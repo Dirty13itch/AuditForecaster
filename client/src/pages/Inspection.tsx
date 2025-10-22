@@ -7,20 +7,32 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+
+interface ChecklistItemData {
+  id: string;
+  itemNumber: number;
+  title: string;
+  completed: boolean;
+  notes: string;
+  photoCount: number;
+  voiceNoteUrl?: string | null;
+  voiceNoteDuration?: number | null;
+}
 
 export default function Inspection() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"dashboard" | "inspection" | "photos" | "forecast">("inspection");
   
-  const [checklistItems, setChecklistItems] = useState([
-    { id: '1', itemNumber: 1, title: 'Verify all ductwork is properly sealed at joints with mastic sealant', completed: true, notes: 'All joints sealed with mastic', photoCount: 3 },
-    { id: '2', itemNumber: 2, title: 'Check for proper insulation R-value in attic spaces (minimum R-38)', completed: true, notes: 'R-49 insulation installed', photoCount: 2 },
-    { id: '3', itemNumber: 3, title: 'Inspect HVAC unit installation and clearances per manufacturer specs', completed: false, notes: '', photoCount: 0 },
-    { id: '4', itemNumber: 4, title: 'Verify air handler is level and properly supported', completed: false, notes: '', photoCount: 0 },
-    { id: '5', itemNumber: 5, title: 'Check condensate drain line for proper slope and trap', completed: false, notes: '', photoCount: 1 },
-    { id: '6', itemNumber: 6, title: 'Inspect all duct hangers and supports for proper spacing', completed: false, notes: '', photoCount: 0 },
-    { id: '7', itemNumber: 7, title: 'Verify proper filter rack installation and accessibility', completed: false, notes: '', photoCount: 0 },
-    { id: '8', itemNumber: 8, title: 'Check for proper vapor barrier installation on ducts', completed: false, notes: '', photoCount: 0 },
+  const [checklistItems, setChecklistItems] = useState<ChecklistItemData[]>([
+    { id: '1', itemNumber: 1, title: 'Verify all ductwork is properly sealed at joints with mastic sealant', completed: true, notes: 'All joints sealed with mastic', photoCount: 3, voiceNoteUrl: null, voiceNoteDuration: null },
+    { id: '2', itemNumber: 2, title: 'Check for proper insulation R-value in attic spaces (minimum R-38)', completed: true, notes: 'R-49 insulation installed', photoCount: 2, voiceNoteUrl: null, voiceNoteDuration: null },
+    { id: '3', itemNumber: 3, title: 'Inspect HVAC unit installation and clearances per manufacturer specs', completed: false, notes: '', photoCount: 0, voiceNoteUrl: null, voiceNoteDuration: null },
+    { id: '4', itemNumber: 4, title: 'Verify air handler is level and properly supported', completed: false, notes: '', photoCount: 0, voiceNoteUrl: null, voiceNoteDuration: null },
+    { id: '5', itemNumber: 5, title: 'Check condensate drain line for proper slope and trap', completed: false, notes: '', photoCount: 1, voiceNoteUrl: null, voiceNoteDuration: null },
+    { id: '6', itemNumber: 6, title: 'Inspect all duct hangers and supports for proper spacing', completed: false, notes: '', photoCount: 0, voiceNoteUrl: null, voiceNoteDuration: null },
+    { id: '7', itemNumber: 7, title: 'Verify proper filter rack installation and accessibility', completed: false, notes: '', photoCount: 0, voiceNoteUrl: null, voiceNoteDuration: null },
+    { id: '8', itemNumber: 8, title: 'Check for proper vapor barrier installation on ducts', completed: false, notes: '', photoCount: 0, voiceNoteUrl: null, voiceNoteDuration: null },
   ]);
 
   const completedCount = checklistItems.filter(item => item.completed).length;
@@ -53,6 +65,74 @@ export default function Inspection() {
       title: "Photo added",
       description: "Photo has been saved locally and will sync when online.",
     });
+  };
+
+  const handleVoiceNoteAdd = async (id: string, audioBlob: Blob, duration: number) => {
+    try {
+      // Get presigned upload URL
+      const response = await apiRequest("POST", "/api/objects/upload");
+      const { uploadURL, objectPath } = await response.json() as {
+        uploadURL: string;
+        objectPath: string;
+      };
+
+      // Upload the audio blob to the presigned URL
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: audioBlob,
+        headers: {
+          "Content-Type": audioBlob.type || "audio/webm",
+        },
+      });
+
+      // Update checklist item with voice note URL and duration
+      setChecklistItems(items =>
+        items.map(item =>
+          item.id === id
+            ? { ...item, voiceNoteUrl: objectPath, voiceNoteDuration: duration }
+            : item
+        )
+      );
+
+      toast({
+        title: "Voice note saved",
+        description: "Your voice note has been saved successfully.",
+      });
+    } catch (error) {
+      console.error("Error uploading voice note:", error);
+      toast({
+        title: "Failed to save voice note",
+        description: "An error occurred while uploading. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const handleVoiceNoteDelete = async (id: string) => {
+    try {
+      // Update checklist item to remove voice note
+      setChecklistItems(items =>
+        items.map(item =>
+          item.id === id
+            ? { ...item, voiceNoteUrl: null, voiceNoteDuration: null }
+            : item
+        )
+      );
+
+      toast({
+        title: "Voice note deleted",
+        description: "Your voice note has been removed.",
+      });
+    } catch (error) {
+      console.error("Error deleting voice note:", error);
+      toast({
+        title: "Failed to delete voice note",
+        description: "An error occurred while deleting. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
   };
 
   const handleSave = () => {
@@ -106,6 +186,8 @@ export default function Inspection() {
                 onToggle={handleToggle}
                 onNotesChange={handleNotesChange}
                 onPhotoAdd={handlePhotoAdd}
+                onVoiceNoteAdd={handleVoiceNoteAdd}
+                onVoiceNoteDelete={handleVoiceNoteDelete}
               />
             ))}
           </div>

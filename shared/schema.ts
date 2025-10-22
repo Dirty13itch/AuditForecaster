@@ -117,6 +117,8 @@ export const checklistItems = pgTable("checklist_items", {
   notes: text("notes"),
   photoCount: integer("photo_count").default(0),
   photoRequired: boolean("photo_required").default(false),
+  voiceNoteUrl: text("voice_note_url"),
+  voiceNoteDuration: integer("voice_note_duration"),
 });
 
 export const photos = pgTable("photos", {
@@ -152,6 +154,8 @@ export const updateChecklistItemSchema = z.object({
   notes: z.string().nullable().optional(),
   photoCount: z.number().optional(),
   photoRequired: z.boolean().optional(),
+  voiceNoteUrl: z.string().nullable().optional(),
+  voiceNoteDuration: z.number().nullable().optional(),
 });
 export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, uploadedAt: true });
 
