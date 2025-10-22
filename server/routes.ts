@@ -732,6 +732,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/photos/:id", isAuthenticated, async (req, res) => {
+    try {
+      const validated = insertPhotoSchema.partial().parse(req.body);
+      const photo = await storage.updatePhoto(req.params.id, validated);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      res.json(photo);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid photo data", error });
+    }
+  });
+
   app.delete("/api/photos/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deletePhoto(req.params.id);

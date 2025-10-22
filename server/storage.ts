@@ -75,6 +75,7 @@ export interface IStorage {
   getPhoto(id: string): Promise<Photo | undefined>;
   getPhotosByJob(jobId: string): Promise<Photo[]>;
   getPhotosByChecklistItem(checklistItemId: string): Promise<Photo[]>;
+  updatePhoto(id: string, photo: Partial<InsertPhoto>): Promise<Photo | undefined>;
   deletePhoto(id: string): Promise<boolean>;
 
   createForecast(forecast: InsertForecast): Promise<Forecast>;
@@ -849,6 +850,16 @@ export class MemStorage implements IStorage {
     return Array.from(this.photos.values()).filter(
       (photo) => photo.checklistItemId === checklistItemId,
     );
+  }
+
+  async updatePhoto(id: string, updates: Partial<InsertPhoto>): Promise<Photo | undefined> {
+    const photo = this.photos.get(id);
+    if (!photo) {
+      return undefined;
+    }
+    const updated: Photo = { ...photo, ...updates };
+    this.photos.set(id, updated);
+    return updated;
   }
 
   async deletePhoto(id: string): Promise<boolean> {

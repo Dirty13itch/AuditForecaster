@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -125,6 +125,7 @@ export const photos = pgTable("photos", {
   filePath: text("file_path").notNull(),
   caption: text("caption"),
   tags: text("tags").array(),
+  annotationData: jsonb("annotation_data"),
   uploadedAt: timestamp("uploaded_at").notNull().default(sql`now()`),
 });
 
