@@ -376,4 +376,111 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* React Big Calendar Custom Styles */
+  .rbc-calendar {
+    font-family: var(--font-sans);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+  }
+
+  .rbc-header {
+    padding: 12px 8px;
+    font-weight: 600;
+    font-size: 14px;
+    color: hsl(var(--foreground));
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .rbc-month-view,
+  .rbc-time-view,
+  .rbc-agenda-view {
+    background: hsl(var(--card));
+    border: none;
+  }
+
+  .rbc-day-bg {
+    background: hsl(var(--background));
+    border-left: 1px solid hsl(var(--border));
+  }
+
+  .rbc-today {
+    background-color: hsl(var(--accent) / 0.3);
+  }
+
+  .rbc-off-range-bg {
+    background: hsl(var(--muted) / 0.3);
+  }
+
+  .rbc-date-cell {
+    padding: 6px 8px;
+    font-size: 14px;
+  }
+
+  .rbc-event {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .rbc-event:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+  }
+
+  .rbc-event-label {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .rbc-event-content {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rbc-selected {
+    background-color: hsl(var(--primary)) !important;
+  }
+
+  .rbc-slot-selection {
+    background-color: hsl(var(--primary) / 0.2);
+  }
+
+  .rbc-time-slot {
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .rbc-time-header-content {
+    border-left: 1px solid hsl(var(--border));
+  }
+
+  .rbc-current-time-indicator {
+    background-color: hsl(var(--destructive));
+    height: 2px;
+  }
+
+  .rbc-toolbar {
+    display: none;
+  }
+
+  .rbc-addons-dnd .rbc-addons-dnd-drag-preview {
+    opacity: 0.5;
+  }
+
+  .rbc-addons-dnd .rbc-addons-dnd-dragging {
+    opacity: 0.5;
+  }
+
+  .rbc-addons-dnd .rbc-event {
+    cursor: move;
+  }
+
+  .rbc-addons-dnd .rbc-event.rbc-addons-dnd-dragging {
+    opacity: 0.5;
+  }
 }

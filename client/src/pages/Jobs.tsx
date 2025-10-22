@@ -1,0 +1,617 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { format } from "date-fns";
+import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import JobCard from "@/components/JobCard";
+import JobDialog from "@/components/JobDialog";
+import WorkflowStepper from "@/components/WorkflowStepper";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Job, Builder } from "@shared/schema";
+
+type SortOption = "date" | "priority" | "status" | "name";
+
+export default function Jobs() {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [builderFilter, setBuilderFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<SortOption>("date");
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+  const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [bulkStatusDialogOpen, setBulkStatusDialogOpen] = useState(false);
+  const [bulkBuilderDialogOpen, setBulkBuilderDialogOpen] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkBuilder, setBulkBuilder] = useState("");
+  const [workflowJobId, setWorkflowJobId] = useState<string | null>(null);
+
+  const { data: jobs = [], isLoading: isLoadingJobs } = useQuery<Job[]>({
+    queryKey: ["/api/jobs"],
+  });
+
+  const { data: builders = [], isLoading: isLoadingBuilders } = useQuery<Builder[]>({
+    queryKey: ["/api/builders"],
+  });
+
+  const createJobMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("POST", "/api/jobs", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({
+        title: "Success",
+        description: "Job created successfully",
+      });
+      setIsJobDialogOpen(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create job",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateJobMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      return apiRequest("PUT", `/api/jobs/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({
+        title: "Success",
+        description: "Job updated successfully",
+      });
+      setIsJobDialogOpen(false);
+      setEditingJob(null);
+      setWorkflowJobId(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update job",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteJobsMutation = useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      await Promise.all(jobIds.map(id => apiRequest("DELETE", `/api/jobs/${id}`)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({
+        title: "Success",
+        description: `${selectedJobs.size} job(s) deleted successfully`,
+      });
+      setSelectedJobs(new Set());
+      setDeleteDialogOpen(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete jobs",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ jobIds, updates }: { jobIds: string[]; updates: any }) => {
+      await Promise.all(jobIds.map(id => apiRequest("PUT", `/api/jobs/${id}`, updates)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({
+        title: "Success",
+        description: `${selectedJobs.size} job(s) updated successfully`,
+      });
+      setSelectedJobs(new Set());
+      setBulkStatusDialogOpen(false);
+      setBulkBuilderDialogOpen(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update jobs",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSaveJob = async (data: any) => {
+    const jobData = {
+      ...data,
+      scheduledDate: data.scheduledDate ? data.scheduledDate.toISOString() : null,
+    };
+
+    if (editingJob) {
+      await updateJobMutation.mutateAsync({ id: editingJob.id, data: jobData });
+    } else {
+      await createJobMutation.mutateAsync(jobData);
+    }
+  };
+
+  const handleJobSelect = (id: string, selected: boolean) => {
+    const newSelected = new Set(selectedJobs);
+    if (selected) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedJobs(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedJobs.size === filteredJobs.length) {
+      setSelectedJobs(new Set());
+    } else {
+      setSelectedJobs(new Set(filteredJobs.map(j => j.id)));
+    }
+  };
+
+  const handleBulkStatusUpdate = () => {
+    if (bulkStatus && selectedJobs.size > 0) {
+      bulkUpdateMutation.mutate({
+        jobIds: Array.from(selectedJobs),
+        updates: { status: bulkStatus },
+      });
+    }
+  };
+
+  const handleBulkBuilderUpdate = () => {
+    if (bulkBuilder && selectedJobs.size > 0) {
+      bulkUpdateMutation.mutate({
+        jobIds: Array.from(selectedJobs),
+        updates: { builderId: bulkBuilder },
+      });
+    }
+  };
+
+  const handleBuilderChange = (jobId: string, builderId: string) => {
+    updateJobMutation.mutate({
+      id: jobId,
+      data: { builderId },
+    });
+  };
+
+  const handleWorkflowAdvance = (newStatus: string) => {
+    if (workflowJobId) {
+      updateJobMutation.mutate({
+        id: workflowJobId,
+        data: { status: newStatus },
+      });
+    }
+  };
+
+  const filteredJobs = jobs.filter(job => {
+    const matchesSearch = 
+      job.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.contractor.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = statusFilter === "all" || job.status === statusFilter;
+    const matchesBuilder = builderFilter === "all" || job.builderId === builderFilter;
+    const matchesPriority = priorityFilter === "all" || job.priority === priorityFilter;
+
+    return matchesSearch && matchesStatus && matchesBuilder && matchesPriority;
+  });
+
+  const sortedJobs = [...filteredJobs].sort((a, b) => {
+    switch (sortBy) {
+      case "date":
+        const dateA = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+        const dateB = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+        return dateB - dateA;
+      case "priority":
+        const priorityOrder = { high: 3, medium: 2, low: 1 };
+        return (priorityOrder[b.priority as keyof typeof priorityOrder] || 0) - 
+               (priorityOrder[a.priority as keyof typeof priorityOrder] || 0);
+      case "status":
+        return a.status.localeCompare(b.status);
+      case "name":
+        return a.name.localeCompare(b.name);
+      default:
+        return 0;
+    }
+  });
+
+  const stats = {
+    total: jobs.length,
+    pending: jobs.filter(j => j.status === "pending").length,
+    inProgress: jobs.filter(j => j.status === "in-progress").length,
+    completed: jobs.filter(j => j.status === "completed").length,
+  };
+
+  const workflowJob = workflowJobId ? jobs.find(j => j.id === workflowJobId) : null;
+
+  return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold" data-testid="text-page-title">Jobs Management</h1>
+          <p className="text-muted-foreground text-sm">Manage and track all energy audit jobs</p>
+        </div>
+        <Button 
+          onClick={() => {
+            setEditingJob(null);
+            setIsJobDialogOpen(true);
+          }}
+          data-testid="button-new-job"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          New Job
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-muted-foreground">Total Jobs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="stat-total">{stats.total}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-muted-foreground">Pending</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-muted-foreground" data-testid="stat-pending">
+              {stats.pending}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-muted-foreground">In Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-info" data-testid="stat-in-progress">
+              {stats.inProgress}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-muted-foreground">Completed</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-success" data-testid="stat-completed">
+              {stats.completed}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {workflowJob && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Workflow Progress: {workflowJob.name}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WorkflowStepper
+              currentStatus={workflowJob.status}
+              onStatusChange={handleWorkflowAdvance}
+              isPending={updateJobMutation.isPending}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Filter className="h-5 w-5 text-muted-foreground" />
+            <CardTitle>Filters & Search</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by job name, address, or contractor..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+              data-testid="input-search"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger data-testid="select-status-filter">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="pre-inspection">Pre-Inspection</SelectItem>
+                <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="testing">Testing</SelectItem>
+                <SelectItem value="review">Review</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={builderFilter} onValueChange={setBuilderFilter}>
+              <SelectTrigger data-testid="select-builder-filter">
+                <SelectValue placeholder="Filter by builder" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Builders</SelectItem>
+                {builders.map((builder) => (
+                  <SelectItem key={builder.id} value={builder.id}>
+                    {builder.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <SelectTrigger data-testid="select-priority-filter">
+                <SelectValue placeholder="Filter by priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
+              <SelectTrigger data-testid="select-sort">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date</SelectItem>
+                <SelectItem value="priority">Priority</SelectItem>
+                <SelectItem value="status">Status</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {selectedJobs.size > 0 && (
+        <Card className="border-primary">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" data-testid="badge-selected-count">
+                  {selectedJobs.size} selected
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAll}
+                  data-testid="button-select-all"
+                >
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  {selectedJobs.size === filteredJobs.length ? "Deselect All" : "Select All"}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkStatusDialogOpen(true)}
+                  data-testid="button-bulk-status"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Update Status
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkBuilderDialogOpen(true)}
+                  data-testid="button-bulk-builder"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reassign Builder
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">
+            Jobs ({sortedJobs.length})
+          </h2>
+        </div>
+
+        {isLoadingJobs ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-6 w-3/4" />
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-4 w-1/2" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : sortedJobs.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              <p>No jobs found matching your filters</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {sortedJobs.map((job) => (
+              <JobCard
+                key={job.id}
+                id={job.id}
+                name={job.name}
+                address={job.address}
+                contractor={job.contractor}
+                builderId={job.builderId}
+                builders={builders}
+                status={job.status}
+                inspectionType={job.inspectionType}
+                scheduledDate={job.scheduledDate ? format(new Date(job.scheduledDate), "MMM d, yyyy") : undefined}
+                priority={job.priority || "medium"}
+                latitude={job.latitude}
+                longitude={job.longitude}
+                notes={job.notes}
+                completedItems={job.completedItems || 0}
+                totalItems={job.totalItems || 52}
+                isSelected={selectedJobs.has(job.id)}
+                onSelect={handleJobSelect}
+                onBuilderChange={handleBuilderChange}
+                onClick={() => {
+                  setWorkflowJobId(job.id);
+                  navigate(`/inspection/${job.id}`);
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <JobDialog
+        open={isJobDialogOpen}
+        onOpenChange={setIsJobDialogOpen}
+        job={editingJob}
+        builders={builders}
+        onSave={handleSaveJob}
+        isPending={createJobMutation.isPending || updateJobMutation.isPending}
+      />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Jobs</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedJobs.size} job(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteJobsMutation.mutate(Array.from(selectedJobs))}
+              className="bg-destructive text-destructive-foreground"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkStatusDialogOpen} onOpenChange={setBulkStatusDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select a new status for {selectedJobs.size} job(s)
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Select value={bulkStatus} onValueChange={setBulkStatus}>
+            <SelectTrigger data-testid="select-bulk-status">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="pre-inspection">Pre-Inspection</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
+              <SelectItem value="testing">Testing</SelectItem>
+              <SelectItem value="review">Review</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-bulk-status">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkStatusUpdate}
+              disabled={!bulkStatus}
+              data-testid="button-confirm-bulk-status"
+            >
+              Update
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkBuilderDialogOpen} onOpenChange={setBulkBuilderDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reassign Builder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select a new builder for {selectedJobs.size} job(s)
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Select value={bulkBuilder} onValueChange={setBulkBuilder}>
+            <SelectTrigger data-testid="select-bulk-builder">
+              <SelectValue placeholder="Select builder" />
+            </SelectTrigger>
+            <SelectContent>
+              {builders.map((builder) => (
+                <SelectItem key={builder.id} value={builder.id}>
+                  {builder.name} - {builder.companyName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-bulk-builder">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkBuilderUpdate}
+              disabled={!bulkBuilder}
+              data-testid="button-confirm-bulk-builder"
+            >
+              Update
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
