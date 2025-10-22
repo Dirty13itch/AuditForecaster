@@ -406,6 +406,7 @@ export class MemStorage implements IStorage {
 
     const template1Id = randomUUID();
     const template2Id = randomUUID();
+    const template3Id = randomUUID();
 
     const template1: ReportTemplate = {
       id: template1Id,
@@ -436,8 +437,251 @@ export class MemStorage implements IStorage {
       createdAt: new Date("2025-02-10T14:30:00"),
     };
 
+    const template3: ReportTemplate = {
+      id: template3Id,
+      name: "Conditional Inspection Form",
+      description: "Smart inspection form with conditional logic that shows/hides fields based on your answers",
+      sections: JSON.stringify([
+        {
+          id: "section1",
+          title: "Property Information",
+          description: "Basic property details and inspection scope",
+          fields: [
+            {
+              id: "propertyAddress",
+              label: "Property Address",
+              type: "text",
+              required: true,
+            },
+            {
+              id: "inspectorName",
+              label: "Inspector Name",
+              type: "text",
+              required: true,
+            },
+            {
+              id: "inspectionDate",
+              label: "Inspection Date",
+              type: "date",
+              required: true,
+            },
+          ],
+        },
+        {
+          id: "section2",
+          title: "Structural Assessment",
+          description: "Basement and foundation inspection",
+          fields: [
+            {
+              id: "hasBasement",
+              label: "Is there a basement?",
+              type: "radio",
+              required: true,
+              options: ["Yes", "No"],
+            },
+            {
+              id: "basementCondition",
+              label: "Basement Condition",
+              type: "select",
+              required: true,
+              options: ["Excellent", "Good", "Fair", "Poor"],
+              conditions: [
+                {
+                  fieldId: "hasBasement",
+                  operator: "equals",
+                  value: "Yes",
+                },
+              ],
+            },
+            {
+              id: "basementMoistureIssues",
+              label: "Moisture or Water Intrusion Issues",
+              type: "radio",
+              required: false,
+              options: ["Yes", "No"],
+              conditions: [
+                {
+                  fieldId: "hasBasement",
+                  operator: "equals",
+                  value: "Yes",
+                },
+              ],
+            },
+            {
+              id: "basementNotes",
+              label: "Basement Notes",
+              type: "textarea",
+              required: false,
+              conditions: [
+                {
+                  fieldId: "hasBasement",
+                  operator: "equals",
+                  value: "Yes",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "section3",
+          title: "HVAC System",
+          description: "Heating, ventilation, and air conditioning inspection",
+          fields: [
+            {
+              id: "ductLeakageTest",
+              label: "Duct Leakage Test Result",
+              type: "select",
+              required: true,
+              options: ["Pass", "Fail", "Not Tested"],
+            },
+            {
+              id: "ductLeakageValue",
+              label: "Duct Leakage CFM25",
+              type: "number",
+              required: false,
+            },
+            {
+              id: "remediationRequired",
+              label: "Remediation Required",
+              type: "textarea",
+              required: true,
+              conditions: [
+                {
+                  fieldId: "ductLeakageTest",
+                  operator: "equals",
+                  value: "Fail",
+                },
+              ],
+            },
+            {
+              id: "followUpDate",
+              label: "Follow-up Inspection Date",
+              type: "date",
+              required: true,
+              conditions: [
+                {
+                  fieldId: "ductLeakageTest",
+                  operator: "equals",
+                  value: "Fail",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "section4",
+          title: "Insulation",
+          description: "Insulation type and specifications",
+          fields: [
+            {
+              id: "insulationType",
+              label: "Insulation Type",
+              type: "select",
+              required: true,
+              options: ["Fiberglass", "Spray Foam", "Cellulose", "Other"],
+            },
+            {
+              id: "rValue",
+              label: "R-Value",
+              type: "number",
+              required: true,
+              conditions: [
+                {
+                  fieldId: "insulationType",
+                  operator: "equals",
+                  value: "Fiberglass",
+                },
+              ],
+            },
+            {
+              id: "sprayFoamType",
+              label: "Spray Foam Type",
+              type: "radio",
+              required: true,
+              options: ["Open Cell", "Closed Cell"],
+              conditions: [
+                {
+                  fieldId: "insulationType",
+                  operator: "equals",
+                  value: "Spray Foam",
+                },
+              ],
+            },
+            {
+              id: "sprayFoamThickness",
+              label: "Spray Foam Thickness (inches)",
+              type: "number",
+              required: false,
+              conditions: [
+                {
+                  fieldId: "insulationType",
+                  operator: "equals",
+                  value: "Spray Foam",
+                },
+              ],
+            },
+            {
+              id: "celluloseDepth",
+              label: "Cellulose Depth (inches)",
+              type: "number",
+              required: true,
+              conditions: [
+                {
+                  fieldId: "insulationType",
+                  operator: "equals",
+                  value: "Cellulose",
+                },
+              ],
+            },
+            {
+              id: "otherInsulationDescription",
+              label: "Other Insulation Description",
+              type: "textarea",
+              required: true,
+              conditions: [
+                {
+                  fieldId: "insulationType",
+                  operator: "equals",
+                  value: "Other",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "section5",
+          title: "Final Notes",
+          description: "Additional observations and recommendations",
+          fields: [
+            {
+              id: "overallCondition",
+              label: "Overall Condition Rating",
+              type: "select",
+              required: true,
+              options: ["Excellent", "Good", "Fair", "Poor"],
+            },
+            {
+              id: "additionalNotes",
+              label: "Additional Notes",
+              type: "textarea",
+              required: false,
+            },
+            {
+              id: "requiresFollowUp",
+              label: "Requires Follow-up Inspection",
+              type: "checkbox",
+              required: false,
+            },
+          ],
+        },
+      ]),
+      isDefault: false,
+      createdAt: new Date("2025-03-20T09:00:00"),
+    };
+
     this.reportTemplates.set(template1Id, template1);
     this.reportTemplates.set(template2Id, template2);
+    this.reportTemplates.set(template3Id, template3);
 
     const reportInstance1Id = randomUUID();
     const reportInstance2Id = randomUUID();

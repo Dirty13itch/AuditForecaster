@@ -7,10 +7,12 @@ This is a full-stack energy auditing field application designed for field inspec
 **Key Features:**
 - Job and inspection management with workflow tracking
 - Builder/contractor relationship management
-- Photo documentation and gallery
+- Photo documentation with multi-tag system, annotations, and OCR text extraction
+- Photo-required checklist items (can't complete inspection without required photos)
+- Conditional logic engine for dynamic inspection forms
 - Financial tracking (expenses and mileage logs)
 - Scheduling with Google Calendar integration
-- Customizable report generation
+- Customizable report generation with intelligent form fields
 - Offline-first architecture with background sync
 - Mobile-responsive design optimized for field use
 
@@ -131,6 +133,16 @@ Preferred communication style: Simple, everyday language.
   - Modal-based upload interface with progress tracking
   - Direct-to-storage uploads via presigned URLs
   - Custom `ObjectUploader` component in `client/src/components/ObjectUploader.tsx`
+- **react-konva** & **konva** - Canvas-based photo annotation tools
+  - Arrow, text overlay, and measurement line drawing tools
+  - Color picker with 7 preset colors
+  - Undo/redo functionality
+  - Custom `PhotoAnnotator` component in `client/src/components/PhotoAnnotator.tsx`
+- **tesseract.js** - OCR (Optical Character Recognition) for text extraction
+  - Extract addresses, lot numbers, permit IDs from photos
+  - Pattern recognition with confidence scoring
+  - Auto-fill job fields from extracted text
+  - Custom `PhotoOCR` component in `client/src/components/PhotoOCR.tsx`
 
 **Development Tools:**
 - **Replit-specific plugins** for development environment integration

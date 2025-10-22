@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Plus, Search, Eye, Edit, Trash2, Mail, Download, Printer, ChevronUp, ChevronDown, GripVertical, Calendar } from "lucide-react";
+import { FileText, Plus, Search, Eye, Edit, Trash2, Mail, Download, Printer, ChevronUp, ChevronDown, GripVertical, Calendar, Play } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,6 +20,8 @@ import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ReportTemplate, ReportInstance, Job, Builder } from "@shared/schema";
+import { DynamicForm } from "@/components/DynamicForm";
+import type { FormSection } from "@shared/types";
 
 interface ReportSection {
   id: string;
@@ -68,9 +70,11 @@ export default function Reports() {
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [viewerDialogOpen, setViewerDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [conditionalFormDialogOpen, setConditionalFormDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [selectedReport, setSelectedReport] = useState<ReportInstance | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ReportTemplate | null>(null);
+  const [conditionalFormData, setConditionalFormData] = useState<Record<string, any>>({});
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery<ReportTemplate[]>({
     queryKey: ["/api/report-templates"],
@@ -148,6 +152,25 @@ export default function Reports() {
     if (status === "Sent") return "default";
     if (status === "Finalized") return "secondary";
     return "outline";
+  };
+
+  const handleTestConditionalForm = (template: ReportTemplate) => {
+    setSelectedTemplate(template);
+    setConditionalFormData({});
+    setConditionalFormDialogOpen(true);
+  };
+
+  const isConditionalTemplate = (template: ReportTemplate): boolean => {
+    try {
+      const sections = JSON.parse(template.sections);
+      if (Array.isArray(sections) && sections.length > 0) {
+        const firstSection = sections[0];
+        return firstSection.fields !== undefined && Array.isArray(firstSection.fields);
+      }
+      return false;
+    } catch {
+      return false;
+    }
   };
 
   return (
@@ -242,8 +265,25 @@ export default function Reports() {
                         <Calendar className="h-4 w-4" />
                         <span>Created {format(new Date(template.createdAt!), "MMM d, yyyy")}</span>
                       </div>
+                      {isConditionalTemplate(template) && (
+                        <Badge variant="secondary" data-testid={`badge-conditional-${template.id}`}>
+                          Conditional Logic
+                        </Badge>
+                      )}
                     </CardContent>
-                    <CardFooter className="flex gap-2 pt-4">
+                    <CardFooter className="flex flex-wrap gap-2 pt-4">
+                      {isConditionalTemplate(template) && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleTestConditionalForm(template)}
+                          data-testid={`button-test-form-${template.id}`}
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          Test Form
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -405,6 +445,55 @@ export default function Reports() {
           job={jobs.find(j => j.id === selectedReport.jobId)}
           builders={builders}
         />
+      )}
+
+      {selectedTemplate && isConditionalTemplate(selectedTemplate) && (
+        <Dialog open={conditionalFormDialogOpen} onOpenChange={setConditionalFormDialogOpen}>
+          <DialogContent className="max-w-5xl max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle data-testid="text-conditional-form-title">
+                Test Conditional Form: {selectedTemplate.name}
+              </DialogTitle>
+              <DialogDescription>
+                Fill out the form below to test the conditional logic. Fields will appear and disappear based on your answers.
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="max-h-[70vh] pr-4">
+              <DynamicForm
+                sections={JSON.parse(selectedTemplate.sections) as FormSection[]}
+                initialData={conditionalFormData}
+                onChange={(data) => {
+                  setConditionalFormData(data);
+                }}
+                onSubmit={(data) => {
+                  toast({
+                    title: "Form Submitted",
+                    description: "Check the console for form data",
+                  });
+                  console.log("Form Data:", data);
+                }}
+              />
+            </ScrollArea>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setConditionalFormData({});
+                  toast({ title: "Form Reset" });
+                }}
+                data-testid="button-reset-form"
+              >
+                Reset Form
+              </Button>
+              <Button
+                onClick={() => setConditionalFormDialogOpen(false)}
+                data-testid="button-close-form"
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
