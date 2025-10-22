@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { googleCalendarService } from "./googleCalendar";
 import {
   insertBuilderSchema,
   insertJobSchema,
@@ -147,10 +148,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/schedule-events/sync", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "startDate and endDate query parameters are required" });
+      }
+
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      
+      const googleEvents = await googleCalendarService.fetchEventsFromGoogle(start, end);
+      const syncedCount = { created: 0, updated: 0, skipped: 0 };
+      
+      for (const googleEvent of googleEvents) {
+        const parsedEvent = googleCalendarService.parseGoogleEventToScheduleEvent(googleEvent);
+        
+        if (!parsedEvent || !parsedEvent.jobId) {
+          syncedCount.skipped++;
+          continue;
+        }
+
+        const existingEvent = parsedEvent.id 
+          ? await storage.getScheduleEvent(parsedEvent.id)
+          : null;
+
+        if (existingEvent) {
+          await storage.updateScheduleEvent(existingEvent.id, {
+            title: parsedEvent.title,
+            startTime: parsedEvent.startTime,
+            endTime: parsedEvent.endTime,
+            notes: parsedEvent.notes,
+            googleCalendarEventId: parsedEvent.googleCalendarEventId,
+            lastSyncedAt: parsedEvent.lastSyncedAt,
+          });
+          syncedCount.updated++;
+        } else {
+          const job = await storage.getJob(parsedEvent.jobId);
+          if (job) {
+            await storage.createScheduleEvent({
+              jobId: parsedEvent.jobId,
+              title: parsedEvent.title!,
+              startTime: parsedEvent.startTime!,
+              endTime: parsedEvent.endTime!,
+              notes: parsedEvent.notes,
+              googleCalendarEventId: parsedEvent.googleCalendarEventId,
+              color: parsedEvent.color,
+            });
+            syncedCount.created++;
+          } else {
+            syncedCount.skipped++;
+          }
+        }
+      }
+
+      res.json({
+        message: "Sync completed successfully",
+        syncedCount,
+        totalProcessed: googleEvents.length,
+      });
+    } catch (error) {
+      console.error('[Routes] Error syncing from Google Calendar:', error);
+      res.status(500).json({ message: "Failed to sync from Google Calendar", error });
+    }
+  });
+
   app.post("/api/schedule-events", async (req, res) => {
     try {
       const validated = insertScheduleEventSchema.parse(req.body);
       const event = await storage.createScheduleEvent(validated);
+      
+      try {
+        const job = await storage.getJob(event.jobId);
+        if (job) {
+          const googleEventId = await googleCalendarService.syncEventToGoogle(event, job);
+          if (googleEventId) {
+            const updatedEvent = await storage.updateScheduleEvent(event.id, {
+              googleCalendarEventId: googleEventId,
+              lastSyncedAt: new Date(),
+            });
+            return res.status(201).json(updatedEvent || event);
+          }
+        }
+      } catch (syncError) {
+        console.error('[Routes] Error syncing to Google Calendar:', syncError);
+      }
+      
       res.status(201).json(event);
     } catch (error) {
       res.status(400).json({ message: "Invalid schedule event data", error });
@@ -176,6 +260,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!event) {
         return res.status(404).json({ message: "Schedule event not found" });
       }
+      
+      try {
+        const job = await storage.getJob(event.jobId);
+        if (job) {
+          const googleEventId = await googleCalendarService.syncEventToGoogle(event, job);
+          if (googleEventId) {
+            const updatedEvent = await storage.updateScheduleEvent(event.id, {
+              googleCalendarEventId: googleEventId,
+              lastSyncedAt: new Date(),
+            });
+            return res.json(updatedEvent || event);
+          }
+        }
+      } catch (syncError) {
+        console.error('[Routes] Error syncing to Google Calendar:', syncError);
+      }
+      
       res.json(event);
     } catch (error) {
       res.status(400).json({ message: "Invalid schedule event data", error });
@@ -184,6 +285,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/schedule-events/:id", async (req, res) => {
     try {
+      const event = await storage.getScheduleEvent(req.params.id);
+      
+      if (event?.googleCalendarEventId) {
+        try {
+          await googleCalendarService.deleteEventFromGoogle(event.googleCalendarEventId);
+        } catch (syncError) {
+          console.error('[Routes] Error deleting from Google Calendar:', syncError);
+        }
+      }
+      
       const deleted = await storage.deleteScheduleEvent(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Schedule event not found" });

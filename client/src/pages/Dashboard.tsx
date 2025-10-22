@@ -23,6 +23,7 @@ import { formatDistanceToNow, isToday, isThisWeek, isThisMonth, format, startOfM
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import JobDialog from "@/components/JobDialog";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -216,6 +217,8 @@ export default function Dashboard() {
       
       <main className="pt-20 px-4 md:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="space-y-6">
+          <OfflineBanner />
+          
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h2 className="text-2xl font-bold" data-testid="text-page-title">Dashboard</h2>

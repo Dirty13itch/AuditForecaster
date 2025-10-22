@@ -39,6 +39,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import type { Expense, MileageLog, Job } from "@shared/schema";
 import { insertExpenseSchema, insertMileageLogSchema } from "@shared/schema";
 
@@ -285,6 +286,8 @@ export default function Financials() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <OfflineBanner />
+      
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <DollarSign className="h-8 w-8 text-primary" />

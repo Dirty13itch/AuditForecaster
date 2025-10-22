@@ -14,6 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import type { Job, ScheduleEvent } from "@shared/schema";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
@@ -37,6 +38,7 @@ interface CalendarEvent extends Event {
     scheduleEventId: string;
     status: string;
     job: Job;
+    googleEventId: string | null;
   };
 }
 
@@ -105,7 +107,8 @@ export default function Schedule() {
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
   const [pendingEvent, setPendingEvent] = useState<{ job: Job; start: Date; end: Date } | null>(null);
   const [eventFormData, setEventFormData] = useState({ startTime: '', endTime: '' });
-  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const startDate = startOfMonth(date);
   const endDate = endOfMonth(date);
@@ -157,6 +160,36 @@ export default function Schedule() {
     },
   });
 
+  const syncGoogleCalendarMutation = useMutation({
+    mutationFn: async () => {
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+      return apiRequest('GET', `/api/schedule-events/sync?${params.toString()}`);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      setLastSyncedAt(new Date());
+      toast({ 
+        title: 'Google Calendar synced successfully',
+        description: `Created: ${data.syncedCount.created}, Updated: ${data.syncedCount.updated}, Skipped: ${data.syncedCount.skipped}`,
+      });
+    },
+    onError: () => {
+      toast({ title: 'Failed to sync with Google Calendar', variant: 'destructive' });
+    },
+  });
+
+  const handleGoogleCalendarSync = async () => {
+    setIsSyncing(true);
+    try {
+      await syncGoogleCalendarMutation.mutateAsync();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     const jobMap = new Map(jobs.map(j => [j.id, j]));
     
@@ -168,13 +201,14 @@ export default function Schedule() {
         return {
           id: event.id,
           jobId: event.jobId,
-          title: event.title,
+          title: event.googleCalendarEventId ? `${event.title} 🔗` : event.title,
           start: new Date(event.startTime),
           end: new Date(event.endTime),
           resource: {
             scheduleEventId: event.id,
             status: job.status,
             job,
+            googleEventId: event.googleCalendarEventId,
           },
         };
       })
@@ -361,8 +395,13 @@ export default function Schedule() {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="flex h-full">
-        <div className="w-80 border-r bg-background p-4 overflow-y-auto">
+      <div className="flex h-full flex-col">
+        <div className="p-4">
+          <OfflineBanner />
+        </div>
+        
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-80 border-r bg-background p-4 overflow-y-auto">
           <div className="mb-4">
             <h2 className="text-lg font-semibold mb-2" data-testid="text-unscheduled-jobs-title">
               Unscheduled Jobs
@@ -409,21 +448,28 @@ export default function Schedule() {
               </div>
 
               <div className="flex items-center gap-2">
+                {lastSyncedAt && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mr-2" data-testid="text-last-synced">
+                    <Cloud className="h-3 w-3" />
+                    Last synced: {format(lastSyncedAt, 'h:mm a')}
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setGoogleCalendarConnected(!googleCalendarConnected)}
-                  data-testid="button-google-calendar"
+                  onClick={handleGoogleCalendarSync}
+                  disabled={isSyncing}
+                  data-testid="button-google-calendar-sync"
                 >
-                  {googleCalendarConnected ? (
+                  {isSyncing ? (
                     <>
-                      <Cloud className="h-4 w-4 mr-2" />
-                      Synced
+                      <Cloud className="h-4 w-4 mr-2 animate-pulse" />
+                      Syncing...
                     </>
                   ) : (
                     <>
-                      <CloudOff className="h-4 w-4 mr-2" />
-                      Connect Google Calendar
+                      <Cloud className="h-4 w-4 mr-2" />
+                      Sync with Google Calendar
                     </>
                   )}
                 </Button>
@@ -608,6 +654,7 @@ export default function Schedule() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </DndProvider>
   );
 }

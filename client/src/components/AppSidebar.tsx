@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Building2, DollarSign, FileText, Settings, Wifi, WifiOff, CloudUpload } from "lucide-react";
+import { Home, ClipboardList, Calendar, Building2, DollarSign, FileText, Settings, Wifi, WifiOff, CloudUpload, RefreshCw } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,6 +14,9 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { useToast } from "@/hooks/use-toast";
 
 const menuItems = [
   {
@@ -55,8 +58,41 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const isOnline = true;
-  const pendingSync = 0;
+  const { isOnline, pendingSync, isSyncing, forceSync } = useNetworkStatus();
+  const { toast } = useToast();
+
+  const handleForceSync = async () => {
+    if (!isOnline) {
+      toast({
+        title: "Cannot sync",
+        description: "You are currently offline. Sync will occur automatically when you're back online.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await forceSync();
+      
+      if (result && (result.success > 0 || result.failed > 0)) {
+        toast({
+          title: "Sync complete",
+          description: `Successfully synced ${result.success} items. ${result.failed > 0 ? `${result.failed} items failed.` : ''}`,
+        });
+      } else {
+        toast({
+          title: "No items to sync",
+          description: "All data is already synchronized.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Sync failed",
+        description: "An error occurred while syncing. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <Sidebar>
@@ -85,6 +121,23 @@ export function AppSidebar() {
       
       <SidebarFooter>
         <SidebarSeparator />
+        
+        {pendingSync > 0 && (
+          <div className="px-3 py-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleForceSync}
+              disabled={!isOnline || isSyncing}
+              data-testid="button-force-sync"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Force Sync'}
+            </Button>
+          </div>
+        )}
+        
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center gap-3 p-2" data-testid="user-profile">
@@ -104,13 +157,19 @@ export function AppSidebar() {
                     <div className="flex items-center gap-1 text-xs text-warning" data-testid="status-offline">
                       <WifiOff className="h-3 w-3" />
                       <span>Offline</span>
-                      {pendingSync > 0 && (
-                        <Badge variant="secondary" className="h-4 px-1 text-xs ml-1" data-testid="badge-pending-sync">
-                          <CloudUpload className="h-2 w-2 mr-0.5" />
-                          {pendingSync}
-                        </Badge>
-                      )}
                     </div>
+                  )}
+                  {pendingSync > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-xs" data-testid="badge-pending-sync">
+                      <CloudUpload className="h-2 w-2 mr-0.5" />
+                      {pendingSync}
+                    </Badge>
+                  )}
+                  {isSyncing && (
+                    <Badge variant="secondary" className="h-4 px-1 text-xs" data-testid="badge-syncing">
+                      <RefreshCw className="h-2 w-2 mr-0.5 animate-spin" />
+                      Syncing
+                    </Badge>
                   )}
                 </div>
               </div>

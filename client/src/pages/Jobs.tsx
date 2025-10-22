@@ -22,6 +22,7 @@ import {
 import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder } from "@shared/schema";
@@ -252,6 +253,8 @@ export default function Jobs() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      <OfflineBanner />
+      
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold" data-testid="text-page-title">Jobs Management</h1>

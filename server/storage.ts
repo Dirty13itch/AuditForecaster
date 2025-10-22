@@ -486,7 +486,9 @@ export class MemStorage implements IStorage {
       title: "Oakwood Village Lot 42",
       startTime: new Date("2025-10-25T09:00:00"),
       endTime: new Date("2025-10-25T12:00:00"),
+      notes: null,
       googleCalendarEventId: null,
+      lastSyncedAt: null,
       color: null,
     };
 
@@ -496,7 +498,9 @@ export class MemStorage implements IStorage {
       title: "Meadow Creek Lot 18",
       startTime: new Date("2025-10-28T14:00:00"),
       endTime: new Date("2025-10-28T16:00:00"),
+      notes: null,
       googleCalendarEventId: null,
+      lastSyncedAt: null,
       color: null,
     };
 
@@ -506,7 +510,9 @@ export class MemStorage implements IStorage {
       title: "Heritage Hills Lot 7",
       startTime: new Date("2025-10-15T10:30:00"),
       endTime: new Date("2025-10-15T14:45:00"),
+      notes: null,
       googleCalendarEventId: null,
+      lastSyncedAt: null,
       color: null,
     };
 
@@ -621,7 +627,9 @@ export class MemStorage implements IStorage {
       title: insertEvent.title,
       startTime: insertEvent.startTime,
       endTime: insertEvent.endTime,
+      notes: insertEvent.notes ?? null,
       googleCalendarEventId: insertEvent.googleCalendarEventId ?? null,
+      lastSyncedAt: insertEvent.lastSyncedAt ?? null,
       color: insertEvent.color ?? null,
     };
     this.scheduleEvents.set(id, event);
