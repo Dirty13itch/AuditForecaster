@@ -2,13 +2,17 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare } from "lucide-react";
+import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,9 +27,10 @@ import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { ObjectUploader } from "@/components/ObjectUploader";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Job, Builder } from "@shared/schema";
+import type { Job, Builder, Photo } from "@shared/schema";
 
 type SortOption = "date" | "priority" | "status" | "name";
 
@@ -47,13 +52,29 @@ export default function Jobs() {
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkBuilder, setBulkBuilder] = useState("");
   const [workflowJobId, setWorkflowJobId] = useState<string | null>(null);
+  const [photosDialogOpen, setPhotosDialogOpen] = useState(false);
+  const [selectedJobForPhotos, setSelectedJobForPhotos] = useState<Job | null>(null);
+  const [photoCaption, setPhotoCaption] = useState("");
+  const [photoTags, setPhotoTags] = useState("");
+  const [uploadedObjectPath, setUploadedObjectPath] = useState<string>("");
 
-  const { data: jobs = [], isLoading: isLoadingJobs } = useQuery<Job[]>({
+  const { data: jobs = [], isLoading: isLoadingJobs} = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
 
   const { data: builders = [], isLoading: isLoadingBuilders } = useQuery<Builder[]>({
     queryKey: ["/api/builders"],
+  });
+
+  const { data: photos = [], isLoading: isLoadingPhotos } = useQuery<Photo[]>({
+    queryKey: ["/api/photos", selectedJobForPhotos?.id],
+    queryFn: async () => {
+      if (!selectedJobForPhotos?.id) return [];
+      const response = await fetch(`/api/photos?jobId=${selectedJobForPhotos.id}`);
+      if (!response.ok) throw new Error('Failed to fetch photos');
+      return response.json();
+    },
+    enabled: !!selectedJobForPhotos?.id,
   });
 
   const createJobMutation = useMutation({
@@ -145,6 +166,48 @@ export default function Jobs() {
     },
   });
 
+  const createPhotoMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("POST", "/api/photos", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/photos", selectedJobForPhotos?.id] });
+      toast({
+        title: "Success",
+        description: "Photo uploaded successfully",
+      });
+      setPhotoCaption("");
+      setPhotoTags("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to upload photo",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (photoId: string) => {
+      return apiRequest("DELETE", `/api/photos/${photoId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/photos", selectedJobForPhotos?.id] });
+      toast({
+        title: "Success",
+        description: "Photo deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete photo",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSaveJob = async (data: any) => {
     const jobData = {
       ...data,
@@ -208,6 +271,49 @@ export default function Jobs() {
         data: { status: newStatus },
       });
     }
+  };
+
+  const handleOpenPhotosDialog = (job: Job) => {
+    setSelectedJobForPhotos(job);
+    setPhotosDialogOpen(true);
+  };
+
+  const handlePhotoUpload = async () => {
+    try {
+      const response = await fetch('/api/objects/upload', { method: 'POST' });
+      if (!response.ok) {
+        throw new Error('Failed to get upload URL');
+      }
+      const { uploadURL, objectPath } = await response.json();
+      setUploadedObjectPath(objectPath);
+      return { method: 'PUT' as const, url: uploadURL };
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to get upload URL",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const handleUploadComplete = async (result: any) => {
+    if (!selectedJobForPhotos || !uploadedObjectPath) return;
+    
+    const tags = photoTags.split(',').map(tag => tag.trim()).filter(Boolean);
+    
+    await createPhotoMutation.mutateAsync({
+      jobId: selectedJobForPhotos.id,
+      filePath: uploadedObjectPath,
+      caption: photoCaption || undefined,
+      tags: tags.length > 0 ? tags : undefined,
+    });
+    
+    setUploadedObjectPath("");
+  };
+
+  const handleDeletePhoto = (photoId: string) => {
+    deletePhotoMutation.mutate(photoId);
   };
 
   const filteredJobs = jobs.filter(job => {
@@ -488,31 +594,45 @@ export default function Jobs() {
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {sortedJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                id={job.id}
-                name={job.name}
-                address={job.address}
-                contractor={job.contractor}
-                builderId={job.builderId}
-                builders={builders}
-                status={job.status}
-                inspectionType={job.inspectionType}
-                scheduledDate={job.scheduledDate ? format(new Date(job.scheduledDate), "MMM d, yyyy") : undefined}
-                priority={job.priority || "medium"}
-                latitude={job.latitude}
-                longitude={job.longitude}
-                notes={job.notes}
-                completedItems={job.completedItems || 0}
-                totalItems={job.totalItems || 52}
-                isSelected={selectedJobs.has(job.id)}
-                onSelect={handleJobSelect}
-                onBuilderChange={handleBuilderChange}
-                onClick={() => {
-                  setWorkflowJobId(job.id);
-                  navigate(`/inspection/${job.id}`);
-                }}
-              />
+              <div key={job.id} className="relative">
+                <JobCard
+                  id={job.id}
+                  name={job.name}
+                  address={job.address}
+                  contractor={job.contractor}
+                  builderId={job.builderId}
+                  builders={builders}
+                  status={job.status}
+                  inspectionType={job.inspectionType}
+                  scheduledDate={job.scheduledDate ? format(new Date(job.scheduledDate), "MMM d, yyyy") : undefined}
+                  priority={job.priority || "medium"}
+                  latitude={job.latitude}
+                  longitude={job.longitude}
+                  notes={job.notes}
+                  completedItems={job.completedItems || 0}
+                  totalItems={job.totalItems || 52}
+                  isSelected={selectedJobs.has(job.id)}
+                  onSelect={handleJobSelect}
+                  onBuilderChange={handleBuilderChange}
+                  onClick={() => {
+                    setWorkflowJobId(job.id);
+                    navigate(`/inspection/${job.id}`);
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="absolute bottom-4 right-4"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenPhotosDialog(job);
+                  }}
+                  data-testid={`button-photos-${job.id}`}
+                >
+                  <ImageIcon className="h-4 w-4 mr-2" />
+                  Photos
+                </Button>
+              </div>
             ))}
           </div>
         )}
@@ -615,6 +735,133 @@ export default function Jobs() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={photosDialogOpen} onOpenChange={setPhotosDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle data-testid="text-photos-title">
+              Photos: {selectedJobForPhotos?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Upload and manage photos for this job
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Tabs defaultValue="gallery" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="gallery" data-testid="tab-gallery">Gallery</TabsTrigger>
+              <TabsTrigger value="upload" data-testid="tab-upload">Upload</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="gallery" className="space-y-4">
+              {isLoadingPhotos ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-48 w-full" data-testid={`skeleton-photo-${i}`} />
+                  ))}
+                </div>
+              ) : photos.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p data-testid="text-no-photos">No photos uploaded yet</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {photos.map((photo) => (
+                    <Card key={photo.id} className="overflow-hidden" data-testid={`card-photo-${photo.id}`}>
+                      <div className="relative group">
+                        <img
+                          src={photo.filePath}
+                          alt={photo.caption || "Job photo"}
+                          className="w-full h-48 object-cover"
+                          data-testid={`img-photo-${photo.id}`}
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleDeletePhoto(photo.id)}
+                          disabled={deletePhotoMutation.isPending}
+                          data-testid={`button-delete-photo-${photo.id}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {(photo.caption || photo.tags) && (
+                        <CardContent className="pt-3">
+                          {photo.caption && (
+                            <p className="text-sm text-muted-foreground" data-testid={`text-caption-${photo.id}`}>
+                              {photo.caption}
+                            </p>
+                          )}
+                          {photo.tags && photo.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {photo.tags.map((tag, idx) => (
+                                <Badge key={idx} variant="secondary" data-testid={`badge-tag-${photo.id}-${idx}`}>
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+            
+            <TabsContent value="upload" className="space-y-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="caption">Caption (optional)</Label>
+                  <Input
+                    id="caption"
+                    placeholder="Enter a caption for the photo"
+                    value={photoCaption}
+                    onChange={(e) => setPhotoCaption(e.target.value)}
+                    data-testid="input-caption"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="tags">Tags (optional, comma-separated)</Label>
+                  <Input
+                    id="tags"
+                    placeholder="e.g., attic, insulation, before"
+                    value={photoTags}
+                    onChange={(e) => setPhotoTags(e.target.value)}
+                    data-testid="input-tags"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Upload Photo</Label>
+                  <ObjectUploader
+                    maxNumberOfFiles={1}
+                    maxFileSize={10485760}
+                    onGetUploadParameters={handlePhotoUpload}
+                    onComplete={handleUploadComplete}
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Upload Photo
+                  </ObjectUploader>
+                </div>
+                
+                {createPhotoMutation.isPending && (
+                  <Card className="bg-muted">
+                    <CardContent className="py-4 text-center text-sm">
+                      <p>Processing upload...</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

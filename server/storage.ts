@@ -826,9 +826,10 @@ export class MemStorage implements IStorage {
       id,
       jobId: insertPhoto.jobId,
       checklistItemId: insertPhoto.checklistItemId ?? null,
-      url: insertPhoto.url,
-      timestamp: insertPhoto.timestamp,
+      filePath: insertPhoto.filePath,
       caption: insertPhoto.caption ?? null,
+      tags: insertPhoto.tags ?? null,
+      uploadedAt: insertPhoto.uploadedAt ?? new Date(),
     };
     this.photos.set(id, photo);
     return photo;

@@ -1,7 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import passport from "passport";
+import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { googleCalendarService } from "./googleCalendar";
+import { isAuthenticated, getUserId } from "./auth";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectPermission } from "./objectAcl";
 import {
   insertBuilderSchema,
   insertJobSchema,
@@ -11,10 +16,87 @@ import {
   insertReportTemplateSchema,
   insertReportInstanceSchema,
   insertPhotoSchema,
+  insertUserSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.get("/api/builders", async (_req, res) => {
+  // Authentication routes
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { username, password } = insertUserSchema.parse(req.body);
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+      
+      // Hash password with bcrypt
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      // Create user
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword
+      });
+      
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+      
+      // Log user in after registration
+      req.login(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Registration successful but login failed" });
+        }
+        res.status(201).json(userWithoutPassword);
+      });
+    } catch (error) {
+      res.status(400).json({ message: "Invalid registration data", error });
+    }
+  });
+
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate('local', (err: any, user: any, info: any) => {
+      if (err) {
+        return res.status(500).json({ message: "Authentication error" });
+      }
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
+      }
+      
+      req.login(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Login failed" });
+        }
+        
+        // Remove password from response
+        const { password: _, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      });
+    })(req, res, next);
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/user", (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    
+    // Remove password from response
+    const user = req.user as any;
+    const { password: _, ...userWithoutPassword } = user;
+    res.json(userWithoutPassword);
+  });
+
+  app.get("/api/builders", isAuthenticated, async (_req, res) => {
     try {
       const builders = await storage.getAllBuilders();
       res.json(builders);
@@ -23,7 +105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders", async (req, res) => {
+  app.post("/api/builders", isAuthenticated, async (req, res) => {
     try {
       const validated = insertBuilderSchema.parse(req.body);
       const builder = await storage.createBuilder(validated);
@@ -33,7 +115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/builders/:id", async (req, res) => {
+  app.get("/api/builders/:id", isAuthenticated, async (req, res) => {
     try {
       const builder = await storage.getBuilder(req.params.id);
       if (!builder) {
@@ -45,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:id", async (req, res) => {
+  app.put("/api/builders/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertBuilderSchema.partial().parse(req.body);
       const builder = await storage.updateBuilder(req.params.id, validated);
@@ -58,7 +140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:id", async (req, res) => {
+  app.delete("/api/builders/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteBuilder(req.params.id);
       if (!deleted) {
@@ -70,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/jobs", async (_req, res) => {
+  app.get("/api/jobs", isAuthenticated, async (_req, res) => {
     try {
       const jobs = await storage.getAllJobs();
       res.json(jobs);
@@ -79,7 +161,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/jobs", async (req, res) => {
+  app.post("/api/jobs", isAuthenticated, async (req, res) => {
     try {
       const validated = insertJobSchema.parse(req.body);
       const job = await storage.createJob(validated);
@@ -89,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/jobs/:id", async (req, res) => {
+  app.get("/api/jobs/:id", isAuthenticated, async (req, res) => {
     try {
       const job = await storage.getJob(req.params.id);
       if (!job) {
@@ -101,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/jobs/:id", async (req, res) => {
+  app.put("/api/jobs/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertJobSchema.partial().parse(req.body);
       const job = await storage.updateJob(req.params.id, validated);
@@ -114,7 +196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/jobs/:id", async (req, res) => {
+  app.delete("/api/jobs/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteJob(req.params.id);
       if (!deleted) {
@@ -126,7 +208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/schedule-events", async (req, res) => {
+  app.get("/api/schedule-events", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate, jobId } = req.query;
 
@@ -148,7 +230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/schedule-events/sync", async (req, res) => {
+  app.get("/api/schedule-events/sync", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
       
@@ -214,7 +296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/schedule-events", async (req, res) => {
+  app.post("/api/schedule-events", isAuthenticated, async (req, res) => {
     try {
       const validated = insertScheduleEventSchema.parse(req.body);
       const event = await storage.createScheduleEvent(validated);
@@ -241,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/schedule-events/:id", async (req, res) => {
+  app.get("/api/schedule-events/:id", isAuthenticated, async (req, res) => {
     try {
       const event = await storage.getScheduleEvent(req.params.id);
       if (!event) {
@@ -253,7 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/schedule-events/:id", async (req, res) => {
+  app.put("/api/schedule-events/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertScheduleEventSchema.partial().parse(req.body);
       const event = await storage.updateScheduleEvent(req.params.id, validated);
@@ -283,7 +365,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/schedule-events/:id", async (req, res) => {
+  app.delete("/api/schedule-events/:id", isAuthenticated, async (req, res) => {
     try {
       const event = await storage.getScheduleEvent(req.params.id);
       
@@ -305,7 +387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/expenses", async (req, res) => {
+  app.get("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const { jobId } = req.query;
 
@@ -321,7 +403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/expenses", async (req, res) => {
+  app.post("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const validated = insertExpenseSchema.parse(req.body);
       const expense = await storage.createExpense(validated);
@@ -331,7 +413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/expenses/:id", async (req, res) => {
+  app.get("/api/expenses/:id", isAuthenticated, async (req, res) => {
     try {
       const expense = await storage.getExpense(req.params.id);
       if (!expense) {
@@ -343,7 +425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/expenses/:id", async (req, res) => {
+  app.put("/api/expenses/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertExpenseSchema.partial().parse(req.body);
       const expense = await storage.updateExpense(req.params.id, validated);
@@ -356,7 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", async (req, res) => {
+  app.delete("/api/expenses/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteExpense(req.params.id);
       if (!deleted) {
@@ -368,7 +450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/mileage-logs", async (req, res) => {
+  app.get("/api/mileage-logs", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
 
@@ -386,7 +468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/mileage-logs", async (req, res) => {
+  app.post("/api/mileage-logs", isAuthenticated, async (req, res) => {
     try {
       const validated = insertMileageLogSchema.parse(req.body);
       const log = await storage.createMileageLog(validated);
@@ -396,7 +478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/mileage-logs/:id", async (req, res) => {
+  app.get("/api/mileage-logs/:id", isAuthenticated, async (req, res) => {
     try {
       const log = await storage.getMileageLog(req.params.id);
       if (!log) {
@@ -408,7 +490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/mileage-logs/:id", async (req, res) => {
+  app.put("/api/mileage-logs/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertMileageLogSchema.partial().parse(req.body);
       const log = await storage.updateMileageLog(req.params.id, validated);
@@ -421,7 +503,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/mileage-logs/:id", async (req, res) => {
+  app.delete("/api/mileage-logs/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteMileageLog(req.params.id);
       if (!deleted) {
@@ -433,7 +515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/report-templates", async (_req, res) => {
+  app.get("/api/report-templates", isAuthenticated, async (_req, res) => {
     try {
       const templates = await storage.getAllReportTemplates();
       res.json(templates);
@@ -442,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-templates", async (req, res) => {
+  app.post("/api/report-templates", isAuthenticated, async (req, res) => {
     try {
       const validated = insertReportTemplateSchema.parse(req.body);
       const template = await storage.createReportTemplate(validated);
@@ -452,7 +534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/report-templates/:id", async (req, res) => {
+  app.get("/api/report-templates/:id", isAuthenticated, async (req, res) => {
     try {
       const template = await storage.getReportTemplate(req.params.id);
       if (!template) {
@@ -464,7 +546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/report-templates/:id", async (req, res) => {
+  app.put("/api/report-templates/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertReportTemplateSchema.partial().parse(req.body);
       const template = await storage.updateReportTemplate(req.params.id, validated);
@@ -477,7 +559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/report-templates/:id", async (req, res) => {
+  app.delete("/api/report-templates/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deleteReportTemplate(req.params.id);
       if (!deleted) {
@@ -489,7 +571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/report-instances", async (req, res) => {
+  app.get("/api/report-instances", isAuthenticated, async (req, res) => {
     try {
       const { jobId } = req.query;
 
@@ -504,7 +586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-instances", async (req, res) => {
+  app.post("/api/report-instances", isAuthenticated, async (req, res) => {
     try {
       const validated = insertReportInstanceSchema.parse(req.body);
       const instance = await storage.createReportInstance(validated);
@@ -514,7 +596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/report-instances/:id", async (req, res) => {
+  app.get("/api/report-instances/:id", isAuthenticated, async (req, res) => {
     try {
       const instance = await storage.getReportInstance(req.params.id);
       if (!instance) {
@@ -526,7 +608,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/report-instances/:id", async (req, res) => {
+  app.put("/api/report-instances/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertReportInstanceSchema.partial().parse(req.body);
       const instance = await storage.updateReportInstance(req.params.id, validated);
@@ -539,7 +621,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/photos", async (req, res) => {
+  // Object Storage Routes
+  app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL, objectPath });
+    } catch (error) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL", error: String(error) });
+    }
+  });
+
+  app.get("/objects/:objectPath(*)", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId: userId,
+        requestedPermission: ObjectPermission.READ,
+      });
+      if (!canAccess) {
+        return res.sendStatus(401);
+      }
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error checking object access:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Photo Routes
+  app.get("/api/photos", isAuthenticated, async (req, res) => {
     try {
       const { jobId, checklistItemId } = req.query;
 
@@ -559,17 +677,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/photos", async (req, res) => {
+  app.post("/api/photos", isAuthenticated, async (req, res) => {
     try {
-      const validated = insertPhotoSchema.parse(req.body);
+      const userId = getUserId(req);
+      if (!req.body.filePath) {
+        return res.status(400).json({ error: "filePath is required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      
+      // Normalize the path first
+      const normalizedPath = objectStorageService.normalizeObjectEntityPath(req.body.filePath);
+      
+      // Wait for the file to exist before setting ACL (uploaded files may take a moment to appear)
+      if (normalizedPath.startsWith("/")) {
+        const fileExists = await objectStorageService.waitForObjectEntity(normalizedPath, 10, 500);
+        if (!fileExists) {
+          return res.status(400).json({ 
+            error: "Uploaded file not found. Please ensure the file was uploaded successfully before creating the photo record." 
+          });
+        }
+      }
+      
+      // Now that we've confirmed the file exists, set the ACL policy
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        req.body.filePath,
+        {
+          owner: userId || "unknown",
+          visibility: "public",
+        },
+      );
+
+      const validated = insertPhotoSchema.parse({
+        ...req.body,
+        filePath: objectPath,
+      });
       const photo = await storage.createPhoto(validated);
       res.status(201).json(photo);
     } catch (error) {
-      res.status(400).json({ message: "Invalid photo data", error });
+      console.error("Error creating photo:", error);
+      res.status(400).json({ message: "Invalid photo data", error: String(error) });
     }
   });
 
-  app.get("/api/photos/:id", async (req, res) => {
+  app.get("/api/photos/:id", isAuthenticated, async (req, res) => {
     try {
       const photo = await storage.getPhoto(req.params.id);
       if (!photo) {
@@ -581,7 +732,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/photos/:id", async (req, res) => {
+  app.delete("/api/photos/:id", isAuthenticated, async (req, res) => {
     try {
       const deleted = await storage.deletePhoto(req.params.id);
       if (!deleted) {
@@ -593,7 +744,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/forecasts", async (req, res) => {
+  app.get("/api/forecasts", isAuthenticated, async (req, res) => {
     try {
       const forecasts = await storage.getAllForecasts();
       res.json(forecasts);
@@ -602,7 +753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/forecasts/:id", async (req, res) => {
+  app.get("/api/forecasts/:id", isAuthenticated, async (req, res) => {
     try {
       const forecast = await storage.getForecast(req.params.id);
       if (!forecast) {

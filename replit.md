@@ -70,9 +70,15 @@ Preferred communication style: Simple, everyday language.
 - Storage abstraction layer (`server/storage.ts`) defining the data access interface
 - Request/response validation using Zod schemas from shared schema definitions
 
-**Session Management:**
+**Authentication & Session Management:**
+- **Passport.js** with local strategy for username/password authentication
+- **Bcrypt** password hashing (10 rounds) for secure credential storage
 - **Express sessions** with PostgreSQL-backed session store (`connect-pg-simple`)
-- Session configuration supports production and development environments
+- Session configuration:
+  - Production: Secure cookies, SESSION_SECRET from environment
+  - Development: Auto-login middleware for seamless testing
+- Authentication routes: `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/user`
+- All API routes protected with `isAuthenticated` middleware
 
 ### Data Model
 
@@ -103,6 +109,13 @@ Preferred communication style: Simple, everyday language.
   - Access token refresh handling with expiration tracking
   - Requires `REPLIT_CONNECTORS_HOSTNAME` and Replit identity tokens
 
+- **Replit Object Storage** - Cloud file storage for photo uploads
+  - Google Cloud Storage backend via Replit sidecar integration
+  - Presigned URL uploads for direct-to-storage file transfer
+  - ACL-based access control for photo security
+  - Service initialized in `server/objectStorage.ts`
+  - Environment variables: `PUBLIC_OBJECT_SEARCH_PATHS`, `PRIVATE_OBJECT_DIR`
+
 **Database:**
 - **Neon Serverless PostgreSQL** - Cloud-hosted PostgreSQL via `@neondatabase/serverless`
 - Connection string provided via `DATABASE_URL` environment variable
@@ -113,6 +126,11 @@ Preferred communication style: Simple, everyday language.
 - **React Big Calendar** - Calendar view component with drag-and-drop support
 - **React DnD** - Drag and drop functionality for calendar scheduling
 - **date-fns** - Date manipulation and formatting
+- **Uppy** - File upload component library
+  - `@uppy/core`, `@uppy/react`, `@uppy/dashboard`, `@uppy/aws-s3`
+  - Modal-based upload interface with progress tracking
+  - Direct-to-storage uploads via presigned URLs
+  - Custom `ObjectUploader` component in `client/src/components/ObjectUploader.tsx`
 
 **Development Tools:**
 - **Replit-specific plugins** for development environment integration

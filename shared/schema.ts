@@ -122,9 +122,10 @@ export const photos = pgTable("photos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull(),
   checklistItemId: varchar("checklist_item_id"),
-  url: text("url").notNull(),
-  timestamp: timestamp("timestamp").notNull(),
+  filePath: text("file_path").notNull(),
   caption: text("caption"),
+  tags: text("tags").array(),
+  uploadedAt: timestamp("uploaded_at").notNull().default(sql`now()`),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -141,7 +142,7 @@ export const insertReportTemplateSchema = createInsertSchema(reportTemplates).om
 export const insertReportInstanceSchema = createInsertSchema(reportInstances).omit({ id: true, createdAt: true });
 export const insertForecastSchema = createInsertSchema(forecasts).omit({ id: true });
 export const insertChecklistItemSchema = createInsertSchema(checklistItems).omit({ id: true });
-export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true });
+export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, uploadedAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
