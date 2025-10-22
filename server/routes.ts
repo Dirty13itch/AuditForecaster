@@ -17,6 +17,8 @@ import {
   insertReportInstanceSchema,
   insertPhotoSchema,
   insertUserSchema,
+  insertChecklistItemSchema,
+  updateChecklistItemSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -713,6 +715,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filePath: objectPath,
       });
       const photo = await storage.createPhoto(validated);
+      
+      if (photo.checklistItemId) {
+        const checklistItem = await storage.getChecklistItem(photo.checklistItemId);
+        if (checklistItem) {
+          await storage.updateChecklistItem(photo.checklistItemId, {
+            photoCount: (checklistItem.photoCount || 0) + 1,
+          });
+        }
+      }
+      
       res.status(201).json(photo);
     } catch (error) {
       console.error("Error creating photo:", error);
@@ -747,6 +759,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/photos/:id", isAuthenticated, async (req, res) => {
     try {
+      const photo = await storage.getPhoto(req.params.id);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      if (photo.checklistItemId) {
+        const checklistItem = await storage.getChecklistItem(photo.checklistItemId);
+        if (checklistItem && checklistItem.photoCount > 0) {
+          await storage.updateChecklistItem(photo.checklistItemId, {
+            photoCount: checklistItem.photoCount - 1,
+          });
+        }
+      }
+      
       const deleted = await storage.deletePhoto(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Photo not found" });
@@ -775,6 +801,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(forecast);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch forecast" });
+    }
+  });
+
+  app.get("/api/checklist-items", isAuthenticated, async (req, res) => {
+    try {
+      const { jobId } = req.query;
+
+      if (jobId && typeof jobId === "string") {
+        const items = await storage.getChecklistItemsByJob(jobId);
+        return res.json(items);
+      }
+
+      res.status(400).json({ message: "jobId query parameter is required" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch checklist items" });
+    }
+  });
+
+  app.post("/api/checklist-items", isAuthenticated, async (req, res) => {
+    try {
+      const validated = insertChecklistItemSchema.parse(req.body);
+      const item = await storage.createChecklistItem(validated);
+      res.status(201).json(item);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid checklist item data", error });
+    }
+  });
+
+  app.get("/api/checklist-items/:id", isAuthenticated, async (req, res) => {
+    try {
+      const item = await storage.getChecklistItem(req.params.id);
+      if (!item) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch checklist item" });
+    }
+  });
+
+  app.patch("/api/checklist-items/:id", isAuthenticated, async (req, res) => {
+    try {
+      const validated = updateChecklistItemSchema.parse(req.body);
+      const item = await storage.updateChecklistItem(req.params.id, validated);
+      if (!item) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid checklist item data", error });
+    }
+  });
+
+  app.delete("/api/checklist-items/:id", isAuthenticated, async (req, res) => {
+    try {
+      const deleted = await storage.deleteChecklistItem(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete checklist item" });
     }
   });
 

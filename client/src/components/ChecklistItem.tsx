@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Camera, ChevronDown, ChevronUp, ImageIcon } from "lucide-react";
+import { Camera, ChevronDown, ChevronUp, ImageIcon, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChecklistItemProps {
   id: string;
@@ -13,6 +14,7 @@ interface ChecklistItemProps {
   completed: boolean;
   notes?: string;
   photoCount: number;
+  photoRequired?: boolean;
   onToggle?: (id: string) => void;
   onNotesChange?: (id: string, notes: string) => void;
   onPhotoAdd?: (id: string) => void;
@@ -25,12 +27,14 @@ export default function ChecklistItem({
   completed,
   notes = "",
   photoCount,
+  photoRequired = false,
   onToggle,
   onNotesChange,
   onPhotoAdd
 }: ChecklistItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localNotes, setLocalNotes] = useState(notes);
+  const { toast } = useToast();
 
   const handleNotesBlur = () => {
     if (onNotesChange && localNotes !== notes) {
@@ -38,13 +42,30 @@ export default function ChecklistItem({
     }
   };
 
+  const handleToggle = () => {
+    if (!completed && photoRequired && photoCount === 0) {
+      toast({
+        title: "Photo Required",
+        description: "This item requires at least one photo before it can be marked as complete.",
+        variant: "destructive",
+      });
+      return;
+    }
+    onToggle?.(id);
+  };
+
+  const missingRequiredPhoto = photoRequired && photoCount === 0;
+
   return (
-    <Card className="overflow-visible" data-testid={`card-checklist-${id}`}>
+    <Card 
+      className={`overflow-visible ${missingRequiredPhoto && !completed ? "border-destructive" : ""}`}
+      data-testid={`card-checklist-${id}`}
+    >
       <div className="p-4">
         <div className="flex items-start gap-3">
           <Checkbox
             checked={completed}
-            onCheckedChange={() => onToggle?.(id)}
+            onCheckedChange={handleToggle}
             className="mt-1"
             data-testid={`checkbox-item-${id}`}
           />
@@ -62,12 +83,28 @@ export default function ChecklistItem({
                     {title}
                   </h4>
                 </div>
-                {photoCount > 0 && (
-                  <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                    <ImageIcon className="h-3 w-3" />
-                    <span data-testid="text-photo-count">{photoCount} photo{photoCount !== 1 ? 's' : ''}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {photoRequired && (
+                    <Badge 
+                      variant={missingRequiredPhoto ? "destructive" : "secondary"}
+                      className="text-xs"
+                      data-testid="badge-photo-required"
+                    >
+                      {missingRequiredPhoto && <AlertTriangle className="h-3 w-3 mr-1" />}
+                      Photo Required
+                    </Badge>
+                  )}
+                  {photoCount > 0 && (
+                    <Badge 
+                      variant="outline"
+                      className="text-xs bg-green-50 text-green-700 border-green-200"
+                      data-testid="badge-photo-count"
+                    >
+                      <ImageIcon className="h-3 w-3 mr-1" />
+                      {photoCount} photo{photoCount !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </div>
               </div>
               <Button
                 size="icon"
@@ -93,13 +130,13 @@ export default function ChecklistItem({
                   />
                 </div>
                 <Button
-                  variant="outline"
+                  variant={missingRequiredPhoto ? "default" : "outline"}
                   onClick={() => onPhotoAdd?.(id)}
                   className="w-full"
                   data-testid="button-add-photo"
                 >
                   <Camera className="h-4 w-4 mr-2" />
-                  Add Photo
+                  {photoRequired ? "Add Required Photo" : "Add Photo"}
                 </Button>
               </div>
             )}

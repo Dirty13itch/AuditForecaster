@@ -19,6 +19,8 @@ import {
   type InsertPhoto,
   type Forecast,
   type InsertForecast,
+  type ChecklistItem,
+  type InsertChecklistItem,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -84,6 +86,12 @@ export interface IStorage {
   getForecastsByJob(jobId: string): Promise<Forecast[]>;
   updateForecast(id: string, forecast: Partial<InsertForecast>): Promise<Forecast | undefined>;
   deleteForecast(id: string): Promise<boolean>;
+
+  createChecklistItem(item: InsertChecklistItem): Promise<ChecklistItem>;
+  getChecklistItem(id: string): Promise<ChecklistItem | undefined>;
+  getChecklistItemsByJob(jobId: string): Promise<ChecklistItem[]>;
+  updateChecklistItem(id: string, item: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined>;
+  deleteChecklistItem(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -97,6 +105,7 @@ export class MemStorage implements IStorage {
   private reportInstances: Map<string, ReportInstance>;
   private photos: Map<string, Photo>;
   private forecasts: Map<string, Forecast>;
+  private checklistItems: Map<string, ChecklistItem>;
 
   constructor() {
     this.users = new Map();
@@ -109,6 +118,7 @@ export class MemStorage implements IStorage {
     this.reportInstances = new Map();
     this.photos = new Map();
     this.forecasts = new Map();
+    this.checklistItems = new Map();
 
     this.initializeSampleData();
   }
@@ -520,6 +530,73 @@ export class MemStorage implements IStorage {
     this.scheduleEvents.set(scheduleEvent1Id, scheduleEvent1);
     this.scheduleEvents.set(scheduleEvent2Id, scheduleEvent2);
     this.scheduleEvents.set(scheduleEvent3Id, scheduleEvent3);
+
+    const checklistItem1Id = randomUUID();
+    const checklistItem2Id = randomUUID();
+    const checklistItem3Id = randomUUID();
+    const checklistItem4Id = randomUUID();
+    const checklistItem5Id = randomUUID();
+
+    const checklistItem1: ChecklistItem = {
+      id: checklistItem1Id,
+      jobId: job1Id,
+      itemNumber: 1,
+      title: "Exterior walls air sealed",
+      completed: true,
+      notes: "All penetrations sealed with foam",
+      photoCount: 2,
+      photoRequired: true,
+    };
+
+    const checklistItem2: ChecklistItem = {
+      id: checklistItem2Id,
+      jobId: job1Id,
+      itemNumber: 2,
+      title: "Attic access insulated and sealed",
+      completed: false,
+      notes: null,
+      photoCount: 0,
+      photoRequired: true,
+    };
+
+    const checklistItem3: ChecklistItem = {
+      id: checklistItem3Id,
+      jobId: job1Id,
+      itemNumber: 3,
+      title: "HVAC ducts sealed at register boots",
+      completed: true,
+      notes: "Mastic applied to all connections",
+      photoCount: 3,
+      photoRequired: true,
+    };
+
+    const checklistItem4: ChecklistItem = {
+      id: checklistItem4Id,
+      jobId: job1Id,
+      itemNumber: 4,
+      title: "Recessed lighting IC rated and sealed",
+      completed: false,
+      notes: null,
+      photoCount: 0,
+      photoRequired: false,
+    };
+
+    const checklistItem5: ChecklistItem = {
+      id: checklistItem5Id,
+      jobId: job1Id,
+      itemNumber: 5,
+      title: "Plumbing penetrations air sealed",
+      completed: false,
+      notes: null,
+      photoCount: 1,
+      photoRequired: true,
+    };
+
+    this.checklistItems.set(checklistItem1Id, checklistItem1);
+    this.checklistItems.set(checklistItem2Id, checklistItem2);
+    this.checklistItems.set(checklistItem3Id, checklistItem3);
+    this.checklistItems.set(checklistItem4Id, checklistItem4);
+    this.checklistItems.set(checklistItem5Id, checklistItem5);
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -905,6 +982,44 @@ export class MemStorage implements IStorage {
 
   async deleteForecast(id: string): Promise<boolean> {
     return this.forecasts.delete(id);
+  }
+
+  async createChecklistItem(insertItem: InsertChecklistItem): Promise<ChecklistItem> {
+    const id = randomUUID();
+    const item: ChecklistItem = {
+      id,
+      jobId: insertItem.jobId,
+      itemNumber: insertItem.itemNumber,
+      title: insertItem.title,
+      completed: insertItem.completed ?? false,
+      notes: insertItem.notes ?? null,
+      photoCount: insertItem.photoCount ?? 0,
+      photoRequired: insertItem.photoRequired ?? false,
+    };
+    this.checklistItems.set(id, item);
+    return item;
+  }
+
+  async getChecklistItem(id: string): Promise<ChecklistItem | undefined> {
+    return this.checklistItems.get(id);
+  }
+
+  async getChecklistItemsByJob(jobId: string): Promise<ChecklistItem[]> {
+    return Array.from(this.checklistItems.values())
+      .filter((item) => item.jobId === jobId)
+      .sort((a, b) => a.itemNumber - b.itemNumber);
+  }
+
+  async updateChecklistItem(id: string, updates: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined> {
+    const item = this.checklistItems.get(id);
+    if (!item) return undefined;
+    const updated = { ...item, ...updates };
+    this.checklistItems.set(id, updated);
+    return updated;
+  }
+
+  async deleteChecklistItem(id: string): Promise<boolean> {
+    return this.checklistItems.delete(id);
   }
 }
 

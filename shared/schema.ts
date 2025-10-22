@@ -116,6 +116,7 @@ export const checklistItems = pgTable("checklist_items", {
   completed: boolean("completed").default(false),
   notes: text("notes"),
   photoCount: integer("photo_count").default(0),
+  photoRequired: boolean("photo_required").default(false),
 });
 
 export const photos = pgTable("photos", {
@@ -143,6 +144,15 @@ export const insertReportTemplateSchema = createInsertSchema(reportTemplates).om
 export const insertReportInstanceSchema = createInsertSchema(reportInstances).omit({ id: true, createdAt: true });
 export const insertForecastSchema = createInsertSchema(forecasts).omit({ id: true });
 export const insertChecklistItemSchema = createInsertSchema(checklistItems).omit({ id: true });
+export const updateChecklistItemSchema = z.object({
+  jobId: z.string().optional(),
+  itemNumber: z.number().optional(),
+  title: z.string().optional(),
+  completed: z.boolean().optional(),
+  notes: z.string().nullable().optional(),
+  photoCount: z.number().optional(),
+  photoRequired: z.boolean().optional(),
+});
 export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, uploadedAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -166,4 +176,5 @@ export type InsertReportTemplate = z.infer<typeof insertReportTemplateSchema>;
 export type InsertReportInstance = z.infer<typeof insertReportInstanceSchema>;
 export type InsertForecast = z.infer<typeof insertForecastSchema>;
 export type InsertChecklistItem = z.infer<typeof insertChecklistItemSchema>;
+export type UpdateChecklistItem = z.infer<typeof updateChecklistItemSchema>;
 export type InsertPhoto = z.infer<typeof insertPhotoSchema>;

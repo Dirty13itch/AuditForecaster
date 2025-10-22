@@ -33,7 +33,8 @@ import { PhotoAnnotator } from "@/components/PhotoAnnotator";
 import { PhotoOCR } from "@/components/PhotoOCR";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Job, Builder, Photo } from "@shared/schema";
+import type { Job, Builder, Photo, ChecklistItem } from "@shared/schema";
+import ChecklistItemComponent from "@/components/ChecklistItem";
 import {
   TAG_CATEGORIES,
   INSPECTION_TAGS,
@@ -78,6 +79,9 @@ export default function Jobs() {
   const [photoToOCR, setPhotoToOCR] = useState<Photo | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  const [selectedChecklistItemForPhoto, setSelectedChecklistItemForPhoto] = useState<string | null>(null);
+  const [completionValidationDialogOpen, setCompletionValidationDialogOpen] = useState(false);
+  const [missingPhotoItems, setMissingPhotoItems] = useState<ChecklistItem[]>([]);
 
   const { data: jobs = [], isLoading: isLoadingJobs} = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -93,6 +97,17 @@ export default function Jobs() {
       if (!selectedJobForPhotos?.id) return [];
       const response = await fetch(`/api/photos?jobId=${selectedJobForPhotos.id}`);
       if (!response.ok) throw new Error('Failed to fetch photos');
+      return response.json();
+    },
+    enabled: !!selectedJobForPhotos?.id,
+  });
+
+  const { data: checklistItems = [], isLoading: isLoadingChecklistItems } = useQuery<ChecklistItem[]>({
+    queryKey: ["/api/checklist-items", selectedJobForPhotos?.id],
+    queryFn: async () => {
+      if (!selectedJobForPhotos?.id) return [];
+      const response = await fetch(`/api/checklist-items?jobId=${selectedJobForPhotos.id}`);
+      if (!response.ok) throw new Error('Failed to fetch checklist items');
       return response.json();
     },
     enabled: !!selectedJobForPhotos?.id,
@@ -235,6 +250,7 @@ export default function Jobs() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/photos", selectedJobForPhotos?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checklist-items", selectedJobForPhotos?.id] });
       toast({
         title: "Success",
         description: "Annotations saved successfully",
@@ -246,6 +262,26 @@ export default function Jobs() {
       toast({
         title: "Error",
         description: "Failed to save annotations",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateChecklistItemMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      return apiRequest("PATCH", `/api/checklist-items/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/checklist-items", selectedJobForPhotos?.id] });
+      toast({
+        title: "Success",
+        description: "Checklist item updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update checklist item",
         variant: "destructive",
       });
     },
@@ -345,12 +381,14 @@ export default function Jobs() {
     
     await createPhotoMutation.mutateAsync({
       jobId: selectedJobForPhotos.id,
+      checklistItemId: selectedChecklistItemForPhoto || undefined,
       filePath: uploadedObjectPath,
       caption: photoCaption || undefined,
       tags: selectedPhotoTags.length > 0 ? selectedPhotoTags : undefined,
     });
     
     setUploadedObjectPath("");
+    setSelectedChecklistItemForPhoto(null);
   };
 
   const handleToggleTag = (tag: PhotoTag) => {
@@ -414,6 +452,41 @@ export default function Jobs() {
         data: updates,
       });
     }
+  };
+
+  const handleChecklistItemToggle = (itemId: string) => {
+    const item = checklistItems.find(i => i.id === itemId);
+    if (!item) return;
+    
+    updateChecklistItemMutation.mutate({
+      id: itemId,
+      data: { completed: !item.completed },
+    });
+  };
+
+  const handleChecklistItemNotesChange = (itemId: string, notes: string) => {
+    updateChecklistItemMutation.mutate({
+      id: itemId,
+      data: { notes },
+    });
+  };
+
+  const handleChecklistItemPhotoAdd = (itemId: string) => {
+    setSelectedChecklistItemForPhoto(itemId);
+  };
+
+  const handleValidateJobCompletion = (job: Job) => {
+    const itemsToCheck = checklistItems.filter(item => item.jobId === job.id);
+    const missing = itemsToCheck.filter(item => 
+      item.photoRequired && (!item.photoCount || item.photoCount === 0)
+    );
+    
+    if (missing.length > 0) {
+      setMissingPhotoItems(missing);
+      setCompletionValidationDialogOpen(true);
+      return false;
+    }
+    return true;
   };
 
   const handleEnterSelectionMode = () => {
@@ -895,11 +968,48 @@ export default function Jobs() {
             </DialogDescription>
           </DialogHeader>
           
-          <Tabs defaultValue="gallery" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs defaultValue="checklist" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="checklist" data-testid="tab-checklist">Checklist</TabsTrigger>
               <TabsTrigger value="gallery" data-testid="tab-gallery">Gallery</TabsTrigger>
               <TabsTrigger value="upload" data-testid="tab-upload">Upload</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="checklist" className="space-y-4">
+              <div className="space-y-4">
+                {isLoadingChecklistItems ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                ) : checklistItems.length === 0 ? (
+                  <Card className="p-8 text-center">
+                    <p className="text-muted-foreground" data-testid="text-no-checklist-items">
+                      No checklist items for this job
+                    </p>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {checklistItems.map((item) => (
+                      <ChecklistItemComponent
+                        key={item.id}
+                        id={item.id}
+                        itemNumber={item.itemNumber}
+                        title={item.title}
+                        completed={item.completed || false}
+                        notes={item.notes || ""}
+                        photoCount={item.photoCount || 0}
+                        photoRequired={item.photoRequired || false}
+                        onToggle={handleChecklistItemToggle}
+                        onNotesChange={handleChecklistItemNotesChange}
+                        onPhotoAdd={handleChecklistItemPhotoAdd}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
             
             <TabsContent value="gallery" className="space-y-4">
               <div className="space-y-4">
@@ -1329,6 +1439,39 @@ export default function Jobs() {
           onAutoFill={handleOCRAutoFill}
         />
       )}
+
+      <AlertDialog open={completionValidationDialogOpen} onOpenChange={setCompletionValidationDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="text-completion-validation-title">
+              Missing Required Photos
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The following checklist items require photos before this job can be completed:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-4">
+            {missingPhotoItems.map((item) => (
+              <Card key={item.id} className="p-3 border-destructive" data-testid={`card-missing-item-${item.id}`}>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs font-mono">
+                    #{item.itemNumber}
+                  </Badge>
+                  <span className="text-sm font-medium">{item.title}</span>
+                  <Badge variant="destructive" className="text-xs ml-auto">
+                    Photo Required
+                  </Badge>
+                </div>
+              </Card>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-completion">
+              Close
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
