@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil } from "lucide-react";
+import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ import WorkflowStepper from "@/components/WorkflowStepper";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PhotoAnnotator } from "@/components/PhotoAnnotator";
+import { PhotoOCR } from "@/components/PhotoOCR";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, Photo } from "@shared/schema";
@@ -73,6 +74,8 @@ export default function Jobs() {
   const [uploadedObjectPath, setUploadedObjectPath] = useState<string>("");
   const [annotatorOpen, setAnnotatorOpen] = useState(false);
   const [photoToAnnotate, setPhotoToAnnotate] = useState<Photo | null>(null);
+  const [ocrOpen, setOcrOpen] = useState(false);
+  const [photoToOCR, setPhotoToOCR] = useState<Photo | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
 
@@ -386,6 +389,31 @@ export default function Jobs() {
   const handleCancelAnnotator = () => {
     setAnnotatorOpen(false);
     setPhotoToAnnotate(null);
+  };
+
+  const handleOpenOCR = (photo: Photo) => {
+    setPhotoToOCR(photo);
+    setOcrOpen(true);
+  };
+
+  const handleCloseOCR = () => {
+    setOcrOpen(false);
+    setPhotoToOCR(null);
+  };
+
+  const handleOCRAutoFill = (data: { address?: string; lotNumber?: string }) => {
+    if (!selectedJobForPhotos) return;
+    
+    const updates: any = {};
+    if (data.address) updates.address = data.address;
+    if (data.lotNumber) updates.lotNumber = data.lotNumber;
+
+    if (Object.keys(updates).length > 0) {
+      updateJobMutation.mutate({
+        id: selectedJobForPhotos.id,
+        data: updates,
+      });
+    }
   };
 
   const handleEnterSelectionMode = () => {
@@ -1043,6 +1071,16 @@ export default function Jobs() {
                           {!selectionMode && (
                             <div className="absolute top-2 right-2 flex gap-2">
                               <Button
+                                variant="secondary"
+                                size="icon"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => handleOpenOCR(photo)}
+                                data-testid={`button-ocr-photo-${photo.id}`}
+                                title="Extract Text (OCR)"
+                              >
+                                <ScanText className="h-4 w-4" />
+                              </Button>
+                              <Button
                                 variant="default"
                                 size="icon"
                                 className="opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1279,6 +1317,16 @@ export default function Jobs() {
           onSave={handleSaveAnnotations}
           onCancel={handleCancelAnnotator}
           open={annotatorOpen}
+        />
+      )}
+
+      {photoToOCR && (
+        <PhotoOCR
+          open={ocrOpen}
+          photoUrl={photoToOCR.filePath}
+          jobId={selectedJobForPhotos?.id}
+          onClose={handleCloseOCR}
+          onAutoFill={handleOCRAutoFill}
         />
       )}
     </div>
