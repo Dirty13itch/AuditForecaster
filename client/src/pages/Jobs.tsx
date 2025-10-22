@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText } from "lucide-react";
+import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText, PenTool } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PhotoAnnotator } from "@/components/PhotoAnnotator";
 import { PhotoOCR } from "@/components/PhotoOCR";
+import { SignatureCapture } from "@/components/SignatureCapture";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, Photo, ChecklistItem } from "@shared/schema";
@@ -82,6 +83,8 @@ export default function Jobs() {
   const [selectedChecklistItemForPhoto, setSelectedChecklistItemForPhoto] = useState<string | null>(null);
   const [completionValidationDialogOpen, setCompletionValidationDialogOpen] = useState(false);
   const [missingPhotoItems, setMissingPhotoItems] = useState<ChecklistItem[]>([]);
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
+  const [selectedJobForSignature, setSelectedJobForSignature] = useState<Job | null>(null);
 
   const { data: jobs = [], isLoading: isLoadingJobs} = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -286,6 +289,67 @@ export default function Jobs() {
       });
     },
   });
+
+  const handleSignatureSave = async (signatureData: {
+    signatureBlob: Blob;
+    signerName: string;
+    signerRole: string;
+  }) => {
+    if (!selectedJobForSignature) return;
+
+    try {
+      const uploadResponse = await fetch("/api/objects/upload", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to get upload URL");
+      }
+
+      const { uploadURL, objectPath } = await uploadResponse.json();
+
+      const uploadResult = await fetch(uploadURL, {
+        method: "PUT",
+        body: signatureData.signatureBlob,
+        headers: {
+          "Content-Type": "image/png",
+        },
+      });
+
+      if (!uploadResult.ok) {
+        throw new Error("Failed to upload signature");
+      }
+
+      const signatureResponse = await apiRequest(
+        "POST",
+        `/api/jobs/${selectedJobForSignature.id}/signature`,
+        {
+          signatureUrl: objectPath,
+          signerName: signatureData.signerName,
+          signerRole: signatureData.signerRole,
+        }
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+
+      toast({
+        title: "Success",
+        description: `Signature captured from ${signatureData.signerName}`,
+      });
+
+      setSignatureDialogOpen(false);
+      setSelectedJobForSignature(null);
+    } catch (error) {
+      console.error("Error saving signature:", error);
+      throw error;
+    }
+  };
+
+  const handleOpenSignatureDialog = (job: Job) => {
+    setSelectedJobForSignature(job);
+    setSignatureDialogOpen(true);
+  };
 
   const handleSaveJob = async (data: any) => {
     const jobData = {
@@ -840,19 +904,53 @@ export default function Jobs() {
                     navigate(`/inspection/${job.id}`);
                   }}
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="absolute bottom-4 right-4"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenPhotosDialog(job);
-                  }}
-                  data-testid={`button-photos-${job.id}`}
-                >
-                  <ImageIcon className="h-4 w-4 mr-2" />
-                  Photos
-                </Button>
+                <div className="absolute bottom-4 right-4 flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenPhotosDialog(job);
+                    }}
+                    data-testid={`button-photos-${job.id}`}
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Photos
+                  </Button>
+                  {job.builderSignatureUrl && job.builderSignerName && job.builderSignedAt ? (
+                    <Badge 
+                      variant="secondary" 
+                      className="px-3 py-1.5"
+                      data-testid={`badge-signed-${job.id}`}
+                    >
+                      <PenTool className="h-3 w-3 mr-1" />
+                      Signed
+                    </Badge>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenSignatureDialog(job);
+                      }}
+                      data-testid={`button-signature-${job.id}`}
+                    >
+                      <PenTool className="h-4 w-4 mr-2" />
+                      Get Signature
+                    </Button>
+                  )}
+                </div>
+                {job.builderSignatureUrl && job.builderSignerName && job.builderSignedAt && (
+                  <div 
+                    className="absolute top-4 right-4 text-xs text-muted-foreground bg-background/95 px-2 py-1 rounded border"
+                    data-testid={`text-signature-info-${job.id}`}
+                  >
+                    Signed by {job.builderSignerName}
+                    <br />
+                    {format(new Date(job.builderSignedAt), "MMM d, yyyy 'at' h:mm a")}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1472,6 +1570,16 @@ export default function Jobs() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SignatureCapture
+        open={signatureDialogOpen}
+        onClose={() => {
+          setSignatureDialogOpen(false);
+          setSelectedJobForSignature(null);
+        }}
+        onSave={handleSignatureSave}
+        jobName={selectedJobForSignature?.name}
+      />
     </div>
   );
 }

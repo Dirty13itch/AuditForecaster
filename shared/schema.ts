@@ -38,6 +38,9 @@ export const jobs = pgTable("jobs", {
   latitude: real("latitude"),
   longitude: real("longitude"),
   notes: text("notes"),
+  builderSignatureUrl: text("builder_signature_url"),
+  builderSignedAt: timestamp("builder_signed_at"),
+  builderSignerName: text("builder_signer_name"),
 });
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -138,7 +141,11 @@ export const insertUserSchema = createInsertSchema(users).pick({
 });
 
 export const insertBuilderSchema = createInsertSchema(builders).omit({ id: true, totalJobs: true });
-export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
+  builderSignatureUrl: z.string().nullable().optional(),
+  builderSignedAt: z.date().nullable().optional(),
+  builderSignerName: z.string().nullable().optional(),
+});
 export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit({ id: true });
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true });
 export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true });

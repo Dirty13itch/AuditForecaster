@@ -658,6 +658,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Signature Routes
+  app.post("/api/jobs/:id/signature", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { signatureUrl, signerName, signerRole } = req.body;
+
+      if (!signatureUrl || !signerName) {
+        return res.status(400).json({ error: "signatureUrl and signerName are required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      
+      // Normalize the signature path (handles both presigned HTTPS URLs and relative paths)
+      const normalizedPath = objectStorageService.normalizeObjectEntityPath(signatureUrl);
+      
+      // Validate that normalization was successful
+      if (!normalizedPath || !normalizedPath.startsWith("/")) {
+        return res.status(400).json({ 
+          error: "Invalid signature URL format" 
+        });
+      }
+      
+      // Wait for the file to exist before setting ACL
+      const fileExists = await objectStorageService.waitForObjectEntity(normalizedPath, 10, 500);
+      if (!fileExists) {
+        return res.status(400).json({ 
+          error: "Uploaded signature not found. Please ensure the signature was uploaded successfully." 
+        });
+      }
+      
+      // Set the ACL policy to private (signatures should be secure)
+      // Use normalizedPath instead of raw signatureUrl
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        normalizedPath,
+        {
+          owner: userId || "unknown",
+          visibility: "private",
+        },
+      );
+
+      // Update the job with signature data and server-side timestamp
+      const job = await storage.updateJob(req.params.id, {
+        builderSignatureUrl: objectPath,
+        builderSignerName: signerName,
+        builderSignedAt: new Date(),
+      });
+
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      res.json(job);
+    } catch (error) {
+      console.error("Error saving signature:", error);
+      res.status(500).json({ message: "Failed to save signature", error: String(error) });
+    }
+  });
+
   // Photo Routes
   app.get("/api/photos", isAuthenticated, async (req, res) => {
     try {
