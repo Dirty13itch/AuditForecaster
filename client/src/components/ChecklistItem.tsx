@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import VoiceRecorder from "./VoiceRecorder";
 
 interface ChecklistItemProps {
@@ -48,7 +50,18 @@ export default function ChecklistItem({
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prevExpandedRef = useRef(isExpanded);
   const { toast } = useToast();
+
+  const autoSave = useAutoSave({
+    data: { notes: localNotes },
+    onSave: async () => {
+      if (onNotesChange && localNotes !== notes) {
+        onNotesChange(id, localNotes);
+      }
+    },
+    enabled: !!onNotesChange && isExpanded,
+  });
 
   useEffect(() => {
     if (audioRef.current) {
@@ -67,6 +80,18 @@ export default function ChecklistItem({
       }
     };
   }, []);
+
+  // Trigger save when collapsing to preserve unsaved notes
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current;
+    const isNowCollapsed = !isExpanded;
+    
+    if (wasExpanded && isNowCollapsed) {
+      autoSave.forceSave(true);
+    }
+    
+    prevExpandedRef.current = isExpanded;
+  }, [isExpanded, autoSave]);
 
   const handleNotesBlur = () => {
     if (onNotesChange && localNotes !== notes) {
@@ -208,7 +233,14 @@ export default function ChecklistItem({
             {isExpanded && (
               <div className="mt-4 space-y-3">
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Notes</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Notes</label>
+                    <AutoSaveIndicator
+                      isSaving={autoSave.isSaving}
+                      lastSaved={autoSave.lastSaved}
+                      error={autoSave.error}
+                    />
+                  </div>
                   <Textarea
                     value={localNotes}
                     onChange={(e) => setLocalNotes(e.target.value)}

@@ -37,6 +37,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -755,11 +757,32 @@ function ExpenseDialog({ open, onOpenChange, expense, jobs, onSave, isPending }:
     },
   });
 
+  const formData = form.watch();
+
+  const autoSave = useAutoSave({
+    data: formData,
+    onSave: async () => {
+      if (expense) {
+        await onSave(formData);
+      }
+    },
+    enabled: !!expense && open,
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl" data-testid="dialog-expense">
         <DialogHeader>
-          <DialogTitle>{expense ? "Edit Expense" : "Add Expense"}</DialogTitle>
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle>{expense ? "Edit Expense" : "Add Expense"}</DialogTitle>
+            {expense && (
+              <AutoSaveIndicator
+                isSaving={autoSave.isSaving}
+                lastSaved={autoSave.lastSaved}
+                error={autoSave.error}
+              />
+            )}
+          </div>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSave)} className="space-y-4">

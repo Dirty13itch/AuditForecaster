@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import type { Job, Builder } from "@shared/schema";
 
 const jobFormSchema = z.object({
@@ -67,6 +69,18 @@ export default function JobDialog({
     },
   });
 
+  const formData = form.watch();
+
+  const autoSave = useAutoSave({
+    data: formData,
+    onSave: async () => {
+      if (job) {
+        await onSave(formData);
+      }
+    },
+    enabled: !!job && open,
+  });
+
   const handleSubmit = async (data: JobFormValues) => {
     await onSave(data);
     form.reset();
@@ -76,9 +90,18 @@ export default function JobDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-job">
         <DialogHeader>
-          <DialogTitle data-testid="text-dialog-title">
-            {job ? "Edit Job" : "Add New Job"}
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle data-testid="text-dialog-title">
+              {job ? "Edit Job" : "Add New Job"}
+            </DialogTitle>
+            {job && (
+              <AutoSaveIndicator
+                isSaving={autoSave.isSaving}
+                lastSaved={autoSave.lastSaved}
+                error={autoSave.error}
+              />
+            )}
+          </div>
         </DialogHeader>
         
         <Form {...form}>
