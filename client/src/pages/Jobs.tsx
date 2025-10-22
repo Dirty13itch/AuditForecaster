@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
@@ -73,6 +73,8 @@ export default function Jobs() {
   const [uploadedObjectPath, setUploadedObjectPath] = useState<string>("");
   const [annotatorOpen, setAnnotatorOpen] = useState(false);
   const [photoToAnnotate, setPhotoToAnnotate] = useState<Photo | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
 
   const { data: jobs = [], isLoading: isLoadingJobs} = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -385,6 +387,48 @@ export default function Jobs() {
     setAnnotatorOpen(false);
     setPhotoToAnnotate(null);
   };
+
+  const handleEnterSelectionMode = () => {
+    setSelectionMode(true);
+    setSelectedPhotoIds(new Set());
+  };
+
+  const handleExitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedPhotoIds(new Set());
+  };
+
+  const handleTogglePhotoSelection = (photoId: string) => {
+    const newSelected = new Set(selectedPhotoIds);
+    if (newSelected.has(photoId)) {
+      newSelected.delete(photoId);
+    } else {
+      newSelected.add(photoId);
+    }
+    setSelectedPhotoIds(newSelected);
+  };
+
+  const handleSelectAllPhotos = () => {
+    setSelectedPhotoIds(new Set(filteredPhotos.map(p => p.id)));
+  };
+
+  const handleDeselectAllPhotos = () => {
+    setSelectedPhotoIds(new Set());
+  };
+
+  const handleAddToReport = () => {
+    const count = selectedPhotoIds.size;
+    toast({
+      title: "Photos Ready for Report",
+      description: `${count} photo${count !== 1 ? 's' : ''} ready to be added to report`,
+    });
+    handleExitSelectionMode();
+  };
+
+  useEffect(() => {
+    setSelectionMode(false);
+    setSelectedPhotoIds(new Set());
+  }, [selectedJobForPhotos?.id]);
 
   const filteredPhotos = photos.filter(photo => {
     if (filterTags.length === 0) return true;
@@ -832,26 +876,76 @@ export default function Jobs() {
             <TabsContent value="gallery" className="space-y-4">
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Filter by Tags</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground" data-testid="text-photo-count">
-                      {filterTags.length > 0 ? `${filteredPhotos.length} / ${photos.length}` : `${photos.length}`} photos
-                    </span>
-                    {filterTags.length > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleClearFilters}
-                        data-testid="button-clear-filters"
-                      >
-                        <FilterX className="h-4 w-4 mr-2" />
-                        Clear Filters
-                      </Button>
-                    )}
-                  </div>
+                  {!selectionMode ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Filter by Tags</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground" data-testid="text-photo-count">
+                          {filterTags.length > 0 ? `${filteredPhotos.length} / ${photos.length}` : `${photos.length}`} photos
+                        </span>
+                        {filterTags.length > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleClearFilters}
+                            data-testid="button-clear-filters"
+                          >
+                            <FilterX className="h-4 w-4 mr-2" />
+                            Clear Filters
+                          </Button>
+                        )}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleEnterSelectionMode}
+                          disabled={photos.length === 0}
+                          data-testid="button-select-photos"
+                        >
+                          <CheckSquare className="h-4 w-4 mr-2" />
+                          Select Photos
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" data-testid="badge-selected-photos-count">
+                          {selectedPhotoIds.size} photo{selectedPhotoIds.size !== 1 ? 's' : ''} selected
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={selectedPhotoIds.size === filteredPhotos.length ? handleDeselectAllPhotos : handleSelectAllPhotos}
+                          data-testid="button-toggle-select-all"
+                        >
+                          <CheckSquare className="h-4 w-4 mr-2" />
+                          {selectedPhotoIds.size === filteredPhotos.length ? "Deselect All" : "Select All"}
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleExitSelectionMode}
+                          data-testid="button-cancel-selection"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleAddToReport}
+                          disabled={selectedPhotoIds.size === 0}
+                          data-testid="button-add-to-report"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add to Report
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {filterTags.length > 0 && (
@@ -902,47 +996,75 @@ export default function Jobs() {
                 </Card>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {filteredPhotos.map((photo) => (
-                    <Card key={photo.id} className="overflow-hidden" data-testid={`card-photo-${photo.id}`}>
-                      <div className="relative group">
-                        <img
-                          src={photo.filePath}
-                          alt={photo.caption || "Job photo"}
-                          className="w-full h-48 object-cover"
-                          data-testid={`img-photo-${photo.id}`}
-                        />
-                        {photo.annotationData && Array.isArray(photo.annotationData) && photo.annotationData.length > 0 && (
-                          <Badge 
-                            className="absolute top-2 left-2 bg-primary text-primary-foreground"
-                            data-testid={`badge-annotated-${photo.id}`}
-                          >
-                            <Pencil className="h-3 w-3 mr-1" />
-                            Annotated
-                          </Badge>
-                        )}
-                        <div className="absolute top-2 right-2 flex gap-2">
-                          <Button
-                            variant="default"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleOpenAnnotator(photo)}
-                            data-testid={`button-annotate-photo-${photo.id}`}
-                            title="Annotate Photo"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleDeletePhoto(photo.id)}
-                            disabled={deletePhotoMutation.isPending}
-                            data-testid={`button-delete-photo-${photo.id}`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                  {filteredPhotos.map((photo) => {
+                    const isSelected = selectedPhotoIds.has(photo.id);
+                    return (
+                      <Card 
+                        key={photo.id} 
+                        className={`overflow-hidden ${isSelected ? 'ring-2 ring-primary' : ''}`} 
+                        data-testid={`card-photo-${photo.id}`}
+                      >
+                        <div className="relative group">
+                          <img
+                            src={photo.filePath}
+                            alt={photo.caption || "Job photo"}
+                            className="w-full h-48 object-cover"
+                            data-testid={`img-photo-${photo.id}`}
+                          />
+                          {isSelected && !selectionMode && (
+                            <div className="absolute inset-0 bg-primary/10 pointer-events-none" />
+                          )}
+                          {selectionMode && (
+                            <div 
+                              className="absolute top-2 left-2 z-10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTogglePhotoSelection(photo.id);
+                              }}
+                            >
+                              <div className="flex items-center justify-center w-12 h-12 cursor-pointer" data-testid={`checkbox-photo-${photo.id}`}>
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => handleTogglePhotoSelection(photo.id)}
+                                  className="h-6 w-6 border-2 bg-white shadow-md"
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {!selectionMode && photo.annotationData && Array.isArray(photo.annotationData) && photo.annotationData.length > 0 && (
+                            <Badge 
+                              className="absolute top-2 left-2 bg-primary text-primary-foreground"
+                              data-testid={`badge-annotated-${photo.id}`}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" />
+                              Annotated
+                            </Badge>
+                          )}
+                          {!selectionMode && (
+                            <div className="absolute top-2 right-2 flex gap-2">
+                              <Button
+                                variant="default"
+                                size="icon"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => handleOpenAnnotator(photo)}
+                                data-testid={`button-annotate-photo-${photo.id}`}
+                                title="Annotate Photo"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => handleDeletePhoto(photo.id)}
+                                disabled={deletePhotoMutation.isPending}
+                                data-testid={`button-delete-photo-${photo.id}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                      </div>
                       {(photo.caption || photo.tags) && (
                         <CardContent className="pt-3">
                           {photo.caption && (
@@ -969,8 +1091,9 @@ export default function Jobs() {
                           )}
                         </CardContent>
                       )}
-                    </Card>
-                  ))}
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </TabsContent>
