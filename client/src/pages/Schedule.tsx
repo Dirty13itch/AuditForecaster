@@ -118,7 +118,20 @@ export default function Schedule() {
   });
 
   const { data: scheduleEvents = [], isLoading: eventsLoading } = useQuery<ScheduleEvent[]>({
-    queryKey: ['/api/schedule-events', { startDate: startDate.toISOString(), endDate: endDate.toISOString() }],
+    queryKey: ['/api/schedule-events', startDate.toISOString(), endDate.toISOString()],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+      const response = await fetch(`/api/schedule-events?${params.toString()}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
   });
 
   const createEventMutation = useMutation({
@@ -166,7 +179,8 @@ export default function Schedule() {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
       });
-      return apiRequest('GET', `/api/schedule-events/sync?${params.toString()}`);
+      const response = await apiRequest('GET', `/api/schedule-events/sync?${params.toString()}`);
+      return response.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
