@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X } from "lucide-react";
+import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +32,17 @@ import { ObjectUploader } from "@/components/ObjectUploader";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, Photo } from "@shared/schema";
+import {
+  TAG_CATEGORIES,
+  INSPECTION_TAGS,
+  STATUS_TAGS,
+  PRIORITY_TAGS,
+  LOCATION_TAGS,
+  getTagConfig,
+  getCategoryLabel,
+  type PhotoTag,
+  type TagCategory,
+} from "@shared/photoTags";
 
 type SortOption = "date" | "priority" | "status" | "name";
 
@@ -55,7 +67,8 @@ export default function Jobs() {
   const [photosDialogOpen, setPhotosDialogOpen] = useState(false);
   const [selectedJobForPhotos, setSelectedJobForPhotos] = useState<Job | null>(null);
   const [photoCaption, setPhotoCaption] = useState("");
-  const [photoTags, setPhotoTags] = useState("");
+  const [selectedPhotoTags, setSelectedPhotoTags] = useState<PhotoTag[]>([]);
+  const [filterTags, setFilterTags] = useState<PhotoTag[]>([]);
   const [uploadedObjectPath, setUploadedObjectPath] = useState<string>("");
 
   const { data: jobs = [], isLoading: isLoadingJobs} = useQuery<Job[]>({
@@ -177,7 +190,7 @@ export default function Jobs() {
         description: "Photo uploaded successfully",
       });
       setPhotoCaption("");
-      setPhotoTags("");
+      setSelectedPhotoTags([]);
     },
     onError: (error: any) => {
       toast({
@@ -300,21 +313,41 @@ export default function Jobs() {
   const handleUploadComplete = async (result: any) => {
     if (!selectedJobForPhotos || !uploadedObjectPath) return;
     
-    const tags = photoTags.split(',').map(tag => tag.trim()).filter(Boolean);
-    
     await createPhotoMutation.mutateAsync({
       jobId: selectedJobForPhotos.id,
       filePath: uploadedObjectPath,
       caption: photoCaption || undefined,
-      tags: tags.length > 0 ? tags : undefined,
+      tags: selectedPhotoTags.length > 0 ? selectedPhotoTags : undefined,
     });
     
     setUploadedObjectPath("");
   };
 
+  const handleToggleTag = (tag: PhotoTag) => {
+    setSelectedPhotoTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handleFilterByTag = (tag: PhotoTag) => {
+    setFilterTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handleClearFilters = () => {
+    setFilterTags([]);
+  };
+
   const handleDeletePhoto = (photoId: string) => {
     deletePhotoMutation.mutate(photoId);
   };
+
+  const filteredPhotos = photos.filter(photo => {
+    if (filterTags.length === 0) return true;
+    if (!photo.tags || photo.tags.length === 0) return false;
+    return filterTags.some(filterTag => photo.tags?.includes(filterTag));
+  });
 
   const filteredJobs = jobs.filter(job => {
     const matchesSearch = 
@@ -754,6 +787,56 @@ export default function Jobs() {
             </TabsList>
             
             <TabsContent value="gallery" className="space-y-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Filter by Tags</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground" data-testid="text-photo-count">
+                      {filterTags.length > 0 ? `${filteredPhotos.length} / ${photos.length}` : `${photos.length}`} photos
+                    </span>
+                    {filterTags.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleClearFilters}
+                        data-testid="button-clear-filters"
+                      >
+                        <FilterX className="h-4 w-4 mr-2" />
+                        Clear Filters
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {filterTags.length > 0 && (
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex flex-wrap gap-2">
+                        {filterTags.map((tag) => {
+                          const config = getTagConfig(tag);
+                          return (
+                            <Badge
+                              key={tag}
+                              className={config?.color}
+                              data-testid={`badge-filter-${tag}`}
+                            >
+                              {config?.label || tag}
+                              <X
+                                className="h-3 w-3 ml-1 cursor-pointer"
+                                onClick={() => handleFilterByTag(tag)}
+                              />
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
               {isLoadingPhotos ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {[1, 2, 3].map((i) => (
@@ -767,9 +850,16 @@ export default function Jobs() {
                     <p data-testid="text-no-photos">No photos uploaded yet</p>
                   </CardContent>
                 </Card>
+              ) : filteredPhotos.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <Filter className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p data-testid="text-no-filtered-photos">No photos match the selected filters</p>
+                  </CardContent>
+                </Card>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {photos.map((photo) => (
+                  {filteredPhotos.map((photo) => (
                     <Card key={photo.id} className="overflow-hidden" data-testid={`card-photo-${photo.id}`}>
                       <div className="relative group">
                         <img
@@ -792,17 +882,25 @@ export default function Jobs() {
                       {(photo.caption || photo.tags) && (
                         <CardContent className="pt-3">
                           {photo.caption && (
-                            <p className="text-sm text-muted-foreground" data-testid={`text-caption-${photo.id}`}>
+                            <p className="text-sm text-muted-foreground mb-2" data-testid={`text-caption-${photo.id}`}>
                               {photo.caption}
                             </p>
                           )}
                           {photo.tags && photo.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {photo.tags.map((tag, idx) => (
-                                <Badge key={idx} variant="secondary" data-testid={`badge-tag-${photo.id}-${idx}`}>
-                                  {tag}
-                                </Badge>
-                              ))}
+                            <div className="flex flex-wrap gap-1">
+                              {photo.tags.map((tag, idx) => {
+                                const config = getTagConfig(tag);
+                                return (
+                                  <Badge
+                                    key={idx}
+                                    className={`${config?.color || 'bg-gray-500 text-white'} cursor-pointer no-default-hover-elevate`}
+                                    onClick={() => handleFilterByTag(tag as PhotoTag)}
+                                    data-testid={`badge-tag-${photo.id}-${idx}`}
+                                  >
+                                    {config?.label || tag}
+                                  </Badge>
+                                );
+                              })}
                             </div>
                           )}
                         </CardContent>
@@ -826,15 +924,139 @@ export default function Jobs() {
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="tags">Tags (optional, comma-separated)</Label>
-                  <Input
-                    id="tags"
-                    placeholder="e.g., attic, insulation, before"
-                    value={photoTags}
-                    onChange={(e) => setPhotoTags(e.target.value)}
-                    data-testid="input-tags"
-                  />
+                <div className="space-y-4">
+                  <Label>Tags (select all that apply)</Label>
+                  
+                  {selectedPhotoTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 p-3 bg-muted rounded-md">
+                      {selectedPhotoTags.map((tag) => {
+                        const config = getTagConfig(tag);
+                        return (
+                          <Badge
+                            key={tag}
+                            className={config?.color}
+                            data-testid={`badge-selected-${tag}`}
+                          >
+                            {config?.label || tag}
+                            <X
+                              className="h-3 w-3 ml-1 cursor-pointer"
+                              onClick={() => handleToggleTag(tag)}
+                            />
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.INSPECTION)}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {INSPECTION_TAGS.map((tag) => {
+                          const config = getTagConfig(tag);
+                          return (
+                            <div key={tag} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`tag-${tag}`}
+                                checked={selectedPhotoTags.includes(tag)}
+                                onCheckedChange={() => handleToggleTag(tag)}
+                                data-testid={`checkbox-${tag}`}
+                              />
+                              <label
+                                htmlFor={`tag-${tag}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {config?.label || tag}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.STATUS)}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {STATUS_TAGS.map((tag) => {
+                          const config = getTagConfig(tag);
+                          return (
+                            <div key={tag} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`tag-${tag}`}
+                                checked={selectedPhotoTags.includes(tag)}
+                                onCheckedChange={() => handleToggleTag(tag)}
+                                data-testid={`checkbox-${tag}`}
+                              />
+                              <label
+                                htmlFor={`tag-${tag}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {config?.label || tag}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.PRIORITY)}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {PRIORITY_TAGS.map((tag) => {
+                          const config = getTagConfig(tag);
+                          return (
+                            <div key={tag} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`tag-${tag}`}
+                                checked={selectedPhotoTags.includes(tag)}
+                                onCheckedChange={() => handleToggleTag(tag)}
+                                data-testid={`checkbox-${tag}`}
+                              />
+                              <label
+                                htmlFor={`tag-${tag}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {config?.label || tag}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.LOCATION)}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {LOCATION_TAGS.map((tag) => {
+                          const config = getTagConfig(tag);
+                          return (
+                            <div key={tag} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`tag-${tag}`}
+                                checked={selectedPhotoTags.includes(tag)}
+                                onCheckedChange={() => handleToggleTag(tag)}
+                                data-testid={`checkbox-${tag}`}
+                              />
+                              <label
+                                htmlFor={`tag-${tag}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {config?.label || tag}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
