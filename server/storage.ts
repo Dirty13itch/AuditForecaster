@@ -98,6 +98,10 @@ export interface IStorage {
   getPhotosFilteredPaginated(filters: PhotoFilterParams, params: PaginationParams): Promise<PaginatedResult<Photo>>;
   updatePhoto(id: string, photo: Partial<InsertPhoto>): Promise<Photo | undefined>;
   deletePhoto(id: string): Promise<boolean>;
+  
+  // Bulk photo operations
+  bulkDeletePhotos(ids: string[]): Promise<number>;
+  bulkUpdatePhotoTags(ids: string[], mode: 'add' | 'remove' | 'replace', tags: string[]): Promise<number>;
 
   createForecast(forecast: InsertForecast): Promise<Forecast>;
   getForecast(id: string): Promise<Forecast | undefined>;
@@ -1719,6 +1723,53 @@ export class MemStorage implements IStorage {
 
   async deletePhoto(id: string): Promise<boolean> {
     return this.photos.delete(id);
+  }
+
+  async bulkDeletePhotos(ids: string[]): Promise<number> {
+    let deleted = 0;
+    for (const id of ids) {
+      if (this.photos.delete(id)) {
+        deleted++;
+      }
+    }
+    return deleted;
+  }
+
+  async bulkUpdatePhotoTags(
+    ids: string[],
+    mode: 'add' | 'remove' | 'replace',
+    tags: string[]
+  ): Promise<number> {
+    let updated = 0;
+    
+    for (const id of ids) {
+      const photo = this.photos.get(id);
+      if (!photo) continue;
+
+      let newTags: string[];
+      const currentTags = photo.tags || [];
+
+      switch (mode) {
+        case 'add':
+          // Add tags (avoid duplicates)
+          newTags = Array.from(new Set([...currentTags, ...tags]));
+          break;
+        case 'remove':
+          // Remove tags
+          newTags = currentTags.filter(tag => !tags.includes(tag));
+          break;
+        case 'replace':
+          // Replace all tags
+          newTags = [...tags];
+          break;
+      }
+
+      const updatedPhoto: Photo = { ...photo, tags: newTags };
+      this.photos.set(id, updatedPhoto);
+      updated++;
+    }
+
+    return updated;
   }
 
   async createForecast(insertForecast: InsertForecast): Promise<Forecast> {

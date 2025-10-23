@@ -30,7 +30,7 @@ import {
   updateJobComplianceStatus,
   updateReportComplianceStatus,
 } from "./complianceService";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 
 // Error handling helpers
@@ -1255,6 +1255,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete photo');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Bulk delete photos
+  app.delete("/api/photos/bulk", isAuthenticated, async (req, res) => {
+    const bulkDeleteSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one photo ID is required"),
+    });
+
+    try {
+      const { ids } = bulkDeleteSchema.parse(req.body);
+      
+      // Limit bulk operations to 200 items for safety
+      if (ids.length > 200) {
+        return res.status(400).json({ message: "Cannot delete more than 200 photos at once" });
+      }
+
+      // Fetch photos first to update checklist item counts
+      const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
+      const validPhotos = photos.filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+      // Track checklist items that need count updates
+      const checklistUpdates = new Map<string, number>();
+      
+      for (const photo of validPhotos) {
+        if (photo.checklistItemId) {
+          const current = checklistUpdates.get(photo.checklistItemId) || 0;
+          checklistUpdates.set(photo.checklistItemId, current + 1);
+        }
+      }
+
+      // Delete photos
+      const deleted = await storage.bulkDeletePhotos(ids);
+
+      // Update checklist item photo counts
+      for (const [checklistItemId, decrementBy] of checklistUpdates.entries()) {
+        const checklistItem = await storage.getChecklistItem(checklistItemId);
+        if (checklistItem && checklistItem.photoCount !== null && checklistItem.photoCount > 0) {
+          await storage.updateChecklistItem(checklistItemId, {
+            photoCount: Math.max(0, checklistItem.photoCount - decrementBy),
+          });
+        }
+      }
+
+      res.json({ deleted, total: ids.length });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'bulk delete photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Bulk tag photos
+  app.post("/api/photos/bulk-tag", isAuthenticated, async (req, res) => {
+    const bulkTagSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one photo ID is required"),
+      mode: z.enum(['add', 'remove', 'replace']),
+      tags: z.array(z.string()).min(1, "At least one tag is required"),
+    });
+
+    try {
+      const { ids, mode, tags } = bulkTagSchema.parse(req.body);
+      
+      // Limit bulk operations to 200 items for safety
+      if (ids.length > 200) {
+        return res.status(400).json({ message: "Cannot tag more than 200 photos at once" });
+      }
+
+      const updated = await storage.bulkUpdatePhotoTags(ids, mode, tags);
+      res.json({ updated, total: ids.length, mode, tags });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'bulk tag photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Export photos
+  app.post("/api/photos/export", isAuthenticated, async (req, res) => {
+    const exportSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one photo ID is required"),
+      format: z.enum(['csv', 'json']),
+    });
+
+    try {
+      const { ids, format } = exportSchema.parse(req.body);
+      
+      // Limit export to 1000 items for safety
+      if (ids.length > 1000) {
+        return res.status(400).json({ message: "Cannot export more than 1000 photos at once" });
+      }
+
+      // Fetch photos by IDs
+      const photos = await Promise.all(
+        ids.map(id => storage.getPhoto(id))
+      );
+      const validPhotos = photos.filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+      if (format === 'json') {
+        // Return JSON directly
+        res.json(validPhotos);
+      } else {
+        // Generate CSV
+        const csvRows: string[] = [
+          // Header row
+          'ID,Job ID,Job Name,Checklist Item ID,Tags,Uploaded At,File Path,Full URL'
+        ];
+
+        // Data rows
+        for (const photo of validPhotos) {
+          // Get job name if jobId exists
+          let jobName = '';
+          if (photo.jobId) {
+            const job = await storage.getJob(photo.jobId);
+            jobName = job?.name ?? '';
+          }
+
+          const row = [
+            photo.id,
+            photo.jobId ?? '',
+            jobName,
+            photo.checklistItemId ?? '',
+            (photo.tags ?? []).join(';'),
+            photo.uploadedAt,
+            photo.filePath ?? '',
+            photo.fullUrl ?? '',
+          ].map(field => {
+            // Escape commas and quotes in CSV
+            const str = String(field);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          }).join(',');
+
+          csvRows.push(row);
+        }
+
+        const csv = csvRows.join('\n');
+        
+        // Set headers for CSV download
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="photos-export-${Date.now()}.csv"`);
+        res.send(csv);
+      }
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'export photos');
       res.status(status).json({ message });
     }
   });
