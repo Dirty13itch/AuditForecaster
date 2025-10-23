@@ -24,6 +24,7 @@ interface ChecklistItemData {
 export default function Inspection() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"dashboard" | "inspection" | "photos" | "forecast">("inspection");
+  const [voiceNoteLoadingId, setVoiceNoteLoadingId] = useState<string | null>(null);
   
   const [checklistItems, setChecklistItems] = useState<ChecklistItemData[]>([
     { id: '1', itemNumber: 1, title: 'Verify all ductwork is properly sealed at joints with mastic sealant', completed: true, notes: 'All joints sealed with mastic', photoCount: 3, voiceNoteUrl: null, voiceNoteDuration: null },
@@ -69,6 +70,7 @@ export default function Inspection() {
   };
 
   const handleVoiceNoteAdd = async (id: string, audioBlob: Blob, duration: number) => {
+    setVoiceNoteLoadingId(id);
     try {
       // Get presigned upload URL
       const response = await apiRequest("POST", "/api/objects/upload");
@@ -107,10 +109,13 @@ export default function Inspection() {
         variant: "destructive",
       });
       throw error;
+    } finally {
+      setVoiceNoteLoadingId(null);
     }
   };
 
   const handleVoiceNoteDelete = async (id: string) => {
+    setVoiceNoteLoadingId(id);
     try {
       // Update checklist item to remove voice note
       setChecklistItems(items =>
@@ -133,6 +138,8 @@ export default function Inspection() {
         variant: "destructive",
       });
       throw error;
+    } finally {
+      setVoiceNoteLoadingId(null);
     }
   };
 

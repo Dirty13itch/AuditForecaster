@@ -613,18 +613,38 @@ export default function Financials() {
                             variant="outline"
                             className="flex-1"
                             onClick={() => handleSwipeGesture(false)}
+                            disabled={updateMileageMutation.isPending}
                             data-testid="button-mark-personal"
                           >
-                            <ArrowLeft className="h-4 w-4 mr-2" />
-                            Personal
+                            {updateMileageMutation.isPending ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <ArrowLeft className="h-4 w-4 mr-2" />
+                                Personal
+                              </>
+                            )}
                           </Button>
                           <Button
                             className="flex-1"
                             onClick={() => handleSwipeGesture(true)}
+                            disabled={updateMileageMutation.isPending}
                             data-testid="button-mark-work"
                           >
-                            <ArrowRight className="h-4 w-4 mr-2" />
-                            Work
+                            {updateMileageMutation.isPending ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <ArrowRight className="h-4 w-4 mr-2" />
+                                Work
+                              </>
+                            )}
                           </Button>
                         </div>
                       </CardContent>

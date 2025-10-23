@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Plus, Search, Eye, Edit, Trash2, Mail, Download, Printer, ChevronUp, ChevronDown, GripVertical, Calendar, Play } from "lucide-react";
+import { FileText, Plus, Search, Eye, Edit, Trash2, Mail, Download, Printer, ChevronUp, ChevronDown, GripVertical, Calendar, Play, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -322,9 +322,14 @@ export default function Reports() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDeleteTemplate(template.id)}
+                        disabled={deleteTemplateMutation.isPending}
                         data-testid={`button-delete-${template.id}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {deleteTemplateMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </Button>
                     </CardFooter>
                   </Card>

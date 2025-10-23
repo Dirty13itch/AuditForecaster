@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText, PenTool, AlertTriangle, CheckCircle2, Clock, HelpCircle } from "lucide-react";
+import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText, PenTool, AlertTriangle, CheckCircle2, Clock, HelpCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1028,8 +1028,10 @@ export default function Jobs() {
             <AlertDialogAction
               onClick={() => deleteJobsMutation.mutate(Array.from(selectedJobs))}
               className="bg-destructive text-destructive-foreground"
+              disabled={deleteJobsMutation.isPending}
               data-testid="button-confirm-delete"
             >
+              {deleteJobsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1062,9 +1064,10 @@ export default function Jobs() {
             <AlertDialogCancel data-testid="button-cancel-bulk-status">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkStatusUpdate}
-              disabled={!bulkStatus}
+              disabled={!bulkStatus || bulkUpdateMutation.isPending}
               data-testid="button-confirm-bulk-status"
             >
+              {bulkUpdateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Update
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1095,9 +1098,10 @@ export default function Jobs() {
             <AlertDialogCancel data-testid="button-cancel-bulk-builder">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkBuilderUpdate}
-              disabled={!bulkBuilder}
+              disabled={!bulkBuilder || bulkUpdateMutation.isPending}
               data-testid="button-confirm-bulk-builder"
             >
+              {bulkUpdateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Update
             </AlertDialogAction>
           </AlertDialogFooter>

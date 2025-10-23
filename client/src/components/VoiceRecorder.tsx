@@ -36,6 +36,7 @@ export default function VoiceRecorder({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [browserNotSupported, setBrowserNotSupported] = useState(false);
@@ -251,6 +252,7 @@ export default function VoiceRecorder({
   const handleDelete = async () => {
     if (!onDelete) return;
 
+    setIsDeleting(true);
     try {
       await onDelete();
       toast({
@@ -266,8 +268,10 @@ export default function VoiceRecorder({
         description: "An error occurred while deleting. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
-    setShowDeleteConfirm(false);
   };
 
   const handleCancel = () => {
@@ -481,12 +485,16 @@ export default function VoiceRecorder({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogCancel data-testid="button-cancel-delete" disabled={isDeleting}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-destructive hover:bg-destructive/90"
+              disabled={isDeleting}
               data-testid="button-confirm-delete"
             >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

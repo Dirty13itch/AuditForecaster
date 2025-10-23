@@ -4,7 +4,7 @@ import { Calendar as BigCalendar, dateFnsLocalizer, View, Event } from "react-bi
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -638,11 +638,18 @@ export default function Schedule() {
             <Button
               variant="destructive"
               onClick={handleDeleteEvent}
+              disabled={deleteEventMutation.isPending || updateEventMutation.isPending}
               data-testid="button-delete-event"
             >
+              {deleteEventMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete Event
             </Button>
-            <Button onClick={handleSaveEvent} data-testid="button-save-event">
+            <Button 
+              onClick={handleSaveEvent} 
+              disabled={updateEventMutation.isPending || deleteEventMutation.isPending}
+              data-testid="button-save-event"
+            >
+              {updateEventMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>
           </DialogFooter>
@@ -662,7 +669,12 @@ export default function Schedule() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-conflict-cancel">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmConflict} data-testid="button-conflict-confirm">
+            <AlertDialogAction 
+              onClick={handleConfirmConflict} 
+              disabled={createEventMutation.isPending}
+              data-testid="button-conflict-confirm"
+            >
+              {createEventMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Schedule Anyway
             </AlertDialogAction>
           </AlertDialogFooter>
