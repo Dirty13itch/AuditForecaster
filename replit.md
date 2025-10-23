@@ -14,12 +14,35 @@ This is a full-stack energy auditing field application designed for field inspec
 - Scheduling with Google Calendar integration
 - Customizable report generation with intelligent form fields
 - Professional PDF export with dynamic sections and pagination
+- Analytics dashboard with inspection metrics, trends, and common issues tracking
 - Offline-first architecture with background sync
 - Mobile-responsive design optimized for field use
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+
+## Recent Changes
+
+**October 2025 - Analytics Dashboard:**
+- Added comprehensive Analytics page (`/analytics`) with inspection metrics
+- Inspection volume trends (6-month line chart showing completed inspections)
+- Photo tag analysis (bar chart of top 10 most used tags with category colors)
+- Inspection status breakdown (stacked area chart showing workflow distribution)
+- Common issues tracking (top 10 failed items from completed inspections with severity badges)
+- Enhanced API endpoints to support analytics queries (all photos, all checklist items)
+- Severity classification: Critical (>10 occurrences), Major (5-10), Minor (≤5)
+- Empty state handling for zero failures
+- Location: `client/src/pages/Analytics.tsx`
+
+**October 2025 - PDF Export System:**
+- Professional PDF generation using @react-pdf/renderer
+- Multi-section layout: Header, Job Info, Summary, Checklist, Photos, Forecasts, Signatures
+- Dynamic pagination based on active sections
+- Photo grid with tags and annotation overlays
+- Upload to private object storage with download endpoint
+- Endpoints: POST `/api/report-instances/:id/generate-pdf`, GET `/api/report-instances/:id/download-pdf`
+- Location: `server/pdfGenerator.tsx`
 
 ## System Architecture
 

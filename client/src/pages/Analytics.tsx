@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target } from "lucide-react";
-import { format, subMonths, differenceInMinutes, startOfMonth } from "date-fns";
+import { useLocation } from "wouter";
+import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight } from "lucide-react";
+import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -19,7 +22,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import type { Job, ChecklistItem, Photo } from "@shared/schema";
+import type { Job, ChecklistItem, Photo, Builder, Forecast } from "@shared/schema";
 import { getTagConfig } from "@shared/photoTags";
 
 const STATUS_COLORS = {
@@ -30,6 +33,10 @@ const STATUS_COLORS = {
 };
 
 export default function Analytics() {
+  const [, setLocation] = useLocation();
+  const [sortColumn, setSortColumn] = useState<string>('completionRate');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
   const { data: jobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
@@ -42,7 +49,15 @@ export default function Analytics() {
     queryKey: ["/api/photos"],
   });
 
-  const isLoading = jobsLoading || itemsLoading || photosLoading;
+  const { data: builders = [], isLoading: buildersLoading } = useQuery<Builder[]>({
+    queryKey: ["/api/builders"],
+  });
+
+  const { data: forecasts = [], isLoading: forecastsLoading } = useQuery<Forecast[]>({
+    queryKey: ["/api/forecasts"],
+  });
+
+  const isLoading = jobsLoading || itemsLoading || photosLoading || buildersLoading || forecastsLoading;
 
   const totalInspections = jobs.length;
   const completedJobs = jobs.filter(j => j.status === "completed" && j.completedDate && j.scheduledDate);
@@ -167,6 +182,172 @@ export default function Analytics() {
         return '#6C757D';
     }
   };
+
+  // Builder Performance Metrics Calculation
+  const builderStats = builders.map(builder => {
+    const builderJobs = jobs.filter(j => j.builderId === builder.id);
+    const completedBuilderJobs = builderJobs.filter(j => j.status === 'completed');
+    
+    const completionRate = builderJobs.length > 0
+      ? (completedBuilderJobs.length / builderJobs.length * 100)
+      : 0;
+    
+    const avgTime = completedBuilderJobs.filter(j => j.completedDate && j.scheduledDate).length > 0
+      ? completedBuilderJobs
+          .filter(j => j.completedDate && j.scheduledDate)
+          .reduce((sum, job) => {
+            const start = new Date(job.scheduledDate!);
+            const end = new Date(job.completedDate!);
+            return sum + differenceInMinutes(end, start);
+          }, 0) / completedBuilderJobs.filter(j => j.completedDate && j.scheduledDate).length
+      : 0;
+    
+    const builderForecasts = completedBuilderJobs
+      .map(j => forecasts.find(f => f.jobId === j.id))
+      .filter(f => f && f.actualTDL && f.predictedTDL);
+    
+    const avgAccuracy = builderForecasts.length > 0
+      ? builderForecasts.reduce((sum, f) => {
+          const actual = parseFloat(f!.actualTDL?.toString() || "0");
+          const predicted = parseFloat(f!.predictedTDL?.toString() || "0");
+          const variance = Math.abs(actual - predicted) / predicted * 100;
+          return sum + (100 - variance);
+        }, 0) / builderForecasts.length
+      : 0;
+    
+    const builderChecklistItems = builderJobs.flatMap(job => 
+      checklistItems.filter(item => item.jobId === job.id)
+    );
+    const failedItems = builderChecklistItems.filter(item => 
+      !item.completed && completedBuilderJobs.find(j => j.id === item.jobId)
+    );
+    
+    const thisMonthJobs = builderJobs.filter(j => {
+      if (!j.scheduledDate) return false;
+      return isThisMonth(new Date(j.scheduledDate));
+    });
+    
+    return {
+      builder,
+      totalJobs: builderJobs.length,
+      completedJobs: completedBuilderJobs.length,
+      completionRate,
+      avgAccuracy,
+      avgInspectionTime: avgTime,
+      commonIssuesCount: failedItems.length,
+      jobsThisMonth: thisMonthJobs.length,
+    };
+  });
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc');
+    }
+  };
+
+  const sortedBuilders = [...builderStats].sort((a, b) => {
+    let aVal, bVal;
+    
+    // Handle nested property access
+    if (sortColumn === 'builder.name') {
+      aVal = a.builder.name;
+      bVal = b.builder.name;
+    } else {
+      aVal = a[sortColumn as keyof typeof a];
+      bVal = b[sortColumn as keyof typeof b];
+    }
+    
+    // Handle string vs numeric comparison
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return sortDirection === 'asc' 
+        ? aVal.localeCompare(bVal) 
+        : bVal.localeCompare(aVal);
+    } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    }
+    return 0;
+  });
+
+  const topPerformerIndex = sortedBuilders.length > 0 
+    ? builderStats.findIndex(b => b.builder.id === sortedBuilders[0].builder.id)
+    : -1;
+
+  const getPerformanceTier = (completionRate: number, accuracy: number) => {
+    const avgScore = (completionRate + accuracy) / 2;
+    if (avgScore >= 85) return { label: 'Excellent', color: 'bg-green-600 text-white' };
+    if (avgScore >= 70) return { label: 'Good', color: 'bg-blue-500 text-white' };
+    return { label: 'Needs Improvement', color: 'bg-orange-500 text-white' };
+  };
+
+  const getTrendIcon = (stat: typeof builderStats[0], allJobs: Job[]) => {
+    if (stat.totalJobs === 0) return <Minus className="h-4 w-4 text-muted-foreground" />;
+    
+    // Get jobs for this builder in the last 6 months (excluding current month)
+    const last6MonthsJobs = allJobs.filter(j => {
+      if (j.builderId !== stat.builder.id) return false;
+      const jobDate = new Date(j.createdAt || j.scheduledDate || Date.now());
+      const now = new Date();
+      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      return jobDate >= sixMonthsAgo && jobDate < thisMonthStart;
+    });
+    
+    // Guard: Need minimum data for reliable trends
+    if (last6MonthsJobs.length < 3) {
+      return <Minus className="h-4 w-4 text-muted-foreground" />;
+    }
+    
+    // Calculate trend based on actual months with activity
+    // Guards against false positives for low-volume builders
+    const monthsWithJobs = new Set(
+      last6MonthsJobs.map(j => {
+        const date = new Date(j.createdAt || j.scheduledDate || Date.now());
+        return `${date.getFullYear()}-${date.getMonth()}`;
+      })
+    ).size;
+    
+    const avgJobsPerActiveMonth = last6MonthsJobs.length / monthsWithJobs;
+    
+    // Compare current month to average (20% threshold)
+    if (stat.jobsThisMonth > avgJobsPerActiveMonth * 1.2) {
+      return <TrendingUp className="h-4 w-4 text-success" />;
+    } else if (stat.jobsThisMonth < avgJobsPerActiveMonth * 0.8) {
+      return <TrendingDown className="h-4 w-4 text-destructive" />;
+    }
+    return <Minus className="h-4 w-4 text-muted-foreground" />;
+  };
+
+  const builderComparisonData = builderStats
+    .sort((a, b) => b.completionRate - a.completionRate)
+    .slice(0, 5)
+    .map(stat => ({
+      name: stat.builder.name,
+      'Completion Rate': parseFloat(stat.completionRate.toFixed(1)),
+      'Forecast Accuracy': parseFloat(stat.avgAccuracy.toFixed(1)),
+    }));
+
+  const builderTrendData = last6Months.map(month => {
+    const monthData: any = { month };
+    builderStats
+      .sort((a, b) => b.totalJobs - a.totalJobs)
+      .slice(0, 5)
+      .forEach(stat => {
+        const jobsInMonth = jobs.filter(j => {
+          if (!j.completedDate || j.builderId !== stat.builder.id) return false;
+          const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
+          return jobMonth === month;
+        }).length;
+        monthData[stat.builder.name] = jobsInMonth;
+      });
+    return monthData;
+  });
+
+  const topBuilders = builderStats
+    .sort((a, b) => b.totalJobs - a.totalJobs)
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-background pb-6">
@@ -422,6 +603,238 @@ export default function Analytics() {
                   <CheckCircle2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="font-medium">No failed items found</p>
                   <p className="text-sm mt-2">All completed inspections are passing!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Builder Performance Comparison */}
+          <Card data-testid="card-builder-performance">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Builder Performance Comparison
+                  </CardTitle>
+                  <CardDescription>Compare builders across key metrics</CardDescription>
+                </div>
+                <Button variant="outline" onClick={() => setLocation("/builders")} data-testid="button-view-builders">
+                  View All Builders
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-[400px] w-full" />
+              ) : builderStats.length > 0 ? (
+                <div className="space-y-8">
+                  {/* Builder Stats Table */}
+                  <div className="overflow-x-auto">
+                    <Table data-testid="table-builder-stats">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12"></TableHead>
+                          <TableHead>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('builder.name')}
+                              data-testid="button-sort-name"
+                              className="hover-elevate -ml-3"
+                            >
+                              Builder Name
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('totalJobs')}
+                              data-testid="button-sort-totalJobs"
+                              className="hover-elevate"
+                            >
+                              Total Jobs
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('completedJobs')}
+                              data-testid="button-sort-completedJobs"
+                              className="hover-elevate"
+                            >
+                              Completed
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('completionRate')}
+                              data-testid="button-sort-completionRate"
+                              className="hover-elevate"
+                            >
+                              Completion Rate
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('avgAccuracy')}
+                              data-testid="button-sort-avgAccuracy"
+                              className="hover-elevate"
+                            >
+                              Forecast Accuracy
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('avgInspectionTime')}
+                              data-testid="button-sort-avgInspectionTime"
+                              className="hover-elevate"
+                            >
+                              Avg Time (min)
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('commonIssuesCount')}
+                              data-testid="button-sort-commonIssuesCount"
+                              className="hover-elevate"
+                            >
+                              Issues
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleSort('jobsThisMonth')}
+                              data-testid="button-sort-jobsThisMonth"
+                              className="hover-elevate"
+                            >
+                              This Month
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">Trend</TableHead>
+                          <TableHead className="text-right">Performance</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedBuilders.map((stat, index) => {
+                          const isTopPerformer = index === 0 && sortColumn === 'completionRate';
+                          const tier = getPerformanceTier(stat.completionRate, stat.avgAccuracy);
+                          return (
+                            <TableRow 
+                              key={stat.builder.id} 
+                              className="hover-elevate cursor-pointer"
+                              onClick={() => setLocation("/builders")}
+                              data-testid={`row-builder-${stat.builder.id}`}
+                            >
+                              <TableCell>
+                                {isTopPerformer && (
+                                  <Trophy className="h-5 w-5 text-yellow-500" data-testid="icon-top-performer" />
+                                )}
+                              </TableCell>
+                              <TableCell className="font-medium">{stat.builder.name}</TableCell>
+                              <TableCell className="text-center">{stat.totalJobs}</TableCell>
+                              <TableCell className="text-center">{stat.completedJobs}</TableCell>
+                              <TableCell className="text-center font-semibold">
+                                {stat.completionRate.toFixed(1)}%
+                              </TableCell>
+                              <TableCell className="text-center font-semibold">
+                                {stat.avgAccuracy > 0 ? `${stat.avgAccuracy.toFixed(1)}%` : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {stat.avgInspectionTime > 0 ? Math.round(stat.avgInspectionTime) : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-center">{stat.commonIssuesCount}</TableCell>
+                              <TableCell className="text-center">{stat.jobsThisMonth}</TableCell>
+                              <TableCell className="text-center">
+                                {getTrendIcon(stat, jobs)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Badge 
+                                  className={tier.color}
+                                  data-testid={`badge-performance-tier-${stat.builder.id}`}
+                                >
+                                  {tier.label}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Builder Comparison Chart */}
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Top 5 Builders Comparison</h3>
+                      <p className="text-sm text-muted-foreground">Grouped comparison of completion rate vs forecast accuracy</p>
+                    </div>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={builderComparisonData} data-testid="chart-builder-comparison">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                        <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="Completion Rate" fill="#28A745" name="Completion Rate %" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Forecast Accuracy" fill="#2E5BBA" name="Forecast Accuracy %" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Builder Trend Analysis */}
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Builder Performance Trends</h3>
+                      <p className="text-sm text-muted-foreground">Job completion trends over the last 6 months for top 5 builders</p>
+                    </div>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <LineChart data={builderTrendData} data-testid="chart-builder-trends">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis label={{ value: 'Jobs Completed', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        {topBuilders.map((stat, index) => (
+                          <Line
+                            key={stat.builder.id}
+                            type="monotone"
+                            dataKey={stat.builder.name}
+                            stroke={['#2E5BBA', '#28A745', '#FFC107', '#DC3545', '#9333EA'][index % 5]}
+                            strokeWidth={2}
+                            name={stat.builder.name}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="font-medium">No builder data available</p>
+                  <p className="text-sm mt-2">Add builders to start tracking performance metrics</p>
                 </div>
               )}
             </CardContent>
