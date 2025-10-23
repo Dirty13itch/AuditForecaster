@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { format, subDays, startOfMonth, endOfMonth, startOfYear, subMonths } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, startOfYear, subMonths, isSameDay, isAfter } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -109,6 +109,28 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   const [preset, setPreset] = useState<DateRangePreset>("last6months");
   const [isOpen, setIsOpen] = useState(false);
 
+  // Sync preset state with incoming value prop (for localStorage persistence)
+  useEffect(() => {
+    // Check if value matches any preset
+    let matchedPreset: DateRangePreset | null = null;
+    
+    for (const [key, presetConfig] of Object.entries(PRESETS)) {
+      if (key === "custom") continue;
+      const presetRange = presetConfig.getRange();
+      
+      // Compare dates (same day comparison)
+      if (
+        isSameDay(value.from, presetRange.from) &&
+        isSameDay(value.to, presetRange.to)
+      ) {
+        matchedPreset = key as DateRangePreset;
+        break;
+      }
+    }
+    
+    setPreset(matchedPreset || "custom");
+  }, [value]);
+
   const handlePresetChange = (newPreset: DateRangePreset) => {
     setPreset(newPreset);
     if (newPreset !== "custom") {
@@ -120,10 +142,21 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   const handleCustomDateChange = (date: Date | undefined, field: "from" | "to") => {
     if (!date) return;
     setPreset("custom");
-    onChange({
-      ...value,
-      [field]: date,
-    });
+    
+    // Ensure from <= to by clamping the counterpart date
+    if (field === "from" && isAfter(date, value.to)) {
+      // If new "from" is after current "to", advance "to" to match "from"
+      onChange({ from: date, to: date });
+    } else if (field === "to" && isAfter(value.from, date)) {
+      // If new "to" is before current "from", move "from" back to match "to"
+      onChange({ from: date, to: date });
+    } else {
+      // Normal case: dates are valid
+      onChange({
+        ...value,
+        [field]: date,
+      });
+    }
   };
 
   return (
