@@ -124,8 +124,10 @@ export const forecasts = pgTable("forecasts", {
   jobId: varchar("job_id").notNull(),
   predictedTDL: decimal("predicted_tdl", { precision: 10, scale: 2 }),
   predictedDLO: decimal("predicted_dlo", { precision: 10, scale: 2 }),
+  predictedACH50: decimal("predicted_ach50", { precision: 10, scale: 2 }),
   actualTDL: decimal("actual_tdl", { precision: 10, scale: 2 }),
   actualDLO: decimal("actual_dlo", { precision: 10, scale: 2 }),
+  actualACH50: decimal("actual_ach50", { precision: 10, scale: 2 }),
   confidence: integer("confidence"),
 });
 

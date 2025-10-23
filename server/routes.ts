@@ -20,7 +20,14 @@ import {
   insertUserSchema,
   insertChecklistItemSchema,
   updateChecklistItemSchema,
+  insertComplianceRuleSchema,
 } from "@shared/schema";
+import {
+  evaluateJobCompliance,
+  evaluateReportCompliance,
+  updateJobComplianceStatus,
+  updateReportComplianceStatus,
+} from "./complianceService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -1083,6 +1090,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete checklist item" });
+    }
+  });
+
+  app.get("/api/compliance/jobs/:jobId", isAuthenticated, async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const evaluation = await evaluateJobCompliance(storage, req.params.jobId);
+      res.json({
+        jobId: req.params.jobId,
+        ...evaluation,
+      });
+    } catch (error) {
+      console.error("Error getting job compliance status:", error);
+      res.status(500).json({ message: "Failed to get job compliance status" });
+    }
+  });
+
+  app.post("/api/compliance/jobs/:jobId/evaluate", isAuthenticated, async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const updatedJob = await updateJobComplianceStatus(storage, req.params.jobId);
+      if (!updatedJob) {
+        return res.status(500).json({ message: "Failed to update job compliance status" });
+      }
+
+      res.json(updatedJob);
+    } catch (error) {
+      console.error("Error evaluating job compliance:", error);
+      res.status(500).json({ message: "Failed to evaluate job compliance" });
+    }
+  });
+
+  app.get("/api/compliance/reports/:reportId", isAuthenticated, async (req, res) => {
+    try {
+      const report = await storage.getReportInstance(req.params.reportId);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      const evaluation = await evaluateReportCompliance(storage, req.params.reportId);
+      res.json({
+        reportId: req.params.reportId,
+        ...evaluation,
+      });
+    } catch (error) {
+      console.error("Error getting report compliance status:", error);
+      res.status(500).json({ message: "Failed to get report compliance status" });
+    }
+  });
+
+  app.post("/api/compliance/reports/:reportId/evaluate", isAuthenticated, async (req, res) => {
+    try {
+      const report = await storage.getReportInstance(req.params.reportId);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      const updatedReport = await updateReportComplianceStatus(storage, req.params.reportId);
+      if (!updatedReport) {
+        return res.status(500).json({ message: "Failed to update report compliance status" });
+      }
+
+      res.json(updatedReport);
+    } catch (error) {
+      console.error("Error evaluating report compliance:", error);
+      res.status(500).json({ message: "Failed to evaluate report compliance" });
+    }
+  });
+
+  app.get("/api/compliance/rules", isAuthenticated, async (_req, res) => {
+    try {
+      const rules = await storage.getComplianceRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching compliance rules:", error);
+      res.status(500).json({ message: "Failed to fetch compliance rules" });
+    }
+  });
+
+  app.post("/api/compliance/rules", isAuthenticated, async (req, res) => {
+    try {
+      const validated = insertComplianceRuleSchema.parse(req.body);
+      const rule = await storage.createComplianceRule(validated);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Error creating compliance rule:", error);
+      res.status(400).json({ message: "Invalid compliance rule data", error });
+    }
+  });
+
+  app.get("/api/compliance/history/:entityType/:entityId", isAuthenticated, async (req, res) => {
+    try {
+      const { entityType, entityId } = req.params;
+      
+      if (entityType !== "job" && entityType !== "report") {
+        return res.status(400).json({ message: "Invalid entity type. Must be 'job' or 'report'" });
+      }
+
+      const history = await storage.getComplianceHistory(entityType, entityId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching compliance history:", error);
+      res.status(500).json({ message: "Failed to fetch compliance history" });
     }
   });
 
