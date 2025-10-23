@@ -24,6 +24,19 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**October 2025 - Type Safety & Error Prevention:**
+- Fixed critical runtime bug in Analytics.tsx where unsafe non-null assertions caused "Cannot read properties of null" errors
+- Applied comprehensive TypeScript type guards to ALL forecast filtering operations (5 instances)
+- Changed `.filter(f => f && ...)` to `.filter((f): f is Forecast => f != null && ...)` throughout Analytics.tsx
+- Fixed copy-paste errors in NaN validation where predictedDLO checks were incorrectly duplicated as actualDLO checks
+- All forecast filters now validate both actual AND predicted values for null/undefined/NaN
+- Type guards applied to: forecastsWithTDL, forecastsWithDLO, forecastsWithData, builder TDL/DLO calculations
+- Removed all unsafe non-null assertions (`f!.`) that could cause runtime errors
+- All Number() conversions now occur only after type-guarded filters
+- Comprehensive test suite (93 total tests): compliance (38), scoring (18), forecast accuracy (37)
+- E2E testing confirms Analytics page renders without runtime errors
+- Location: `client/src/pages/Analytics.tsx`, `shared/forecastAccuracy.ts`, `shared/numberUtils.ts`, `shared/scoring.ts`
+
 **October 2025 - Forecast Accuracy Tracking:**
 - Added comprehensive forecast accuracy analytics to Analytics page
 - Dual-metric tracking for both TDL (Total Duct Leakage) and DLO (Duct Leakage to Outside)
