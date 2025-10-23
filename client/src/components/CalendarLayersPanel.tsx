@@ -26,7 +26,7 @@ export function CalendarLayersPanel() {
   
   const toggleMutation = useMutation({
     mutationFn: async ({ calendarId, isEnabled }: { calendarId: string; isEnabled: boolean }) => {
-      const response = await apiRequest('PATCH', `/api/calendar-preferences/${calendarId}/toggle`, { isEnabled });
+      const response = await apiRequest('PATCH', `/api/calendar-preferences/${encodeURIComponent(calendarId)}/toggle`, { isEnabled });
       return response.json();
     },
     onSuccess: () => {

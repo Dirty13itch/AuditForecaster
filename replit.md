@@ -20,7 +20,7 @@ The backend uses **Express.js** with **Node.js** and **TypeScript**. **PostgreSQ
 
 ### Data Model
 
-The core entities include **Users**, **Builders**, **Jobs**, **Schedule Events**, **Expenses**, **Mileage Logs**, **Photos**, **Report Templates**, **Report Instances**, and **Forecasts**. Key relationships link Jobs to Builders, Schedule Events, Photos, and Expenses, while Report Instances are generated from Templates for specific Jobs.
+The core entities include **Users**, **Builders**, **Jobs**, **Schedule Events**, **Expenses**, **Mileage Logs**, **Photos**, **Report Templates**, **Report Instances**, **Forecasts**, **Calendar Preferences**, and **Google Events**. Key relationships link Jobs to Builders, Schedule Events, Photos, and Expenses, while Report Instances are generated from Templates for specific Jobs. Calendar Preferences store per-user toggle states for each Google Calendar. Google Events maintain a separate table for non-job-linked calendar events with an isConverted flag to track conversion history.
 
 ### Technical Implementations & Feature Specifications
 
@@ -33,7 +33,7 @@ The core entities include **Users**, **Builders**, **Jobs**, **Schedule Events**
 - **Photo Documentation:** Supports multi-tag systems, annotations (arrows, text, measurements via `react-konva`), and **OCR text extraction** using `tesseract.js` for auto-filling job fields. Includes photo-required checklist items.
 - **Enhanced Mobile Camera Integration:** Direct camera access via Uppy Webcam plugin for instant photo capture. Automatic client-side image compression using Canvas API reduces bandwidth usage (target: <500KB, configurable quality 0-1). Images resized to max 1920px dimension and converted to JPEG format with proper metadata handling. Compression skips small/optimal images to preserve original format. Configurable via `enableWebcam`, `enableCompression`, `compressionQuality`, and `maxImageSizeKB` props.
 - **Offline-First Functionality:** Leverages service workers, IndexedDB, and a custom sync queue for robust operation without internet connectivity.
-- **Scheduling:** Features Google Calendar integration for two-way sync.
+- **Google Calendar Integration:** Comprehensive multi-calendar integration with CalendarLayersPanel sidebar showing all user calendars with color indicators and toggle checkboxes (matching Google Calendar UI). Fetches events from multiple enabled calendars with automatic sync every 10 minutes (configurable via VITE_SYNC_INTERVAL_MS), syncs on page visibility change, and includes offline detection. Visual distinction between job-linked events (colored by status, 🔗 icon) and Google-only events (gray with 📅 icon, dashed border). One-click event-to-job conversion with ConvertGoogleEventDialog that pre-fills job data from event metadata (title→name, location→address, description→notes). Sync status indicators show real-time state (Syncing/Synced/Error/Offline) with automatic timeout cleanup. Calendar preferences persist toggle states in storage. Error resilience with sequential calendar fetching and partial-sync tolerance. GoogleEvent schema maintains audit trail with isConverted flag.
 - **Conditional Logic:** Dynamic inspection forms are driven by a conditional logic engine.
 
 ## External Dependencies

@@ -2154,6 +2154,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const preferences = await storage.getCalendarPreferences();
       const prefsMap = new Map(preferences.map(p => [p.calendarId, p]));
       
+      // Create preferences for new calendars that don't have them yet
+      const newPreferences: typeof insertCalendarPreferenceSchema._type[] = [];
+      for (const cal of googleCalendars) {
+        if (!prefsMap.has(cal.id)) {
+          newPreferences.push({
+            userId: null,
+            calendarId: cal.id,
+            calendarName: cal.summary || '',
+            backgroundColor: cal.backgroundColor || null,
+            foregroundColor: cal.foregroundColor || null,
+            isEnabled: true, // Default to enabled
+            isPrimary: cal.primary || false,
+            accessRole: cal.accessRole || null,
+            lastSyncedAt: null,
+          });
+        }
+      }
+      
+      // Save new preferences
+      if (newPreferences.length > 0) {
+        const savedPrefs = await storage.saveCalendarPreferences(newPreferences);
+        savedPrefs.forEach(pref => prefsMap.set(pref.calendarId, pref));
+      }
+      
       // Merge Google calendars with preferences
       const mergedCalendars = googleCalendars.map(cal => {
         const pref = prefsMap.get(cal.id);
