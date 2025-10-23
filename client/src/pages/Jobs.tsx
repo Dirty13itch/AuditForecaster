@@ -33,6 +33,7 @@ import JobDialog from "@/components/JobDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import { PhotoCapture } from "@/components/PhotoCapture";
 import { PhotoAnnotator, type Annotation } from "@/components/PhotoAnnotator";
 import { PhotoOCR } from "@/components/PhotoOCR";
 import { SignatureCapture } from "@/components/SignatureCapture";
@@ -1430,174 +1431,19 @@ export default function Jobs() {
             </TabsContent>
             
             <TabsContent value="upload" className="space-y-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="caption">Caption (optional)</Label>
-                  <Input
-                    id="caption"
-                    placeholder="Enter a caption for the photo"
-                    value={photoCaption}
-                    onChange={(e) => setPhotoCaption(e.target.value)}
-                    data-testid="input-caption"
-                  />
-                </div>
-                
-                <div className="space-y-4">
-                  <Label>Tags (select all that apply)</Label>
-                  
-                  {selectedPhotoTags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 p-3 bg-muted rounded-md">
-                      {selectedPhotoTags.map((tag) => {
-                        const config = getTagConfig(tag);
-                        return (
-                          <Badge
-                            key={tag}
-                            className={config?.color}
-                            data-testid={`badge-selected-${tag}`}
-                          >
-                            {config?.label || tag}
-                            <X
-                              className="h-3 w-3 ml-1 cursor-pointer"
-                              onClick={() => handleToggleTag(tag)}
-                            />
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.INSPECTION)}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {INSPECTION_TAGS.map((tag) => {
-                          const config = getTagConfig(tag);
-                          return (
-                            <div key={tag} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`tag-${tag}`}
-                                checked={selectedPhotoTags.includes(tag)}
-                                onCheckedChange={() => handleToggleTag(tag)}
-                                data-testid={`checkbox-${tag}`}
-                              />
-                              <label
-                                htmlFor={`tag-${tag}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {config?.label || tag}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.STATUS)}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {STATUS_TAGS.map((tag) => {
-                          const config = getTagConfig(tag);
-                          return (
-                            <div key={tag} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`tag-${tag}`}
-                                checked={selectedPhotoTags.includes(tag)}
-                                onCheckedChange={() => handleToggleTag(tag)}
-                                data-testid={`checkbox-${tag}`}
-                              />
-                              <label
-                                htmlFor={`tag-${tag}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {config?.label || tag}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.PRIORITY)}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {PRIORITY_TAGS.map((tag) => {
-                          const config = getTagConfig(tag);
-                          return (
-                            <div key={tag} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`tag-${tag}`}
-                                checked={selectedPhotoTags.includes(tag)}
-                                onCheckedChange={() => handleToggleTag(tag)}
-                                data-testid={`checkbox-${tag}`}
-                              />
-                              <label
-                                htmlFor={`tag-${tag}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {config?.label || tag}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm">{getCategoryLabel(TAG_CATEGORIES.LOCATION)}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {LOCATION_TAGS.map((tag) => {
-                          const config = getTagConfig(tag);
-                          return (
-                            <div key={tag} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`tag-${tag}`}
-                                checked={selectedPhotoTags.includes(tag)}
-                                onCheckedChange={() => handleToggleTag(tag)}
-                                data-testid={`checkbox-${tag}`}
-                              />
-                              <label
-                                htmlFor={`tag-${tag}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {config?.label || tag}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Upload Photo</Label>
-                  <ObjectUploader
-                    maxNumberOfFiles={1}
-                    maxFileSize={10485760}
-                    onGetUploadParameters={handlePhotoUpload}
-                    onComplete={handleUploadComplete}
-                  >
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    Upload Photo
-                  </ObjectUploader>
-                </div>
-                
-                {createPhotoMutation.isPending && (
-                  <Card className="bg-muted">
-                    <CardContent className="py-4 text-center text-sm">
-                      <p>Processing upload...</p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+              {selectedJobForPhotos && (
+                <PhotoCapture
+                  jobId={selectedJobForPhotos.id}
+                  onUploadComplete={() => {
+                    queryClient.invalidateQueries({ queryKey: ["/api/photos", selectedJobForPhotos.id] });
+                    toast({
+                      title: "Success",
+                      description: "Photos uploaded successfully",
+                    });
+                  }}
+                  bucketPath="photos"
+                />
+              )}
             </TabsContent>
           </Tabs>
         </DialogContent>
