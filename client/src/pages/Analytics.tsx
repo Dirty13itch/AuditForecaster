@@ -26,6 +26,7 @@ import {
 import type { Job, ChecklistItem, Photo, Builder, Forecast } from "@shared/schema";
 import { getTagConfig } from "@shared/photoTags";
 import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
+import { calculateAccuracy } from "@shared/forecastAccuracy";
 
 const STATUS_COLORS = {
   pending: "#FFC107",
@@ -267,19 +268,7 @@ export default function Analytics() {
     return { icon: Minus, color: 'text-muted-foreground', label: 'Stable' };
   };
 
-  // Forecast Accuracy Helper Function
-  const calculateAccuracy = (predicted: number, actual: number): number => {
-    if (predicted === null || predicted === undefined || 
-        actual === null || actual === undefined) return 0;
-    
-    // Handle zero predicted value
-    if (predicted === 0) {
-      return actual === 0 ? 100 : 0; // Perfect if both zero, else 0%
-    }
-    
-    const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
-    return Math.max(0, 100 - variance);
-  };
+  // Forecast Accuracy Helper Function moved to @shared/forecastAccuracy
 
   // Builder Performance Metrics Calculation
   const builderStats = builders.map(builder => {
@@ -304,24 +293,28 @@ export default function Analytics() {
     const tdlForecasts = completedBuilderJobs
       .map(j => forecasts.find(f => f.jobId === j.id))
       .filter(f => f && 
-        f.actualTDL !== null && f.actualTDL !== undefined && 
-        f.predictedTDL !== null && f.predictedTDL !== undefined
+        f.actualTDL != null && 
+        f.predictedTDL != null &&
+        !isNaN(Number(f.actualTDL)) && 
+        !isNaN(Number(f.predictedTDL))
       );
     
     // Get DLO forecasts for this builder
     const dloForecasts = completedBuilderJobs
       .map(j => forecasts.find(f => f.jobId === j.id))
       .filter(f => f &&
-        f.actualDLO !== null && f.actualDLO !== undefined &&
-        f.predictedDLO !== null && f.predictedDLO !== undefined
+        f.actualDLO != null &&
+        f.predictedDLO != null &&
+        !isNaN(Number(f.actualDLO)) &&
+        !isNaN(Number(f.predictedDLO))
       );
     
     // Calculate TDL accuracy
     const tdlAccuracy = tdlForecasts.length > 0
       ? safeDivide(tdlForecasts.reduce((sum, f) => {
           return sum + calculateAccuracy(
-            safeParseFloat(f!.predictedTDL!.toString()),
-            safeParseFloat(f!.actualTDL!.toString())
+            Number(f!.predictedTDL),
+            Number(f!.actualTDL)
           );
         }, 0), tdlForecasts.length)
       : 0;
@@ -330,8 +323,8 @@ export default function Analytics() {
     const dloAccuracy = dloForecasts.length > 0
       ? safeDivide(dloForecasts.reduce((sum, f) => {
           return sum + calculateAccuracy(
-            safeParseFloat(f!.predictedDLO!.toString()),
-            safeParseFloat(f!.actualDLO!.toString())
+            Number(f!.predictedDLO),
+            Number(f!.actualDLO)
           );
         }, 0), dloForecasts.length)
       : 0;
@@ -493,28 +486,36 @@ export default function Analytics() {
 
   // Forecast Accuracy Calculations
   const forecastsWithTDL = forecasts.filter(f => 
-    f.actualTDL !== null && f.actualTDL !== undefined &&
-    f.predictedTDL !== null && f.predictedTDL !== undefined
+    f.actualTDL != null &&
+    f.predictedTDL != null &&
+    !isNaN(Number(f.actualTDL)) &&
+    !isNaN(Number(f.predictedTDL))
   );
 
   const forecastsWithDLO = forecasts.filter(f =>
-    f.actualDLO !== null && f.actualDLO !== undefined &&
-    f.predictedDLO !== null && f.predictedDLO !== undefined
+    f.actualDLO != null &&
+    f.predictedDLO != null &&
+    !isNaN(Number(f.actualDLO)) &&
+    !isNaN(Number(f.predictedDLO))
   );
 
   const forecastsWithData = forecasts.filter(f => 
-    (f.actualTDL !== null && f.actualTDL !== undefined &&
-     f.predictedTDL !== null && f.predictedTDL !== undefined) ||
-    (f.actualDLO !== null && f.actualDLO !== undefined &&
-     f.predictedDLO !== null && f.predictedDLO !== undefined)
+    (f.actualTDL != null &&
+     f.predictedTDL != null &&
+     !isNaN(Number(f.actualTDL)) &&
+     !isNaN(Number(f.predictedTDL))) ||
+    (f.actualDLO != null &&
+     f.predictedDLO != null &&
+     !isNaN(Number(f.actualDLO)) &&
+     !isNaN(Number(f.predictedDLO)))
   );
 
   // Calculate TDL accuracy
   const tdlAccuracy = forecastsWithTDL.length > 0
     ? safeDivide(forecastsWithTDL.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          safeParseFloat(f.predictedTDL!.toString()),
-          safeParseFloat(f.actualTDL!.toString())
+          Number(f.predictedTDL),
+          Number(f.actualTDL)
         );
       }, 0), forecastsWithTDL.length)
     : 0;
@@ -523,8 +524,8 @@ export default function Analytics() {
   const dloAccuracy = forecastsWithDLO.length > 0
     ? safeDivide(forecastsWithDLO.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          safeParseFloat(f.predictedDLO!.toString()),
-          safeParseFloat(f.actualDLO!.toString())
+          Number(f.predictedDLO),
+          Number(f.actualDLO)
         );
       }, 0), forecastsWithDLO.length)
     : 0;
@@ -551,8 +552,8 @@ export default function Analytics() {
   const recentTDLAccuracy = recentTDLForecasts.length > 0
     ? safeDivide(recentTDLForecasts.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          safeParseFloat(f.predictedTDL!.toString()),
-          safeParseFloat(f.actualTDL!.toString())
+          Number(f.predictedTDL),
+          Number(f.actualTDL)
         );
       }, 0), recentTDLForecasts.length)
     : 0;
@@ -560,8 +561,8 @@ export default function Analytics() {
   const recentDLOAccuracy = recentDLOForecasts.length > 0
     ? safeDivide(recentDLOForecasts.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          safeParseFloat(f.predictedDLO!.toString()),
-          safeParseFloat(f.actualDLO!.toString())
+          Number(f.predictedDLO),
+          Number(f.actualDLO)
         );
       }, 0), recentDLOForecasts.length)
     : 0;
@@ -580,8 +581,8 @@ export default function Analytics() {
     // Check TDL forecasts
     forecastsWithTDL.forEach(f => {
       const accuracy = calculateAccuracy(
-        safeParseFloat(f.predictedTDL!.toString()),
-        safeParseFloat(f.actualTDL!.toString())
+        Number(f.predictedTDL),
+        Number(f.actualTDL)
       );
       const job = jobsMap.get(f.jobId);
       candidates.push({ forecast: f, accuracy, job, type: 'TDL' });
@@ -590,8 +591,8 @@ export default function Analytics() {
     // Check DLO forecasts
     forecastsWithDLO.forEach(f => {
       const accuracy = calculateAccuracy(
-        safeParseFloat(f.predictedDLO!.toString()),
-        safeParseFloat(f.actualDLO!.toString())
+        Number(f.predictedDLO),
+        Number(f.actualDLO)
       );
       const job = jobsMap.get(f.jobId);
       candidates.push({ forecast: f, accuracy, job, type: 'DLO' });
@@ -620,8 +621,8 @@ export default function Analytics() {
     const tdlAccuracy = monthTDLForecasts.length > 0
       ? safeDivide(monthTDLForecasts.reduce((sum, f) => {
           const accuracy = calculateAccuracy(
-            safeParseFloat(f.predictedTDL!.toString()),
-            safeParseFloat(f.actualTDL!.toString())
+            Number(f.predictedTDL),
+            Number(f.actualTDL)
           );
           return sum + accuracy;
         }, 0), monthTDLForecasts.length)
@@ -630,8 +631,8 @@ export default function Analytics() {
     const dloAccuracy = monthDLOForecasts.length > 0
       ? safeDivide(monthDLOForecasts.reduce((sum, f) => {
           const accuracy = calculateAccuracy(
-            safeParseFloat(f.predictedDLO!.toString()),
-            safeParseFloat(f.actualDLO!.toString())
+            Number(f.predictedDLO),
+            Number(f.actualDLO)
           );
           return sum + accuracy;
         }, 0), monthDLOForecasts.length)
@@ -655,8 +656,8 @@ export default function Analytics() {
     // Count TDL accuracies
     forecastsWithTDL.forEach(f => {
       const accuracy = calculateAccuracy(
-        safeParseFloat(f.predictedTDL!.toString()),
-        safeParseFloat(f.actualTDL!.toString())
+        Number(f.predictedTDL),
+        Number(f.actualTDL)
       );
       if (accuracy > 95) dist['Excellent (>95%)']++;
       else if (accuracy >= 90) dist['Good (90-95%)']++;
@@ -667,8 +668,8 @@ export default function Analytics() {
     // Count DLO accuracies
     forecastsWithDLO.forEach(f => {
       const accuracy = calculateAccuracy(
-        safeParseFloat(f.predictedDLO!.toString()),
-        safeParseFloat(f.actualDLO!.toString())
+        Number(f.predictedDLO),
+        Number(f.actualDLO)
       );
       if (accuracy > 95) dist['Excellent (>95%)']++;
       else if (accuracy >= 90) dist['Good (90-95%)']++;
@@ -700,18 +701,22 @@ export default function Analytics() {
     const job = jobsMap.get(f.jobId);
     
     // TDL data
-    const hasTDL = f.predictedTDL !== null && f.predictedTDL !== undefined && 
-                   f.actualTDL !== null && f.actualTDL !== undefined;
-    const predictedTDL = hasTDL ? safeParseFloat(f.predictedTDL!.toString()) : null;
-    const actualTDL = hasTDL ? safeParseFloat(f.actualTDL!.toString()) : null;
+    const hasTDL = f.predictedTDL != null && 
+                   f.actualTDL != null &&
+                   !isNaN(Number(f.predictedTDL)) &&
+                   !isNaN(Number(f.actualTDL));
+    const predictedTDL = hasTDL ? Number(f.predictedTDL) : null;
+    const actualTDL = hasTDL ? Number(f.actualTDL) : null;
     const tdlVariance = hasTDL && predictedTDL !== null && actualTDL !== null ? actualTDL - predictedTDL : null;
     const tdlAccuracy = hasTDL && predictedTDL !== null && actualTDL !== null ? calculateAccuracy(predictedTDL, actualTDL) : null;
     
     // DLO data
-    const hasDLO = f.predictedDLO !== null && f.predictedDLO !== undefined && 
-                   f.actualDLO !== null && f.actualDLO !== undefined;
-    const predictedDLO = hasDLO ? safeParseFloat(f.predictedDLO!.toString()) : null;
-    const actualDLO = hasDLO ? safeParseFloat(f.actualDLO!.toString()) : null;
+    const hasDLO = f.predictedDLO != null && 
+                   f.actualDLO != null &&
+                   !isNaN(Number(f.predictedDLO)) &&
+                   !isNaN(Number(f.actualDLO));
+    const predictedDLO = hasDLO ? Number(f.predictedDLO) : null;
+    const actualDLO = hasDLO ? Number(f.actualDLO) : null;
     const dloVariance = hasDLO && predictedDLO !== null && actualDLO !== null ? actualDLO - predictedDLO : null;
     const dloAccuracy = hasDLO && predictedDLO !== null && actualDLO !== null ? calculateAccuracy(predictedDLO, actualDLO) : null;
     
