@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { CalendarLayersPanel } from "@/components/CalendarLayersPanel";
+import { ConvertGoogleEventDialog } from "@/components/ConvertGoogleEventDialog";
 import type { Job, ScheduleEvent, GoogleEvent } from "@shared/schema";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
@@ -112,6 +113,8 @@ export default function Schedule() {
   const [eventFormData, setEventFormData] = useState({ startTime: '', endTime: '' });
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false);
+  const [selectedGoogleEvent, setSelectedGoogleEvent] = useState<GoogleEvent | null>(null);
 
   const startDate = startOfMonth(date);
   const endDate = endOfMonth(date);
@@ -314,6 +317,14 @@ export default function Schedule() {
   }, [checkConflict, createEventMutation]);
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    // Check if this is a Google-only event (not linked to a job)
+    if (event.resource.eventType === 'google' && event.resource.googleEvent) {
+      setSelectedGoogleEvent(event.resource.googleEvent);
+      setConvertDialogOpen(true);
+      return;
+    }
+    
+    // Regular app event - show edit dialog
     setSelectedEvent(event);
     setEventFormData({
       startTime: format(event.start, "yyyy-MM-dd'T'HH:mm"),
@@ -744,6 +755,18 @@ export default function Schedule() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Convert Google Event Dialog */}
+      <ConvertGoogleEventDialog
+        googleEvent={selectedGoogleEvent}
+        open={convertDialogOpen}
+        onOpenChange={setConvertDialogOpen}
+        onSuccess={() => {
+          setSelectedGoogleEvent(null);
+          // Trigger a sync to refresh events
+          handleGoogleCalendarSync();
+        }}
+      />
       </div>
     </DndProvider>
   );

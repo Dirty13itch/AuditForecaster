@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import passport from "passport";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
-import { googleCalendarService } from "./googleCalendar";
+import { googleCalendarService, getUncachableGoogleCalendarClient } from "./googleCalendar";
 import { isAuthenticated, getUserId } from "./auth";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
@@ -467,6 +467,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       serverLogger.error('[API] Error fetching Google events:', error);
       res.status(500).json({ message: 'Failed to fetch Google events', error: error.message });
+    }
+  });
+
+  // Convert Google event to job
+  app.post('/api/google-events/:id/convert', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { jobData, scheduleData, keepSynced } = req.body;
+      
+      // Get the Google event
+      const googleEvent = await storage.getGoogleEvent(id);
+      if (!googleEvent) {
+        return res.status(404).json({ message: 'Google event not found' });
+      }
+      
+      if (googleEvent.isConverted) {
+        return res.status(400).json({ message: 'Event has already been converted to a job' });
+      }
+      
+      // Create the job
+      const job = await storage.createJob({
+        ...jobData,
+        status: jobData.status || 'scheduled',
+        priority: jobData.priority || 'medium',
+      });
+      
+      // Create the schedule event
+      const scheduleEvent = await storage.createScheduleEvent({
+        jobId: job.id,
+        title: job.name,
+        startTime: new Date(scheduleData.startTime),
+        endTime: new Date(scheduleData.endTime),
+        notes: jobData.notes || null,
+        googleCalendarEventId: googleEvent.googleEventId,
+        googleCalendarId: googleEvent.googleCalendarId,
+        color: null,
+      });
+      
+      // Mark Google event as converted
+      await storage.markGoogleEventAsConverted(id, job.id);
+      
+      // If keepSynced, update Google Calendar event with jobId in extendedProperties
+      if (keepSynced) {
+        try {
+          const calendar = await getUncachableGoogleCalendarClient();
+          
+          await calendar.events.patch({
+            calendarId: googleEvent.googleCalendarId,
+            eventId: googleEvent.googleEventId,
+            requestBody: {
+              extendedProperties: {
+                private: {
+                  scheduleEventId: scheduleEvent.id,
+                  jobId: job.id,
+                },
+              },
+            },
+          });
+          
+          serverLogger.info(`[GoogleCalendar] Updated event ${googleEvent.googleEventId} with jobId ${job.id}`);
+        } catch (error) {
+          serverLogger.error('[GoogleCalendar] Error updating event in Google Calendar:', error);
+          // Don't fail the conversion if Google update fails
+        }
+      }
+      
+      serverLogger.info(`[API] Converted Google event ${id} to job ${job.id}`);
+      
+      res.json({ 
+        success: true,
+        job,
+        scheduleEvent,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error converting Google event to job:', error);
+      res.status(500).json({ message: 'Failed to convert event to job', error: error.message });
     }
   });
 
