@@ -175,7 +175,7 @@ export default function Analytics() {
 
   // Format data for line chart
   const issuesTrendData = last6Months.map(month => {
-    const dataPoint: any = { month };
+    const dataPoint: Record<string, string | number> = { month };
     topIssues.forEach(issue => {
       dataPoint[issue] = monthlyIssues[month]?.[issue] || 0;
     });
@@ -467,7 +467,7 @@ export default function Analytics() {
     }));
 
   const builderTrendData = last6Months.map(month => {
-    const monthData: any = { month };
+    const monthData: Record<string, string | number> = { month };
     builderStats
       .sort((a, b) => b.totalJobs - a.totalJobs)
       .slice(0, 5)

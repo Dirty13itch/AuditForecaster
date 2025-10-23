@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Stage, Layer, Image as KonvaImage, Arrow, Text as KonvaText, Line } from "react-konva";
+import type { KonvaEventObject } from "konva/lib/Node";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +9,7 @@ import { ArrowRight, Type, Minus, Undo2, Redo2, Save, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import useImage from "use-image";
 
-interface Annotation {
+export interface Annotation {
   type: 'arrow' | 'text' | 'line';
   points?: number[];
   text?: string;
@@ -94,31 +95,34 @@ export function PhotoAnnotator({ photoUrl, existingAnnotations = [], onSave, onC
     }
   };
 
-  const handleStageMouseDown = (e: any) => {
+  const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     if (!tool || tool === 'text') return;
 
     const stage = e.target.getStage();
-    const pos = stage.getPointerPosition();
+    const pos = stage?.getPointerPosition();
+    if (!pos) return;
 
     setIsDrawing(true);
     setCurrentPoints([pos.x, pos.y]);
   };
 
-  const handleStageMouseMove = (e: any) => {
+  const handleStageMouseMove = (e: KonvaEventObject<MouseEvent>) => {
     if (!isDrawing || !tool || tool === 'text') return;
 
     const stage = e.target.getStage();
-    const pos = stage.getPointerPosition();
+    const pos = stage?.getPointerPosition();
+    if (!pos) return;
 
     setCurrentPoints([currentPoints[0], currentPoints[1], pos.x, pos.y]);
   };
 
-  const handleStageMouseUp = (e: any) => {
+  const handleStageMouseUp = (e: KonvaEventObject<MouseEvent>) => {
     if (!tool) return;
 
     if (tool === 'text') {
       const stage = e.target.getStage();
-      const pos = stage.getPointerPosition();
+      const pos = stage?.getPointerPosition();
+      if (!pos) return;
       setTextPosition(pos);
       setShowTextInput(true);
       return;

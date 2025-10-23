@@ -53,62 +53,62 @@ class MockStorage implements IStorage {
   // Stub implementations for other required methods
   async getUser(): Promise<any> { return undefined; }
   async getUserByUsername(): Promise<any> { return undefined; }
-  async createUser(): Promise<any> { return {} as any; }
-  async createBuilder(): Promise<any> { return {} as any; }
+  async createUser(): Promise<any> { return {}; }
+  async createBuilder(): Promise<any> { return {}; }
   async getBuilder(): Promise<any> { return undefined; }
   async getAllBuilders(): Promise<any[]> { return []; }
   async updateBuilder(): Promise<any> { return undefined; }
   async deleteBuilder(): Promise<boolean> { return false; }
-  async createJob(): Promise<any> { return {} as any; }
+  async createJob(): Promise<any> { return {}; }
   async getAllJobs(): Promise<any[]> { return []; }
   async updateJob(): Promise<any> { return undefined; }
   async deleteJob(): Promise<boolean> { return false; }
-  async createScheduleEvent(): Promise<any> { return {} as any; }
+  async createScheduleEvent(): Promise<any> { return {}; }
   async getScheduleEvent(): Promise<any> { return undefined; }
   async getScheduleEventsByJob(): Promise<any[]> { return []; }
   async getScheduleEventsByDateRange(): Promise<any[]> { return []; }
   async updateScheduleEvent(): Promise<any> { return undefined; }
   async deleteScheduleEvent(): Promise<boolean> { return false; }
-  async createExpense(): Promise<any> { return {} as any; }
+  async createExpense(): Promise<any> { return {}; }
   async getExpense(): Promise<any> { return undefined; }
   async getAllExpenses(): Promise<any[]> { return []; }
   async getExpensesByJob(): Promise<any[]> { return []; }
   async updateExpense(): Promise<any> { return undefined; }
   async deleteExpense(): Promise<boolean> { return false; }
-  async createMileageLog(): Promise<any> { return {} as any; }
+  async createMileageLog(): Promise<any> { return {}; }
   async getMileageLog(): Promise<any> { return undefined; }
   async getAllMileageLogs(): Promise<any[]> { return []; }
   async getMileageLogsByDateRange(): Promise<any[]> { return []; }
   async updateMileageLog(): Promise<any> { return undefined; }
   async deleteMileageLog(): Promise<boolean> { return false; }
-  async createReportTemplate(): Promise<any> { return {} as any; }
+  async createReportTemplate(): Promise<any> { return {}; }
   async getReportTemplate(): Promise<any> { return undefined; }
   async getAllReportTemplates(): Promise<any[]> { return []; }
   async updateReportTemplate(): Promise<any> { return undefined; }
   async deleteReportTemplate(): Promise<boolean> { return false; }
-  async createReportInstance(): Promise<any> { return {} as any; }
+  async createReportInstance(): Promise<any> { return {}; }
   async getReportInstancesByJob(): Promise<any[]> { return []; }
   async updateReportInstance(): Promise<any> { return undefined; }
-  async createPhoto(): Promise<any> { return {} as any; }
+  async createPhoto(): Promise<any> { return {}; }
   async getPhoto(): Promise<any> { return undefined; }
   async getPhotosByJob(): Promise<any[]> { return []; }
   async getPhotosByChecklistItem(): Promise<any[]> { return []; }
   async updatePhoto(): Promise<any> { return undefined; }
   async deletePhoto(): Promise<boolean> { return false; }
-  async createForecast(): Promise<any> { return {} as any; }
+  async createForecast(): Promise<any> { return {}; }
   async getForecast(): Promise<any> { return undefined; }
   async getAllForecasts(): Promise<any[]> { return []; }
   async updateForecast(): Promise<any> { return undefined; }
   async deleteForecast(): Promise<boolean> { return false; }
-  async createChecklistItem(): Promise<any> { return {} as any; }
+  async createChecklistItem(): Promise<any> { return {}; }
   async getChecklistItem(): Promise<any> { return undefined; }
   async updateChecklistItem(): Promise<any> { return undefined; }
   async deleteChecklistItem(): Promise<boolean> { return false; }
-  async createComplianceRule(): Promise<any> { return {} as any; }
+  async createComplianceRule(): Promise<any> { return {}; }
   async updateComplianceRule(): Promise<any> { return undefined; }
   async deleteComplianceRule(): Promise<boolean> { return false; }
   async getComplianceHistory(): Promise<any[]> { return []; }
-  async createComplianceHistoryEntry(): Promise<any> { return {} as any; }
+  async createComplianceHistoryEntry(): Promise<any> { return {}; }
   async recalculateReportScore(): Promise<void> { }
 }
 
@@ -119,7 +119,7 @@ const MINNESOTA_RULES: ComplianceRule[] = [
     userId: null,
     codeYear: '2020',
     metricType: 'TDL',
-    threshold: '4.0' as any,
+    threshold: '4.0',
     units: 'CFM/100 sq ft',
     severity: 'high',
     isActive: true,
@@ -131,7 +131,7 @@ const MINNESOTA_RULES: ComplianceRule[] = [
     userId: null,
     codeYear: '2020',
     metricType: 'DLO',
-    threshold: '6.0' as any,
+    threshold: '6.0',
     units: 'CFM/100 sq ft',
     severity: 'high',
     isActive: true,
@@ -143,7 +143,7 @@ const MINNESOTA_RULES: ComplianceRule[] = [
     userId: null,
     codeYear: '2020',
     metricType: 'ACH50',
-    threshold: '5.0' as any,
+    threshold: '5.0',
     units: 'ACH',
     severity: 'high',
     isActive: true,
@@ -176,7 +176,12 @@ const createTestJob = (id: string): Job => ({
   lastComplianceCheck: null,
 });
 
-const createTestForecast = (jobId: string, actualTDL: any, actualDLO: any, actualACH50: any): Forecast => ({
+const createTestForecast = (
+  jobId: string,
+  actualTDL: string | null,
+  actualDLO: string | null,
+  actualACH50: string | null
+): Forecast => ({
   id: 'forecast-1',
   jobId,
   predictedTDL: null,
@@ -201,7 +206,7 @@ describe('evaluateJobCompliance', () => {
   describe('Edge Case 1: Zero values', () => {
     it('should be compliant when all actual values are zero', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '0' as any, '0' as any, '0' as any),
+        createTestForecast(jobId, '0', '0', '0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -212,7 +217,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when TDL is zero', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '0' as any, null, null),
+        createTestForecast(jobId, '0', null, null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -223,7 +228,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when DLO is zero', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, '0' as any, null),
+        createTestForecast(jobId, null, '0', null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -234,7 +239,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when ACH50 is zero', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, null, '0' as any),
+        createTestForecast(jobId, null, null, '0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -278,7 +283,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should evaluate only non-null values', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.5' as any, null, null),
+        createTestForecast(jobId, '3.5', null, null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -291,7 +296,7 @@ describe('evaluateJobCompliance', () => {
   describe('Edge Case 3: Boundary thresholds (exactly at threshold)', () => {
     it('should be compliant when TDL equals threshold (4.0)', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '4.0' as any, null, null),
+        createTestForecast(jobId, '4.0', null, null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -302,7 +307,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when DLO equals threshold (6.0)', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, '6.0' as any, null),
+        createTestForecast(jobId, null, '6.0', null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -313,7 +318,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when ACH50 equals threshold (5.0)', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, null, '5.0' as any),
+        createTestForecast(jobId, null, null, '5.0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -324,7 +329,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when all values equal their thresholds', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '4.0' as any, '6.0' as any, '5.0' as any),
+        createTestForecast(jobId, '4.0', '6.0', '5.0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -337,7 +342,7 @@ describe('evaluateJobCompliance', () => {
   describe('Edge Case 4: Just above thresholds', () => {
     it('should be non-compliant when TDL is 4.1', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '4.1' as any, null, null),
+        createTestForecast(jobId, '4.1', null, null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -351,7 +356,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be non-compliant when DLO is 6.1', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, '6.1' as any, null),
+        createTestForecast(jobId, null, '6.1', null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -365,7 +370,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be non-compliant when ACH50 is 5.1', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, null, '5.1' as any),
+        createTestForecast(jobId, null, null, '5.1'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -381,7 +386,7 @@ describe('evaluateJobCompliance', () => {
   describe('Edge Case 5: Just below thresholds', () => {
     it('should be compliant when TDL is 3.9', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.9' as any, null, null),
+        createTestForecast(jobId, '3.9', null, null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -392,7 +397,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when DLO is 5.9', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, '5.9' as any, null),
+        createTestForecast(jobId, null, '5.9', null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -403,7 +408,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when ACH50 is 4.9', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, null, '4.9' as any),
+        createTestForecast(jobId, null, null, '4.9'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -414,7 +419,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should be compliant when all values are just below thresholds', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.9' as any, '5.9' as any, '4.9' as any),
+        createTestForecast(jobId, '3.9', '5.9', '4.9'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -427,7 +432,7 @@ describe('evaluateJobCompliance', () => {
   describe('Edge Case 6: Multiple violations', () => {
     it('should report violations for all metrics when all exceed thresholds', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '5.0' as any, '7.0' as any, '6.0' as any),
+        createTestForecast(jobId, '5.0', '7.0', '6.0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -454,7 +459,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should report violations for two metrics', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '4.5' as any, '6.5' as any, '3.0' as any),
+        createTestForecast(jobId, '4.5', '6.5', '3.0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -470,7 +475,7 @@ describe('evaluateJobCompliance', () => {
   describe('Edge Case 7: Mixed compliance', () => {
     it('should be non-compliant with one violation when some metrics pass and one fails', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.0' as any, '5.0' as any, '6.0' as any),
+        createTestForecast(jobId, '3.0', '5.0', '6.0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -482,7 +487,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should handle mix of zero, compliant, and non-compliant values', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '0' as any, '3.0' as any, '5.5' as any),
+        createTestForecast(jobId, '0', '3.0', '5.5'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -495,7 +500,7 @@ describe('evaluateJobCompliance', () => {
 
     it('should handle mix of null and non-compliant values', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, null, '7.0' as any, null),
+        createTestForecast(jobId, null, '7.0', null),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -516,9 +521,9 @@ describe('evaluateJobCompliance', () => {
 
     it('should handle multiple forecasts for same job', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.0' as any, null, null),
-        createTestForecast(jobId, null, '5.0' as any, null),
-        createTestForecast(jobId, null, null, '4.0' as any),
+        createTestForecast(jobId, '3.0', null, null),
+        createTestForecast(jobId, null, '5.0', null),
+        createTestForecast(jobId, null, null, '4.0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -531,7 +536,7 @@ describe('evaluateJobCompliance', () => {
       const inactiveRules = MINNESOTA_RULES.map(rule => ({ ...rule, isActive: false }));
       storage.setComplianceRules(inactiveRules);
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '10.0' as any, '10.0' as any, '10.0' as any),
+        createTestForecast(jobId, '10.0', '10.0', '10.0'),
       ]);
 
       const result = await evaluateJobCompliance(storage, jobId);
@@ -570,7 +575,7 @@ describe('evaluateReportCompliance', () => {
   describe('Edge Case 1: Zero values', () => {
     it('should be compliant when all actual values are zero', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '0' as any, '0' as any, '0' as any),
+        createTestForecast(jobId, '0', '0', '0'),
       ]);
 
       const result = await evaluateReportCompliance(storage, reportId);
@@ -605,7 +610,7 @@ describe('evaluateReportCompliance', () => {
   describe('Edge Case 3: Boundary thresholds', () => {
     it('should be compliant when all values equal their thresholds', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '4.0' as any, '6.0' as any, '5.0' as any),
+        createTestForecast(jobId, '4.0', '6.0', '5.0'),
       ]);
 
       const result = await evaluateReportCompliance(storage, reportId);
@@ -618,7 +623,7 @@ describe('evaluateReportCompliance', () => {
   describe('Edge Case 4: Just above thresholds', () => {
     it('should be non-compliant when values are just above thresholds', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '4.1' as any, '6.1' as any, '5.1' as any),
+        createTestForecast(jobId, '4.1', '6.1', '5.1'),
       ]);
 
       const result = await evaluateReportCompliance(storage, reportId);
@@ -631,7 +636,7 @@ describe('evaluateReportCompliance', () => {
   describe('Edge Case 5: Just below thresholds', () => {
     it('should be compliant when all values are just below thresholds', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.9' as any, '5.9' as any, '4.9' as any),
+        createTestForecast(jobId, '3.9', '5.9', '4.9'),
       ]);
 
       const result = await evaluateReportCompliance(storage, reportId);
@@ -644,7 +649,7 @@ describe('evaluateReportCompliance', () => {
   describe('Edge Case 6: Multiple violations', () => {
     it('should report violations for all metrics when all exceed thresholds', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '5.0' as any, '7.0' as any, '6.0' as any),
+        createTestForecast(jobId, '5.0', '7.0', '6.0'),
       ]);
 
       const result = await evaluateReportCompliance(storage, reportId);
@@ -657,7 +662,7 @@ describe('evaluateReportCompliance', () => {
   describe('Edge Case 7: Mixed compliance', () => {
     it('should be non-compliant when some metrics pass and one fails', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.0' as any, '5.0' as any, '6.0' as any),
+        createTestForecast(jobId, '3.0', '5.0', '6.0'),
       ]);
 
       const result = await evaluateReportCompliance(storage, reportId);
@@ -671,7 +676,7 @@ describe('evaluateReportCompliance', () => {
   describe('Report-specific: Checklist items', () => {
     it('should add violations for failed compliance-related checklist items', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.0' as any, '5.0' as any, '4.0' as any),
+        createTestForecast(jobId, '3.0', '5.0', '4.0'),
       ]);
 
       storage.setChecklistItems(jobId, [
@@ -700,7 +705,7 @@ describe('evaluateReportCompliance', () => {
 
     it('should be compliant when metrics pass and no checklist failures', async () => {
       storage.setForecasts(jobId, [
-        createTestForecast(jobId, '3.0' as any, '5.0' as any, '4.0' as any),
+        createTestForecast(jobId, '3.0', '5.0', '4.0'),
       ]);
 
       storage.setChecklistItems(jobId, [

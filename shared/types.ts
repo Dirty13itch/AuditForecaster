@@ -3,7 +3,7 @@ export type FieldType = 'text' | 'number' | 'select' | 'radio' | 'checkbox' | 't
 export type ConditionalRule = {
   fieldId: string;
   operator: 'equals' | 'notEquals' | 'contains' | 'greaterThan' | 'lessThan' | 'isTrue' | 'isFalse';
-  value: any;
+  value: string | number | boolean | null;
 }
 
 export type FormField = {
@@ -12,7 +12,7 @@ export type FormField = {
   type: FieldType;
   required: boolean;
   options?: string[];
-  defaultValue?: any;
+  defaultValue?: string | number | boolean | null;
   conditions?: ConditionalRule[];
 }
 

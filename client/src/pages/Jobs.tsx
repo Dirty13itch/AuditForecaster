@@ -30,12 +30,12 @@ import JobDialog from "@/components/JobDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { PhotoAnnotator } from "@/components/PhotoAnnotator";
+import { PhotoAnnotator, type Annotation } from "@/components/PhotoAnnotator";
 import { PhotoOCR } from "@/components/PhotoOCR";
 import { SignatureCapture } from "@/components/SignatureCapture";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Job, Builder, Photo, ChecklistItem } from "@shared/schema";
+import type { Job, Builder, Photo, ChecklistItem, InsertJob, InsertPhoto, InsertChecklistItem } from "@shared/schema";
 import { clientLogger } from "@/lib/logger";
 import ChecklistItemComponent from "@/components/ChecklistItem";
 import {
@@ -145,7 +145,7 @@ export default function Jobs() {
   });
 
   const createJobMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: InsertJob) => {
       return apiRequest("POST", "/api/jobs", data);
     },
     onSuccess: () => {
@@ -166,7 +166,7 @@ export default function Jobs() {
   });
 
   const updateJobMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertJob> }) => {
       return apiRequest("PUT", `/api/jobs/${id}`, data);
     },
     onSuccess: () => {
@@ -211,7 +211,7 @@ export default function Jobs() {
   });
 
   const bulkUpdateMutation = useMutation({
-    mutationFn: async ({ jobIds, updates }: { jobIds: string[]; updates: any }) => {
+    mutationFn: async ({ jobIds, updates }: { jobIds: string[]; updates: Partial<InsertJob> }) => {
       await Promise.all(jobIds.map(id => apiRequest("PUT", `/api/jobs/${id}`, updates)));
     },
     onSuccess: () => {
@@ -234,7 +234,7 @@ export default function Jobs() {
   });
 
   const createPhotoMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: InsertPhoto) => {
       return apiRequest("POST", "/api/photos", data);
     },
     onSuccess: () => {
@@ -246,7 +246,7 @@ export default function Jobs() {
       setPhotoCaption("");
       setSelectedPhotoTags([]);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error?.message || "Failed to upload photo",
@@ -276,7 +276,7 @@ export default function Jobs() {
   });
 
   const updatePhotoMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertPhoto> }) => {
       return apiRequest("PATCH", `/api/photos/${id}`, data);
     },
     onSuccess: () => {
@@ -299,7 +299,7 @@ export default function Jobs() {
   });
 
   const updateChecklistItemMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertChecklistItem> }) => {
       return apiRequest("PATCH", `/api/checklist-items/${id}`, data);
     },
     onSuccess: () => {
@@ -384,7 +384,7 @@ export default function Jobs() {
     setComplianceDrawerOpen(true);
   };
 
-  const handleSaveJob = async (data: any) => {
+  const handleSaveJob = async (data: InsertJob) => {
     const jobData = {
       ...data,
       scheduledDate: data.scheduledDate ? data.scheduledDate.toISOString() : null,
@@ -473,7 +473,7 @@ export default function Jobs() {
     }
   };
 
-  const handleUploadComplete = async (result: any) => {
+  const handleUploadComplete = async (result: { success: boolean; objectPath?: string }) => {
     if (!selectedJobForPhotos || !uploadedObjectPath) return;
     
     await createPhotoMutation.mutateAsync({
@@ -513,7 +513,7 @@ export default function Jobs() {
     setAnnotatorOpen(true);
   };
 
-  const handleSaveAnnotations = (annotations: any[]) => {
+  const handleSaveAnnotations = (annotations: Annotation[]) => {
     if (!photoToAnnotate) return;
     updatePhotoMutation.mutate({
       id: photoToAnnotate.id,
@@ -539,7 +539,7 @@ export default function Jobs() {
   const handleOCRAutoFill = (data: { address?: string; lotNumber?: string }) => {
     if (!selectedJobForPhotos) return;
     
-    const updates: any = {};
+    const updates: Partial<InsertJob> = {};
     if (data.address) updates.address = data.address;
     if (data.lotNumber) updates.lotNumber = data.lotNumber;
 

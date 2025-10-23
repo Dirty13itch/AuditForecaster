@@ -13,6 +13,13 @@ interface ReportSection {
   order: number;
 }
 
+interface ReportData {
+  inspector?: string;
+  overview?: string;
+  recommendations?: string;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
 interface PDFGenerationData {
   reportInstance: ReportInstance;
   job: Job;
@@ -253,7 +260,7 @@ const styles = StyleSheet.create({
   },
 });
 
-function ReportHeader({ job, reportData }: { job: Job; reportData: any }) {
+function ReportHeader({ job, reportData }: { job: Job; reportData: ReportData }) {
   return (
     <View style={styles.header}>
       <Text style={styles.headerTitle}>Inspection Report</Text>
@@ -579,7 +586,7 @@ function SignatureSection({ job, builder }: { job: Job; builder?: Builder }) {
   );
 }
 
-function ReportFooter({ reportData, pageNumber, totalPages }: { reportData: any; pageNumber: number; totalPages: number }) {
+function ReportFooter({ reportData, pageNumber, totalPages }: { reportData: ReportData; pageNumber: number; totalPages: number }) {
   return (
     <View style={styles.footer} fixed>
       <Text>

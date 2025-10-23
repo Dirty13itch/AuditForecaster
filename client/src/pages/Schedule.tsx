@@ -182,7 +182,7 @@ export default function Schedule() {
       const response = await apiRequest('GET', `/api/schedule-events/sync?${params.toString()}`);
       return response.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { syncedCount: { created: number; updated: number; skipped: number } }) => {
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
       setLastSyncedAt(new Date());
       toast({ 

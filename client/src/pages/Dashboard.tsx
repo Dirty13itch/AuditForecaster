@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import type { Job, Builder, ScheduleEvent, Expense, MileageLog, ReportInstance, Forecast } from "@shared/schema";
+import type { Job, Builder, ScheduleEvent, Expense, MileageLog, ReportInstance, Forecast, InsertJob } from "@shared/schema";
 import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
 
 const STANDARD_MILEAGE_RATE = 0.67;
@@ -92,7 +92,7 @@ export default function Dashboard() {
   });
 
   const createJobMutation = useMutation({
-    mutationFn: async (data: any) => apiRequest("/api/jobs", "POST", data),
+    mutationFn: async (data: InsertJob) => apiRequest("/api/jobs", "POST", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       setIsJobDialogOpen(false);

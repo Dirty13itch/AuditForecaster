@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import type { ResolverOptions, ResolverResult } from "@hookform/resolvers";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,10 +62,10 @@ export function DynamicForm({ sections, initialData = {}, onChange, onSubmit }: 
 
   // Custom resolver that rebuilds schema based on current form values
   const dynamicResolver = async (
-    values: Record<string, any>,
-    context: any,
-    options: any
-  ) => {
+    values: FieldValues,
+    context: undefined | object,
+    options: ResolverOptions<FieldValues>
+  ): Promise<ResolverResult<FieldValues>> => {
     const schema = buildZodSchema(values);
     return zodResolver(schema)(values, context, options);
   };

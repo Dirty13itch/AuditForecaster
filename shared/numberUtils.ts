@@ -15,7 +15,7 @@
  * safeToFixed(undefined, 0) // "0"
  */
 export function safeToFixed(value: number | null | undefined | string, decimals: number = 2): string {
-  const num = typeof value === 'number' ? value : parseFloat(value as any);
+  const num = typeof value === 'number' ? value : parseFloat(value as string);
   
   if (typeof num === 'number' && !isNaN(num)) {
     return num.toFixed(decimals);
@@ -39,8 +39,8 @@ export function safeToFixed(value: number | null | undefined | string, decimals:
  * safeParseFloat("abc") // 0
  * safeParseFloat(null) // 0
  */
-export function safeParseFloat(value: any): number {
-  const num = parseFloat(value);
+export function safeParseFloat(value: string | number | null | undefined): number {
+  const num = parseFloat(value as string);
   return !isNaN(num) ? num : 0;
 }
 
