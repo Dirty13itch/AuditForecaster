@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import TopBar from "@/components/TopBar";
 import PhotoGallery from "@/components/PhotoGallery";
 import BottomNav from "@/components/BottomNav";
+import { ObjectUploader } from "@/components/ObjectUploader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +50,9 @@ export default function Photos() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTagDialog, setShowTagDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  
+  // Upload modal state
+  const [showUploadModal, setShowUploadModal] = useState(false);
   
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -354,7 +358,10 @@ export default function Photos() {
                 </p>
               )}
             </div>
-            <Button data-testid="button-add-photo">
+            <Button 
+              onClick={() => setShowUploadModal(true)}
+              data-testid="button-add-photo"
+            >
               <Camera className="h-4 w-4 mr-2" />
               Take Photo
             </Button>
@@ -723,6 +730,21 @@ export default function Photos() {
         selectedCount={metadata.selectedCount}
         entityName="photos"
         isPending={exportMutation.isPending}
+      />
+
+      {/* Photo Upload Modal */}
+      <ObjectUploader
+        open={showUploadModal}
+        onOpenChange={setShowUploadModal}
+        onUploadComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
+          setShowUploadModal(false);
+        }}
+        bucketPath="photos"
+        enableWebcam={true}
+        enableCompression={true}
+        compressionQuality={0.8}
+        maxImageSizeKB={500}
       />
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />

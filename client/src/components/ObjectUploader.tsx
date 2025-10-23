@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import Uppy from "@uppy/core";
 import { DashboardModal } from "@uppy/react";
@@ -86,7 +86,7 @@ async function compressImage(
 interface ObjectUploaderProps {
   maxNumberOfFiles?: number;
   maxFileSize?: number;
-  onGetUploadParameters: () => Promise<{
+  onGetUploadParameters?: () => Promise<{
     method: "PUT";
     url: string;
   }>;
@@ -94,11 +94,16 @@ interface ObjectUploaderProps {
     result: UploadResult<Record<string, unknown>, Record<string, unknown>>
   ) => void;
   buttonClassName?: string;
-  children: ReactNode;
+  children?: ReactNode;
   enableWebcam?: boolean; // Enable direct camera capture (default: true for mobile)
   enableCompression?: boolean; // Enable image compression (default: true)
   compressionQuality?: number; // JPEG quality 0-1 (default: 0.8)
   maxImageSizeKB?: number; // Target max size in KB (default: 500KB)
+  // Controlled mode props
+  open?: boolean; // Control modal visibility externally
+  onOpenChange?: (open: boolean) => void; // Callback when modal open state changes
+  bucketPath?: string; // Bucket path for automatic upload parameter generation (photos, documents, etc.)
+  onUploadComplete?: () => void; // Callback when upload completes successfully
 }
 
 /**
@@ -144,8 +149,46 @@ export function ObjectUploader({
   enableCompression = true,
   compressionQuality = 0.8,
   maxImageSizeKB = 500,
+  open,
+  onOpenChange,
+  bucketPath,
+  onUploadComplete,
 }: ObjectUploaderProps) {
   const [showModal, setShowModal] = useState(false);
+  
+  // Sync controlled open prop with internal state
+  // This is necessary because DashboardModal needs the state to actually change
+  useEffect(() => {
+    if (open !== undefined) {
+      setShowModal(open);
+    }
+  }, [open]);
+  
+  // Determine if component is in controlled mode
+  const isControlled = open !== undefined;
+  const setModalOpen = (newOpen: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(newOpen);
+    } else {
+      setShowModal(newOpen);
+    }
+  };
+
+  // Auto-generate upload parameters if bucketPath is provided
+  const getUploadParams = onGetUploadParameters || (async () => {
+    if (!bucketPath) {
+      throw new Error("Either onGetUploadParameters or bucketPath must be provided");
+    }
+    const response = await fetch("/api/uploads/presigned-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: bucketPath }),
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get upload URL");
+    return response.json();
+  });
+
   const [uppy] = useState(() => {
     const uppyInstance = new Uppy({
       restrictions: {
@@ -156,10 +199,11 @@ export function ObjectUploader({
     })
       .use(AwsS3, {
         shouldUseMultipart: false,
-        getUploadParameters: onGetUploadParameters,
+        getUploadParameters: getUploadParams,
       })
       .on("complete", (result) => {
         onComplete?.(result);
+        onUploadComplete?.();
       });
 
     // Add webcam plugin for direct camera access
@@ -217,14 +261,17 @@ export function ObjectUploader({
 
   return (
     <div>
-      <Button onClick={() => setShowModal(true)} className={buttonClassName} data-testid="button-upload">
-        {children}
-      </Button>
+      {/* Only render button in uncontrolled mode (when children is provided) */}
+      {children && (
+        <Button onClick={() => setModalOpen(true)} className={buttonClassName} data-testid="button-upload">
+          {children}
+        </Button>
+      )}
 
       <DashboardModal
         uppy={uppy}
         open={showModal}
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => setModalOpen(false)}
         proudlyDisplayPoweredByUppy={false}
       />
     </div>
