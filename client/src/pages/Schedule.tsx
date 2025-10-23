@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { CalendarLayersPanel } from "@/components/CalendarLayersPanel";
-import type { Job, ScheduleEvent } from "@shared/schema";
+import type { Job, ScheduleEvent, GoogleEvent } from "@shared/schema";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
 const localizer = dateFnsLocalizer({
@@ -36,10 +36,12 @@ interface CalendarEvent extends Event {
   start: Date;
   end: Date;
   resource: {
-    scheduleEventId: string;
-    status: string;
-    job: Job;
-    googleEventId: string | null;
+    scheduleEventId?: string;
+    status?: string;
+    job?: Job;
+    googleEventId?: string | null;
+    eventType?: 'app' | 'google';
+    googleEvent?: GoogleEvent;
   };
 }
 
@@ -135,6 +137,21 @@ export default function Schedule() {
     },
   });
 
+  const { data: googleOnlyEvents = [] } = useQuery<GoogleEvent[]>({
+    queryKey: ['/api/google-events', startDate.toISOString(), endDate.toISOString()],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+      const response = await fetch(`/api/google-events?${params.toString()}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+  });
+
   const createEventMutation = useMutation({
     mutationFn: async (data: { jobId: string; title: string; startTime: Date; endTime: Date }) => {
       return apiRequest('POST', '/api/schedule-events', data);
@@ -183,12 +200,20 @@ export default function Schedule() {
       const response = await apiRequest('GET', `/api/schedule-events/sync?${params.toString()}`);
       return response.json();
     },
-    onSuccess: (data: { syncedCount: { created: number; updated: number; skipped: number } }) => {
+    onSuccess: (data: { 
+      syncedCount: { 
+        scheduleEvents: { created: number; updated: number; skipped: number };
+        googleEvents: { created: number; updated: number };
+      } 
+    }) => {
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/google-events'] });
       setLastSyncedAt(new Date());
+      const schedEvents = data.syncedCount.scheduleEvents;
+      const gEvents = data.syncedCount.googleEvents;
       toast({ 
         title: 'Google Calendar synced successfully',
-        description: `Created: ${data.syncedCount.created}, Updated: ${data.syncedCount.updated}, Skipped: ${data.syncedCount.skipped}`,
+        description: `Job Events - Created: ${schedEvents.created}, Updated: ${schedEvents.updated} | Google Events - Created: ${gEvents.created}, Updated: ${gEvents.updated}`,
       });
     },
     onError: () => {
@@ -208,7 +233,8 @@ export default function Schedule() {
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     const jobMap = new Map(jobs.map(j => [j.id, j]));
     
-    return scheduleEvents
+    // App events (linked to jobs)
+    const appEvents = scheduleEvents
       .map(event => {
         const job = jobMap.get(event.jobId);
         if (!job) return null;
@@ -224,11 +250,29 @@ export default function Schedule() {
             status: job.status,
             job,
             googleEventId: event.googleCalendarEventId,
+            eventType: 'app' as const,
           },
         };
       })
       .filter((e): e is CalendarEvent => e !== null);
-  }, [scheduleEvents, jobs]);
+    
+    // Google-only events (not linked to jobs)
+    const googleEvents = googleOnlyEvents
+      .filter(event => !event.isConverted)
+      .map(event => ({
+        id: event.id,
+        jobId: '',
+        title: `📅 ${event.title}`,
+        start: new Date(event.startTime),
+        end: new Date(event.endTime),
+        resource: {
+          googleEvent: event,
+          eventType: 'google' as const,
+        },
+      }));
+    
+    return [...appEvents, ...googleEvents];
+  }, [scheduleEvents, jobs, googleOnlyEvents]);
 
   const unscheduledJobs = useMemo(() => {
     const scheduledJobIds = new Set(scheduleEvents.map(e => e.jobId));
@@ -337,6 +381,21 @@ export default function Schedule() {
   }, [pendingEvent, createEventMutation]);
 
   const eventStyleGetter = useCallback((event: CalendarEvent) => {
+    if (event.resource.eventType === 'google') {
+      // Google-only events - use lighter style
+      return {
+        style: {
+          backgroundColor: '#9e9e9e',
+          borderRadius: '4px',
+          opacity: 0.7,
+          color: 'white',
+          border: '1px dashed white',
+          display: 'block',
+        },
+      };
+    }
+    
+    // App events - existing styling
     const statusColors = {
       'pending': '#FFC107',
       'scheduled': '#2E5BBA',

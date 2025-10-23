@@ -70,6 +70,22 @@ export const scheduleEvents = pgTable("schedule_events", {
   color: text("color"),
 });
 
+export const googleEvents = pgTable("google_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  googleEventId: text("google_event_id").notNull(),
+  googleCalendarId: text("google_calendar_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  location: text("location"),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  colorId: text("color_id"),
+  isConverted: boolean("is_converted").default(false),
+  convertedToJobId: varchar("converted_to_job_id"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+});
+
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id"),
@@ -234,6 +250,7 @@ export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, upl
 export const insertComplianceRuleSchema = createInsertSchema(complianceRules).omit({ id: true, createdAt: true });
 export const insertComplianceHistorySchema = createInsertSchema(complianceHistory).omit({ id: true });
 export const insertCalendarPreferenceSchema = createInsertSchema(calendarPreferences).omit({ id: true, createdAt: true });
+export const insertGoogleEventSchema = createInsertSchema(googleEvents).omit({ id: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -264,3 +281,5 @@ export type InsertComplianceRule = z.infer<typeof insertComplianceRuleSchema>;
 export type InsertComplianceHistory = z.infer<typeof insertComplianceHistorySchema>;
 export type CalendarPreference = typeof calendarPreferences.$inferSelect;
 export type InsertCalendarPreference = z.infer<typeof insertCalendarPreferenceSchema>;
+export type GoogleEvent = typeof googleEvents.$inferSelect;
+export type InsertGoogleEvent = z.infer<typeof insertGoogleEventSchema>;

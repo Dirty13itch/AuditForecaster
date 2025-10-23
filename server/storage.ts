@@ -27,6 +27,8 @@ import {
   type InsertComplianceHistory,
   type CalendarPreference,
   type InsertCalendarPreference,
+  type GoogleEvent,
+  type InsertGoogleEvent,
   type ScoreSummary,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
@@ -133,6 +135,15 @@ export interface IStorage {
   updateCalendarToggle(calendarId: string, isEnabled: boolean): Promise<CalendarPreference | undefined>;
   deleteCalendarPreference(calendarId: string): Promise<boolean>;
 
+  // Google events (not linked to jobs)
+  createGoogleEvent(event: InsertGoogleEvent): Promise<GoogleEvent>;
+  getGoogleEvent(id: string): Promise<GoogleEvent | undefined>;
+  getGoogleEventByGoogleId(googleEventId: string, calendarId: string): Promise<GoogleEvent | undefined>;
+  getGoogleEventsByDateRange(startDate: Date, endDate: Date): Promise<GoogleEvent[]>;
+  updateGoogleEvent(id: string, event: Partial<InsertGoogleEvent>): Promise<GoogleEvent | undefined>;
+  deleteGoogleEvent(id: string): Promise<boolean>;
+  markGoogleEventAsConverted(id: string, jobId: string): Promise<GoogleEvent | undefined>;
+
   recalculateReportScore(reportInstanceId: string): Promise<void>;
 }
 
@@ -151,6 +162,7 @@ export class MemStorage implements IStorage {
   private complianceRules: Map<string, ComplianceRule>;
   private complianceHistory: Map<string, ComplianceHistory>;
   private calendarPreferences: Map<string, CalendarPreference>;
+  private googleEvents: Map<string, GoogleEvent>;
 
   constructor() {
     this.users = new Map();
@@ -167,6 +179,7 @@ export class MemStorage implements IStorage {
     this.complianceRules = new Map();
     this.complianceHistory = new Map();
     this.calendarPreferences = new Map();
+    this.googleEvents = new Map();
 
     this.initializeSampleData();
   }
@@ -2033,6 +2046,64 @@ export class MemStorage implements IStorage {
     
     this.calendarPreferences.delete(pref.id);
     return true;
+  }
+
+  async createGoogleEvent(event: InsertGoogleEvent): Promise<GoogleEvent> {
+    const id = randomUUID();
+    const googleEvent: GoogleEvent = {
+      id,
+      ...event,
+      createdAt: new Date(),
+    };
+    this.googleEvents.set(id, googleEvent);
+    return googleEvent;
+  }
+
+  async getGoogleEvent(id: string): Promise<GoogleEvent | undefined> {
+    return this.googleEvents.get(id);
+  }
+
+  async getGoogleEventByGoogleId(googleEventId: string, calendarId: string): Promise<GoogleEvent | undefined> {
+    return Array.from(this.googleEvents.values())
+      .find(e => e.googleEventId === googleEventId && e.googleCalendarId === calendarId);
+  }
+
+  async getGoogleEventsByDateRange(startDate: Date, endDate: Date): Promise<GoogleEvent[]> {
+    return Array.from(this.googleEvents.values())
+      .filter(event => {
+        const eventStart = new Date(event.startTime);
+        const eventEnd = new Date(event.endTime);
+        return eventStart <= endDate && eventEnd >= startDate;
+      });
+  }
+
+  async updateGoogleEvent(id: string, event: Partial<InsertGoogleEvent>): Promise<GoogleEvent | undefined> {
+    const existing = this.googleEvents.get(id);
+    if (!existing) return undefined;
+
+    const updated: GoogleEvent = {
+      ...existing,
+      ...event,
+    };
+    this.googleEvents.set(id, updated);
+    return updated;
+  }
+
+  async deleteGoogleEvent(id: string): Promise<boolean> {
+    return this.googleEvents.delete(id);
+  }
+
+  async markGoogleEventAsConverted(id: string, jobId: string): Promise<GoogleEvent | undefined> {
+    const existing = this.googleEvents.get(id);
+    if (!existing) return undefined;
+
+    const updated: GoogleEvent = {
+      ...existing,
+      isConverted: true,
+      convertedToJobId: jobId,
+    };
+    this.googleEvents.set(id, updated);
+    return updated;
   }
 
   async recalculateReportScore(reportInstanceId: string): Promise<void> {

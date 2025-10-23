@@ -450,6 +450,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/google-events", isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: 'startDate and endDate are required' });
+      }
+      
+      const events = await storage.getGoogleEventsByDateRange(
+        new Date(startDate as string),
+        new Date(endDate as string)
+      );
+      
+      res.json(events);
+    } catch (error: any) {
+      serverLogger.error('[API] Error fetching Google events:', error);
+      res.status(500).json({ message: 'Failed to fetch Google events', error: error.message });
+    }
+  });
+
   app.get("/api/schedule-events/sync", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
@@ -473,47 +493,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
       serverLogger.info(`[ScheduleEvents/Sync] Syncing from ${calendarIds.length} calendars: ${calendarIds.join(', ')}`);
       
       const googleEvents = await googleCalendarService.fetchEventsFromGoogle(start, end, calendarIds);
-      const syncedCount = { created: 0, updated: 0, skipped: 0 };
+      const syncedCount = { 
+        scheduleEvents: { created: 0, updated: 0, skipped: 0 },
+        googleEvents: { created: 0, updated: 0 },
+      };
       
       for (const googleEvent of googleEvents) {
         const parsedEvent = googleCalendarService.parseGoogleEventToScheduleEvent(googleEvent);
         
-        if (!parsedEvent || !parsedEvent.jobId) {
-          syncedCount.skipped++;
-          continue;
-        }
+        if (parsedEvent && parsedEvent.jobId) {
+          // Event linked to job → ScheduleEvent
+          const existingEvent = parsedEvent.id 
+            ? await storage.getScheduleEvent(parsedEvent.id)
+            : null;
 
-        const existingEvent = parsedEvent.id 
-          ? await storage.getScheduleEvent(parsedEvent.id)
-          : null;
-
-        if (existingEvent) {
-          await storage.updateScheduleEvent(existingEvent.id, {
-            title: parsedEvent.title,
-            startTime: parsedEvent.startTime,
-            endTime: parsedEvent.endTime,
-            notes: parsedEvent.notes,
-            googleCalendarEventId: parsedEvent.googleCalendarEventId,
-            googleCalendarId: parsedEvent.googleCalendarId,
-            lastSyncedAt: parsedEvent.lastSyncedAt,
-          });
-          syncedCount.updated++;
-        } else {
-          const job = await storage.getJob(parsedEvent.jobId);
-          if (job) {
-            await storage.createScheduleEvent({
-              jobId: parsedEvent.jobId,
-              title: parsedEvent.title!,
-              startTime: parsedEvent.startTime!,
-              endTime: parsedEvent.endTime!,
+          if (existingEvent) {
+            await storage.updateScheduleEvent(existingEvent.id, {
+              title: parsedEvent.title,
+              startTime: parsedEvent.startTime,
+              endTime: parsedEvent.endTime,
               notes: parsedEvent.notes,
               googleCalendarEventId: parsedEvent.googleCalendarEventId,
               googleCalendarId: parsedEvent.googleCalendarId,
-              color: parsedEvent.color,
+              lastSyncedAt: parsedEvent.lastSyncedAt,
             });
-            syncedCount.created++;
+            syncedCount.scheduleEvents.updated++;
           } else {
-            syncedCount.skipped++;
+            const job = await storage.getJob(parsedEvent.jobId);
+            if (job) {
+              await storage.createScheduleEvent({
+                jobId: parsedEvent.jobId,
+                title: parsedEvent.title!,
+                startTime: parsedEvent.startTime!,
+                endTime: parsedEvent.endTime!,
+                notes: parsedEvent.notes,
+                googleCalendarEventId: parsedEvent.googleCalendarEventId,
+                googleCalendarId: parsedEvent.googleCalendarId,
+                color: parsedEvent.color,
+              });
+              syncedCount.scheduleEvents.created++;
+            } else {
+              syncedCount.scheduleEvents.skipped++;
+            }
+          }
+        } else {
+          // Event not linked to job → GoogleEvent
+          if (!googleEvent.id || !googleEvent.start?.dateTime || !googleEvent.end?.dateTime) {
+            continue;
+          }
+
+          const calendarId = googleEvent.organizer?.email || 'primary';
+          const existingGoogleEvent = await storage.getGoogleEventByGoogleId(googleEvent.id, calendarId);
+
+          if (existingGoogleEvent) {
+            await storage.updateGoogleEvent(existingGoogleEvent.id, {
+              title: googleEvent.summary || 'Untitled',
+              description: googleEvent.description || null,
+              location: googleEvent.location || null,
+              startTime: new Date(googleEvent.start.dateTime),
+              endTime: new Date(googleEvent.end.dateTime),
+              colorId: googleEvent.colorId || null,
+              lastSyncedAt: new Date(),
+            });
+            syncedCount.googleEvents.updated++;
+          } else {
+            await storage.createGoogleEvent({
+              googleEventId: googleEvent.id,
+              googleCalendarId: calendarId,
+              title: googleEvent.summary || 'Untitled',
+              description: googleEvent.description || null,
+              location: googleEvent.location || null,
+              startTime: new Date(googleEvent.start.dateTime),
+              endTime: new Date(googleEvent.end.dateTime),
+              colorId: googleEvent.colorId || null,
+              isConverted: false,
+              convertedToJobId: null,
+              lastSyncedAt: new Date(),
+            });
+            syncedCount.googleEvents.created++;
           }
         }
       }
