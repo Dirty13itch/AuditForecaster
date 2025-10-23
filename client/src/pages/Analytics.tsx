@@ -154,7 +154,7 @@ export default function Analytics() {
       const issueName = item.title;
       
       if (!acc[month]) acc[month] = {};
-      acc[month][issueName] = (acc[month][issueName] || 0) + 1;
+      acc[month][issueName] = (acc[month][issueName] ?? 0) + 1;
       
       return acc;
     }, {} as Record<string, Record<string, number>>);
@@ -163,7 +163,7 @@ export default function Analytics() {
   const issueFrequency6Months: Record<string, number> = {};
   Object.values(monthlyIssues).forEach(monthData => {
     Object.entries(monthData).forEach(([issue, count]) => {
-      issueFrequency6Months[issue] = (issueFrequency6Months[issue] || 0) + count;
+      issueFrequency6Months[issue] = (issueFrequency6Months[issue] ?? 0) + count;
     });
   });
 
@@ -177,14 +177,14 @@ export default function Analytics() {
   const issuesTrendData = last6Months.map(month => {
     const dataPoint: Record<string, string | number> = { month };
     topIssues.forEach(issue => {
-      dataPoint[issue] = monthlyIssues[month]?.[issue] || 0;
+      dataPoint[issue] = monthlyIssues[month]?.[issue] ?? 0;
     });
     return dataPoint;
   });
 
   const tagCounts = photos.reduce((acc, photo) => {
-    (photo.tags || []).forEach(tag => {
-      acc[tag] = (acc[tag] || 0) + 1;
+    (photo.tags ?? []).forEach(tag => {
+      acc[tag] = (acc[tag] ?? 0) + 1;
     });
     return acc;
   }, {} as Record<string, number>);
@@ -255,9 +255,9 @@ export default function Analytics() {
       return format(date, 'MMM yyyy');
     });
     
-    const currentCount = monthlyData[currentMonth]?.[issueName] || 0;
+    const currentCount = monthlyData[currentMonth]?.[issueName] ?? 0;
     const avgLast3Months = safeDivide(last3Months.reduce((sum, month) => {
-      return sum + (monthlyData[month]?.[issueName] || 0);
+      return sum + (monthlyData[month]?.[issueName] ?? 0);
     }, 0), 3);
     
     if (currentCount > avgLast3Months * 1.3) {
@@ -737,7 +737,7 @@ export default function Analytics() {
     
     return {
       id: f.id,
-      jobName: job?.name || 'Unknown Job',
+      jobName: job?.name ?? 'Unknown Job',
       predictedTDL,
       actualTDL,
       tdlVariance,
@@ -756,8 +756,8 @@ export default function Analytics() {
     let bVal = b[forecastSortColumn as keyof typeof b];
     
     if (forecastSortColumn === 'date') {
-      aVal = a.date?.getTime() || 0;
-      bVal = b.date?.getTime() || 0;
+      aVal = a.date?.getTime() ?? 0;
+      bVal = b.date?.getTime() ?? 0;
     }
     
     if (typeof aVal === 'string' && typeof bVal === 'string') {
@@ -1255,10 +1255,10 @@ export default function Analytics() {
                               const data = payload[0].payload;
                               return (
                                 <div className="bg-card p-3 border rounded-md shadow-md">
-                                  <p className="font-semibold">{data.metric || 'Unknown'}</p>
-                                  <p className="text-sm">Frequency: {data.frequency || 0}</p>
+                                  <p className="font-semibold">{data.metric ?? 'Unknown'}</p>
+                                  <p className="text-sm">Frequency: {data.frequency ?? 0}</p>
                                   <p className="text-sm">Avg Overage: {typeof data.avgOverage === 'number' && !isNaN(data.avgOverage) ? safeToFixed(data.avgOverage, 2) : '0.00'}</p>
-                                  <p className="text-sm text-muted-foreground capitalize">Severity: {data.severity || 'unknown'}</p>
+                                  <p className="text-sm text-muted-foreground capitalize">Severity: {data.severity ?? 'unknown'}</p>
                                 </div>
                               );
                             }

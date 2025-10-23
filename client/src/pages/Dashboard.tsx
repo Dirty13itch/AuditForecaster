@@ -144,11 +144,11 @@ export default function Dashboard() {
   const totalMileageDeduction = thisMonthMileage.reduce((sum, m) => sum + (safeParseFloat(m.distance.toString()) * STANDARD_MILEAGE_RATE), 0);
   const thisMonthFinancials = totalExpenses + totalMileageDeduction;
 
-  const jobsWithForecasts = forecasts.filter(f => f.actualTDL && f.predictedTDL).slice(-10);
+  const jobsWithForecasts = forecasts.filter(f => f.actualTDL != null && f.predictedTDL != null).slice(-10);
   const forecastAccuracy = jobsWithForecasts.length > 0
     ? safeDivide(jobsWithForecasts.reduce((sum, f) => {
-        const actual = safeParseFloat(f.actualTDL?.toString() || "0");
-        const predicted = safeParseFloat(f.predictedTDL?.toString() || "0");
+        const actual = safeParseFloat(f.actualTDL?.toString() ?? "0");
+        const predicted = safeParseFloat(f.predictedTDL?.toString() ?? "0");
         const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
         return sum + (100 - variance);
       }, 0), jobsWithForecasts.length)
@@ -165,25 +165,25 @@ export default function Dashboard() {
     const status = job.status === "in-progress" ? "In Progress" : 
                    job.status === "pending" ? "Pending" :
                    job.status === "review" ? "Review" : "Completed";
-    acc[status] = (acc[status] || 0) + 1;
+    acc[status] = (acc[status] ?? 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
   const chartData = [
-    { name: "Pending", value: statusCounts["Pending"] || 0, color: STATUS_COLORS.pending },
-    { name: "In Progress", value: statusCounts["In Progress"] || 0, color: STATUS_COLORS["in-progress"] },
-    { name: "Review", value: statusCounts["Review"] || 0, color: STATUS_COLORS.review },
-    { name: "Completed", value: statusCounts["Completed"] || 0, color: STATUS_COLORS.completed },
+    { name: "Pending", value: statusCounts["Pending"] ?? 0, color: STATUS_COLORS.pending },
+    { name: "In Progress", value: statusCounts["In Progress"] ?? 0, color: STATUS_COLORS["in-progress"] },
+    { name: "Review", value: statusCounts["Review"] ?? 0, color: STATUS_COLORS.review },
+    { name: "Completed", value: statusCounts["Completed"] ?? 0, color: STATUS_COLORS.completed },
   ];
 
   const scheduledJobIds = new Set(scheduleEvents.map(e => e.jobId));
   const unscheduledJobs = jobs.filter(j => !scheduledJobIds.has(j.id) && j.status !== "completed");
 
   const recentActivities = [
-    ...jobs.slice(-3).map(j => ({ type: "job", item: j, date: new Date() })),
-    ...reportInstances.slice(-3).map(r => ({ type: "report", item: r, date: r.createdAt ? new Date(r.createdAt) : new Date() })),
-    ...thisMonthExpenses.slice(-2).map(e => ({ type: "expense", item: e, date: new Date(e.date) })),
-    ...scheduleEvents.slice(-2).map(e => ({ type: "schedule", item: e, date: new Date(e.startTime) })),
+    ...(jobs ?? []).slice(-3).map(j => ({ type: "job", item: j, date: new Date() })),
+    ...(reportInstances ?? []).slice(-3).map(r => ({ type: "report", item: r, date: r.createdAt ? new Date(r.createdAt) : new Date() })),
+    ...(thisMonthExpenses ?? []).slice(-2).map(e => ({ type: "expense", item: e, date: new Date(e.date) })),
+    ...(scheduleEvents ?? []).slice(-2).map(e => ({ type: "schedule", item: e, date: new Date(e.startTime) })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 10);
 
   const miHomesBuilders = builders.filter(b => b.companyName === "M/I Homes");
@@ -191,12 +191,14 @@ export default function Dashboard() {
     const builderJobs = jobs.filter(j => j.builderId === builder.id);
     const builderForecasts = builderJobs
       .map(j => forecasts.find(f => f.jobId === j.id))
-      .filter(f => f && f.actualTDL && f.predictedTDL);
+      .filter((f): f is typeof f & { actualTDL: any; predictedTDL: any } => 
+        f != null && f.actualTDL != null && f.predictedTDL != null
+      );
     
     const avgAccuracy = builderForecasts.length > 0
       ? safeDivide(builderForecasts.reduce((sum, f) => {
-          const actual = safeParseFloat(f!.actualTDL?.toString() || "0");
-          const predicted = safeParseFloat(f!.predictedTDL?.toString() || "0");
+          const actual = safeParseFloat(f.actualTDL?.toString() ?? "0");
+          const predicted = safeParseFloat(f.predictedTDL?.toString() ?? "0");
           const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
           return sum + (100 - variance);
         }, 0), builderForecasts.length)

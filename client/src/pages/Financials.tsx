@@ -133,7 +133,7 @@ export default function Financials() {
     const mileageDeduction = workMileage * 0.67;
 
     const categoryBreakdown = filteredExpenses.reduce((acc, exp) => {
-      acc[exp.category] = (acc[exp.category] || 0) + safeParseFloat(exp.amount);
+      acc[exp.category] = (acc[exp.category] ?? 0) + safeParseFloat(exp.amount);
       return acc;
     }, {} as Record<string, number>);
 
@@ -273,7 +273,7 @@ export default function Financials() {
       format(new Date(exp.date), "yyyy-MM-dd"),
       exp.category,
       `$${safeToFixed(safeParseFloat(exp.amount), 2)}`,
-      exp.description || "",
+      exp.description ?? "",
       exp.isWorkRelated ? "Work" : "Personal",
       jobs.find((j) => j.id === exp.jobId)?.name || "N/A",
     ]);
@@ -493,7 +493,7 @@ export default function Financials() {
                           <p className="text-sm text-muted-foreground mb-1" data-testid={`text-expense-date-${expense.id}`}>
                             {format(new Date(expense.date), "MMM d, yyyy")}
                           </p>
-                          <p className="text-sm" data-testid={`text-expense-description-${expense.id}`}>{expense.description || "No description"}</p>
+                          <p className="text-sm" data-testid={`text-expense-description-${expense.id}`}>{expense.description ?? "No description"}</p>
                           {expense.jobId && (
                             <p className="text-xs text-muted-foreground mt-1" data-testid={`text-expense-job-${expense.id}`}>
                               Job: {jobs.find((j) => j.id === expense.jobId)?.name}

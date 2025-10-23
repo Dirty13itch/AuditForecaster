@@ -656,8 +656,8 @@ export default function Jobs() {
         return dateB - dateA;
       case "priority":
         const priorityOrder = { high: 3, medium: 2, low: 1 };
-        return (priorityOrder[b.priority as keyof typeof priorityOrder] || 0) - 
-               (priorityOrder[a.priority as keyof typeof priorityOrder] || 0);
+        return (priorityOrder[b.priority as keyof typeof priorityOrder] ?? 0) - 
+               (priorityOrder[a.priority as keyof typeof priorityOrder] ?? 0);
       case "status":
         return a.status.localeCompare(b.status);
       case "name":
@@ -937,12 +937,12 @@ export default function Jobs() {
                   status={job.status}
                   inspectionType={job.inspectionType}
                   scheduledDate={job.scheduledDate ? format(new Date(job.scheduledDate), "MMM d, yyyy") : undefined}
-                  priority={job.priority || "medium"}
+                  priority={job.priority ?? "medium"}
                   latitude={job.latitude}
                   longitude={job.longitude}
                   notes={job.notes}
-                  completedItems={job.completedItems || 0}
-                  totalItems={job.totalItems || 52}
+                  completedItems={job.completedItems ?? 0}
+                  totalItems={job.totalItems ?? 52}
                   isSelected={selectedJobs.has(job.id)}
                   complianceStatus={job.complianceStatus}
                   onSelect={handleJobSelect}
@@ -1148,10 +1148,10 @@ export default function Jobs() {
                         id={item.id}
                         itemNumber={item.itemNumber}
                         title={item.title}
-                        completed={item.completed || false}
-                        notes={item.notes || ""}
-                        photoCount={item.photoCount || 0}
-                        photoRequired={item.photoRequired || false}
+                        completed={item.completed ?? false}
+                        notes={item.notes ?? ""}
+                        photoCount={item.photoCount ?? 0}
+                        photoRequired={item.photoRequired ?? false}
                         onToggle={handleChecklistItemToggle}
                         onNotesChange={handleChecklistItemNotesChange}
                         onPhotoAdd={handleChecklistItemPhotoAdd}
@@ -1364,7 +1364,7 @@ export default function Jobs() {
                             </div>
                           )}
                         </div>
-                      {(photo.caption || photo.tags) && (
+                      {(photo.caption ?? photo.tags) && (
                         <CardContent className="pt-3">
                           {photo.caption && (
                             <p className="text-sm text-muted-foreground mb-2" data-testid={`text-caption-${photo.id}`}>

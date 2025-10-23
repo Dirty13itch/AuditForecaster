@@ -963,7 +963,7 @@ function ReportGenerationDialog({
       const job = jobs.find(j => j.id === data.jobId);
       const reportData = {
         overview: data.overview || `Inspection report for ${job?.name}`,
-        checklistSummary: `${job?.completedItems || 0}/${job?.totalItems || 52} items completed`,
+        checklistSummary: `${job?.completedItems ?? 0}/${job?.totalItems ?? 52} items completed`,
         forecast: {
           predictedTDL: "125.0",
           predictedDLO: "8.5",
