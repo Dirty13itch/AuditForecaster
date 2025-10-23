@@ -1306,6 +1306,16 @@ export class MemStorage implements IStorage {
     return this.expenses.delete(id);
   }
 
+  async bulkDeleteExpenses(ids: string[]): Promise<number> {
+    let deleted = 0;
+    for (const id of ids) {
+      if (this.expenses.delete(id)) {
+        deleted++;
+      }
+    }
+    return deleted;
+  }
+
   async createMileageLog(insertLog: InsertMileageLog): Promise<MileageLog> {
     const id = randomUUID();
     const log: MileageLog = {

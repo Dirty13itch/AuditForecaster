@@ -713,6 +713,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk delete expenses
+  app.delete("/api/expenses/bulk", isAuthenticated, async (req, res) => {
+    const bulkDeleteSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one expense ID is required"),
+    });
+
+    try {
+      const { ids } = bulkDeleteSchema.parse(req.body);
+      
+      // Limit bulk operations to 200 items for safety
+      if (ids.length > 200) {
+        return res.status(400).json({ message: "Cannot delete more than 200 expenses at once" });
+      }
+
+      const deleted = await storage.bulkDeleteExpenses(ids);
+      res.json({ deleted, total: ids.length });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'bulk delete expenses');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Export expenses
+  app.post("/api/expenses/export", isAuthenticated, async (req, res) => {
+    const exportSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one expense ID is required"),
+      format: z.enum(['csv', 'json']),
+    });
+
+    try {
+      const { ids, format } = exportSchema.parse(req.body);
+      
+      // Limit export to 1000 items for safety
+      if (ids.length > 1000) {
+        return res.status(400).json({ message: "Cannot export more than 1000 expenses at once" });
+      }
+
+      // Fetch expenses by IDs
+      const expenses = await Promise.all(
+        ids.map(id => storage.getExpense(id))
+      );
+      const validExpenses = expenses.filter((e): e is NonNullable<typeof e> => e !== undefined);
+
+      // Fetch jobs for enrichment (for job names in export)
+      const jobIds = Array.from(new Set(validExpenses.map(e => e.jobId).filter(Boolean)));
+      const jobs = await Promise.all(
+        jobIds.map(id => storage.getJob(id))
+      );
+      const jobMap = new Map(jobs.filter(Boolean).map(j => [j!.id, j!]));
+
+      if (format === 'json') {
+        // Return JSON directly
+        res.json(validExpenses);
+      } else {
+        // Generate CSV
+        const csvRows: string[] = [
+          // Header row - accounting-friendly format
+          'ID,Date,Category,Amount,Description,Type,Job ID,Job Name,Receipt URL'
+        ];
+
+        // Data rows
+        for (const expense of validExpenses) {
+          const job = expense.jobId ? jobMap.get(expense.jobId) : undefined;
+          const jobName = job?.name ?? '';
+          const expenseType = expense.isWorkRelated ? 'Work' : 'Personal';
+
+          const row = [
+            expense.id,
+            expense.date ? new Date(expense.date).toISOString().split('T')[0] : '', // YYYY-MM-DD format
+            expense.category ?? '',
+            expense.amount ?? '',
+            expense.description ?? '',
+            expenseType,
+            expense.jobId ?? '',
+            jobName,
+            expense.receiptUrl ?? '',
+          ].map(field => {
+            // Escape commas and quotes in CSV
+            const str = String(field);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          }).join(',');
+
+          csvRows.push(row);
+        }
+
+        const csv = csvRows.join('\n');
+        
+        // Set headers for CSV download
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="expenses-export-${Date.now()}.csv"`);
+        res.send(csv);
+      }
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'export expenses');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/mileage-logs", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate, limit, offset } = req.query;
