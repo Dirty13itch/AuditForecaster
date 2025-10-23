@@ -3,6 +3,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText, PenTool, AlertTriangle, CheckCircle2, Clock, HelpCircle, Loader2 } from "lucide-react";
+import { useBulkSelection } from "@/hooks/use-bulk-selection";
+import { SelectionToolbar, commonBulkActions } from "@/components/SelectionToolbar";
+import { BulkDeleteDialog, BulkExportDialog, type ExportFormat } from "@/components/BulkActionDialogs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,10 +65,10 @@ export default function Jobs() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [complianceFilter, setComplianceFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortOption>("date");
-  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [bulkStatusDialogOpen, setBulkStatusDialogOpen] = useState(false);
   const [bulkBuilderDialogOpen, setBulkBuilderDialogOpen] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("");
@@ -192,14 +195,14 @@ export default function Jobs() {
     mutationFn: async (jobIds: string[]) => {
       await Promise.all(jobIds.map(id => apiRequest("DELETE", `/api/jobs/${id}`)));
     },
-    onSuccess: () => {
+    onSuccess: (_, jobIds) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({
         title: "Success",
-        description: `${selectedJobs.size} job(s) deleted successfully`,
+        description: `${jobIds.length} job(s) deleted successfully`,
       });
-      setSelectedJobs(new Set());
-      setDeleteDialogOpen(false);
+      actions.deselectAll();
+      setShowDeleteDialog(false);
     },
     onError: () => {
       toast({
@@ -214,13 +217,13 @@ export default function Jobs() {
     mutationFn: async ({ jobIds, updates }: { jobIds: string[]; updates: Partial<InsertJob> }) => {
       await Promise.all(jobIds.map(id => apiRequest("PUT", `/api/jobs/${id}`, updates)));
     },
-    onSuccess: () => {
+    onSuccess: (_, { jobIds }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({
         title: "Success",
-        description: `${selectedJobs.size} job(s) updated successfully`,
+        description: `${jobIds.length} job(s) updated successfully`,
       });
-      setSelectedJobs(new Set());
+      actions.deselectAll();
       setBulkStatusDialogOpen(false);
       setBulkBuilderDialogOpen(false);
     },
@@ -397,37 +400,32 @@ export default function Jobs() {
     }
   };
 
-  const handleJobSelect = (id: string, selected: boolean) => {
-    const newSelected = new Set(selectedJobs);
-    if (selected) {
-      newSelected.add(id);
-    } else {
-      newSelected.delete(id);
-    }
-    setSelectedJobs(newSelected);
+  const handleBulkDelete = () => {
+    deleteJobsMutation.mutate(selectedIds);
   };
 
-  const handleSelectAll = () => {
-    if (selectedJobs.size === filteredJobs.length) {
-      setSelectedJobs(new Set());
-    } else {
-      setSelectedJobs(new Set(filteredJobs.map(j => j.id)));
-    }
+  const handleBulkExport = (format: ExportFormat) => {
+    console.log("Export:", format, selectedIds);
+    toast({
+      title: "Export Coming Soon",
+      description: `Export ${selectedIds.length} jobs as ${format.toUpperCase()}`,
+    });
+    setShowExportDialog(false);
   };
 
   const handleBulkStatusUpdate = () => {
-    if (bulkStatus && selectedJobs.size > 0) {
+    if (bulkStatus && selectedIds.length > 0) {
       bulkUpdateMutation.mutate({
-        jobIds: Array.from(selectedJobs),
+        jobIds: selectedIds,
         updates: { status: bulkStatus },
       });
     }
   };
 
   const handleBulkBuilderUpdate = () => {
-    if (bulkBuilder && selectedJobs.size > 0) {
+    if (bulkBuilder && selectedIds.length > 0) {
       bulkUpdateMutation.mutate({
-        jobIds: Array.from(selectedJobs),
+        jobIds: selectedIds,
         updates: { builderId: bulkBuilder },
       });
     }
@@ -674,6 +672,10 @@ export default function Jobs() {
     completed: jobs.filter(j => j.status === "completed").length,
   };
 
+  // Initialize bulk selection with filtered job IDs
+  const filteredJobIds = filteredJobs.map(job => job.id);
+  const { metadata, actions, selectedIds } = useBulkSelection(filteredJobIds);
+
   const workflowJob = workflowJobId ? jobs.find(j => j.id === workflowJobId) : null;
 
   return (
@@ -843,56 +845,29 @@ export default function Jobs() {
         </CardContent>
       </Card>
 
-      {selectedJobs.size > 0 && (
-        <Card className="border-primary">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" data-testid="badge-selected-count">
-                  {selectedJobs.size} selected
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectAll}
-                  data-testid="button-select-all"
-                >
-                  <CheckSquare className="h-4 w-4 mr-2" />
-                  {selectedJobs.size === filteredJobs.length ? "Deselect All" : "Select All"}
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBulkStatusDialogOpen(true)}
-                  data-testid="button-bulk-status"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Update Status
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBulkBuilderDialogOpen(true)}
-                  data-testid="button-bulk-builder"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Reassign Builder
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setDeleteDialogOpen(true)}
-                  data-testid="button-bulk-delete"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {metadata.hasSelection && (
+        <SelectionToolbar
+          selectedCount={metadata.selectedCount}
+          totalCount={metadata.totalCount}
+          entityName="jobs"
+          onClear={actions.deselectAll}
+          actions={[
+            commonBulkActions.delete(() => setShowDeleteDialog(true)),
+            commonBulkActions.export(() => setShowExportDialog(true)),
+            { 
+              label: "Update Status", 
+              icon: RefreshCw, 
+              onClick: () => setBulkStatusDialogOpen(true),
+              testId: "button-bulk-status"
+            },
+            { 
+              label: "Reassign Builder", 
+              icon: Pencil, 
+              onClick: () => setBulkBuilderDialogOpen(true),
+              testId: "button-bulk-builder"
+            },
+          ]}
+        />
       )}
 
       <div>
@@ -943,9 +918,9 @@ export default function Jobs() {
                   notes={job.notes}
                   completedItems={job.completedItems ?? 0}
                   totalItems={job.totalItems ?? 52}
-                  isSelected={selectedJobs.has(job.id)}
+                  isSelected={metadata.selectedIds.has(job.id)}
                   complianceStatus={job.complianceStatus}
-                  onSelect={handleJobSelect}
+                  onSelect={(id) => actions.toggle(id)}
                   onBuilderChange={handleBuilderChange}
                   onClick={() => {
                     setWorkflowJobId(job.id);
@@ -1015,35 +990,30 @@ export default function Jobs() {
         isPending={createJobMutation.isPending || updateJobMutation.isPending}
       />
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Jobs</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {selectedJobs.size} job(s)? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteJobsMutation.mutate(Array.from(selectedJobs))}
-              className="bg-destructive text-destructive-foreground"
-              disabled={deleteJobsMutation.isPending}
-              data-testid="button-confirm-delete"
-            >
-              {deleteJobsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <BulkDeleteDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={handleBulkDelete}
+        selectedCount={metadata.selectedCount}
+        entityName="jobs"
+        isPending={deleteJobsMutation.isPending}
+      />
+
+      <BulkExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        onConfirm={handleBulkExport}
+        selectedCount={metadata.selectedCount}
+        entityName="jobs"
+        isPending={false}
+      />
 
       <AlertDialog open={bulkStatusDialogOpen} onOpenChange={setBulkStatusDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Update Status</AlertDialogTitle>
             <AlertDialogDescription>
-              Select a new status for {selectedJobs.size} job(s)
+              Select a new status for {metadata.selectedCount} job(s)
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Select value={bulkStatus} onValueChange={setBulkStatus}>
@@ -1079,7 +1049,7 @@ export default function Jobs() {
           <AlertDialogHeader>
             <AlertDialogTitle>Reassign Builder</AlertDialogTitle>
             <AlertDialogDescription>
-              Select a new builder for {selectedJobs.size} job(s)
+              Select a new builder for {metadata.selectedCount} job(s)
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Select value={bulkBuilder} onValueChange={setBulkBuilder}>

@@ -26,7 +26,7 @@ interface JobCardProps {
   totalItems: number;
   isSelected?: boolean;
   complianceStatus?: string | null;
-  onSelect?: (id: string, selected: boolean) => void;
+  onSelect?: (id: string) => void;
   onBuilderChange?: (jobId: string, builderId: string) => void;
   onClick?: () => void;
   onViewCompliance?: () => void;
@@ -99,9 +99,9 @@ export default function JobCard({
         <div className="absolute top-4 left-4 z-10">
           <Checkbox
             checked={isSelected}
-            onCheckedChange={(checked) => onSelect(id, checked as boolean)}
+            onCheckedChange={() => onSelect(id)}
             onClick={(e) => e.stopPropagation()}
-            data-testid={`checkbox-job-${id}`}
+            data-testid={`checkbox-select-job-${id}`}
           />
         </div>
       )}
