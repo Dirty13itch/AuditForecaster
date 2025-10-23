@@ -31,6 +31,7 @@ The core entities include **Users**, **Builders**, **Jobs**, **Schedule Events**
 - **Analytics Dashboard:** Provides metrics on inspection volume, photo tag analysis, inspection status breakdown, and common issues tracking. Features include forecast accuracy tracking (TDL and DLO), builder performance comparison with metrics like completion rate and forecast accuracy, and trend analysis for common failed inspection items.
 - **PDF Export System:** Uses `@react-pdf/renderer` for professional, multi-section PDF generation with dynamic pagination, photo grids (with tags and annotations), and intelligent form fields. Generated PDFs are uploaded to private object storage.
 - **Photo Documentation:** Supports multi-tag systems, annotations (arrows, text, measurements via `react-konva`), and **OCR text extraction** using `tesseract.js` for auto-filling job fields. Includes photo-required checklist items.
+- **Enhanced Mobile Camera Integration:** Direct camera access via Uppy Webcam plugin for instant photo capture. Automatic client-side image compression using Canvas API reduces bandwidth usage (target: <500KB, configurable quality 0-1). Images resized to max 1920px dimension and converted to JPEG format with proper metadata handling. Compression skips small/optimal images to preserve original format. Configurable via `enableWebcam`, `enableCompression`, `compressionQuality`, and `maxImageSizeKB` props.
 - **Offline-First Functionality:** Leverages service workers, IndexedDB, and a custom sync queue for robust operation without internet connectivity.
 - **Scheduling:** Features Google Calendar integration for two-way sync.
 - **Conditional Logic:** Dynamic inspection forms are driven by a conditional logic engine.
@@ -50,7 +51,7 @@ The core entities include **Users**, **Builders**, **Jobs**, **Schedule Events**
 -   **React Big Calendar**: Calendar view component with drag-and-drop.
 -   **React DnD**: Drag and drop functionality.
 -   **date-fns**: Date manipulation and formatting.
--   **Uppy**: File upload component with AWS S3 integration via presigned URLs.
+-   **Uppy**: File upload component with AWS S3 integration via presigned URLs. Includes Webcam plugin for direct camera access and photo capture.
 -   **react-konva** & **konva**: Canvas-based photo annotation tools.
 -   **tesseract.js**: OCR for text extraction from photos.
 -   **@react-pdf/renderer**: PDF generation library for professional reports.
