@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight, Award } from "lucide-react";
+import { analyticsLogger } from "@/lib/logger";
 import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth, subDays } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -842,8 +843,7 @@ export default function Analytics() {
           });
         }
       } catch (e) {
-        // Skip invalid JSON
-        console.error('Invalid complianceFlags JSON:', e);
+        analyticsLogger.warn('Invalid complianceFlags JSON, skipping:', e);
       }
     }
   });

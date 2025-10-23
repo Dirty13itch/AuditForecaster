@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { addToSyncQueue } from "./syncQueue";
+import { queryClientLogger } from "./logger";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -25,7 +26,7 @@ export async function apiRequest(
     return res;
   } catch (error) {
     if (!navigator.onLine || (error instanceof Error && error.message.includes('Failed to fetch'))) {
-      console.log('[QueryClient] Network error detected, adding to sync queue');
+      queryClientLogger.info('Network error detected, adding to sync queue');
       
       if (method !== 'GET') {
         await addToSyncQueue({
@@ -77,7 +78,7 @@ export const getQueryFn: <T>(options: {
       return await res.json();
     } catch (error) {
       if (!navigator.onLine || (error instanceof Error && error.message.includes('Failed to fetch'))) {
-        console.log('[QueryClient] Network error on query, will use stale data if available');
+        queryClientLogger.info('Network error on query, will use stale data if available');
       }
       throw error;
     }

@@ -1,4 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { syncQueueLogger } from './logger';
 
 export interface QueuedRequest {
   id: string;
@@ -50,7 +51,7 @@ export async function addToSyncQueue(request: Omit<QueuedRequest, 'id' | 'timest
     retries: 0,
   };
   await db.add(STORE_NAME, queuedRequest);
-  console.log('[SyncQueue] Added request to queue:', id);
+  syncQueueLogger.debug('Added request to queue:', id);
   return id;
 }
 
@@ -63,7 +64,7 @@ export async function getSyncQueue(): Promise<QueuedRequest[]> {
 export async function removeFromSyncQueue(id: string): Promise<void> {
   const db = await getDB();
   await db.delete(STORE_NAME, id);
-  console.log('[SyncQueue] Removed request from queue:', id);
+  syncQueueLogger.debug('Removed request from queue:', id);
 }
 
 export async function updateRetryCount(id: string, retries: number): Promise<void> {
@@ -78,7 +79,7 @@ export async function updateRetryCount(id: string, retries: number): Promise<voi
 export async function clearSyncQueue(): Promise<void> {
   const db = await getDB();
   await db.clear(STORE_NAME);
-  console.log('[SyncQueue] Cleared all queued requests');
+  syncQueueLogger.info('Cleared all queued requests');
 }
 
 export async function getSyncQueueCount(): Promise<number> {
@@ -94,10 +95,10 @@ async function delay(ms: number): Promise<void> {
 export async function processSyncQueue(
   onProgress?: (current: number, total: number) => void
 ): Promise<{ success: number; failed: number }> {
-  console.log('[SyncQueue] Processing sync queue...');
+  syncQueueLogger.info('Processing sync queue...');
   
   if (!navigator.onLine) {
-    console.log('[SyncQueue] Offline, skipping sync');
+    syncQueueLogger.info('Offline, skipping sync');
     return { success: 0, failed: 0 };
   }
 
@@ -113,14 +114,14 @@ export async function processSyncQueue(
     }
 
     if (request.retries >= MAX_RETRIES) {
-      console.warn('[SyncQueue] Max retries reached for request:', request.id);
+      syncQueueLogger.warn('Max retries reached for request:', request.id);
       await removeFromSyncQueue(request.id);
       failedCount++;
       continue;
     }
 
     try {
-      console.log('[SyncQueue] Syncing request:', request.id, request.method, request.url);
+      syncQueueLogger.debug('Syncing request:', request.id, request.method, request.url);
       
       const response = await fetch(request.url, {
         method: request.method,
@@ -135,14 +136,14 @@ export async function processSyncQueue(
       if (response.ok) {
         await removeFromSyncQueue(request.id);
         successCount++;
-        console.log('[SyncQueue] Successfully synced request:', request.id);
+        syncQueueLogger.info('Successfully synced request:', request.id);
       } else {
         await updateRetryCount(request.id, request.retries + 1);
         failedCount++;
-        console.error('[SyncQueue] Failed to sync request:', request.id, response.status);
+        syncQueueLogger.error('Failed to sync request:', request.id, response.status);
       }
     } catch (error) {
-      console.error('[SyncQueue] Error syncing request:', request.id, error);
+      syncQueueLogger.error('Error syncing request:', request.id, error);
       await updateRetryCount(request.id, request.retries + 1);
       failedCount++;
       
@@ -150,6 +151,6 @@ export async function processSyncQueue(
     }
   }
 
-  console.log(`[SyncQueue] Sync complete: ${successCount} success, ${failedCount} failed`);
+  syncQueueLogger.info(`Sync complete: ${successCount} success, ${failedCount} failed`);
   return { success: successCount, failed: failedCount };
 }
