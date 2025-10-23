@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText, PenTool } from "lucide-react";
+import { Plus, Search, Filter, Trash2, RefreshCw, CheckSquare, Image as ImageIcon, X, FilterX, Pencil, ScanText, PenTool, AlertTriangle, CheckCircle2, Clock, HelpCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -58,6 +59,7 @@ export default function Jobs() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [builderFilter, setBuilderFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [complianceFilter, setComplianceFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortOption>("date");
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
@@ -85,6 +87,8 @@ export default function Jobs() {
   const [missingPhotoItems, setMissingPhotoItems] = useState<ChecklistItem[]>([]);
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
   const [selectedJobForSignature, setSelectedJobForSignature] = useState<Job | null>(null);
+  const [complianceDrawerOpen, setComplianceDrawerOpen] = useState(false);
+  const [selectedJobForCompliance, setSelectedJobForCompliance] = useState<Job | null>(null);
 
   const { data: jobs = [], isLoading: isLoadingJobs} = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -114,6 +118,29 @@ export default function Jobs() {
       return response.json();
     },
     enabled: !!selectedJobForPhotos?.id,
+  });
+
+  const { data: complianceData, isLoading: isLoadingCompliance } = useQuery<{
+    status: string;
+    violations: Array<{
+      ruleId: string;
+      metricType: string;
+      threshold: number;
+      actual: number;
+      severity: string;
+      description: string;
+      units: string;
+    }>;
+    evaluatedAt: string;
+  }>({
+    queryKey: ["/api/compliance/jobs", selectedJobForCompliance?.id],
+    queryFn: async () => {
+      if (!selectedJobForCompliance?.id) return { status: "unknown", violations: [], evaluatedAt: new Date().toISOString() };
+      const response = await fetch(`/api/compliance/jobs/${selectedJobForCompliance.id}`);
+      if (!response.ok) throw new Error('Failed to fetch compliance data');
+      return response.json();
+    },
+    enabled: !!selectedJobForCompliance?.id && complianceDrawerOpen,
   });
 
   const createJobMutation = useMutation({
@@ -349,6 +376,11 @@ export default function Jobs() {
   const handleOpenSignatureDialog = (job: Job) => {
     setSelectedJobForSignature(job);
     setSignatureDialogOpen(true);
+  };
+
+  const handleOpenComplianceDrawer = (job: Job) => {
+    setSelectedJobForCompliance(job);
+    setComplianceDrawerOpen(true);
   };
 
   const handleSaveJob = async (data: any) => {
@@ -610,8 +642,9 @@ export default function Jobs() {
     const matchesStatus = statusFilter === "all" || job.status === statusFilter;
     const matchesBuilder = builderFilter === "all" || job.builderId === builderFilter;
     const matchesPriority = priorityFilter === "all" || job.priority === priorityFilter;
+    const matchesCompliance = complianceFilter === "all" || job.complianceStatus === complianceFilter;
 
-    return matchesSearch && matchesStatus && matchesBuilder && matchesPriority;
+    return matchesSearch && matchesStatus && matchesBuilder && matchesPriority && matchesCompliance;
   });
 
   const sortedJobs = [...filteredJobs].sort((a, b) => {
@@ -738,7 +771,7 @@ export default function Jobs() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger data-testid="select-status-filter">
                 <SelectValue placeholder="Filter by status" />
@@ -778,6 +811,19 @@ export default function Jobs() {
                 <SelectItem value="high">High</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
                 <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={complianceFilter} onValueChange={setComplianceFilter}>
+              <SelectTrigger data-testid="filter-compliance">
+                <SelectValue placeholder="Filter by compliance" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="compliant">Compliant</SelectItem>
+                <SelectItem value="non-compliant">Non-Compliant</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="unknown">Unknown</SelectItem>
               </SelectContent>
             </Select>
 
@@ -897,12 +943,14 @@ export default function Jobs() {
                   completedItems={job.completedItems || 0}
                   totalItems={job.totalItems || 52}
                   isSelected={selectedJobs.has(job.id)}
+                  complianceStatus={job.complianceStatus}
                   onSelect={handleJobSelect}
                   onBuilderChange={handleBuilderChange}
                   onClick={() => {
                     setWorkflowJobId(job.id);
                     navigate(`/inspection/${job.id}`);
                   }}
+                  onViewCompliance={() => handleOpenComplianceDrawer(job)}
                 />
                 <div className="absolute bottom-4 right-4 flex gap-2">
                   <Button
@@ -1267,7 +1315,7 @@ export default function Jobs() {
                               </div>
                             </div>
                           )}
-                          {!selectionMode && photo.annotationData && Array.isArray(photo.annotationData) && photo.annotationData.length > 0 && (
+                          {!selectionMode && photo.annotationData && Array.isArray(photo.annotationData) && photo.annotationData.length > 0 ? (
                             <Badge 
                               className="absolute top-2 left-2 bg-primary text-primary-foreground"
                               data-testid={`badge-annotated-${photo.id}`}
@@ -1275,7 +1323,7 @@ export default function Jobs() {
                               <Pencil className="h-3 w-3 mr-1" />
                               Annotated
                             </Badge>
-                          )}
+                          ) : null}
                           {!selectionMode && (
                             <div className="absolute top-2 right-2 flex gap-2">
                               <Button
@@ -1580,6 +1628,146 @@ export default function Jobs() {
         onSave={handleSignatureSave}
         jobName={selectedJobForSignature?.name}
       />
+
+      <Sheet open={complianceDrawerOpen} onOpenChange={setComplianceDrawerOpen}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto" data-testid="drawer-compliance">
+          <SheetHeader>
+            <SheetTitle>Compliance Details</SheetTitle>
+            <SheetDescription>
+              {selectedJobForCompliance?.name}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6">
+            {isLoadingCompliance ? (
+              <div className="space-y-4">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-32 w-full" />
+              </div>
+            ) : complianceData ? (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {complianceData.status === "compliant" && <CheckCircle2 className="h-5 w-5 text-success" />}
+                      {complianceData.status === "non-compliant" && <AlertTriangle className="h-5 w-5 text-destructive" />}
+                      {complianceData.status === "pending" && <Clock className="h-5 w-5 text-warning" />}
+                      {complianceData.status === "unknown" && <HelpCircle className="h-5 w-5 text-muted-foreground" />}
+                      Compliance Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Status:</span>
+                        <Badge
+                          variant={
+                            complianceData.status === "compliant" ? "default" :
+                            complianceData.status === "non-compliant" ? "destructive" :
+                            complianceData.status === "pending" ? "secondary" :
+                            "outline"
+                          }
+                        >
+                          {complianceData.status === "compliant" && "Compliant"}
+                          {complianceData.status === "non-compliant" && "Non-Compliant"}
+                          {complianceData.status === "pending" && "Pending"}
+                          {complianceData.status === "unknown" && "Unknown"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Last Checked:</span>
+                        <span>{format(new Date(complianceData.evaluatedAt), "MMM d, yyyy 'at' h:mm a")}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {complianceData.violations.length > 0 ? (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold">Violations ({complianceData.violations.length})</h3>
+                    {complianceData.violations.map((violation, index) => (
+                      <Card key={index} className="border-destructive">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+                              <CardTitle className="text-sm">{violation.metricType}</CardTitle>
+                            </div>
+                            <Badge
+                              variant={
+                                violation.severity === "critical" ? "destructive" :
+                                violation.severity === "high" ? "destructive" :
+                                violation.severity === "medium" ? "secondary" :
+                                "outline"
+                              }
+                              className="text-xs"
+                            >
+                              {violation.severity === "critical" && "Critical"}
+                              {violation.severity === "high" && "Major"}
+                              {violation.severity === "medium" && "Minor"}
+                              {violation.severity === "low" && "Minor"}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <p className="text-sm text-muted-foreground">{violation.description}</p>
+                          <div className="grid grid-cols-2 gap-3 pt-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Threshold:</span>
+                              <div className="font-semibold">{violation.threshold} {violation.units}</div>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Actual:</span>
+                              <div className="font-semibold text-destructive">{violation.actual} {violation.units}</div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : complianceData.status === "compliant" ? (
+                  <Card className="border-success">
+                    <CardContent className="py-8 text-center">
+                      <CheckCircle2 className="h-12 w-12 text-success mx-auto mb-3" />
+                      <p className="font-semibold text-success">No Violations Found</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        This job meets all compliance requirements
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : complianceData.status === "pending" ? (
+                  <Card>
+                    <CardContent className="py-8 text-center">
+                      <Clock className="h-12 w-12 text-warning mx-auto mb-3" />
+                      <p className="font-semibold">Pending Evaluation</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Waiting for actual test results to be recorded
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="py-8 text-center">
+                      <HelpCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                      <p className="font-semibold">Unknown Status</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Unable to evaluate compliance at this time
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            ) : (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  <p>No compliance data available</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

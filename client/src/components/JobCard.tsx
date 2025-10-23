@@ -24,9 +24,11 @@ interface JobCardProps {
   completedItems: number;
   totalItems: number;
   isSelected?: boolean;
+  complianceStatus?: string | null;
   onSelect?: (id: string, selected: boolean) => void;
   onBuilderChange?: (jobId: string, builderId: string) => void;
   onClick?: () => void;
+  onViewCompliance?: () => void;
 }
 
 export default function JobCard({
@@ -46,9 +48,11 @@ export default function JobCard({
   completedItems,
   totalItems,
   isSelected = false,
+  complianceStatus,
   onSelect,
   onBuilderChange,
-  onClick
+  onClick,
+  onViewCompliance
 }: JobCardProps) {
   const statusConfig: Record<string, { label: string; className: string }> = {
     pending: { label: "Pending", className: "bg-muted text-muted-foreground" },
@@ -64,6 +68,13 @@ export default function JobCard({
     high: { label: "High", className: "bg-destructive text-destructive-foreground" },
     medium: { label: "Medium", className: "bg-warning text-warning-foreground" },
     low: { label: "Low", className: "bg-success text-success-foreground" }
+  };
+
+  const complianceConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    compliant: { label: "Compliant", variant: "default" },
+    pending: { label: "Pending", variant: "secondary" },
+    "non-compliant": { label: "Non-Compliant", variant: "destructive" },
+    unknown: { label: "Unknown", variant: "outline" }
   };
 
   const progress = (completedItems / totalItems) * 100;
@@ -117,6 +128,14 @@ export default function JobCard({
             >
               {priorityConfig[priority]?.label || priority}
             </Badge>
+            {complianceStatus && (
+              <Badge 
+                variant={complianceConfig[complianceStatus]?.variant || "outline"}
+                data-testid={`badge-compliance-${id}`}
+              >
+                {complianceConfig[complianceStatus]?.label || complianceStatus}
+              </Badge>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -204,11 +223,24 @@ export default function JobCard({
         </div>
       </CardContent>
 
-      <CardFooter>
-        <Button className="w-full" data-testid="button-continue">
+      <CardFooter className="flex gap-2 flex-col sm:flex-row">
+        <Button className="flex-1" data-testid="button-continue">
           Continue Inspection
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
+        {complianceStatus === "non-compliant" && onViewCompliance && (
+          <Button 
+            variant="outline"
+            className="flex-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewCompliance();
+            }}
+            data-testid={`button-view-compliance-${id}`}
+          >
+            View Compliance
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

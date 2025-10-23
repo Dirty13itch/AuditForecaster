@@ -204,6 +204,31 @@ app.use((req, res, next) => {
       } catch (error) {
         console.error('Failed to recalculate scores on startup:', error);
       }
+      
+      // Evaluate compliance for all existing jobs
+      try {
+        const { updateJobComplianceStatus, updateReportComplianceStatus } = await import('./complianceService');
+        const jobs = await storage.getAllJobs();
+        let jobsEvaluated = 0;
+        let reportsEvaluated = 0;
+        
+        for (const job of jobs) {
+          await updateJobComplianceStatus(storage, job.id);
+          jobsEvaluated++;
+          
+          const instances = await storage.getReportInstancesByJob(job.id);
+          for (const instance of instances) {
+            await updateReportComplianceStatus(storage, instance.id);
+            reportsEvaluated++;
+          }
+        }
+        
+        if (jobsEvaluated > 0 || reportsEvaluated > 0) {
+          log(`Evaluated compliance for ${jobsEvaluated} jobs and ${reportsEvaluated} reports`);
+        }
+      } catch (error) {
+        console.error('Failed to evaluate compliance on startup:', error);
+      }
     }
   });
 })();
