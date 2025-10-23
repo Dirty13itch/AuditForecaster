@@ -120,22 +120,31 @@ export default function Dashboard() {
 
   const isLoading = jobsLoading || buildersLoading || eventsLoading || expensesLoading || mileageLoading || forecastsLoading;
 
-  const activeJobs = jobs.filter(j => j.status !== "completed");
+  // Ensure all data is array before processing (defensive guards)
+  const safeJobs = Array.isArray(jobs) ? jobs : [];
+  const safeBuilders = Array.isArray(builders) ? builders : [];
+  const safeScheduleEvents = Array.isArray(scheduleEvents) ? scheduleEvents : [];
+  const safeExpenses = Array.isArray(expenses) ? expenses : [];
+  const safeMileageLogs = Array.isArray(mileageLogs) ? mileageLogs : [];
+  const safeForecasts = Array.isArray(forecasts) ? forecasts : [];
+  const safeReportInstances = Array.isArray(reportInstances) ? reportInstances : [];
+
+  const activeJobs = safeJobs.filter(j => j.status !== "completed");
   const thisMonthStart = startOfMonth(new Date());
   const thisMonthEnd = endOfMonth(new Date());
   
-  const thisMonthInspections = jobs.filter(j => {
+  const thisMonthInspections = safeJobs.filter(j => {
     if (!j.completedDate) return false;
     const completedDate = new Date(j.completedDate);
     return completedDate >= thisMonthStart && completedDate <= thisMonthEnd;
   });
 
-  const thisMonthExpenses = expenses.filter(e => {
+  const thisMonthExpenses = safeExpenses.filter(e => {
     const expenseDate = new Date(e.date);
     return expenseDate >= thisMonthStart && expenseDate <= thisMonthEnd && e.isWorkRelated;
   });
 
-  const thisMonthMileage = mileageLogs.filter(m => {
+  const thisMonthMileage = safeMileageLogs.filter(m => {
     const logDate = new Date(m.date);
     return logDate >= thisMonthStart && logDate <= thisMonthEnd && m.isWorkRelated;
   });
@@ -145,7 +154,7 @@ export default function Dashboard() {
   const thisMonthFinancials = totalExpenses + totalMileageDeduction;
 
   // Filter forecasts with valid non-zero predicted values to ensure accurate calculations
-  const jobsWithForecasts = forecasts
+  const jobsWithForecasts = safeForecasts
     .filter(f => f.actualTDL != null && f.predictedTDL != null)
     .filter(f => {
       const predicted = safeParseFloat(f.predictedTDL?.toString() ?? "0");
@@ -163,14 +172,14 @@ export default function Dashboard() {
       }, 0), jobsWithForecasts.length)
     : 0;
 
-  const todayEvents = scheduleEvents.filter(e => isToday(new Date(e.startTime)));
+  const todayEvents = safeScheduleEvents.filter(e => isToday(new Date(e.startTime)));
   const upcomingEvents = todayEvents.length > 0 
     ? todayEvents 
-    : scheduleEvents.filter(e => isThisWeek(new Date(e.startTime)) && new Date(e.startTime) > new Date()).slice(0, 5);
+    : safeScheduleEvents.filter(e => isThisWeek(new Date(e.startTime)) && new Date(e.startTime) > new Date()).slice(0, 5);
 
-  const jobsMap = new Map(jobs.map(j => [j.id, j]));
+  const jobsMap = new Map(safeJobs.map(j => [j.id, j]));
 
-  const statusCounts = jobs.reduce((acc, job) => {
+  const statusCounts = safeJobs.reduce((acc, job) => {
     const status = job.status === "in-progress" ? "In Progress" : 
                    job.status === "pending" ? "Pending" :
                    job.status === "review" ? "Review" : "Completed";
@@ -185,21 +194,21 @@ export default function Dashboard() {
     { name: "Completed", value: statusCounts["Completed"] ?? 0, color: STATUS_COLORS.completed },
   ];
 
-  const scheduledJobIds = new Set(scheduleEvents.map(e => e.jobId));
-  const unscheduledJobs = jobs.filter(j => !scheduledJobIds.has(j.id) && j.status !== "completed");
+  const scheduledJobIds = new Set(safeScheduleEvents.map(e => e.jobId));
+  const unscheduledJobs = safeJobs.filter(j => !scheduledJobIds.has(j.id) && j.status !== "completed");
 
   const recentActivities = [
-    ...(jobs ?? []).slice(-3).map(j => ({ type: "job", item: j, date: new Date() })),
-    ...(reportInstances ?? []).slice(-3).map(r => ({ type: "report", item: r, date: r.createdAt ? new Date(r.createdAt) : new Date() })),
-    ...(thisMonthExpenses ?? []).slice(-2).map(e => ({ type: "expense", item: e, date: new Date(e.date) })),
-    ...(scheduleEvents ?? []).slice(-2).map(e => ({ type: "schedule", item: e, date: new Date(e.startTime) })),
+    ...safeJobs.slice(-3).map(j => ({ type: "job", item: j, date: new Date() })),
+    ...safeReportInstances.slice(-3).map(r => ({ type: "report", item: r, date: r.createdAt ? new Date(r.createdAt) : new Date() })),
+    ...thisMonthExpenses.slice(-2).map(e => ({ type: "expense", item: e, date: new Date(e.date) })),
+    ...safeScheduleEvents.slice(-2).map(e => ({ type: "schedule", item: e, date: new Date(e.startTime) })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 10);
 
-  const miHomesBuilders = builders.filter(b => b.companyName === "M/I Homes");
+  const miHomesBuilders = safeBuilders.filter(b => b.companyName === "M/I Homes");
   const builderStats = miHomesBuilders.map(builder => {
-    const builderJobs = jobs.filter(j => j.builderId === builder.id);
+    const builderJobs = safeJobs.filter(j => j.builderId === builder.id);
     const builderForecasts = builderJobs
-      .map(j => forecasts.find(f => f.jobId === j.id))
+      .map(j => safeForecasts.find(f => f.jobId === j.id))
       .filter((f): f is typeof f & { actualTDL: any; predictedTDL: any } => 
         f != null && f.actualTDL != null && f.predictedTDL != null
       )
