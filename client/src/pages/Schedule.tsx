@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Calendar as BigCalendar, dateFnsLocalizer, View, Event } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, startOfMonth, endOfMonth } from "date-fns";
@@ -115,6 +115,12 @@ export default function Schedule() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [selectedGoogleEvent, setSelectedGoogleEvent] = useState<GoogleEvent | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline'>('idle');
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncStatusTimeoutId, setSyncStatusTimeoutId] = useState<NodeJS.Timeout | null>(null);
+
+  // Configurable sync interval (default: 10 minutes)
+  const SYNC_INTERVAL_MS = Number(import.meta.env.VITE_SYNC_INTERVAL_MS) || 10 * 60 * 1000;
 
   const startDate = startOfMonth(date);
   const endDate = endOfMonth(date);
@@ -212,22 +218,63 @@ export default function Schedule() {
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/google-events'] });
       setLastSyncedAt(new Date());
-      const schedEvents = data.syncedCount.scheduleEvents;
-      const gEvents = data.syncedCount.googleEvents;
+      
+      const scheduleTotal = data.syncedCount.scheduleEvents.created + 
+                           data.syncedCount.scheduleEvents.updated;
+      const googleTotal = data.syncedCount.googleEvents.created + 
+                         data.syncedCount.googleEvents.updated;
+      
       toast({ 
         title: 'Google Calendar synced successfully',
-        description: `Job Events - Created: ${schedEvents.created}, Updated: ${schedEvents.updated} | Google Events - Created: ${gEvents.created}, Updated: ${gEvents.updated}`,
+        description: `Schedule events: ${scheduleTotal} synced, Google events: ${googleTotal} synced`,
       });
     },
-    onError: () => {
-      toast({ title: 'Failed to sync with Google Calendar', variant: 'destructive' });
+    onError: (error: any) => {
+      // Don't show error toast if offline - the offline indicator is enough
+      if (!navigator.onLine) {
+        return;
+      }
+      
+      toast({ 
+        title: 'Failed to sync with Google Calendar', 
+        description: error.message,
+        variant: 'destructive' 
+      });
     },
   });
 
   const handleGoogleCalendarSync = async () => {
+    // Clear any existing status timeout
+    if (syncStatusTimeoutId) {
+      clearTimeout(syncStatusTimeoutId);
+      setSyncStatusTimeoutId(null);
+    }
+    
     setIsSyncing(true);
+    setSyncStatus('syncing');
+    setSyncError(null);
+    
     try {
       await syncGoogleCalendarMutation.mutateAsync();
+      setSyncStatus('synced');
+      
+      // Reset to idle after 3 seconds
+      const timeoutId = setTimeout(() => {
+        setSyncStatus('idle');
+        setSyncStatusTimeoutId(null);
+      }, 3000);
+      setSyncStatusTimeoutId(timeoutId);
+    } catch (error: any) {
+      setSyncStatus('error');
+      setSyncError(error.message || 'Sync failed');
+      
+      // Reset to idle after 5 seconds
+      const timeoutId = setTimeout(() => {
+        setSyncStatus('idle');
+        setSyncError(null);
+        setSyncStatusTimeoutId(null);
+      }, 5000);
+      setSyncStatusTimeoutId(timeoutId);
     } finally {
       setIsSyncing(false);
     }
@@ -470,6 +517,88 @@ export default function Schedule() {
     }
   }, [date]);
 
+  // Initial sync on mount
+  useEffect(() => {
+    // Wait 1 second after mount to allow other queries to complete
+    const timer = setTimeout(() => {
+      handleGoogleCalendarSync();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Automatic sync every SYNC_INTERVAL_MS (default 10 minutes)
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      if (!isSyncing && document.visibilityState === 'visible' && navigator.onLine) {
+        handleGoogleCalendarSync();
+      }
+    }, SYNC_INTERVAL_MS);
+    
+    return () => clearInterval(syncInterval);
+  }, [isSyncing, SYNC_INTERVAL_MS]);
+
+  // Sync when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !isSyncing && navigator.onLine) {
+        const now = new Date();
+        // Only sync if last sync was more than 1 minute ago (avoid excessive syncing)
+        if (!lastSyncedAt || (now.getTime() - lastSyncedAt.getTime()) > 60 * 1000) {
+          handleGoogleCalendarSync();
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isSyncing, lastSyncedAt]);
+
+  // Detect offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      if (syncStatus === 'offline') {
+        setSyncStatus('idle');
+        // Trigger sync when coming back online
+        handleGoogleCalendarSync();
+      }
+    };
+    
+    const handleOffline = () => {
+      setSyncStatus('offline');
+      // Clear any pending sync status timeout
+      if (syncStatusTimeoutId) {
+        clearTimeout(syncStatusTimeoutId);
+        setSyncStatusTimeoutId(null);
+      }
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    // Set initial offline status if needed
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
+    }
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [syncStatus, syncStatusTimeoutId]);
+
+  // Cleanup sync status timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (syncStatusTimeoutId) {
+        clearTimeout(syncStatusTimeoutId);
+      }
+    };
+  }, [syncStatusTimeoutId]);
+
   if (jobsLoading || eventsLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -537,28 +666,53 @@ export default function Schedule() {
               </div>
 
               <div className="flex items-center gap-2">
-                {lastSyncedAt && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mr-2" data-testid="text-last-synced">
-                    <Cloud className="h-3 w-3" />
-                    Last synced: {format(lastSyncedAt, 'h:mm a')}
+                {syncStatus === 'syncing' && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground" data-testid="status-syncing">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Syncing...</span>
                   </div>
                 )}
+                {syncStatus === 'synced' && (
+                  <div className="flex items-center gap-1 text-sm text-green-600" data-testid="status-synced">
+                    <Cloud className="h-4 w-4" />
+                    <span>Synced</span>
+                  </div>
+                )}
+                {syncStatus === 'error' && (
+                  <div className="flex items-center gap-1 text-sm text-destructive" data-testid="status-error">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Sync error</span>
+                  </div>
+                )}
+                {syncStatus === 'offline' && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground" data-testid="status-offline">
+                    <CloudOff className="h-4 w-4" />
+                    <span>Offline</span>
+                  </div>
+                )}
+                
+                {lastSyncedAt && syncStatus === 'idle' && (
+                  <span className="text-xs text-muted-foreground" data-testid="text-last-synced">
+                    Last synced: {format(lastSyncedAt, 'h:mm a')}
+                  </span>
+                )}
+                
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleGoogleCalendarSync}
                   disabled={isSyncing}
-                  data-testid="button-google-calendar-sync"
+                  data-testid="button-sync"
                 >
                   {isSyncing ? (
                     <>
-                      <Cloud className="h-4 w-4 mr-2 animate-pulse" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Syncing...
                     </>
                   ) : (
                     <>
-                      <Cloud className="h-4 w-4 mr-2" />
-                      Sync with Google Calendar
+                      <Cloud className="mr-2 h-4 w-4" />
+                      Sync Google Calendar
                     </>
                   )}
                 </Button>
