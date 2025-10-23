@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Camera, Filter, X, FilterX, CheckSquare, Square } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import TopBar from "@/components/TopBar";
 import PhotoGallery from "@/components/PhotoGallery";
 import BottomNav from "@/components/BottomNav";
@@ -171,23 +173,141 @@ export default function Photos() {
 
   const hasActiveFilters = selectedTags.length > 0 || jobFilter !== "all" || dateFrom || dateTo || filterItem !== "all";
 
-  // Bulk action handlers (placeholders - will implement backend in next task)
+  const { toast } = useToast();
+
+  // Bulk delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const response = await apiRequest("/api/photos/bulk", {
+        method: "DELETE",
+        body: JSON.stringify({ ids }),
+      });
+      return response;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
+      toast({
+        title: "Photos deleted",
+        description: `Successfully deleted ${data.deleted} of ${data.total} photos`,
+      });
+      setShowDeleteDialog(false);
+      actions.deselectAll();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk tag mutation
+  const tagMutation = useMutation({
+    mutationFn: async ({ ids, mode, tags }: { ids: string[], mode: TagOperationMode, tags: string[] }) => {
+      const response = await apiRequest("/api/photos/bulk-tag", {
+        method: "POST",
+        body: JSON.stringify({ ids, mode, tags }),
+      });
+      return response;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
+      const modeLabel = data.mode === 'add' ? 'added to' : data.mode === 'remove' ? 'removed from' : 'replaced on';
+      toast({
+        title: "Tags updated",
+        description: `Successfully ${modeLabel} ${data.updated} of ${data.total} photos`,
+      });
+      setShowTagDialog(false);
+      actions.deselectAll();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Tag update failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk export mutation
+  const exportMutation = useMutation({
+    mutationFn: async ({ ids, format }: { ids: string[], format: ExportFormat }) => {
+      const response = await fetch("/api/photos/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids, format }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Export failed");
+      }
+      
+      // Branch before consuming response body
+      if (format === 'csv') {
+        // For CSV, download the blob directly
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `photos-export-${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Can't easily parse CSV count, use IDs length as approximation
+        return { format, count: ids.length };
+      }
+      
+      // JSON format - parse the response to get actual count
+      const data = await response.json();
+      const count = Array.isArray(data) ? data.length : ids.length;
+      
+      // Trigger download of JSON
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `photos-export-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      return { format, count };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Export complete",
+        description: `Exported ${data.count} photos as ${data.format.toUpperCase()}`,
+      });
+      setShowExportDialog(false);
+      actions.deselectAll();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Export failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk action handlers
   const handleBulkDelete = () => {
-    console.log("Bulk delete:", selectedIds);
-    setShowDeleteDialog(false);
-    actions.deselectAll();
+    deleteMutation.mutate(Array.from(selectedIds));
   };
 
   const handleBulkTag = (mode: TagOperationMode, tags: string[]) => {
-    console.log("Bulk tag:", mode, tags, selectedIds);
-    setShowTagDialog(false);
-    actions.deselectAll();
+    tagMutation.mutate({ ids: Array.from(selectedIds), mode, tags });
   };
 
   const handleBulkExport = (format: ExportFormat) => {
-    console.log("Bulk export:", format, selectedIds);
-    setShowExportDialog(false);
-    actions.deselectAll();
+    exportMutation.mutate({ ids: Array.from(selectedIds), format });
   };
 
   // Toggle selection mode and clear selection when exiting
@@ -584,7 +704,7 @@ export default function Photos() {
         onConfirm={handleBulkDelete}
         selectedCount={metadata.selectedCount}
         entityName="photos"
-        isPending={false}
+        isPending={deleteMutation.isPending}
         warningMessage="This will also remove associated annotations and OCR data."
       />
 
@@ -593,7 +713,7 @@ export default function Photos() {
         onOpenChange={setShowTagDialog}
         onConfirm={handleBulkTag}
         selectedCount={metadata.selectedCount}
-        isPending={false}
+        isPending={tagMutation.isPending}
       />
 
       <BulkExportDialog
@@ -602,7 +722,7 @@ export default function Photos() {
         onConfirm={handleBulkExport}
         selectedCount={metadata.selectedCount}
         entityName="photos"
-        isPending={false}
+        isPending={exportMutation.isPending}
       />
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
