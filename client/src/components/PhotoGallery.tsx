@@ -3,6 +3,7 @@ import { X, ZoomIn } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Photo {
   id: string;
@@ -15,9 +16,20 @@ interface PhotoGalleryProps {
   photos: Photo[];
   onPhotoClick?: (photo: Photo) => void;
   onPhotoDelete?: (photoId: string) => void;
+  // Bulk selection props
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelection?: (photoId: string) => void;
 }
 
-export default function PhotoGallery({ photos, onPhotoClick, onPhotoDelete }: PhotoGalleryProps) {
+export default function PhotoGallery({ 
+  photos, 
+  onPhotoClick, 
+  onPhotoDelete,
+  selectionMode = false,
+  selectedIds = new Set(),
+  onToggleSelection,
+}: PhotoGalleryProps) {
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
@@ -45,11 +57,14 @@ export default function PhotoGallery({ photos, onPhotoClick, onPhotoDelete }: Ph
       {photos.map((photo) => {
         const isLoaded = loadedImages.has(photo.id);
         const hasFailed = failedImages.has(photo.id);
+        const isSelected = selectedIds.has(photo.id);
 
         return (
           <Card
             key={photo.id}
-            className="overflow-hidden group relative hover-elevate cursor-pointer"
+            className={`overflow-hidden group relative hover-elevate cursor-pointer transition-all ${
+              isSelected ? 'ring-2 ring-primary' : ''
+            }`}
             data-testid={`card-photo-${photo.id}`}
           >
             <div className="aspect-square bg-muted relative">
@@ -96,11 +111,37 @@ export default function PhotoGallery({ photos, onPhotoClick, onPhotoDelete }: Ph
                 </Button>
               </div>
 
-              {/* Item number badge */}
-              {photo.itemNumber && (
+              {/* Selection checkbox (in selection mode) */}
+              {selectionMode && onToggleSelection && (
+                <div
+                  className="absolute top-2 left-2 z-10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onToggleSelection(photo.id)}
+                    className="h-5 w-5 bg-white border-2"
+                    data-testid={`checkbox-photo-${photo.id}`}
+                  />
+                </div>
+              )}
+
+              {/* Item number badge (moved if in selection mode) */}
+              {photo.itemNumber && !selectionMode && (
                 <Badge
                   variant="secondary"
                   className="absolute top-2 left-2 text-xs"
+                  data-testid="badge-item-number"
+                >
+                  #{photo.itemNumber}
+                </Badge>
+              )}
+              
+              {/* Item number badge in selection mode (positioned differently) */}
+              {photo.itemNumber && selectionMode && (
+                <Badge
+                  variant="secondary"
+                  className="absolute top-2 left-12 text-xs"
                   data-testid="badge-item-number"
                 >
                   #{photo.itemNumber}

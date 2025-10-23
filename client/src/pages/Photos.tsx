@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Camera, Filter, X, FilterX } from "lucide-react";
+import { ArrowLeft, Camera, Filter, X, FilterX, CheckSquare, Square } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import PhotoGallery from "@/components/PhotoGallery";
 import BottomNav from "@/components/BottomNav";
@@ -10,6 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useBulkSelection } from "@/hooks/use-bulk-selection";
+import { SelectionToolbar, commonBulkActions } from "@/components/SelectionToolbar";
+import { BulkDeleteDialog, BulkTagDialog, BulkExportDialog, type TagOperationMode, type ExportFormat } from "@/components/BulkActionDialogs";
 import {
   Select,
   SelectContent,
@@ -38,6 +41,12 @@ export default function Photos() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [filterItem, setFilterItem] = useState("all");
+  
+  // Bulk selection state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showTagDialog, setShowTagDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -136,6 +145,10 @@ export default function Photos() {
     itemNumber: photo.checklistItemId ? parseInt(photo.checklistItemId) : undefined,
   }));
 
+  // Bulk selection hook (only active in selection mode)
+  const photoIds = photos.map(p => p.id);
+  const { metadata, actions, selectedIds } = useBulkSelection(photoIds);
+
   // Get unique checklist item numbers from all fetched photos for dynamic filter
   const uniqueItems = Array.from(new Set(photos.map(p => p.itemNumber).filter((n): n is number => n !== undefined))).sort((a, b) => a - b);
 
@@ -157,6 +170,33 @@ export default function Photos() {
   };
 
   const hasActiveFilters = selectedTags.length > 0 || jobFilter !== "all" || dateFrom || dateTo || filterItem !== "all";
+
+  // Bulk action handlers (placeholders - will implement backend in next task)
+  const handleBulkDelete = () => {
+    console.log("Bulk delete:", selectedIds);
+    setShowDeleteDialog(false);
+    actions.deselectAll();
+  };
+
+  const handleBulkTag = (mode: TagOperationMode, tags: string[]) => {
+    console.log("Bulk tag:", mode, tags, selectedIds);
+    setShowTagDialog(false);
+    actions.deselectAll();
+  };
+
+  const handleBulkExport = (format: ExportFormat) => {
+    console.log("Bulk export:", format, selectedIds);
+    setShowExportDialog(false);
+    actions.deselectAll();
+  };
+
+  // Toggle selection mode and clear selection when exiting
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      actions.deselectAll();
+    }
+    setSelectionMode(!selectionMode);
+  };
 
   if (isError) {
     return (
@@ -198,7 +238,39 @@ export default function Photos() {
               <Camera className="h-4 w-4 mr-2" />
               Take Photo
             </Button>
+            <Button
+              variant={selectionMode ? "default" : "outline"}
+              onClick={toggleSelectionMode}
+              data-testid="button-toggle-selection"
+            >
+              {selectionMode ? (
+                <>
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Exit Select
+                </>
+              ) : (
+                <>
+                  <Square className="h-4 w-4 mr-2" />
+                  Select
+                </>
+              )}
+            </Button>
           </div>
+
+          {/* Selection Toolbar (shows when items selected) */}
+          {selectionMode && metadata.hasSelection && (
+            <SelectionToolbar
+              selectedCount={metadata.selectedCount}
+              totalCount={metadata.totalCount}
+              entityName="photos"
+              onClear={actions.deselectAll}
+              actions={[
+                commonBulkActions.tag(() => setShowTagDialog(true)),
+                commonBulkActions.export(() => setShowExportDialog(true)),
+                commonBulkActions.delete(() => setShowDeleteDialog(true)),
+              ]}
+            />
+          )}
 
           {/* Filters Card */}
           <Card>
@@ -470,6 +542,9 @@ export default function Photos() {
                 photos={photos}
                 onPhotoClick={(photo) => {}}
                 onPhotoDelete={(id) => {}}
+                selectionMode={selectionMode}
+                selectedIds={metadata.selectedIds}
+                onToggleSelection={actions.toggle}
               />
 
               {/* Intersection observer trigger */}
@@ -501,6 +576,34 @@ export default function Photos() {
           )}
         </div>
       </main>
+
+      {/* Bulk Action Dialogs */}
+      <BulkDeleteDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={handleBulkDelete}
+        selectedCount={metadata.selectedCount}
+        entityName="photos"
+        isPending={false}
+        warningMessage="This will also remove associated annotations and OCR data."
+      />
+
+      <BulkTagDialog
+        open={showTagDialog}
+        onOpenChange={setShowTagDialog}
+        onConfirm={handleBulkTag}
+        selectedCount={metadata.selectedCount}
+        isPending={false}
+      />
+
+      <BulkExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        onConfirm={handleBulkExport}
+        selectedCount={metadata.selectedCount}
+        entityName="photos"
+        isPending={false}
+      />
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
