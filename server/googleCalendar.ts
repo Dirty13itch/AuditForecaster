@@ -34,6 +34,17 @@ interface GoogleCalendarEvent {
   } | null;
 }
 
+interface GoogleCalendarListItem {
+  id: string;
+  summary: string;
+  description?: string | null;
+  backgroundColor?: string | null;
+  foregroundColor?: string | null;
+  accessRole?: string | null;
+  primary?: boolean | null;
+  selected?: boolean | null;
+}
+
 let connectionSettings: ConnectionSettings | undefined;
 
 async function getAccessToken() {
@@ -175,6 +186,33 @@ export class GoogleCalendarService {
       return response.data.items || [];
     } catch (error) {
       serverLogger.error('[GoogleCalendar] Error fetching events from Google Calendar:', error);
+      throw error;
+    }
+  }
+
+  async fetchCalendarList(): Promise<GoogleCalendarListItem[]> {
+    try {
+      const calendar = await getUncachableGoogleCalendarClient();
+      
+      const response = await calendar.calendarList.list({
+        minAccessRole: 'reader',
+        showHidden: false,
+      });
+
+      serverLogger.info(`[GoogleCalendar] Fetched ${response.data.items?.length || 0} calendars`);
+      
+      return (response.data.items || []).map(cal => ({
+        id: cal.id || '',
+        summary: cal.summary || 'Untitled Calendar',
+        description: cal.description,
+        backgroundColor: cal.backgroundColor,
+        foregroundColor: cal.foregroundColor,
+        accessRole: cal.accessRole,
+        primary: cal.primary,
+        selected: cal.selected,
+      }));
+    } catch (error) {
+      serverLogger.error('[GoogleCalendar] Error fetching calendar list:', error);
       throw error;
     }
   }
