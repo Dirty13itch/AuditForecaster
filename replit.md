@@ -13,6 +13,7 @@ This is a full-stack energy auditing field application designed for field inspec
 - Financial tracking (expenses and mileage logs)
 - Scheduling with Google Calendar integration
 - Customizable report generation with intelligent form fields
+- Professional PDF export with dynamic sections and pagination
 - Offline-first architecture with background sync
 - Mobile-responsive design optimized for field use
 
@@ -143,6 +144,15 @@ Preferred communication style: Simple, everyday language.
   - Pattern recognition with confidence scoring
   - Auto-fill job fields from extracted text
   - Custom `PhotoOCR` component in `client/src/components/PhotoOCR.tsx`
+- **@react-pdf/renderer** - PDF generation for professional inspection reports
+  - React component syntax for PDF document creation
+  - Multi-section layout: Header, Job Info, Summary, Checklist, Photos, Forecasts, Signatures
+  - Dynamic pagination based on active sections
+  - Professional styling with Helvetica fonts, proper margins, page numbers
+  - Photo grid layout with tags and annotation overlays
+  - Server-side generation in `server/pdfGenerator.tsx`
+  - Upload to private object storage with download endpoint
+  - Endpoints: POST `/api/report-instances/:id/generate-pdf`, GET `/api/report-instances/:id/download-pdf`
 
 **Development Tools:**
 - **Replit-specific plugins** for development environment integration

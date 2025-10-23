@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Building2, DollarSign, FileText, Settings, Wifi, WifiOff, CloudUpload, RefreshCw } from "lucide-react";
+import { Home, ClipboardList, Calendar, Building2, DollarSign, FileText, BarChart3, Settings, Wifi, WifiOff, CloudUpload, RefreshCw } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -48,6 +48,11 @@ const menuItems = [
     title: "Reports",
     url: "/reports",
     icon: FileText,
+  },
+  {
+    title: "Analytics",
+    url: "/analytics",
+    icon: BarChart3,
   },
   {
     title: "Settings",

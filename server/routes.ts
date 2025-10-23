@@ -846,7 +846,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(photos);
       }
 
-      res.status(400).json({ message: "Either jobId or checklistItemId query parameter is required" });
+      const jobs = await storage.getAllJobs();
+      const allPhotos = [];
+      for (const job of jobs) {
+        const photos = await storage.getPhotosByJob(job.id);
+        allPhotos.push(...photos);
+      }
+      res.json(allPhotos);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch photos" });
     }
@@ -986,7 +992,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(items);
       }
 
-      res.status(400).json({ message: "jobId query parameter is required" });
+      const jobs = await storage.getAllJobs();
+      const allItems = [];
+      for (const job of jobs) {
+        const items = await storage.getChecklistItemsByJob(job.id);
+        allItems.push(...items);
+      }
+      res.json(allItems);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch checklist items" });
     }
