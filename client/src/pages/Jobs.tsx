@@ -192,22 +192,89 @@ export default function Jobs() {
   });
 
   const deleteJobsMutation = useMutation({
-    mutationFn: async (jobIds: string[]) => {
-      await Promise.all(jobIds.map(id => apiRequest("DELETE", `/api/jobs/${id}`)));
+    mutationFn: async (ids: string[]) => {
+      const response = await apiRequest("DELETE", "/api/jobs/bulk", { ids });
+      return response;
     },
-    onSuccess: (_, jobIds) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({
-        title: "Success",
-        description: `${jobIds.length} job(s) deleted successfully`,
+        title: "Jobs deleted",
+        description: `Successfully deleted ${data.deleted} of ${data.total} jobs`,
       });
       actions.deselectAll();
       setShowDeleteDialog(false);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: "Failed to delete jobs",
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: async ({ ids, format }: { ids: string[], format: ExportFormat }) => {
+      const response = await fetch("/api/jobs/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids, format }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Export failed");
+      }
+      
+      // Branch before consuming response body
+      if (format === 'csv') {
+        // For CSV, download the blob directly
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `jobs-export-${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Can't easily parse CSV count, use IDs length as approximation
+        return { format, count: ids.length };
+      }
+      
+      // JSON format - parse the response to get actual count
+      const data = await response.json();
+      const count = Array.isArray(data) ? data.length : ids.length;
+      
+      // Trigger download of JSON
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jobs-export-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      return { format, count };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Export successful",
+        description: `Exported ${data.count} jobs as ${data.format.toUpperCase()}`,
+      });
+      setShowExportDialog(false);
+      actions.deselectAll();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Export failed",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -405,12 +472,7 @@ export default function Jobs() {
   };
 
   const handleBulkExport = (format: ExportFormat) => {
-    console.log("Export:", format, selectedIds);
-    toast({
-      title: "Export Coming Soon",
-      description: `Export ${selectedIds.length} jobs as ${format.toUpperCase()}`,
-    });
-    setShowExportDialog(false);
+    exportMutation.mutate({ ids: Array.from(selectedIds), format });
   };
 
   const handleBulkStatusUpdate = () => {
@@ -1005,7 +1067,7 @@ export default function Jobs() {
         onConfirm={handleBulkExport}
         selectedCount={metadata.selectedCount}
         entityName="jobs"
-        isPending={false}
+        isPending={exportMutation.isPending}
       />
 
       <AlertDialog open={bulkStatusDialogOpen} onOpenChange={setBulkStatusDialogOpen}>
