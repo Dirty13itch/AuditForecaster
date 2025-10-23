@@ -150,6 +150,12 @@ export const photos = pgTable("photos", {
   jobId: varchar("job_id").notNull(),
   checklistItemId: varchar("checklist_item_id"),
   filePath: text("file_path").notNull(),
+  fullUrl: text("full_url"),
+  // TODO: Add real thumbnail generation during upload:
+  // When a photo is uploaded, generate thumbnail (400x400) and blur placeholder (24x24)
+  // Store all versions in object storage and add these fields:
+  // thumbnailUrl: text("thumbnail_url"), // Generated during upload
+  // blurDataUrl: text("blur_data_url"),  // Generated during upload
   caption: text("caption"),
   tags: text("tags").array(),
   annotationData: jsonb("annotation_data"),

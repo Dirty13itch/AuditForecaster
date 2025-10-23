@@ -1483,11 +1483,13 @@ export class MemStorage implements IStorage {
 
   async createPhoto(insertPhoto: InsertPhoto): Promise<Photo> {
     const id = randomUUID();
+    const fullUrl = insertPhoto.fullUrl || insertPhoto.filePath;
     const photo: Photo = {
       id,
       jobId: insertPhoto.jobId,
       checklistItemId: insertPhoto.checklistItemId ?? null,
       filePath: insertPhoto.filePath,
+      fullUrl: fullUrl ?? null,
       caption: insertPhoto.caption ?? null,
       tags: insertPhoto.tags ?? null,
       annotationData: insertPhoto.annotationData ?? null,
