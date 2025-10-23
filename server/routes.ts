@@ -21,6 +21,7 @@ import {
   insertChecklistItemSchema,
   updateChecklistItemSchema,
   insertComplianceRuleSchema,
+  insertForecastSchema,
 } from "@shared/schema";
 import {
   evaluateJobCompliance,
@@ -606,6 +607,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validated = insertReportInstanceSchema.parse(req.body);
       const instance = await storage.createReportInstance(validated);
+      
+      // Trigger compliance evaluation for both job and report
+      try {
+        await updateJobComplianceStatus(storage, instance.jobId);
+        await updateReportComplianceStatus(storage, instance.id);
+      } catch (error) {
+        console.error("Compliance evaluation failed after report instance creation:", error);
+      }
+      
       res.status(201).json(instance);
     } catch (error) {
       res.status(400).json({ message: "Invalid report instance data", error });
@@ -987,7 +997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (photo.checklistItemId) {
         const checklistItem = await storage.getChecklistItem(photo.checklistItemId);
-        if (checklistItem && checklistItem.photoCount > 0) {
+        if (checklistItem && checklistItem.photoCount !== null && checklistItem.photoCount > 0) {
           await storage.updateChecklistItem(photo.checklistItemId, {
             photoCount: checklistItem.photoCount - 1,
           });
@@ -1025,6 +1035,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/forecasts", isAuthenticated, async (req, res) => {
+    try {
+      const validated = insertForecastSchema.parse(req.body);
+      const forecast = await storage.createForecast(validated);
+      
+      // Trigger compliance evaluation if actual values are being updated
+      if (validated.actualTDL !== undefined || validated.actualDLO !== undefined || validated.actualACH50 !== undefined) {
+        try {
+          await updateJobComplianceStatus(storage, forecast.jobId);
+        } catch (error) {
+          console.error("Compliance evaluation failed after forecast creation:", error);
+        }
+      }
+      
+      res.status(201).json(forecast);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid forecast data", error });
+    }
+  });
+
+  app.patch("/api/forecasts/:id", isAuthenticated, async (req, res) => {
+    try {
+      const validated = insertForecastSchema.partial().parse(req.body);
+      const forecast = await storage.updateForecast(req.params.id, validated);
+      if (!forecast) {
+        return res.status(404).json({ message: "Forecast not found" });
+      }
+      
+      // Trigger compliance evaluation if actual values are being updated
+      if (validated.actualTDL !== undefined || validated.actualDLO !== undefined || validated.actualACH50 !== undefined) {
+        try {
+          await updateJobComplianceStatus(storage, forecast.jobId);
+        } catch (error) {
+          console.error("Compliance evaluation failed after forecast update:", error);
+        }
+      }
+      
+      res.json(forecast);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid forecast data", error });
+    }
+  });
+
   app.get("/api/checklist-items", isAuthenticated, async (req, res) => {
     try {
       const { jobId } = req.query;
@@ -1050,6 +1103,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validated = insertChecklistItemSchema.parse(req.body);
       const item = await storage.createChecklistItem(validated);
+      
+      // Trigger compliance evaluation for all checklist item changes
+      try {
+        const reportInstances = await storage.getReportInstancesByJob(item.jobId);
+        for (const reportInstance of reportInstances) {
+          await updateReportComplianceStatus(storage, reportInstance.id);
+        }
+      } catch (error) {
+        console.error("Compliance evaluation failed after checklist item creation:", error);
+      }
+      
       res.status(201).json(item);
     } catch (error) {
       res.status(400).json({ message: "Invalid checklist item data", error });
@@ -1075,6 +1139,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!item) {
         return res.status(404).json({ message: "Checklist item not found" });
       }
+      
+      // Trigger compliance evaluation for all checklist item changes
+      try {
+        const reportInstances = await storage.getReportInstancesByJob(item.jobId);
+        for (const reportInstance of reportInstances) {
+          await updateReportComplianceStatus(storage, reportInstance.id);
+        }
+      } catch (error) {
+        console.error("Compliance evaluation failed after checklist item update:", error);
+      }
+      
       res.json(item);
     } catch (error) {
       res.status(400).json({ message: "Invalid checklist item data", error });
