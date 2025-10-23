@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { CalendarLayersPanel } from "@/components/CalendarLayersPanel";
 import type { Job, ScheduleEvent } from "@shared/schema";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
@@ -416,6 +417,10 @@ export default function Schedule() {
         
         <div className="flex flex-1 overflow-hidden">
           <div className="w-80 border-r bg-background p-4 overflow-y-auto">
+          {/* Google Calendar Layers */}
+          <CalendarLayersPanel />
+          
+          {/* Unscheduled Jobs section */}
           <div className="mb-4">
             <h2 className="text-lg font-semibold mb-2" data-testid="text-unscheduled-jobs-title">
               Unscheduled Jobs
