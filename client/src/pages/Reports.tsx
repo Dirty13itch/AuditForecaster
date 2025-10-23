@@ -1107,7 +1107,36 @@ function ReportViewerDialog({
   template?: ReportTemplate;
   onEmail: () => void;
 }) {
+  const { toast } = useToast();
   const data = JSON.parse(report.data);
+
+  const generatePdfMutation = useMutation({
+    mutationFn: async (reportId: string) => {
+      const response = await apiRequest(
+        'POST',
+        `/api/report-instances/${reportId}/generate-pdf`
+      );
+      return await response.json() as { success: boolean; pdfUrl: string };
+    },
+    onSuccess: (data, reportId) => {
+      // Download the PDF via our API endpoint instead of opening signed URL
+      const downloadUrl = `/api/report-instances/${reportId}/download-pdf`;
+      window.open(downloadUrl, '_blank');
+      
+      toast({ title: "PDF generated successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/report-instances"] });
+    },
+    onError: () => {
+      toast({ 
+        title: "PDF generation failed",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleDownloadPdf = () => {
+    generatePdfMutation.mutate(report.id);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1219,9 +1248,14 @@ function ReportViewerDialog({
             <Printer className="h-4 w-4 mr-2" />
             Print
           </Button>
-          <Button variant="outline" data-testid="button-export-pdf">
+          <Button 
+            variant="outline" 
+            onClick={handleDownloadPdf}
+            disabled={generatePdfMutation.isPending}
+            data-testid="button-download-pdf"
+          >
             <Download className="h-4 w-4 mr-2" />
-            Export PDF
+            {generatePdfMutation.isPending ? "Generating..." : "Download PDF"}
           </Button>
           <Button onClick={onEmail} data-testid="button-email-report">
             <Mail className="h-4 w-4 mr-2" />

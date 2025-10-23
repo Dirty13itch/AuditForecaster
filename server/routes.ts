@@ -5,8 +5,9 @@ import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { googleCalendarService } from "./googleCalendar";
 import { isAuthenticated, getUserId } from "./auth";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
+import { generateReportPDF } from "./pdfGenerator.tsx";
 import {
   insertBuilderSchema,
   insertJobSchema,
@@ -620,6 +621,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(instance);
     } catch (error) {
       res.status(400).json({ message: "Invalid report instance data", error });
+    }
+  });
+
+  app.post("/api/report-instances/:id/generate-pdf", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      // Fetch report instance
+      const reportInstance = await storage.getReportInstance(req.params.id);
+      if (!reportInstance) {
+        return res.status(404).json({ message: "Report instance not found" });
+      }
+
+      // Fetch related data
+      const job = await storage.getJob(reportInstance.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const builder = job.builderId ? await storage.getBuilder(job.builderId) : undefined;
+      const checklistItems = await storage.getChecklistItemsByJob(reportInstance.jobId);
+      const photos = await storage.getPhotosByJob(reportInstance.jobId);
+      const forecasts = await storage.getForecastsByJob(reportInstance.jobId);
+
+      // Parse template sections
+      const template = await storage.getReportTemplate(reportInstance.templateId);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      const templateSections = JSON.parse(template.sections);
+
+      // Generate PDF
+      const pdfBuffer = await generateReportPDF({
+        reportInstance,
+        job,
+        builder,
+        checklistItems,
+        photos,
+        forecasts,
+        templateSections,
+      });
+
+      // Upload PDF to object storage
+      const objectStorageService = new ObjectStorageService();
+      const privateDir = objectStorageService.getPrivateObjectDir();
+      
+      // Create a unique filename
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `report-${reportInstance.id}-${timestamp}.pdf`;
+      const objectPath = `${privateDir}/reports/${filename}`;
+
+      // Parse the object path to get bucket and object name
+      const pathParts = objectPath.split('/');
+      const bucketName = pathParts[1];
+      const objectName = pathParts.slice(2).join('/');
+
+      // Upload the PDF buffer
+      const bucket = objectStorageClient.bucket(bucketName);
+      const file = bucket.file(objectName);
+      
+      await file.save(pdfBuffer, {
+        metadata: {
+          contentType: 'application/pdf',
+        },
+      });
+
+      // Set ACL to private
+      await objectStorageService.trySetObjectEntityAclPolicy(
+        `/objects/reports/${filename}`,
+        {
+          owner: userId || "unknown",
+          visibility: "private",
+        }
+      );
+
+      // Update report instance with PDF URL (normalized path)
+      const normalizedPath = `/objects/reports/${filename}`;
+      await storage.updateReportInstance(req.params.id, {
+        pdfUrl: normalizedPath,
+      });
+
+      res.json({
+        success: true,
+        pdfUrl: normalizedPath,
+      });
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      res.status(500).json({ 
+        message: "Failed to generate PDF", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+
+  // PDF Download endpoint
+  app.get("/api/report-instances/:id/download-pdf", isAuthenticated, async (req, res) => {
+    try {
+      const instance = await storage.getReportInstance(req.params.id);
+      if (!instance || !instance.pdfUrl) {
+        return res.status(404).json({ message: "PDF not found" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const file = await objectStorageService.getObjectEntityFile(instance.pdfUrl);
+      
+      if (!file) {
+        return res.status(404).json({ message: "PDF file not found in storage" });
+      }
+
+      await objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      res.status(500).json({ message: "Failed to download PDF" });
     }
   });
 
