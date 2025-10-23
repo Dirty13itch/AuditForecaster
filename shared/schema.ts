@@ -3,6 +3,17 @@ import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jso
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export interface ScoreSummary {
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  passRate: number;
+  failRate: number;
+  completionRate: number;
+  totalItems: number;
+  passedItems: number;
+  failedItems: number;
+  updatedAt: string;
+}
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -99,6 +110,7 @@ export const reportInstances = pgTable("report_instances", {
   emailedTo: text("emailed_to"),
   emailedAt: timestamp("emailed_at"),
   createdAt: timestamp("created_at").default(sql`now()`),
+  scoreSummary: text("score_summary"),
 });
 
 export const forecasts = pgTable("forecasts", {
@@ -117,6 +129,7 @@ export const checklistItems = pgTable("checklist_items", {
   itemNumber: integer("item_number").notNull(),
   title: text("title").notNull(),
   completed: boolean("completed").default(false),
+  status: text("status").notNull().default('pending'),
   notes: text("notes"),
   photoCount: integer("photo_count").default(0),
   photoRequired: boolean("photo_required").default(false),
@@ -158,6 +171,7 @@ export const updateChecklistItemSchema = z.object({
   itemNumber: z.number().optional(),
   title: z.string().optional(),
   completed: z.boolean().optional(),
+  status: z.enum(['pending', 'passed', 'failed', 'not_applicable']).optional(),
   notes: z.string().nullable().optional(),
   photoCount: z.number().optional(),
   photoRequired: z.boolean().optional(),

@@ -2,6 +2,7 @@ import React from 'react';
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import { renderToBuffer } from '@react-pdf/renderer';
 import type { Job, Builder, ChecklistItem, Photo, Forecast, ReportInstance } from '@shared/schema';
+import { calculateScore } from '../shared/scoring';
 
 interface ReportSection {
   id: string;
@@ -218,6 +219,36 @@ const styles = StyleSheet.create({
   badgeFailed: {
     backgroundColor: '#DC3545',
   },
+  scoreGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 15,
+  },
+  scoreCard: {
+    backgroundColor: '#F8F9FA',
+    padding: 10,
+    borderRadius: 4,
+    border: '1 solid #DEE2E6',
+    minWidth: 100,
+  },
+  scoreLabel: {
+    fontSize: 9,
+    color: '#6C757D',
+    marginBottom: 4,
+  },
+  scoreValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#212529',
+  },
+  scoreBreakdown: {
+    marginTop: 15,
+    flexDirection: 'row',
+    gap: 20,
+  },
+  scoreBreakdownItem: {
+    flex: 1,
+  },
 });
 
 function ReportHeader({ job, reportData }: { job: Job; reportData: any }) {
@@ -290,6 +321,56 @@ function JobInformationSection({ job, builder }: { job: Job; builder?: Builder }
             </Text>
           </View>
         )}
+      </View>
+    </View>
+  );
+}
+
+function ScoreSummarySection({ checklistItems }: { checklistItems: ChecklistItem[] }) {
+  const score = calculateScore(checklistItems);
+  
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Inspection Score</Text>
+      <View style={styles.scoreGrid}>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreLabel}>Pass Rate</Text>
+          <Text style={styles.scoreValue}>{score.passRate.toFixed(1)}%</Text>
+        </View>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreLabel}>Grade</Text>
+          <Text style={styles.scoreValue}>{score.grade}</Text>
+        </View>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreLabel}>Completion</Text>
+          <Text style={styles.scoreValue}>{score.completionRate.toFixed(1)}%</Text>
+        </View>
+      </View>
+      <View style={styles.scoreBreakdown}>
+        <View style={styles.scoreBreakdownItem}>
+          <Text style={styles.scoreLabel}>Passed</Text>
+          <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#28A745' }}>
+            {score.passedItems} / {score.totalItems}
+          </Text>
+        </View>
+        <View style={styles.scoreBreakdownItem}>
+          <Text style={styles.scoreLabel}>Failed</Text>
+          <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#DC3545' }}>
+            {score.failedItems} / {score.totalItems}
+          </Text>
+        </View>
+        <View style={styles.scoreBreakdownItem}>
+          <Text style={styles.scoreLabel}>Pending</Text>
+          <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#FFC107' }}>
+            {score.pendingItems} / {score.totalItems}
+          </Text>
+        </View>
+        <View style={styles.scoreBreakdownItem}>
+          <Text style={styles.scoreLabel}>N/A</Text>
+          <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#6C757D' }}>
+            {score.notApplicableItems} / {score.totalItems}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -532,7 +613,10 @@ function InspectionReportDocument({ data }: { data: PDFGenerationData }) {
         <JobInformationSection job={data.job} builder={data.builder} />
         
         {hasChecklistSection && data.checklistItems.length > 0 && (
-          <InspectionSummarySection job={data.job} checklistItems={data.checklistItems} />
+          <>
+            <ScoreSummarySection checklistItems={data.checklistItems} />
+            <InspectionSummarySection job={data.job} checklistItems={data.checklistItems} />
+          </>
         )}
 
         {reportData.overview && (

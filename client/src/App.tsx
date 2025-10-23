@@ -14,6 +14,7 @@ import Schedule from "@/pages/Schedule";
 import Builders from "@/pages/Builders";
 import Financials from "@/pages/Financials";
 import Reports from "@/pages/Reports";
+import ReportInstancePage from "@/pages/ReportInstance";
 import Analytics from "@/pages/Analytics";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/not-found";
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/builders" component={Builders} />
       <Route path="/financials" component={Financials} />
       <Route path="/reports" component={Reports} />
+      <Route path="/reports/:id" component={ReportInstancePage} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/inspection/:id" component={Inspection} />

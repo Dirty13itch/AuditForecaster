@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ReportTemplate, ReportInstance, Job, Builder } from "@shared/schema";
+import type { ReportTemplate, ReportInstance, Job, Builder, ScoreSummary } from "@shared/schema";
 import { DynamicForm } from "@/components/DynamicForm";
 import type { FormSection } from "@shared/types";
 
@@ -65,6 +66,7 @@ type EmailFormValues = z.infer<typeof emailFormSchema>;
 
 export default function Reports() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
@@ -152,6 +154,12 @@ export default function Reports() {
     if (status === "Sent") return "default";
     if (status === "Finalized") return "secondary";
     return "outline";
+  };
+
+  const getScoreBadgeVariant = (passRate: number) => {
+    if (passRate >= 90) return "default";
+    if (passRate >= 70) return "secondary";
+    return "destructive";
   };
 
   const handleTestConditionalForm = (template: ReportTemplate) => {
@@ -343,6 +351,7 @@ export default function Reports() {
                 const job = jobs.find(j => j.id === report.jobId);
                 const template = templates.find(t => t.id === report.templateId);
                 const status = getReportStatus(report);
+                const score = (report as any).scoreSummary as ScoreSummary | null;
 
                 return (
                   <Card key={report.id} className="hover-elevate" data-testid={`card-report-${report.id}`}>
@@ -352,9 +361,19 @@ export default function Reports() {
                           <CardTitle className="text-lg">{job?.name || "Unknown Job"}</CardTitle>
                           <CardDescription>{job?.address}</CardDescription>
                         </div>
-                        <Badge variant={getReportStatusBadgeVariant(status)} data-testid={`badge-status-${report.id}`}>
-                          {status}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant={getReportStatusBadgeVariant(status)} data-testid={`badge-status-${report.id}`}>
+                            {status}
+                          </Badge>
+                          {score && (
+                            <Badge 
+                              variant={getScoreBadgeVariant(score.passRate)} 
+                              data-testid={`badge-score-${report.id}`}
+                            >
+                              {score.grade} ({score.passRate.toFixed(0)}%)
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -378,7 +397,7 @@ export default function Reports() {
                         variant="outline"
                         size="sm"
                         className="flex-1"
-                        onClick={() => handleViewReport(report)}
+                        onClick={() => setLocation(`/reports/${report.id}`)}
                         data-testid={`button-view-${report.id}`}
                       >
                         <Eye className="h-4 w-4 mr-2" />

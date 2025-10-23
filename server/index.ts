@@ -183,7 +183,27 @@ app.use((req, res, next) => {
     port,
     host: "0.0.0.0",
     reusePort: true,
-  }, () => {
+  }, async () => {
     log(`serving on port ${port}`);
+    
+    // Recalculate scores for all existing reports in development
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        const jobs = await storage.getAllJobs();
+        let recalculated = 0;
+        for (const job of jobs) {
+          const instances = await storage.getReportInstancesByJob(job.id);
+          for (const instance of instances) {
+            await storage.recalculateReportScore(instance.id);
+            recalculated++;
+          }
+        }
+        if (recalculated > 0) {
+          log(`Recalculated scores for ${recalculated} existing reports`);
+        }
+      } catch (error) {
+        console.error('Failed to recalculate scores on startup:', error);
+      }
+    }
   });
 })();

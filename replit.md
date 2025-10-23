@@ -24,6 +24,29 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**October 2025 - Forecast Accuracy Tracking:**
+- Added comprehensive forecast accuracy analytics to Analytics page
+- Dual-metric tracking for both TDL (Total Duct Leakage) and DLO (Duct Leakage to Outside)
+- Metric cards: Overall Accuracy, Recent Accuracy (30 days), TDL Accuracy, DLO Accuracy, Best Forecast
+- Accuracy calculation: `100 - (|actual - predicted| / predicted * 100)` with zero-value handling
+- Dual-line trend chart showing TDL (green) and DLO (blue) accuracy over 6 months
+- Distribution bar chart grouping forecasts by quality (Excellent >95%, Good 90-95%, Fair 80-90%, Needs Improvement <80%)
+- Detailed forecast table with sortable columns: Job, Predicted TDL/DLO, Actual TDL/DLO, Variances, Accuracy
+- Color-coded variance display (red for over-prediction, green for under-prediction)
+- Weighted average combining TDL and DLO forecasts for overall accuracy
+- Builder performance metrics include both TDL and DLO forecast accuracy
+- Explicit null/undefined checks ensure zero values properly included in calculations
+- Location: `client/src/pages/Analytics.tsx`
+
+**October 2025 - Common Issues Trend Analysis:**
+- Added 6-month trend chart for top 5 most common failed inspection items
+- Monthly frequency tracking with color-coded lines per issue
+- Trend indicators: Worsening (>30% increase), Improving (>30% decrease), Stable (±30%)
+- Baseline comparison using 3-month vs 6-month averages
+- Month-string alignment ensures accurate trend calculations
+- Empty state handling when no failed items exist
+- Location: `client/src/pages/Analytics.tsx`
+
 **October 2025 - Builder Performance Tracking:**
 - Added comprehensive builder comparison analytics to Analytics page
 - Sortable metrics table: Total Jobs, Completion Rate, Forecast Accuracy, Avg Time, Issues, Monthly Volume

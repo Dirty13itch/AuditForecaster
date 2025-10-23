@@ -580,7 +580,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (jobId && typeof jobId === "string") {
         const instances = await storage.getReportInstancesByJob(jobId);
-        return res.json(instances);
+        
+        const withScores = instances.map(inst => ({
+          ...inst,
+          scoreSummary: inst.scoreSummary ? JSON.parse(inst.scoreSummary) : null,
+        }));
+        
+        return res.json(withScores);
       }
 
       res.status(400).json({ message: "jobId query parameter is required" });
@@ -599,13 +605,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/report-instances/recalculate-scores", isAuthenticated, async (req, res) => {
+    try {
+      const jobs = await storage.getAllJobs();
+      let recalculated = 0;
+      
+      for (const job of jobs) {
+        const instances = await storage.getReportInstancesByJob(job.id);
+        for (const instance of instances) {
+          await storage.recalculateReportScore(instance.id);
+          recalculated++;
+        }
+      }
+      
+      res.json({ message: `Recalculated scores for ${recalculated} report instances` });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to recalculate scores", error });
+    }
+  });
+
   app.get("/api/report-instances/:id", isAuthenticated, async (req, res) => {
     try {
       const instance = await storage.getReportInstance(req.params.id);
       if (!instance) {
         return res.status(404).json({ message: "Report instance not found" });
       }
-      res.json(instance);
+      
+      const job = await storage.getJob(instance.jobId);
+      const builder = job?.builderId ? await storage.getBuilder(job.builderId) : undefined;
+      const checklistItems = await storage.getChecklistItemsByJob(instance.jobId);
+      
+      res.json({
+        ...instance,
+        job,
+        builder,
+        checklistItems,
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch report instance" });
     }

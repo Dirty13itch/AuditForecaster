@@ -21,7 +21,9 @@ import {
   type InsertForecast,
   type ChecklistItem,
   type InsertChecklistItem,
+  type ScoreSummary,
 } from "@shared/schema";
+import { calculateScore } from "@shared/scoring";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -92,6 +94,8 @@ export interface IStorage {
   getChecklistItemsByJob(jobId: string): Promise<ChecklistItem[]>;
   updateChecklistItem(id: string, item: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined>;
   deleteChecklistItem(id: string): Promise<boolean>;
+
+  recalculateReportScore(reportInstanceId: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -787,9 +791,12 @@ export class MemStorage implements IStorage {
       itemNumber: 1,
       title: "Exterior walls air sealed",
       completed: true,
+      status: "passed",
       notes: "All penetrations sealed with foam",
       photoCount: 2,
       photoRequired: true,
+      voiceNoteUrl: null,
+      voiceNoteDuration: null,
     };
 
     const checklistItem2: ChecklistItem = {
@@ -798,9 +805,12 @@ export class MemStorage implements IStorage {
       itemNumber: 2,
       title: "Attic access insulated and sealed",
       completed: false,
+      status: "pending",
       notes: null,
       photoCount: 0,
       photoRequired: true,
+      voiceNoteUrl: null,
+      voiceNoteDuration: null,
     };
 
     const checklistItem3: ChecklistItem = {
@@ -809,9 +819,12 @@ export class MemStorage implements IStorage {
       itemNumber: 3,
       title: "HVAC ducts sealed at register boots",
       completed: true,
+      status: "passed",
       notes: "Mastic applied to all connections",
       photoCount: 3,
       photoRequired: true,
+      voiceNoteUrl: null,
+      voiceNoteDuration: null,
     };
 
     const checklistItem4: ChecklistItem = {
@@ -820,9 +833,12 @@ export class MemStorage implements IStorage {
       itemNumber: 4,
       title: "Recessed lighting IC rated and sealed",
       completed: false,
+      status: "not_applicable",
       notes: null,
       photoCount: 0,
       photoRequired: false,
+      voiceNoteUrl: null,
+      voiceNoteDuration: null,
     };
 
     const checklistItem5: ChecklistItem = {
@@ -831,9 +847,12 @@ export class MemStorage implements IStorage {
       itemNumber: 5,
       title: "Plumbing penetrations air sealed",
       completed: false,
+      status: "failed",
       notes: null,
       photoCount: 1,
       photoRequired: true,
+      voiceNoteUrl: null,
+      voiceNoteDuration: null,
     };
 
     this.checklistItems.set(checklistItem1Id, checklistItem1);
@@ -1119,8 +1138,12 @@ export class MemStorage implements IStorage {
       emailedTo: insertInstance.emailedTo ?? null,
       emailedAt: insertInstance.emailedAt ?? null,
       createdAt: new Date(),
+      scoreSummary: null,
     };
     this.reportInstances.set(id, instance);
+
+    await this.recalculateReportScore(id);
+
     return instance;
   }
 
@@ -1236,11 +1259,20 @@ export class MemStorage implements IStorage {
       itemNumber: insertItem.itemNumber,
       title: insertItem.title,
       completed: insertItem.completed ?? false,
+      status: insertItem.status ?? 'pending',
       notes: insertItem.notes ?? null,
       photoCount: insertItem.photoCount ?? 0,
       photoRequired: insertItem.photoRequired ?? false,
+      voiceNoteUrl: insertItem.voiceNoteUrl ?? null,
+      voiceNoteDuration: insertItem.voiceNoteDuration ?? null,
     };
     this.checklistItems.set(id, item);
+
+    const instances = await this.getReportInstancesByJob(insertItem.jobId);
+    for (const instance of instances) {
+      await this.recalculateReportScore(instance.id);
+    }
+
     return item;
   }
 
@@ -1259,11 +1291,40 @@ export class MemStorage implements IStorage {
     if (!item) return undefined;
     const updated = { ...item, ...updates };
     this.checklistItems.set(id, updated);
+
+    const instances = await this.getReportInstancesByJob(updated.jobId);
+    for (const instance of instances) {
+      await this.recalculateReportScore(instance.id);
+    }
+
     return updated;
   }
 
   async deleteChecklistItem(id: string): Promise<boolean> {
     return this.checklistItems.delete(id);
+  }
+
+  async recalculateReportScore(reportInstanceId: string): Promise<void> {
+    const instance = await this.getReportInstance(reportInstanceId);
+    if (!instance) return;
+
+    const checklistItems = await this.getChecklistItemsByJob(instance.jobId);
+    const score = calculateScore(checklistItems);
+
+    const scoreSummary: ScoreSummary = {
+      grade: score.grade,
+      passRate: score.passRate,
+      failRate: score.failRate,
+      completionRate: score.completionRate,
+      totalItems: score.totalItems,
+      passedItems: score.passedItems,
+      failedItems: score.failedItems,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.updateReportInstance(reportInstanceId, {
+      scoreSummary: JSON.stringify(scoreSummary),
+    });
   }
 }
 
