@@ -2,245 +2,74 @@
 
 ## Overview
 
-This is a full-stack energy auditing field application designed for field inspectors to manage inspections, track jobs, schedule events, and generate reports. The application is built with a focus on outdoor readability, offline-first functionality, and rapid data entry, inspired by tools like CompanyCam and iAuditor.
-
-**Key Features:**
-- Job and inspection management with workflow tracking
-- Builder/contractor relationship management
-- Photo documentation with multi-tag system, annotations, and OCR text extraction
-- Photo-required checklist items (can't complete inspection without required photos)
-- Conditional logic engine for dynamic inspection forms
-- Financial tracking (expenses and mileage logs)
-- Scheduling with Google Calendar integration
-- Customizable report generation with intelligent form fields
-- Professional PDF export with dynamic sections and pagination
-- Analytics dashboard with inspection metrics, trends, and common issues tracking
-- Offline-first architecture with background sync
-- Mobile-responsive design optimized for field use
+This is a full-stack energy auditing field application for field inspectors to manage inspections, track jobs, schedule events, and generate reports. It emphasizes outdoor readability, offline-first functionality, and rapid data entry. The application aims to streamline energy auditing workflows, improve data accuracy through photo documentation and OCR, and provide robust analytics for job and builder performance. Its business vision includes transforming field operations with a comprehensive, user-friendly, and powerful mobile solution for energy auditing.
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
 
-## Recent Changes
-
-**October 2025 - Type Safety & Error Prevention:**
-- Fixed critical runtime bug in Analytics.tsx where unsafe non-null assertions caused "Cannot read properties of null" errors
-- Applied comprehensive TypeScript type guards to ALL forecast filtering operations (5 instances)
-- Changed `.filter(f => f && ...)` to `.filter((f): f is Forecast => f != null && ...)` throughout Analytics.tsx
-- Fixed copy-paste errors in NaN validation where predictedDLO checks were incorrectly duplicated as actualDLO checks
-- All forecast filters now validate both actual AND predicted values for null/undefined/NaN
-- Type guards applied to: forecastsWithTDL, forecastsWithDLO, forecastsWithData, builder TDL/DLO calculations
-- Removed all unsafe non-null assertions (`f!.`) that could cause runtime errors
-- All Number() conversions now occur only after type-guarded filters
-- Comprehensive test suite (93 total tests): compliance (38), scoring (18), forecast accuracy (37)
-- E2E testing confirms Analytics page renders without runtime errors
-- Location: `client/src/pages/Analytics.tsx`, `shared/forecastAccuracy.ts`, `shared/numberUtils.ts`, `shared/scoring.ts`
-
-**October 2025 - Forecast Accuracy Tracking:**
-- Added comprehensive forecast accuracy analytics to Analytics page
-- Dual-metric tracking for both TDL (Total Duct Leakage) and DLO (Duct Leakage to Outside)
-- Metric cards: Overall Accuracy, Recent Accuracy (30 days), TDL Accuracy, DLO Accuracy, Best Forecast
-- Accuracy calculation: `100 - (|actual - predicted| / predicted * 100)` with zero-value handling
-- Dual-line trend chart showing TDL (green) and DLO (blue) accuracy over 6 months
-- Distribution bar chart grouping forecasts by quality (Excellent >95%, Good 90-95%, Fair 80-90%, Needs Improvement <80%)
-- Detailed forecast table with sortable columns: Job, Predicted TDL/DLO, Actual TDL/DLO, Variances, Accuracy
-- Color-coded variance display (red for over-prediction, green for under-prediction)
-- Weighted average combining TDL and DLO forecasts for overall accuracy
-- Builder performance metrics include both TDL and DLO forecast accuracy
-- Explicit null/undefined checks ensure zero values properly included in calculations
-- Location: `client/src/pages/Analytics.tsx`
-
-**October 2025 - Common Issues Trend Analysis:**
-- Added 6-month trend chart for top 5 most common failed inspection items
-- Monthly frequency tracking with color-coded lines per issue
-- Trend indicators: Worsening (>30% increase), Improving (>30% decrease), Stable (±30%)
-- Baseline comparison using 3-month vs 6-month averages
-- Month-string alignment ensures accurate trend calculations
-- Empty state handling when no failed items exist
-- Location: `client/src/pages/Analytics.tsx`
-
-**October 2025 - Builder Performance Tracking:**
-- Added comprehensive builder comparison analytics to Analytics page
-- Sortable metrics table: Total Jobs, Completion Rate, Forecast Accuracy, Avg Time, Issues, Monthly Volume
-- Performance tier badges: Excellent (≥85%), Good (≥70%), Needs Improvement (<70%)
-- Top performer highlighting with trophy icon
-- Trend indicators (up/down/stable) based on 6-month active-month averages
-- Builder comparison chart (grouped bars for top 5 builders)
-- Builder trend analysis (line chart showing job completion trends)
-- Guards against false positives for low-volume builders (minimum 3 jobs required)
-- Alphabetical and numeric column sorting with localeCompare and numeric comparison
-- Location: `client/src/pages/Analytics.tsx`
-
-**October 2025 - Analytics Dashboard:**
-- Added comprehensive Analytics page (`/analytics`) with inspection metrics
-- Inspection volume trends (6-month line chart showing completed inspections)
-- Photo tag analysis (bar chart of top 10 most used tags with category colors)
-- Inspection status breakdown (stacked area chart showing workflow distribution)
-- Common issues tracking (top 10 failed items from completed inspections with severity badges)
-- Enhanced API endpoints to support analytics queries (all photos, all checklist items)
-- Severity classification: Critical (>10 occurrences), Major (5-10), Minor (≤5)
-- Empty state handling for zero failures
-- Location: `client/src/pages/Analytics.tsx`
-
-**October 2025 - PDF Export System:**
-- Professional PDF generation using @react-pdf/renderer
-- Multi-section layout: Header, Job Info, Summary, Checklist, Photos, Forecasts, Signatures
-- Dynamic pagination based on active sections
-- Photo grid with tags and annotation overlays
-- Upload to private object storage with download endpoint
-- Endpoints: POST `/api/report-instances/:id/generate-pdf`, GET `/api/report-instances/:id/download-pdf`
-- Location: `server/pdfGenerator.tsx`
-
 ## System Architecture
 
 ### Frontend Architecture
 
-**Framework & Build Tools:**
-- **React** with TypeScript for type-safe component development
-- **Vite** as the build tool and development server, configured for fast HMR (Hot Module Replacement)
-- **Wouter** for lightweight client-side routing instead of React Router
-
-**UI Component System:**
-- **shadcn/ui** components based on Radix UI primitives for accessible, customizable components
-- **Tailwind CSS** for utility-first styling with custom design tokens
-- Component library follows the "New York" style variant with neutral base colors
-- Custom color system defined in CSS variables supporting light/dark themes
-
-**State Management:**
-- **TanStack Query (React Query)** for server state management, caching, and data synchronization
-- Local component state with React hooks for UI state
-- No global state management library (Redux/Zustand) - relies on React Query cache
-
-**Offline Support:**
-- **Service Worker** (`client/public/sw.js`) for caching static assets and API responses
-- **IndexedDB** via `idb` library for persistent offline data storage
-- Custom sync queue system (`client/src/lib/syncQueue.ts`) to queue mutations when offline
-- Network status monitoring (`client/src/hooks/useNetworkStatus.ts`) with singleton pattern to prevent duplicate sync operations
-
-**Design System:**
-- Predefined color palette optimized for outdoor readability (defined in `design_guidelines.md`)
-- Typography using Roboto for UI elements and Open Sans for body text
-- Minimum 16px font size for outdoor visibility
-- Minimum 48px touch targets for mobile usability
-- Spacing system based on Tailwind's 4px scale
+The frontend is built with **React** and **TypeScript**, using **Vite** for fast development. **Wouter** handles client-side routing. UI components leverage **shadcn/ui** (based on Radix UI) and are styled with **Tailwind CSS**, following a "New York" style variant with neutral base colors and a custom color system optimized for outdoor readability. **TanStack Query** manages server state, while local component state uses React hooks. For offline support, a **Service Worker** caches assets, **IndexedDB** stores persistent data, and a custom sync queue handles mutations during offline periods. The design system emphasizes readability and mobile usability with specific font choices (Roboto, Open Sans), minimum font sizes, and touch target dimensions.
 
 ### Backend Architecture
 
-**Server Framework:**
-- **Express.js** running on Node.js with TypeScript
-- Custom middleware for request logging and JSON parsing with raw body capture
-- Vite integration in development mode for SSR-style serving
-
-**Database & ORM:**
-- **PostgreSQL** as the primary database (via Neon serverless)
-- **Drizzle ORM** for type-safe database queries and migrations
-- Schema defined in `shared/schema.ts` with Zod validation schemas generated via `drizzle-zod`
-- Database migrations managed through `drizzle-kit`
-
-**API Architecture:**
-- RESTful API design with CRUD endpoints for each resource type
-- Routes defined in `server/routes.ts`
-- Storage abstraction layer (`server/storage.ts`) defining the data access interface
-- Request/response validation using Zod schemas from shared schema definitions
-
-**Authentication & Session Management:**
-- **Passport.js** with local strategy for username/password authentication
-- **Bcrypt** password hashing (10 rounds) for secure credential storage
-- **Express sessions** with PostgreSQL-backed session store (`connect-pg-simple`)
-- Session configuration:
-  - Production: Secure cookies, SESSION_SECRET from environment
-  - Development: Auto-login middleware for seamless testing
-- Authentication routes: `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/user`
-- All API routes protected with `isAuthenticated` middleware
+The backend uses **Express.js** with **Node.js** and **TypeScript**. **PostgreSQL** (via Neon serverless) is the primary database, accessed through **Drizzle ORM** for type-safe queries. API architecture is RESTful, with routes defined in `server/routes.ts` and data access abstracted via `server/storage.ts`. **Zod** schemas are used for request/response validation. **Passport.js** with a local strategy, **Bcrypt** for password hashing, and **Express sessions** with a PostgreSQL-backed store handle authentication and session management.
 
 ### Data Model
 
-**Core Entities:**
-- **Users** - Authentication and user accounts
-- **Builders** - Contractors/companies with contact information and performance tracking
-- **Jobs** - Inspection jobs with status tracking, location data, and progress metrics
-- **Schedule Events** - Calendar events linked to jobs with Google Calendar sync
-- **Expenses** - Financial tracking with categories and job association
-- **Mileage Logs** - Vehicle mileage tracking for reimbursement
-- **Photos** - Image documentation linked to jobs and checklist items
-- **Report Templates** - Customizable report structures with reusable sections
-- **Report Instances** - Generated reports from templates with job-specific data
-- **Forecasts** - Predicted vs. actual measurements for energy audits
+The core entities include **Users**, **Builders**, **Jobs**, **Schedule Events**, **Expenses**, **Mileage Logs**, **Photos**, **Report Templates**, **Report Instances**, and **Forecasts**. Key relationships link Jobs to Builders, Schedule Events, Photos, and Expenses, while Report Instances are generated from Templates for specific Jobs.
 
-**Key Relationships:**
-- Jobs can be associated with Builders (many-to-one)
-- Schedule Events belong to Jobs (many-to-one)
-- Photos and Expenses can be linked to Jobs
-- Report Instances are generated from Report Templates for specific Jobs
+### Technical Implementations & Feature Specifications
 
-### External Dependencies
+- **Comprehensive Error Prevention:** Includes centralized logging (Winston on server, console on client), extensive type safety (elimination of 'any'), loading states for mutations, null/undefined guards using `??` and type-guarded filters, thorough API error handling with try-catch blocks, and a two-layer Error Boundary system for UI resilience.
+- **Input Validation:** Zod schemas are used for both API endpoint validation and form component validation (e.g., DynamicForm, BuilderDialog).
+- **Analytics Dashboard:** Provides metrics on inspection volume, photo tag analysis, inspection status breakdown, and common issues tracking. Features include forecast accuracy tracking (TDL and DLO), builder performance comparison with metrics like completion rate and forecast accuracy, and trend analysis for common failed inspection items.
+- **PDF Export System:** Uses `@react-pdf/renderer` for professional, multi-section PDF generation with dynamic pagination, photo grids (with tags and annotations), and intelligent form fields. Generated PDFs are uploaded to private object storage.
+- **Photo Documentation:** Supports multi-tag systems, annotations (arrows, text, measurements via `react-konva`), and **OCR text extraction** using `tesseract.js` for auto-filling job fields. Includes photo-required checklist items.
+- **Offline-First Functionality:** Leverages service workers, IndexedDB, and a custom sync queue for robust operation without internet connectivity.
+- **Scheduling:** Features Google Calendar integration for two-way sync.
+- **Conditional Logic:** Dynamic inspection forms are driven by a conditional logic engine.
 
-**Third-Party Services:**
-- **Google Calendar API** - Two-way sync for schedule events
-  - OAuth2 authentication via Replit Connectors system
-  - Client initialization in `server/googleCalendar.ts`
-  - Access token refresh handling with expiration tracking
-  - Requires `REPLIT_CONNECTORS_HOSTNAME` and Replit identity tokens
+## External Dependencies
 
-- **Replit Object Storage** - Cloud file storage for photo uploads
-  - Google Cloud Storage backend via Replit sidecar integration
-  - Presigned URL uploads for direct-to-storage file transfer
-  - ACL-based access control for photo security
-  - Service initialized in `server/objectStorage.ts`
-  - Environment variables: `PUBLIC_OBJECT_SEARCH_PATHS`, `PRIVATE_OBJECT_DIR`
+### Third-Party Services
 
-**Database:**
-- **Neon Serverless PostgreSQL** - Cloud-hosted PostgreSQL via `@neondatabase/serverless`
-- Connection string provided via `DATABASE_URL` environment variable
+-   **Google Calendar API**: For two-way synchronization of schedule events using OAuth2 via Replit Connectors.
+-   **Replit Object Storage**: Utilizes Google Cloud Storage backend for photo uploads via presigned URLs and ACLs.
+-   **Neon Serverless PostgreSQL**: Cloud-hosted PostgreSQL database.
 
-**UI Libraries:**
-- **Radix UI** - Headless accessible component primitives (18+ packages)
-- **Recharts** - Chart rendering for dashboard visualizations
-- **React Big Calendar** - Calendar view component with drag-and-drop support
-- **React DnD** - Drag and drop functionality for calendar scheduling
-- **date-fns** - Date manipulation and formatting
-- **Uppy** - File upload component library
-  - `@uppy/core`, `@uppy/react`, `@uppy/dashboard`, `@uppy/aws-s3`
-  - Modal-based upload interface with progress tracking
-  - Direct-to-storage uploads via presigned URLs
-  - Custom `ObjectUploader` component in `client/src/components/ObjectUploader.tsx`
-- **react-konva** & **konva** - Canvas-based photo annotation tools
-  - Arrow, text overlay, and measurement line drawing tools
-  - Color picker with 7 preset colors
-  - Undo/redo functionality
-  - Custom `PhotoAnnotator` component in `client/src/components/PhotoAnnotator.tsx`
-- **tesseract.js** - OCR (Optical Character Recognition) for text extraction
-  - Extract addresses, lot numbers, permit IDs from photos
-  - Pattern recognition with confidence scoring
-  - Auto-fill job fields from extracted text
-  - Custom `PhotoOCR` component in `client/src/components/PhotoOCR.tsx`
-- **@react-pdf/renderer** - PDF generation for professional inspection reports
-  - React component syntax for PDF document creation
-  - Multi-section layout: Header, Job Info, Summary, Checklist, Photos, Forecasts, Signatures
-  - Dynamic pagination based on active sections
-  - Professional styling with Helvetica fonts, proper margins, page numbers
-  - Photo grid layout with tags and annotation overlays
-  - Server-side generation in `server/pdfGenerator.tsx`
-  - Upload to private object storage with download endpoint
-  - Endpoints: POST `/api/report-instances/:id/generate-pdf`, GET `/api/report-instances/:id/download-pdf`
+### UI Libraries
 
-**Development Tools:**
-- **Replit-specific plugins** for development environment integration
-  - `@replit/vite-plugin-runtime-error-modal`
-  - `@replit/vite-plugin-cartographer`
-  - `@replit/vite-plugin-dev-banner`
+-   **Radix UI**: Headless accessible component primitives.
+-   **Recharts**: Chart rendering for data visualization.
+-   **React Big Calendar**: Calendar view component with drag-and-drop.
+-   **React DnD**: Drag and drop functionality.
+-   **date-fns**: Date manipulation and formatting.
+-   **Uppy**: File upload component with AWS S3 integration via presigned URLs.
+-   **react-konva** & **konva**: Canvas-based photo annotation tools.
+-   **tesseract.js**: OCR for text extraction from photos.
+-   **@react-pdf/renderer**: PDF generation library for professional reports.
 
-**Form Handling:**
-- **React Hook Form** - Form state management and validation
-- **@hookform/resolvers** - Integration with Zod schemas for form validation
+### Development Tools
 
-**Styling:**
-- **Tailwind CSS** with PostCSS and Autoprefixer
-- **class-variance-authority** - Type-safe component variants
-- **clsx** and **tailwind-merge** - Conditional class composition
+-   **Replit-specific plugins**: For enhanced development environment integration (`@replit/vite-plugin-runtime-error-modal`, `@replit/vite-plugin-cartographer`, `@replit/vite-plugin-dev-banner`).
 
-**Build & Runtime:**
-- **esbuild** - Server bundling for production
-- **tsx** - TypeScript execution for development server
-- **nanoid** - Unique ID generation
+### Form Handling
+
+-   **React Hook Form**: Form state management and validation.
+-   **@hookform/resolvers**: Integration with Zod for form validation.
+
+### Styling
+
+-   **Tailwind CSS**: Utility-first CSS framework.
+-   **class-variance-authority**: Type-safe component variants.
+-   **clsx** and **tailwind-merge**: Conditional class composition.
+
+### Build & Runtime
+
+-   **esbuild**: Server bundling.
+-   **tsx**: TypeScript execution for development.
+-   **nanoid**: Unique ID generation.
