@@ -43,9 +43,23 @@ passport.use(new LocalStrategy(
   }
 ));
 
+// Type guard to check if user is a valid User object
+function isUser(user: Express.User): user is User {
+  return (
+    typeof user === "object" &&
+    user !== null &&
+    "id" in user &&
+    typeof (user as User).id === "string"
+  );
+}
+
 // Serialize user to session
 passport.serializeUser((user: Express.User, done) => {
-  done(null, (user as User).id);
+  if (isUser(user)) {
+    done(null, user.id);
+  } else {
+    done(new Error("Invalid user object"));
+  }
 });
 
 // Deserialize user from session using storage layer
@@ -127,7 +141,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -157,7 +171,7 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 

@@ -1,7 +1,39 @@
 import { google } from 'googleapis';
 import type { ScheduleEvent, Job } from '@shared/schema';
 
-let connectionSettings: any;
+interface ConnectionSettings {
+  settings: {
+    access_token?: string;
+    expires_at?: string;
+    oauth?: {
+      credentials?: {
+        access_token?: string;
+      };
+    };
+  };
+}
+
+interface GoogleCalendarEvent {
+  id?: string | null;
+  summary?: string | null;
+  description?: string | null;
+  start?: {
+    dateTime?: string | null;
+  } | null;
+  end?: {
+    dateTime?: string | null;
+  } | null;
+  extendedProperties?: {
+    private?: {
+      [key: string]: string;
+    };
+    shared?: {
+      [key: string]: string;
+    };
+  } | null;
+}
+
+let connectionSettings: ConnectionSettings | undefined;
 
 async function getAccessToken() {
   if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
@@ -29,10 +61,14 @@ async function getAccessToken() {
     }
   ).then(res => res.json()).then(data => data.items?.[0]);
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
-
-  if (!connectionSettings || !accessToken) {
+  if (!connectionSettings) {
     throw new Error('Google Calendar not connected');
+  }
+
+  const accessToken = connectionSettings.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+
+  if (!accessToken) {
+    throw new Error('Google Calendar access token not found');
   }
   return accessToken;
 }
@@ -107,17 +143,20 @@ export class GoogleCalendarService {
       });
       
       console.log(`[GoogleCalendar] Deleted event: ${googleEventId}`);
-    } catch (error: any) {
-      if (error.code === 404 || error.message?.includes('404')) {
-        console.log(`[GoogleCalendar] Event ${googleEventId} not found, already deleted`);
-        return;
+    } catch (error) {
+      if (error instanceof Error) {
+        const errorWithCode = error as Error & { code?: number };
+        if (errorWithCode.code === 404 || error.message?.includes('404')) {
+          console.log(`[GoogleCalendar] Event ${googleEventId} not found, already deleted`);
+          return;
+        }
       }
       console.error('[GoogleCalendar] Error deleting event from Google Calendar:', error);
       throw error;
     }
   }
 
-  async fetchEventsFromGoogle(startDate: Date, endDate: Date): Promise<any[]> {
+  async fetchEventsFromGoogle(startDate: Date, endDate: Date): Promise<GoogleCalendarEvent[]> {
     try {
       const calendar = await getUncachableGoogleCalendarClient();
       
@@ -137,7 +176,7 @@ export class GoogleCalendarService {
     }
   }
 
-  parseGoogleEventToScheduleEvent(googleEvent: any): Partial<ScheduleEvent> | null {
+  parseGoogleEventToScheduleEvent(googleEvent: GoogleCalendarEvent): Partial<ScheduleEvent> | null {
     try {
       if (!googleEvent.start?.dateTime || !googleEvent.end?.dateTime) {
         return null;

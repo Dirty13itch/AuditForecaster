@@ -128,7 +128,10 @@ export async function getObjectAclPolicy(
   if (!aclPolicy) {
     return null;
   }
-  return JSON.parse(aclPolicy as string);
+  if (typeof aclPolicy !== 'string') {
+    throw new Error('ACL policy metadata must be a string');
+  }
+  return JSON.parse(aclPolicy);
 }
 
 // Checks if the user can access the object.
