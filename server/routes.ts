@@ -29,6 +29,39 @@ import {
   updateJobComplianceStatus,
   updateReportComplianceStatus,
 } from "./complianceService";
+import { ZodError } from "zod";
+
+// Error handling helpers
+function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorStack = error instanceof Error ? error.stack : undefined;
+  
+  console.error(`[${context}] Error:`, {
+    message: errorMessage,
+    stack: errorStack,
+    ...additionalInfo,
+  });
+}
+
+function handleValidationError(error: unknown): { status: number; message: string } {
+  if (error instanceof ZodError) {
+    const firstError = error.errors[0];
+    const fieldName = firstError.path.join('.');
+    return {
+      status: 400,
+      message: `Please check your input: ${firstError.message}${fieldName ? ` (${fieldName})` : ''}`,
+    };
+  }
+  return { status: 400, message: "Please check your input and try again" };
+}
+
+function handleDatabaseError(error: unknown, operation: string): { status: number; message: string } {
+  logError('Database', error, { operation });
+  return {
+    status: 500,
+    message: "We're having trouble processing your request. Please try again.",
+  };
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -39,7 +72,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user already exists
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
+        return res.status(400).json({ message: "This username is already taken. Please choose another." });
       }
       
       // Hash password with bcrypt
@@ -57,27 +90,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log user in after registration
       req.login(user, (err) => {
         if (err) {
-          return res.status(500).json({ message: "Registration successful but login failed" });
+          logError('Auth/Register', err, { username });
+          return res.status(500).json({ message: "Account created successfully, but we couldn't log you in. Please try logging in manually." });
         }
         res.status(201).json(userWithoutPassword);
       });
     } catch (error) {
-      res.status(400).json({ message: "Invalid registration data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Auth/Register', error);
+      res.status(500).json({ message: "We couldn't create your account. Please try again." });
     }
   });
 
   app.post("/api/auth/login", (req, res, next) => {
     passport.authenticate('local', (err: any, user: any, info: any) => {
       if (err) {
-        return res.status(500).json({ message: "Authentication error" });
+        logError('Auth/Login', err);
+        return res.status(500).json({ message: "We're having trouble logging you in. Please try again." });
       }
       if (!user) {
-        return res.status(401).json({ message: info?.message || "Authentication failed" });
+        return res.status(401).json({ message: info?.message || "Incorrect username or password" });
       }
       
       req.login(user, (err) => {
         if (err) {
-          return res.status(500).json({ message: "Login failed" });
+          logError('Auth/LoginSession', err);
+          return res.status(500).json({ message: "We couldn't complete your login. Please try again." });
         }
         
         // Remove password from response
@@ -90,7 +131,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/logout", (req, res) => {
     req.logout((err) => {
       if (err) {
-        return res.status(500).json({ message: "Logout failed" });
+        logError('Auth/Logout', err);
+        return res.status(500).json({ message: "We couldn't log you out. Please try again." });
       }
       res.json({ message: "Logged out successfully" });
     });
@@ -98,7 +140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/user", (req, res) => {
     if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
+      return res.status(401).json({ message: "You must be logged in to access this" });
     }
     
     // Remove password from response
@@ -112,7 +154,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const builders = await storage.getAllBuilders();
       res.json(builders);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch builders" });
+      const { status, message } = handleDatabaseError(error, 'fetch builders');
+      res.status(status).json({ message });
     }
   });
 
@@ -122,7 +165,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const builder = await storage.createBuilder(validated);
       res.status(201).json(builder);
     } catch (error) {
-      res.status(400).json({ message: "Invalid builder data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create builder');
+      res.status(status).json({ message });
     }
   });
 
@@ -130,11 +178,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const builder = await storage.getBuilder(req.params.id);
       if (!builder) {
-        return res.status(404).json({ message: "Builder not found" });
+        return res.status(404).json({ message: "Builder not found. It may have been deleted." });
       }
       res.json(builder);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch builder" });
+      const { status, message } = handleDatabaseError(error, 'fetch builder');
+      res.status(status).json({ message });
     }
   });
 
@@ -143,11 +192,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertBuilderSchema.partial().parse(req.body);
       const builder = await storage.updateBuilder(req.params.id, validated);
       if (!builder) {
-        return res.status(404).json({ message: "Builder not found" });
+        return res.status(404).json({ message: "Builder not found. It may have been deleted." });
       }
       res.json(builder);
     } catch (error) {
-      res.status(400).json({ message: "Invalid builder data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update builder');
+      res.status(status).json({ message });
     }
   });
 
@@ -155,11 +209,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deleted = await storage.deleteBuilder(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Builder not found" });
+        return res.status(404).json({ message: "Builder not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete builder" });
+      const { status, message } = handleDatabaseError(error, 'delete builder');
+      res.status(status).json({ message });
     }
   });
 
@@ -168,7 +223,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const jobs = await storage.getAllJobs();
       res.json(jobs);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch jobs" });
+      const { status, message } = handleDatabaseError(error, 'fetch jobs');
+      res.status(status).json({ message });
     }
   });
 
@@ -178,7 +234,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const job = await storage.createJob(validated);
       res.status(201).json(job);
     } catch (error) {
-      res.status(400).json({ message: "Invalid job data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create job');
+      res.status(status).json({ message });
     }
   });
 
@@ -186,11 +247,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const job = await storage.getJob(req.params.id);
       if (!job) {
-        return res.status(404).json({ message: "Job not found" });
+        return res.status(404).json({ message: "Job not found. It may have been deleted or the link may be outdated." });
       }
       res.json(job);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch job" });
+      const { status, message } = handleDatabaseError(error, 'fetch job');
+      res.status(status).json({ message });
     }
   });
 
@@ -199,11 +261,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertJobSchema.partial().parse(req.body);
       const job = await storage.updateJob(req.params.id, validated);
       if (!job) {
-        return res.status(404).json({ message: "Job not found" });
+        return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
       res.json(job);
     } catch (error) {
-      res.status(400).json({ message: "Invalid job data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update job');
+      res.status(status).json({ message });
     }
   });
 
@@ -211,11 +278,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deleted = await storage.deleteJob(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Job not found" });
+        return res.status(404).json({ message: "Job not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete job" });
+      const { status, message } = handleDatabaseError(error, 'delete job');
+      res.status(status).json({ message });
     }
   });
 
@@ -235,9 +303,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(events);
       }
 
-      res.status(400).json({ message: "Either jobId or startDate/endDate query parameters are required" });
+      res.status(400).json({ message: "Please provide either a job ID or date range to view schedule events" });
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch schedule events" });
+      const { status, message } = handleDatabaseError(error, 'fetch schedule events');
+      res.status(status).json({ message });
     }
   });
 
@@ -246,7 +315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { startDate, endDate } = req.query;
       
       if (!startDate || !endDate) {
-        return res.status(400).json({ message: "startDate and endDate query parameters are required" });
+        return res.status(400).json({ message: "Please provide both start date and end date to sync events" });
       }
 
       const start = new Date(startDate as string);
@@ -302,8 +371,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalProcessed: googleEvents.length,
       });
     } catch (error) {
-      console.error('[Routes] Error syncing from Google Calendar:', error);
-      res.status(500).json({ message: "Failed to sync from Google Calendar", error });
+      logError('ScheduleEvents/Sync', error, { startDate, endDate });
+      const { status, message } = handleDatabaseError(error, 'sync schedule events from Google Calendar');
+      res.status(status).json({ message });
     }
   });
 
@@ -325,12 +395,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } catch (syncError) {
-        console.error('[Routes] Error syncing to Google Calendar:', syncError);
+        logError('ScheduleEvents/GoogleSync', syncError, { eventId: event.id });
       }
       
       res.status(201).json(event);
     } catch (error) {
-      res.status(400).json({ message: "Invalid schedule event data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create schedule event');
+      res.status(status).json({ message });
     }
   });
 
@@ -338,11 +413,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const event = await storage.getScheduleEvent(req.params.id);
       if (!event) {
-        return res.status(404).json({ message: "Schedule event not found" });
+        return res.status(404).json({ message: "Schedule event not found. It may have been deleted." });
       }
       res.json(event);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch schedule event" });
+      const { status, message } = handleDatabaseError(error, 'fetch schedule event');
+      res.status(status).json({ message });
     }
   });
 
@@ -351,7 +427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertScheduleEventSchema.partial().parse(req.body);
       const event = await storage.updateScheduleEvent(req.params.id, validated);
       if (!event) {
-        return res.status(404).json({ message: "Schedule event not found" });
+        return res.status(404).json({ message: "Schedule event not found. It may have been deleted." });
       }
       
       try {
@@ -367,12 +443,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } catch (syncError) {
-        console.error('[Routes] Error syncing to Google Calendar:', syncError);
+        logError('ScheduleEvents/GoogleSync', syncError, { eventId: event.id });
       }
       
       res.json(event);
     } catch (error) {
-      res.status(400).json({ message: "Invalid schedule event data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update schedule event');
+      res.status(status).json({ message });
     }
   });
 
@@ -384,17 +465,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           await googleCalendarService.deleteEventFromGoogle(event.googleCalendarEventId);
         } catch (syncError) {
-          console.error('[Routes] Error deleting from Google Calendar:', syncError);
+          logError('ScheduleEvents/GoogleSync', syncError, { eventId: req.params.id });
         }
       }
       
       const deleted = await storage.deleteScheduleEvent(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Schedule event not found" });
+        return res.status(404).json({ message: "Schedule event not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete schedule event" });
+      const { status, message } = handleDatabaseError(error, 'delete schedule event');
+      res.status(status).json({ message });
     }
   });
 
@@ -410,7 +492,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const expenses = await storage.getAllExpenses();
       res.json(expenses);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch expenses" });
+      const { status, message } = handleDatabaseError(error, 'fetch expenses');
+      res.status(status).json({ message });
     }
   });
 
@@ -420,7 +503,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const expense = await storage.createExpense(validated);
       res.status(201).json(expense);
     } catch (error) {
-      res.status(400).json({ message: "Invalid expense data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create expense');
+      res.status(status).json({ message });
     }
   });
 
@@ -428,11 +516,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const expense = await storage.getExpense(req.params.id);
       if (!expense) {
-        return res.status(404).json({ message: "Expense not found" });
+        return res.status(404).json({ message: "Expense not found. It may have been deleted." });
       }
       res.json(expense);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch expense" });
+      const { status, message } = handleDatabaseError(error, 'fetch expense');
+      res.status(status).json({ message });
     }
   });
 
@@ -441,11 +530,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertExpenseSchema.partial().parse(req.body);
       const expense = await storage.updateExpense(req.params.id, validated);
       if (!expense) {
-        return res.status(404).json({ message: "Expense not found" });
+        return res.status(404).json({ message: "Expense not found. It may have been deleted." });
       }
       res.json(expense);
     } catch (error) {
-      res.status(400).json({ message: "Invalid expense data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update expense');
+      res.status(status).json({ message });
     }
   });
 
@@ -453,11 +547,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deleted = await storage.deleteExpense(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Expense not found" });
+        return res.status(404).json({ message: "Expense not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete expense" });
+      const { status, message } = handleDatabaseError(error, 'delete expense');
+      res.status(status).json({ message });
     }
   });
 
@@ -475,7 +570,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const logs = await storage.getAllMileageLogs();
       res.json(logs);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch mileage logs" });
+      const { status, message } = handleDatabaseError(error, 'fetch mileage logs');
+      res.status(status).json({ message });
     }
   });
 
@@ -485,7 +581,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const log = await storage.createMileageLog(validated);
       res.status(201).json(log);
     } catch (error) {
-      res.status(400).json({ message: "Invalid mileage log data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create mileage log');
+      res.status(status).json({ message });
     }
   });
 
@@ -493,11 +594,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const log = await storage.getMileageLog(req.params.id);
       if (!log) {
-        return res.status(404).json({ message: "Mileage log not found" });
+        return res.status(404).json({ message: "Mileage log not found. It may have been deleted." });
       }
       res.json(log);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch mileage log" });
+      const { status, message } = handleDatabaseError(error, 'fetch mileage log');
+      res.status(status).json({ message });
     }
   });
 
@@ -506,11 +608,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertMileageLogSchema.partial().parse(req.body);
       const log = await storage.updateMileageLog(req.params.id, validated);
       if (!log) {
-        return res.status(404).json({ message: "Mileage log not found" });
+        return res.status(404).json({ message: "Mileage log not found. It may have been deleted." });
       }
       res.json(log);
     } catch (error) {
-      res.status(400).json({ message: "Invalid mileage log data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update mileage log');
+      res.status(status).json({ message });
     }
   });
 
@@ -518,11 +625,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deleted = await storage.deleteMileageLog(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Mileage log not found" });
+        return res.status(404).json({ message: "Mileage log not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete mileage log" });
+      const { status, message } = handleDatabaseError(error, 'delete mileage log');
+      res.status(status).json({ message });
     }
   });
 
@@ -531,7 +639,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const templates = await storage.getAllReportTemplates();
       res.json(templates);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch report templates" });
+      const { status, message } = handleDatabaseError(error, 'fetch report templates');
+      res.status(status).json({ message });
     }
   });
 
@@ -541,7 +650,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const template = await storage.createReportTemplate(validated);
       res.status(201).json(template);
     } catch (error) {
-      res.status(400).json({ message: "Invalid report template data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create report template');
+      res.status(status).json({ message });
     }
   });
 
@@ -549,11 +663,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const template = await storage.getReportTemplate(req.params.id);
       if (!template) {
-        return res.status(404).json({ message: "Report template not found" });
+        return res.status(404).json({ message: "Report template not found. It may have been deleted." });
       }
       res.json(template);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch report template" });
+      const { status, message } = handleDatabaseError(error, 'fetch report template');
+      res.status(status).json({ message });
     }
   });
 
@@ -562,11 +677,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertReportTemplateSchema.partial().parse(req.body);
       const template = await storage.updateReportTemplate(req.params.id, validated);
       if (!template) {
-        return res.status(404).json({ message: "Report template not found" });
+        return res.status(404).json({ message: "Report template not found. It may have been deleted." });
       }
       res.json(template);
     } catch (error) {
-      res.status(400).json({ message: "Invalid report template data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update report template');
+      res.status(status).json({ message });
     }
   });
 
@@ -574,11 +694,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deleted = await storage.deleteReportTemplate(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Report template not found" });
+        return res.status(404).json({ message: "Report template not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete report template" });
+      const { status, message } = handleDatabaseError(error, 'delete report template');
+      res.status(status).json({ message });
     }
   });
 
@@ -597,9 +718,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(withScores);
       }
 
-      res.status(400).json({ message: "jobId query parameter is required" });
+      res.status(400).json({ message: "Please provide a job ID to view report instances" });
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch report instances" });
+      const { status, message } = handleDatabaseError(error, 'fetch report instances');
+      res.status(status).json({ message });
     }
   });
 
@@ -613,12 +735,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await updateJobComplianceStatus(storage, instance.jobId);
         await updateReportComplianceStatus(storage, instance.id);
       } catch (error) {
-        console.error("Compliance evaluation failed after report instance creation:", error);
+        logError('ReportInstances/ComplianceEvaluation', error, { instanceId: instance.id });
       }
       
       res.status(201).json(instance);
     } catch (error) {
-      res.status(400).json({ message: "Invalid report instance data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create report instance');
+      res.status(status).json({ message });
     }
   });
 
@@ -637,7 +764,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: `Recalculated scores for ${recalculated} report instances` });
     } catch (error) {
-      res.status(500).json({ message: "Failed to recalculate scores", error });
+      const { status, message } = handleDatabaseError(error, 'recalculate report scores');
+      res.status(status).json({ message });
     }
   });
 
@@ -645,7 +773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const instance = await storage.getReportInstance(req.params.id);
       if (!instance) {
-        return res.status(404).json({ message: "Report instance not found" });
+        return res.status(404).json({ message: "Report instance not found. It may have been deleted." });
       }
       
       const job = await storage.getJob(instance.jobId);
@@ -659,7 +787,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         checklistItems,
       });
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch report instance" });
+      const { status, message } = handleDatabaseError(error, 'fetch report instance');
+      res.status(status).json({ message });
     }
   });
 
@@ -668,11 +797,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertReportInstanceSchema.partial().parse(req.body);
       const instance = await storage.updateReportInstance(req.params.id, validated);
       if (!instance) {
-        return res.status(404).json({ message: "Report instance not found" });
+        return res.status(404).json({ message: "Report instance not found. It may have been deleted." });
       }
       res.json(instance);
     } catch (error) {
-      res.status(400).json({ message: "Invalid report instance data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update report instance');
+      res.status(status).json({ message });
     }
   });
 
@@ -760,11 +894,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pdfUrl: normalizedPath,
       });
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      res.status(500).json({ 
-        message: "Failed to generate PDF", 
-        error: error instanceof Error ? error.message : String(error) 
-      });
+      logError('ReportInstances/GeneratePDF', error, { reportId: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'generate PDF report');
+      res.status(status).json({ message });
     }
   });
 
@@ -773,20 +905,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const instance = await storage.getReportInstance(req.params.id);
       if (!instance || !instance.pdfUrl) {
-        return res.status(404).json({ message: "PDF not found" });
+        return res.status(404).json({ message: "PDF not found. Please generate the PDF first." });
       }
 
       const objectStorageService = new ObjectStorageService();
       const file = await objectStorageService.getObjectEntityFile(instance.pdfUrl);
       
       if (!file) {
-        return res.status(404).json({ message: "PDF file not found in storage" });
+        return res.status(404).json({ message: "PDF file not found in storage. It may have been deleted." });
       }
 
       await objectStorageService.downloadObject(file, res);
     } catch (error) {
-      console.error("Error downloading PDF:", error);
-      res.status(500).json({ message: "Failed to download PDF" });
+      logError('ReportInstances/DownloadPDF', error, { reportId: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'download PDF report');
+      res.status(status).json({ message });
     }
   });
 
@@ -797,8 +930,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL();
       res.json({ uploadURL, objectPath });
     } catch (error) {
-      console.error("Error getting upload URL:", error);
-      res.status(500).json({ message: "Failed to get upload URL", error: String(error) });
+      logError('ObjectStorage/Upload', error);
+      const { status, message } = handleDatabaseError(error, 'get upload URL');
+      res.status(status).json({ message });
     }
   });
 
@@ -817,7 +951,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
-      console.error("Error checking object access:", error);
+      logError('ObjectStorage/Access', error, { path: req.path, userId });
       if (error instanceof ObjectNotFoundError) {
         return res.sendStatus(404);
       }
@@ -832,7 +966,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { signatureUrl, signerName, signerRole } = req.body;
 
       if (!signatureUrl || !signerName) {
-        return res.status(400).json({ error: "signatureUrl and signerName are required" });
+        return res.status(400).json({ message: "Please provide both signature and signer name" });
       }
 
       const objectStorageService = new ObjectStorageService();
@@ -843,7 +977,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate that normalization was successful
       if (!normalizedPath || !normalizedPath.startsWith("/")) {
         return res.status(400).json({ 
-          error: "Invalid signature URL format" 
+          message: "Invalid signature format. Please try again." 
         });
       }
       
@@ -851,7 +985,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fileExists = await objectStorageService.waitForObjectEntity(normalizedPath, 10, 500);
       if (!fileExists) {
         return res.status(400).json({ 
-          error: "Uploaded signature not found. Please ensure the signature was uploaded successfully." 
+          message: "Signature upload not complete. Please ensure the signature was uploaded successfully." 
         });
       }
       
@@ -873,13 +1007,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (!job) {
-        return res.status(404).json({ message: "Job not found" });
+        return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
 
       res.json(job);
     } catch (error) {
-      console.error("Error saving signature:", error);
-      res.status(500).json({ message: "Failed to save signature", error: String(error) });
+      logError('Signature/Save', error, { jobId: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'save signature');
+      res.status(status).json({ message });
     }
   });
 
@@ -906,7 +1041,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(allPhotos);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch photos" });
+      const { status, message } = handleDatabaseError(error, 'fetch photos');
+      res.status(status).json({ message });
     }
   });
 
@@ -914,7 +1050,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       if (!req.body.filePath) {
-        return res.status(400).json({ error: "filePath is required" });
+        return res.status(400).json({ message: "Please provide a file path for the photo" });
       }
 
       const objectStorageService = new ObjectStorageService();
@@ -927,7 +1063,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const fileExists = await objectStorageService.waitForObjectEntity(normalizedPath, 10, 500);
         if (!fileExists) {
           return res.status(400).json({ 
-            error: "Uploaded file not found. Please ensure the file was uploaded successfully before creating the photo record." 
+            message: "Photo upload not complete. Please ensure the file was uploaded successfully." 
           });
         }
       }
@@ -958,8 +1094,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(photo);
     } catch (error) {
-      console.error("Error creating photo:", error);
-      res.status(400).json({ message: "Invalid photo data", error: String(error) });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Photos/Create', error, { filePath: req.body.filePath });
+      const { status, message } = handleDatabaseError(error, 'create photo');
+      res.status(status).json({ message });
     }
   });
 
@@ -967,11 +1108,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const photo = await storage.getPhoto(req.params.id);
       if (!photo) {
-        return res.status(404).json({ message: "Photo not found" });
+        return res.status(404).json({ message: "Photo not found. It may have been deleted." });
       }
       res.json(photo);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch photo" });
+      const { status, message } = handleDatabaseError(error, 'fetch photo');
+      res.status(status).json({ message });
     }
   });
 
@@ -980,11 +1122,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertPhotoSchema.partial().parse(req.body);
       const photo = await storage.updatePhoto(req.params.id, validated);
       if (!photo) {
-        return res.status(404).json({ message: "Photo not found" });
+        return res.status(404).json({ message: "Photo not found. It may have been deleted." });
       }
       res.json(photo);
     } catch (error) {
-      res.status(400).json({ message: "Invalid photo data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update photo');
+      res.status(status).json({ message });
     }
   });
 
@@ -992,7 +1139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const photo = await storage.getPhoto(req.params.id);
       if (!photo) {
-        return res.status(404).json({ message: "Photo not found" });
+        return res.status(404).json({ message: "Photo not found. It may have already been deleted." });
       }
       
       if (photo.checklistItemId) {
@@ -1006,11 +1153,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const deleted = await storage.deletePhoto(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Photo not found" });
+        return res.status(404).json({ message: "Photo not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete photo" });
+      const { status, message } = handleDatabaseError(error, 'delete photo');
+      res.status(status).json({ message });
     }
   });
 
@@ -1019,7 +1167,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const forecasts = await storage.getAllForecasts();
       res.json(forecasts);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch forecasts" });
+      const { status, message } = handleDatabaseError(error, 'fetch forecasts');
+      res.status(status).json({ message });
     }
   });
 
@@ -1027,11 +1176,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const forecast = await storage.getForecast(req.params.id);
       if (!forecast) {
-        return res.status(404).json({ message: "Forecast not found" });
+        return res.status(404).json({ message: "Forecast not found. It may have been deleted." });
       }
       res.json(forecast);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch forecast" });
+      const { status, message } = handleDatabaseError(error, 'fetch forecast');
+      res.status(status).json({ message });
     }
   });
 
@@ -1045,13 +1195,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           await updateJobComplianceStatus(storage, forecast.jobId);
         } catch (error) {
-          console.error("Compliance evaluation failed after forecast creation:", error);
+          logError('Forecasts/ComplianceEvaluation', error, { forecastId: forecast.id });
         }
       }
       
       res.status(201).json(forecast);
     } catch (error) {
-      res.status(400).json({ message: "Invalid forecast data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create forecast');
+      res.status(status).json({ message });
     }
   });
 
@@ -1060,7 +1215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertForecastSchema.partial().parse(req.body);
       const forecast = await storage.updateForecast(req.params.id, validated);
       if (!forecast) {
-        return res.status(404).json({ message: "Forecast not found" });
+        return res.status(404).json({ message: "Forecast not found. It may have been deleted." });
       }
       
       // Trigger compliance evaluation if actual values are being updated
@@ -1068,13 +1223,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           await updateJobComplianceStatus(storage, forecast.jobId);
         } catch (error) {
-          console.error("Compliance evaluation failed after forecast update:", error);
+          logError('Forecasts/ComplianceEvaluation', error, { forecastId: forecast.id });
         }
       }
       
       res.json(forecast);
     } catch (error) {
-      res.status(400).json({ message: "Invalid forecast data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update forecast');
+      res.status(status).json({ message });
     }
   });
 
@@ -1095,7 +1255,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(allItems);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch checklist items" });
+      const { status, message } = handleDatabaseError(error, 'fetch checklist items');
+      res.status(status).json({ message });
     }
   });
 
@@ -1111,12 +1272,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await updateReportComplianceStatus(storage, reportInstance.id);
         }
       } catch (error) {
-        console.error("Compliance evaluation failed after checklist item creation:", error);
+        logError('ChecklistItems/ComplianceEvaluation', error, { itemId: item.id });
       }
       
       res.status(201).json(item);
     } catch (error) {
-      res.status(400).json({ message: "Invalid checklist item data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create checklist item');
+      res.status(status).json({ message });
     }
   });
 
@@ -1124,11 +1290,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const item = await storage.getChecklistItem(req.params.id);
       if (!item) {
-        return res.status(404).json({ message: "Checklist item not found" });
+        return res.status(404).json({ message: "Checklist item not found. It may have been deleted." });
       }
       res.json(item);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch checklist item" });
+      const { status, message } = handleDatabaseError(error, 'fetch checklist item');
+      res.status(status).json({ message });
     }
   });
 
@@ -1137,7 +1304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = updateChecklistItemSchema.parse(req.body);
       const item = await storage.updateChecklistItem(req.params.id, validated);
       if (!item) {
-        return res.status(404).json({ message: "Checklist item not found" });
+        return res.status(404).json({ message: "Checklist item not found. It may have been deleted." });
       }
       
       // Trigger compliance evaluation for all checklist item changes
@@ -1147,12 +1314,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await updateReportComplianceStatus(storage, reportInstance.id);
         }
       } catch (error) {
-        console.error("Compliance evaluation failed after checklist item update:", error);
+        logError('ChecklistItems/ComplianceEvaluation', error, { itemId: item.id });
       }
       
       res.json(item);
     } catch (error) {
-      res.status(400).json({ message: "Invalid checklist item data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update checklist item');
+      res.status(status).json({ message });
     }
   });
 
@@ -1160,11 +1332,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deleted = await storage.deleteChecklistItem(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Checklist item not found" });
+        return res.status(404).json({ message: "Checklist item not found. It may have already been deleted." });
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete checklist item" });
+      const { status, message } = handleDatabaseError(error, 'delete checklist item');
+      res.status(status).json({ message });
     }
   });
 
@@ -1172,7 +1345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const job = await storage.getJob(req.params.jobId);
       if (!job) {
-        return res.status(404).json({ message: "Job not found" });
+        return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
 
       const evaluation = await evaluateJobCompliance(storage, req.params.jobId);
@@ -1181,8 +1354,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...evaluation,
       });
     } catch (error) {
-      console.error("Error getting job compliance status:", error);
-      res.status(500).json({ message: "Failed to get job compliance status" });
+      logError('Compliance/JobStatus', error, { jobId: req.params.jobId });
+      const { status, message } = handleDatabaseError(error, 'fetch job compliance status');
+      res.status(status).json({ message });
     }
   });
 
@@ -1190,18 +1364,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const job = await storage.getJob(req.params.jobId);
       if (!job) {
-        return res.status(404).json({ message: "Job not found" });
+        return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
 
       const updatedJob = await updateJobComplianceStatus(storage, req.params.jobId);
       if (!updatedJob) {
-        return res.status(500).json({ message: "Failed to update job compliance status" });
+        return res.status(500).json({ message: "Unable to evaluate job compliance. Please try again." });
       }
 
       res.json(updatedJob);
     } catch (error) {
-      console.error("Error evaluating job compliance:", error);
-      res.status(500).json({ message: "Failed to evaluate job compliance" });
+      logError('Compliance/JobEvaluate', error, { jobId: req.params.jobId });
+      const { status, message } = handleDatabaseError(error, 'evaluate job compliance');
+      res.status(status).json({ message });
     }
   });
 
@@ -1209,7 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const report = await storage.getReportInstance(req.params.reportId);
       if (!report) {
-        return res.status(404).json({ message: "Report not found" });
+        return res.status(404).json({ message: "Report not found. It may have been deleted." });
       }
 
       const evaluation = await evaluateReportCompliance(storage, req.params.reportId);
@@ -1218,8 +1393,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...evaluation,
       });
     } catch (error) {
-      console.error("Error getting report compliance status:", error);
-      res.status(500).json({ message: "Failed to get report compliance status" });
+      logError('Compliance/ReportStatus', error, { reportId: req.params.reportId });
+      const { status, message } = handleDatabaseError(error, 'fetch report compliance status');
+      res.status(status).json({ message });
     }
   });
 
@@ -1227,18 +1403,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const report = await storage.getReportInstance(req.params.reportId);
       if (!report) {
-        return res.status(404).json({ message: "Report not found" });
+        return res.status(404).json({ message: "Report not found. It may have been deleted." });
       }
 
       const updatedReport = await updateReportComplianceStatus(storage, req.params.reportId);
       if (!updatedReport) {
-        return res.status(500).json({ message: "Failed to update report compliance status" });
+        return res.status(500).json({ message: "Unable to evaluate report compliance. Please try again." });
       }
 
       res.json(updatedReport);
     } catch (error) {
-      console.error("Error evaluating report compliance:", error);
-      res.status(500).json({ message: "Failed to evaluate report compliance" });
+      logError('Compliance/ReportEvaluate', error, { reportId: req.params.reportId });
+      const { status, message } = handleDatabaseError(error, 'evaluate report compliance');
+      res.status(status).json({ message });
     }
   });
 
@@ -1247,8 +1424,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rules = await storage.getComplianceRules();
       res.json(rules);
     } catch (error) {
-      console.error("Error fetching compliance rules:", error);
-      res.status(500).json({ message: "Failed to fetch compliance rules" });
+      logError('Compliance/GetRules', error);
+      const { status, message } = handleDatabaseError(error, 'fetch compliance rules');
+      res.status(status).json({ message });
     }
   });
 
@@ -1258,8 +1436,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rule = await storage.createComplianceRule(validated);
       res.status(201).json(rule);
     } catch (error) {
-      console.error("Error creating compliance rule:", error);
-      res.status(400).json({ message: "Invalid compliance rule data", error });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Compliance/CreateRule', error);
+      const { status, message } = handleDatabaseError(error, 'create compliance rule');
+      res.status(status).json({ message });
     }
   });
 
@@ -1268,14 +1451,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { entityType, entityId } = req.params;
       
       if (entityType !== "job" && entityType !== "report") {
-        return res.status(400).json({ message: "Invalid entity type. Must be 'job' or 'report'" });
+        return res.status(400).json({ message: "Please specify either 'job' or 'report' as the entity type" });
       }
 
       const history = await storage.getComplianceHistory(entityType, entityId);
       res.json(history);
     } catch (error) {
-      console.error("Error fetching compliance history:", error);
-      res.status(500).json({ message: "Failed to fetch compliance history" });
+      logError('Compliance/History', error, { entityType: req.params.entityType, entityId: req.params.entityId });
+      const { status, message } = handleDatabaseError(error, 'fetch compliance history');
+      res.status(status).json({ message });
     }
   });
 
