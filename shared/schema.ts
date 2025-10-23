@@ -168,6 +168,7 @@ export const photos = pgTable("photos", {
   checklistItemId: varchar("checklist_item_id"),
   filePath: text("file_path").notNull(),
   fullUrl: text("full_url"),
+  hash: text("hash"),
   // TODO: Add real thumbnail generation during upload:
   // When a photo is uploaded, generate thumbnail (400x400) and blur placeholder (24x24)
   // Store all versions in object storage and add these fields:

@@ -1539,6 +1539,7 @@ export class MemStorage implements IStorage {
       checklistItemId: insertPhoto.checklistItemId ?? null,
       filePath: insertPhoto.filePath,
       fullUrl: fullUrl ?? null,
+      hash: insertPhoto.hash ?? null,
       caption: insertPhoto.caption ?? null,
       tags: insertPhoto.tags ?? null,
       annotationData: insertPhoto.annotationData ?? null,

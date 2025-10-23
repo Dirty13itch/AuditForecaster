@@ -77,10 +77,7 @@ export default function Jobs() {
   const [workflowJobId, setWorkflowJobId] = useState<string | null>(null);
   const [photosDialogOpen, setPhotosDialogOpen] = useState(false);
   const [selectedJobForPhotos, setSelectedJobForPhotos] = useState<Job | null>(null);
-  const [photoCaption, setPhotoCaption] = useState("");
-  const [selectedPhotoTags, setSelectedPhotoTags] = useState<PhotoTag[]>([]);
   const [filterTags, setFilterTags] = useState<PhotoTag[]>([]);
-  const [uploadedObjectPath, setUploadedObjectPath] = useState<string>("");
   const [annotatorOpen, setAnnotatorOpen] = useState(false);
   const [photoToAnnotate, setPhotoToAnnotate] = useState<Photo | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -513,46 +510,6 @@ export default function Jobs() {
   const handleOpenPhotosDialog = (job: Job) => {
     setSelectedJobForPhotos(job);
     setPhotosDialogOpen(true);
-  };
-
-  const handlePhotoUpload = async () => {
-    try {
-      const response = await fetch('/api/objects/upload', { method: 'POST' });
-      if (!response.ok) {
-        throw new Error('Failed to get upload URL');
-      }
-      const { uploadURL, objectPath } = await response.json();
-      setUploadedObjectPath(objectPath);
-      return { method: 'PUT' as const, url: uploadURL };
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to get upload URL",
-        variant: "destructive",
-      });
-      throw error;
-    }
-  };
-
-  const handleUploadComplete = async (result: { success: boolean; objectPath?: string }) => {
-    if (!selectedJobForPhotos || !uploadedObjectPath) return;
-    
-    await createPhotoMutation.mutateAsync({
-      jobId: selectedJobForPhotos.id,
-      checklistItemId: selectedChecklistItemForPhoto || undefined,
-      filePath: uploadedObjectPath,
-      caption: photoCaption || undefined,
-      tags: selectedPhotoTags.length > 0 ? selectedPhotoTags : undefined,
-    });
-    
-    setUploadedObjectPath("");
-    setSelectedChecklistItemForPhoto(null);
-  };
-
-  const handleToggleTag = (tag: PhotoTag) => {
-    setSelectedPhotoTags(prev => 
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
   };
 
   const handleFilterByTag = (tag: PhotoTag) => {
@@ -1442,6 +1399,7 @@ export default function Jobs() {
                     });
                   }}
                   bucketPath="photos"
+                  existingPhotos={photos}
                 />
               )}
             </TabsContent>

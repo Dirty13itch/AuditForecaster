@@ -1,9 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Camera, X, RotateCw, Zap, ZapOff, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Camera, X, RotateCw, Zap, ZapOff, Loader2, AlertTriangle } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
+import { addToSyncQueue } from "@/lib/syncQueue";
+import { clientLogger } from "@/lib/logger";
+import { generateHash } from "@/lib/utils";
+import type { Photo } from "@shared/schema";
 
 /**
  * Compress an image file using canvas API
@@ -79,6 +84,7 @@ interface EnhancedWebCameraProps {
   bucketPath?: string;
   onClose?: () => void;
   autoAdvance?: boolean; // Auto-advance to next photo after capture
+  existingPhotos?: Photo[];
 }
 
 /**
@@ -91,6 +97,7 @@ export function EnhancedWebCamera({
   bucketPath = "photos",
   onClose,
   autoAdvance = true,
+  existingPhotos = [],
 }: EnhancedWebCameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -103,8 +110,18 @@ export function EnhancedWebCamera({
   const [isCapturing, setIsCapturing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+  const [capturedFilename, setCapturedFilename] = useState<string | null>(null);
+  const [capturedHash, setCapturedHash] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDuplicate, setIsDuplicate] = useState(false);
   const { toast } = useToast();
+
+  // Extract hashes from existing photos for content-based duplicate detection
+  const existingHashes = new Set(
+    existingPhotos
+      .filter(photo => photo.hash) // Only consider photos with hashes
+      .map(photo => photo.hash!)
+  );
 
   // Initialize camera
   useEffect(() => {
@@ -221,19 +238,37 @@ export function EnhancedWebCamera({
         imageHeight: 3072,
       });
 
+      // Generate filename
+      const filename = `photo-${Date.now()}.jpg`;
+      
+      // Compute hash for content-based duplicate detection
+      const hash = await generateHash(blob);
+      const duplicate = existingHashes.has(hash);
+      
       setCapturedBlob(blob);
+      setCapturedFilename(filename);
+      setCapturedHash(hash);
+      setIsDuplicate(duplicate);
       const url = URL.createObjectURL(blob);
       setPreviewUrl(url);
       setShowPreview(true);
 
-      // Auto-upload if enabled
-      if (autoAdvance) {
+      if (duplicate) {
+        toast({
+          title: "Duplicate photo detected",
+          description: "This photo appears to be identical to an existing photo. You can still proceed if you want.",
+          variant: "default",
+        });
+      }
+
+      // Auto-upload if enabled (even if duplicate, user can decide)
+      if (autoAdvance && !duplicate) {
         setTimeout(() => {
-          uploadPhoto(blob);
+          uploadPhoto(blob, filename, hash);
         }, 500); // Brief preview
       }
     } catch (error) {
-      console.error("Capture error:", error);
+      clientLogger.error("Capture error:", error);
       toast({
         title: "Capture failed",
         description: "Failed to capture photo. Please try again.",
@@ -244,13 +279,15 @@ export function EnhancedWebCamera({
     }
   };
 
-  const uploadPhoto = async (blob?: Blob) => {
+  const uploadPhoto = async (blob?: Blob, filename?: string, hash?: string) => {
     const photoBlob = blob || capturedBlob;
+    const photoFilename = filename || capturedFilename || `photo-${Date.now()}.jpg`;
+    const photoHash = hash || capturedHash;
     if (!photoBlob) return;
 
     try {
       // Convert blob to file
-      const file = new File([photoBlob], `photo-${Date.now()}.jpg`, {
+      const file = new File([photoBlob], photoFilename, {
         type: "image/jpeg",
       });
 
@@ -288,29 +325,62 @@ export function EnhancedWebCamera({
       const urlObj = new URL(url);
       const filePath = urlObj.pathname.split('/').slice(2).join('/');
 
-      // Save to database
-      const photoResponse = await fetch("/api/photos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobId,
-          filePath,
-          caption: "",
-          tags: [],
-        }),
-        credentials: "include",
-      });
+      // Save photo metadata to database - with offline queue support
+      const photoData = {
+        jobId,
+        filePath,
+        caption: "",
+        tags: [],
+        hash: photoHash,
+      };
 
-      if (!photoResponse.ok) {
-        throw new Error("Failed to save photo metadata");
+      let photoSaved = false;
+      let photoQueued = false;
+
+      try {
+        const photoResponse = await fetch("/api/photos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(photoData),
+          credentials: "include",
+        });
+
+        if (!photoResponse.ok) {
+          throw new Error("Failed to save photo metadata");
+        }
+
+        photoSaved = true;
+      } catch (error) {
+        // Check if it's a network error
+        if (!navigator.onLine || (error instanceof Error && error.message.includes('Failed to fetch'))) {
+          // Queue the metadata POST for when we're back online
+          clientLogger.info('Network offline, queueing photo metadata for sync', { filePath, jobId });
+          await addToSyncQueue({
+            method: "POST",
+            url: "/api/photos",
+            data: photoData,
+            headers: { "Content-Type": "application/json" },
+          });
+          photoQueued = true;
+        } else {
+          // Re-throw non-network errors
+          throw error;
+        }
       }
 
-      // Success!
+      // Success feedback
       if (!autoAdvance) {
-        toast({
-          title: "Success",
-          description: "Photo uploaded successfully",
-        });
+        if (photoSaved) {
+          toast({
+            title: "Success",
+            description: "Photo uploaded successfully",
+          });
+        } else if (photoQueued) {
+          toast({
+            title: "Photo queued",
+            description: "Photo queued for upload when online",
+          });
+        }
       }
 
       // Reset for next photo
@@ -323,7 +393,7 @@ export function EnhancedWebCamera({
 
       onUploadComplete?.();
     } catch (error) {
-      console.error("Upload error:", error);
+      clientLogger.error("Upload error:", error);
       toast({
         title: "Upload failed",
         description: error instanceof Error ? error.message : "Failed to upload photo",
@@ -337,8 +407,11 @@ export function EnhancedWebCamera({
       URL.revokeObjectURL(previewUrl);
     }
     setCapturedBlob(null);
+    setCapturedFilename(null);
+    setCapturedHash(null);
     setPreviewUrl(null);
     setShowPreview(false);
+    setIsDuplicate(false);
   };
 
   return (
@@ -444,6 +517,18 @@ export function EnhancedWebCamera({
             data-testid="img-photo-preview"
           />
 
+          {/* Duplicate indicator */}
+          {isDuplicate && (
+            <Badge
+              variant="destructive"
+              className="absolute top-4 left-4"
+              data-testid="badge-duplicate-warning"
+            >
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Duplicate filename detected
+            </Badge>
+          )}
+
           {/* Preview controls */}
           <div className="absolute bottom-4 left-4 right-4 flex gap-2">
             <Button
@@ -459,7 +544,7 @@ export function EnhancedWebCamera({
               onClick={() => uploadPhoto()}
               data-testid="button-confirm-upload"
             >
-              Use Photo
+              {isDuplicate ? "Upload Anyway" : "Use Photo"}
             </Button>
           </div>
         </div>

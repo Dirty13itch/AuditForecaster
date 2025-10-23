@@ -4,12 +4,14 @@ import { EnhancedWebCamera } from "./EnhancedWebCamera";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Camera, ImageIcon } from "lucide-react";
+import type { Photo } from "@shared/schema";
 
 interface PhotoCaptureProps {
   jobId: string;
   onUploadComplete?: () => void;
   bucketPath?: string;
   showGalleryByDefault?: boolean; // Show gallery picker immediately
+  existingPhotos?: Photo[];
 }
 
 /**
@@ -22,6 +24,7 @@ export function PhotoCapture({
   onUploadComplete,
   bucketPath = "photos",
   showGalleryByDefault = false,
+  existingPhotos = [],
 }: PhotoCaptureProps) {
   const [mode, setMode] = useState<"select" | "gallery" | "camera">(
     showGalleryByDefault ? "gallery" : "select"
@@ -47,6 +50,7 @@ export function PhotoCapture({
           jobId={jobId}
           onUploadComplete={handleUploadComplete}
           bucketPath={bucketPath}
+          existingPhotos={existingPhotos}
         />
         <Button
           variant="outline"
@@ -68,6 +72,7 @@ export function PhotoCapture({
         bucketPath={bucketPath}
         onClose={handleCameraClose}
         autoAdvance={true}
+        existingPhotos={existingPhotos}
       />
     );
   }

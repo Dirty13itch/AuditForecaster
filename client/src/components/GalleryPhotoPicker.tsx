@@ -2,8 +2,13 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Check, ImageIcon, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { X, Check, ImageIcon, Loader2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { addToSyncQueue } from "@/lib/syncQueue";
+import { clientLogger } from "@/lib/logger";
+import { generateHash } from "@/lib/utils";
+import type { Photo } from "@shared/schema";
 
 /**
  * Compress an image file using canvas API
@@ -84,6 +89,7 @@ async function compressImage(
 interface SelectedPhoto {
   file: File;
   preview: string;
+  isDuplicate: boolean;
 }
 
 interface GalleryPhotoPickerProps {
@@ -91,6 +97,7 @@ interface GalleryPhotoPickerProps {
   onUploadComplete?: () => void;
   bucketPath?: string;
   maxPhotos?: number;
+  existingPhotos?: Photo[];
 }
 
 /**
@@ -102,12 +109,22 @@ export function GalleryPhotoPicker({
   onUploadComplete,
   bucketPath = "photos",
   maxPhotos = 50,
+  existingPhotos = [],
 }: GalleryPhotoPickerProps) {
   const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [skipDuplicates, setSkipDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Extract filenames from existing photos
+  const existingFilenames = new Set(
+    existingPhotos.map(photo => {
+      const parts = photo.filePath.split('/');
+      return parts[parts.length - 1];
+    })
+  );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -124,11 +141,24 @@ export function GalleryPhotoPicker({
       return;
     }
 
-    // Create preview URLs for selected files
-    const newPhotos: SelectedPhoto[] = files.map(file => ({
-      file,
-      preview: URL.createObjectURL(file),
-    }));
+    // Create preview URLs and check for duplicates
+    const newPhotos: SelectedPhoto[] = files.map(file => {
+      const isDuplicate = existingFilenames.has(file.name);
+      return {
+        file,
+        preview: URL.createObjectURL(file),
+        isDuplicate,
+      };
+    });
+
+    const duplicateCount = newPhotos.filter(p => p.isDuplicate).length;
+    if (duplicateCount > 0) {
+      toast({
+        title: "Duplicate photos detected",
+        description: `${duplicateCount} photo${duplicateCount > 1 ? 's' : ''} with the same filename already exist${duplicateCount === 1 ? 's' : ''}. They are marked with a warning icon.`,
+        variant: "default",
+      });
+    }
 
     setSelectedPhotos(prev => [...prev, ...newPhotos]);
   };
@@ -157,13 +187,33 @@ export function GalleryPhotoPicker({
     setUploadProgress(0);
 
     try {
-      const totalPhotos = selectedPhotos.length;
+      // Filter out duplicates if skipDuplicates is enabled
+      const photosToUpload = skipDuplicates 
+        ? selectedPhotos.filter(p => !p.isDuplicate)
+        : selectedPhotos;
+
+      if (photosToUpload.length === 0) {
+        toast({
+          title: "No photos to upload",
+          description: "All selected photos are duplicates and skip duplicates is enabled.",
+        });
+        setIsUploading(false);
+        setUploadProgress(0);
+        return;
+      }
+
+      const totalPhotos = photosToUpload.length;
       let uploadedCount = 0;
+      let queuedCount = 0;
+      let skippedCount = selectedPhotos.length - photosToUpload.length;
 
       // Upload photos sequentially to avoid overwhelming the server
-      for (const { file } of selectedPhotos) {
+      for (const { file } of photosToUpload) {
         // Compress image
         const compressedFile = await compressImage(file);
+
+        // Generate hash for duplicate detection
+        const hash = await generateHash(compressedFile);
 
         // Get presigned URL
         const urlResponse = await fetch("/api/uploads/presigned-url", {
@@ -196,38 +246,67 @@ export function GalleryPhotoPicker({
         const urlObj = new URL(url);
         const filePath = urlObj.pathname.split('/').slice(2).join('/'); // Remove bucket prefix
 
-        // Save photo metadata to database
-        const photoResponse = await fetch("/api/photos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jobId,
-            filePath,
-            caption: "",
-            tags: [],
-          }),
-          credentials: "include",
-        });
+        // Save photo metadata to database - with offline queue support
+        const photoData = {
+          jobId,
+          filePath,
+          hash,
+          caption: "",
+          tags: [],
+        };
 
-        if (!photoResponse.ok) {
-          throw new Error(`Failed to save photo metadata: ${file.name}`);
+        try {
+          const photoResponse = await fetch("/api/photos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(photoData),
+            credentials: "include",
+          });
+
+          if (!photoResponse.ok) {
+            throw new Error(`Failed to save photo metadata: ${file.name}`);
+          }
+
+          uploadedCount++;
+        } catch (error) {
+          // Check if it's a network error
+          if (!navigator.onLine || (error instanceof Error && error.message.includes('Failed to fetch'))) {
+            // Queue the metadata POST for when we're back online
+            clientLogger.info('Network offline, queueing photo metadata for sync', { filePath, jobId });
+            await addToSyncQueue({
+              method: "POST",
+              url: "/api/photos",
+              data: photoData,
+              headers: { "Content-Type": "application/json" },
+            });
+            queuedCount++;
+          } else {
+            // Re-throw non-network errors
+            throw error;
+          }
         }
 
-        uploadedCount++;
-        setUploadProgress(Math.round((uploadedCount / totalPhotos) * 100));
+        setUploadProgress(Math.round(((uploadedCount + queuedCount) / totalPhotos) * 100));
       }
 
-      // Success!
-      toast({
-        title: "Success",
-        description: `${totalPhotos} photo${totalPhotos > 1 ? 's' : ''} uploaded successfully`,
-      });
+      // Success message based on what happened
+      const parts: string[] = [];
+      if (uploadedCount > 0) parts.push(`${uploadedCount} uploaded`);
+      if (queuedCount > 0) parts.push(`${queuedCount} queued`);
+      if (skippedCount > 0) parts.push(`${skippedCount} skipped (duplicates)`);
+
+      if (parts.length > 0) {
+        toast({
+          title: uploadedCount > 0 ? "Success" : queuedCount > 0 ? "Photos queued" : "Completed",
+          description: parts.join(", "),
+        });
+      }
 
       // Clean up
       clearAll();
       onUploadComplete?.();
     } catch (error) {
-      console.error("Upload error:", error);
+      clientLogger.error("Upload error:", error);
       toast({
         title: "Upload failed",
         description: error instanceof Error ? error.message : "Failed to upload photos",
@@ -294,6 +373,16 @@ export function GalleryPhotoPicker({
                       alt={`Selected ${index + 1}`}
                       className="w-full h-full object-cover"
                     />
+                    {photo.isDuplicate && (
+                      <Badge
+                        variant="destructive"
+                        className="absolute top-1 left-1 text-xs"
+                        data-testid={`badge-duplicate-${index}`}
+                      >
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Duplicate
+                      </Badge>
+                    )}
                     <button
                       onClick={() => removePhoto(index)}
                       disabled={isUploading}
@@ -307,6 +396,24 @@ export function GalleryPhotoPicker({
               </div>
             </ScrollArea>
           </div>
+
+          {/* Duplicate handling option */}
+          {selectedPhotos.some(p => p.isDuplicate) && (
+            <div className="flex items-center space-x-2 p-3 bg-muted rounded-md">
+              <input
+                type="checkbox"
+                id="skip-duplicates"
+                checked={skipDuplicates}
+                onChange={(e) => setSkipDuplicates(e.target.checked)}
+                disabled={isUploading}
+                className="h-4 w-4"
+                data-testid="checkbox-skip-duplicates"
+              />
+              <label htmlFor="skip-duplicates" className="text-sm cursor-pointer">
+                Skip duplicate photos during upload ({selectedPhotos.filter(p => p.isDuplicate).length} duplicate{selectedPhotos.filter(p => p.isDuplicate).length !== 1 ? 's' : ''})
+              </label>
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex gap-2">
