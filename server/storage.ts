@@ -25,6 +25,8 @@ import {
   type InsertComplianceRule,
   type ComplianceHistory,
   type InsertComplianceHistory,
+  type CalendarPreference,
+  type InsertCalendarPreference,
   type ScoreSummary,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
@@ -125,6 +127,12 @@ export interface IStorage {
   getComplianceHistory(entityType?: string, entityId?: string): Promise<ComplianceHistory[]>;
   createComplianceHistoryEntry(entry: InsertComplianceHistory): Promise<ComplianceHistory>;
 
+  // Calendar preferences
+  getCalendarPreferences(): Promise<CalendarPreference[]>;
+  saveCalendarPreferences(preferences: InsertCalendarPreference[]): Promise<CalendarPreference[]>;
+  updateCalendarToggle(calendarId: string, isEnabled: boolean): Promise<CalendarPreference | undefined>;
+  deleteCalendarPreference(calendarId: string): Promise<boolean>;
+
   recalculateReportScore(reportInstanceId: string): Promise<void>;
 }
 
@@ -142,6 +150,7 @@ export class MemStorage implements IStorage {
   private checklistItems: Map<string, ChecklistItem>;
   private complianceRules: Map<string, ComplianceRule>;
   private complianceHistory: Map<string, ComplianceHistory>;
+  private calendarPreferences: Map<string, CalendarPreference>;
 
   constructor() {
     this.users = new Map();
@@ -157,6 +166,7 @@ export class MemStorage implements IStorage {
     this.checklistItems = new Map();
     this.complianceRules = new Map();
     this.complianceHistory = new Map();
+    this.calendarPreferences = new Map();
 
     this.initializeSampleData();
   }
@@ -1952,6 +1962,77 @@ export class MemStorage implements IStorage {
     };
     this.complianceHistory.set(id, entry);
     return entry;
+  }
+
+  async getCalendarPreferences(): Promise<CalendarPreference[]> {
+    return Array.from(this.calendarPreferences.values());
+  }
+
+  async saveCalendarPreferences(preferences: InsertCalendarPreference[]): Promise<CalendarPreference[]> {
+    const savedPreferences: CalendarPreference[] = [];
+    
+    for (const pref of preferences) {
+      const existingPref = Array.from(this.calendarPreferences.values())
+        .find(p => p.calendarId === pref.calendarId);
+      
+      if (existingPref) {
+        // Update existing preference
+        const updated: CalendarPreference = {
+          ...existingPref,
+          ...pref,
+        };
+        this.calendarPreferences.set(existingPref.id, updated);
+        savedPreferences.push(updated);
+      } else {
+        // Create new preference
+        const newPref: CalendarPreference = {
+          id: randomUUID(),
+          userId: pref.userId || null,
+          calendarId: pref.calendarId,
+          calendarName: pref.calendarName,
+          backgroundColor: pref.backgroundColor || null,
+          foregroundColor: pref.foregroundColor || null,
+          isEnabled: pref.isEnabled ?? true,
+          isPrimary: pref.isPrimary ?? false,
+          accessRole: pref.accessRole || null,
+          lastSyncedAt: pref.lastSyncedAt || null,
+          createdAt: new Date(),
+        };
+        this.calendarPreferences.set(newPref.id, newPref);
+        savedPreferences.push(newPref);
+      }
+    }
+    
+    return savedPreferences;
+  }
+
+  async updateCalendarToggle(calendarId: string, isEnabled: boolean): Promise<CalendarPreference | undefined> {
+    const pref = Array.from(this.calendarPreferences.values())
+      .find(p => p.calendarId === calendarId);
+    
+    if (!pref) {
+      return undefined;
+    }
+    
+    const updated: CalendarPreference = {
+      ...pref,
+      isEnabled,
+    };
+    
+    this.calendarPreferences.set(pref.id, updated);
+    return updated;
+  }
+
+  async deleteCalendarPreference(calendarId: string): Promise<boolean> {
+    const pref = Array.from(this.calendarPreferences.values())
+      .find(p => p.calendarId === calendarId);
+    
+    if (!pref) {
+      return false;
+    }
+    
+    this.calendarPreferences.delete(pref.id);
+    return true;
   }
 
   async recalculateReportScore(reportInstanceId: string): Promise<void> {

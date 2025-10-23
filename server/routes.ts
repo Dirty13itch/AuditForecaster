@@ -22,6 +22,7 @@ import {
   updateChecklistItemSchema,
   insertComplianceRuleSchema,
   insertForecastSchema,
+  insertCalendarPreferenceSchema,
 } from "@shared/schema";
 import { paginationParamsSchema } from "@shared/pagination";
 import {
@@ -1937,6 +1938,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logError('Compliance/History', error, { entityType: req.params.entityType, entityId: req.params.entityId });
       const { status, message } = handleDatabaseError(error, 'fetch compliance history');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Google Calendar preferences
+  app.get('/api/calendar-preferences', isAuthenticated, async (req, res) => {
+    try {
+      const preferences = await storage.getCalendarPreferences();
+      res.json(preferences);
+    } catch (error) {
+      logError('CalendarPreferences/Get', error);
+      const { status, message } = handleDatabaseError(error, 'fetch calendar preferences');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post('/api/calendar-preferences', isAuthenticated, async (req, res) => {
+    try {
+      const preferencesData = z.array(insertCalendarPreferenceSchema).parse(req.body);
+      const preferences = await storage.saveCalendarPreferences(preferencesData);
+      res.json(preferences);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('CalendarPreferences/Save', error);
+      const { status, message } = handleDatabaseError(error, 'save calendar preferences');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch('/api/calendar-preferences/:calendarId/toggle', isAuthenticated, async (req, res) => {
+    try {
+      const { calendarId } = req.params;
+      const { isEnabled } = z.object({ isEnabled: z.boolean() }).parse(req.body);
+      
+      const preference = await storage.updateCalendarToggle(calendarId, isEnabled);
+      
+      if (!preference) {
+        return res.status(404).json({ message: 'Calendar preference not found. It may have been deleted.' });
+      }
+      
+      res.json(preference);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('CalendarPreferences/Toggle', error, { calendarId: req.params.calendarId });
+      const { status, message } = handleDatabaseError(error, 'update calendar toggle');
       res.status(status).json({ message });
     }
   });

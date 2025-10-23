@@ -185,6 +185,20 @@ export const complianceHistory = pgTable("compliance_history", {
   ruleSnapshot: jsonb("rule_snapshot"),
 });
 
+export const calendarPreferences = pgTable("calendar_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id"),
+  calendarId: text("calendar_id").notNull(),
+  calendarName: text("calendar_name").notNull(),
+  backgroundColor: text("background_color"),
+  foregroundColor: text("foreground_color"),
+  isEnabled: boolean("is_enabled").default(true),
+  isPrimary: boolean("is_primary").default(false),
+  accessRole: text("access_role"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -218,6 +232,7 @@ export const updateChecklistItemSchema = z.object({
 export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, uploadedAt: true });
 export const insertComplianceRuleSchema = createInsertSchema(complianceRules).omit({ id: true, createdAt: true });
 export const insertComplianceHistorySchema = createInsertSchema(complianceHistory).omit({ id: true });
+export const insertCalendarPreferenceSchema = createInsertSchema(calendarPreferences).omit({ id: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -246,3 +261,5 @@ export type UpdateChecklistItem = z.infer<typeof updateChecklistItemSchema>;
 export type InsertPhoto = z.infer<typeof insertPhotoSchema>;
 export type InsertComplianceRule = z.infer<typeof insertComplianceRuleSchema>;
 export type InsertComplianceHistory = z.infer<typeof insertComplianceHistorySchema>;
+export type CalendarPreference = typeof calendarPreferences.$inferSelect;
+export type InsertCalendarPreference = z.infer<typeof insertCalendarPreferenceSchema>;
