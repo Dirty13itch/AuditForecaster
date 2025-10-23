@@ -21,6 +21,7 @@ import {
   Loader2,
   Receipt,
   Upload,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,9 +37,13 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
+import { SelectionToolbar, commonBulkActions } from "@/components/SelectionToolbar";
+import { BulkDeleteDialog, BulkExportDialog } from "@/components/BulkActionDialogs";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -78,6 +83,11 @@ export default function Financials() {
   const [currentMileageIndex, setCurrentMileageIndex] = useState(0);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Bulk selection state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   const { data: expenses = [] } = useQuery<Expense[]>({ queryKey: ["/api/expenses"] });
   const { data: mileageLogs = [] } = useQuery<MileageLog[]>({ queryKey: ["/api/mileage-logs"] });
@@ -112,6 +122,18 @@ export default function Financials() {
       return inDateRange && matchesCategory && matchesWork && matchesJob && matchesSearch;
     });
   }, [expenses, dateRangeInterval, categoryFilter, workFilter, jobFilter, searchQuery]);
+
+  // Bulk selection hook
+  const expenseIds = useMemo(() => filteredExpenses.map(e => e.id), [filteredExpenses]);
+  const { metadata, actions, selectedIds } = useBulkSelection(expenseIds);
+
+  // Toggle selection mode and clear selection when exiting
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      actions.deselectAll();
+    }
+    setSelectionMode(!selectionMode);
+  };
 
   const filteredMileageLogs = useMemo(() => {
     return mileageLogs.filter((log) => {
@@ -421,6 +443,21 @@ export default function Financials() {
                 <CardDescription>Manage your business and personal expenses</CardDescription>
               </div>
               <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={toggleSelectionMode} 
+                  data-testid="button-toggle-selection"
+                >
+                  {selectionMode ? (
+                    <>
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </>
+                  ) : (
+                    "Select"
+                  )}
+                </Button>
                 <Button variant="outline" size="sm" onClick={exportToCSV} data-testid="button-export-csv">
                   <Download className="h-4 w-4 mr-2" />
                   Export
@@ -472,6 +509,19 @@ export default function Financials() {
 
             <Separator />
 
+            {metadata.selectedCount > 0 && (
+              <SelectionToolbar
+                selectedCount={metadata.selectedCount}
+                totalCount={metadata.totalCount}
+                onClear={actions.deselectAll}
+                entityName="expenses"
+                actions={[
+                  commonBulkActions.delete(() => setShowDeleteDialog(true)),
+                  commonBulkActions.export(() => setShowExportDialog(true)),
+                ]}
+              />
+            )}
+
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {filteredExpenses.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground" data-testid="text-no-expenses">
@@ -480,44 +530,53 @@ export default function Financials() {
                 </div>
               ) : (
                 filteredExpenses.map((expense) => (
-                  <Card key={expense.id} className="hover-elevate" data-testid={`card-expense-${expense.id}`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={expense.isWorkRelated ? "default" : "secondary"} data-testid={`badge-expense-type-${expense.id}`}>
-                              {expense.isWorkRelated ? "Work" : "Personal"}
-                            </Badge>
-                            <Badge variant="outline" data-testid={`badge-expense-category-${expense.id}`}>{expense.category}</Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground mb-1" data-testid={`text-expense-date-${expense.id}`}>
-                            {format(new Date(expense.date), "MMM d, yyyy")}
-                          </p>
-                          <p className="text-sm" data-testid={`text-expense-description-${expense.id}`}>{expense.description ?? "No description"}</p>
-                          {expense.jobId && (
-                            <p className="text-xs text-muted-foreground mt-1" data-testid={`text-expense-job-${expense.id}`}>
-                              Job: {jobs.find((j) => j.id === expense.jobId)?.name}
+                  <div key={expense.id} className="flex gap-3 items-start">
+                    {selectionMode && (
+                      <Checkbox
+                        checked={metadata.selectedIds.has(expense.id)}
+                        onCheckedChange={() => actions.toggle(expense.id)}
+                        data-testid={`checkbox-expense-${expense.id}`}
+                      />
+                    )}
+                    <Card className={cn("hover-elevate", selectionMode && "flex-1")} data-testid={`card-expense-${expense.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant={expense.isWorkRelated ? "default" : "secondary"} data-testid={`badge-expense-type-${expense.id}`}>
+                                {expense.isWorkRelated ? "Work" : "Personal"}
+                              </Badge>
+                              <Badge variant="outline" data-testid={`badge-expense-category-${expense.id}`}>{expense.category}</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-1" data-testid={`text-expense-date-${expense.id}`}>
+                              {format(new Date(expense.date), "MMM d, yyyy")}
                             </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-lg font-bold" data-testid={`text-expense-amount-${expense.id}`}>
-                              ${safeToFixed(safeParseFloat(expense.amount), 2)}
-                            </p>
+                            <p className="text-sm" data-testid={`text-expense-description-${expense.id}`}>{expense.description ?? "No description"}</p>
+                            {expense.jobId && (
+                              <p className="text-xs text-muted-foreground mt-1" data-testid={`text-expense-job-${expense.id}`}>
+                                Job: {jobs.find((j) => j.id === expense.jobId)?.name}
+                              </p>
+                            )}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeleteExpenseId(expense.id)}
-                            data-testid={`button-delete-expense-${expense.id}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="text-lg font-bold" data-testid={`text-expense-amount-${expense.id}`}>
+                                ${safeToFixed(safeParseFloat(expense.amount), 2)}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteExpenseId(expense.id)}
+                              data-testid={`button-delete-expense-${expense.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </div>
                 ))
               )}
             </div>
@@ -751,6 +810,33 @@ export default function Financials() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <BulkDeleteDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={() => {
+          console.log("Bulk delete expenses:", selectedIds);
+          toast({ title: "Success", description: `${selectedIds.length} expenses deleted` });
+          actions.deselectAll();
+          setShowDeleteDialog(false);
+        }}
+        selectedCount={metadata.selectedCount}
+        entityName="expenses"
+        isPending={false}
+      />
+
+      <BulkExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        onConfirm={(format) => {
+          console.log("Bulk export expenses:", selectedIds, "format:", format);
+          toast({ title: "Success", description: `${selectedIds.length} expenses exported as ${format}` });
+          setShowExportDialog(false);
+        }}
+        selectedCount={metadata.selectedCount}
+        entityName="expenses"
+        isPending={false}
+      />
     </div>
   );
 }
