@@ -18,12 +18,34 @@ const API_ROUTES = [
   '/api/report-instances',
 ];
 
+// Logger that integrates with centralized logger via postMessage
+// All logs are sent to main thread which uses centralized logger
+const logger = {
+  _postLog: async (level, message, ...args) => {
+    // Post log to all clients (main thread) which will use centralized logger
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'SW_LOG',
+        level,
+        message,
+        args
+      });
+    });
+  },
+  
+  info: (message, ...args) => logger._postLog('info', message, ...args),
+  warn: (message, ...args) => logger._postLog('warn', message, ...args),
+  error: (message, ...args) => logger._postLog('error', message, ...args),
+  debug: (message, ...args) => logger._postLog('debug', message, ...args),
+};
+
 self.addEventListener('install', (event) => {
-  console.log('[ServiceWorker] Installing...');
+  logger.info('Installing...');
   
   event.waitUntil(
     caches.open(STATIC_CACHE_NAME).then((cache) => {
-      console.log('[ServiceWorker] Caching static assets');
+      logger.info('Caching static assets');
       return cache.addAll(STATIC_ASSETS);
     }).then(() => {
       return self.skipWaiting();
@@ -32,7 +54,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[ServiceWorker] Activating...');
+  logger.info('Activating...');
   
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -41,7 +63,7 @@ self.addEventListener('activate', (event) => {
           if (cacheName !== CACHE_NAME && 
               cacheName !== API_CACHE_NAME && 
               cacheName !== STATIC_CACHE_NAME) {
-            console.log('[ServiceWorker] Deleting old cache:', cacheName);
+            logger.info('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -84,7 +106,7 @@ async function networkFirstStrategy(request) {
     
     return networkResponse;
   } catch (error) {
-    console.log('[ServiceWorker] Network request failed, trying cache:', request.url);
+    logger.warn('Network request failed, trying cache:', request.url);
     
     const cachedResponse = await cache.match(request);
     
@@ -128,13 +150,13 @@ async function cacheFirstStrategy(request) {
     
     return networkResponse;
   } catch (error) {
-    console.log('[ServiceWorker] Failed to fetch:', request.url);
+    logger.error('Failed to fetch:', request.url);
     throw error;
   }
 }
 
 self.addEventListener('sync', (event) => {
-  console.log('[ServiceWorker] Background sync triggered:', event.tag);
+  logger.debug('Background sync triggered:', event.tag);
   
   if (event.tag === 'sync-queue') {
     event.waitUntil(
@@ -151,7 +173,7 @@ self.addEventListener('sync', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  console.log('[ServiceWorker] Message received:', event.data);
+  logger.debug('Message received:', event.data);
   
   if (event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

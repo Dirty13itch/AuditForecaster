@@ -78,6 +78,7 @@ class Logger {
 export const queryClientLogger = new Logger({ prefix: 'QueryClient' });
 export const syncQueueLogger = new Logger({ prefix: 'SyncQueue' });
 export const analyticsLogger = new Logger({ prefix: 'Analytics' });
+export const swLogger = new Logger({ prefix: 'ServiceWorker' });
 
 // Default logger for general use
 export const logger = new Logger();

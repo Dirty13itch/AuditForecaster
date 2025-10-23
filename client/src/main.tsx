@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { clientLogger } from "./lib/logger";
+import { clientLogger, swLogger } from "./lib/logger";
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -41,7 +41,13 @@ if ('serviceWorker' in navigator) {
   });
   
   navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data.type === 'BACKGROUND_SYNC') {
+    if (event.data && event.data.type === 'SW_LOG') {
+      const { level, message, args } = event.data;
+      const logMethod = swLogger[level as keyof typeof swLogger] || swLogger.info;
+      logMethod(message, ...args);
+    }
+    
+    if (event.data && event.data.type === 'BACKGROUND_SYNC') {
       clientLogger.info('[SW] Background sync message received');
       window.dispatchEvent(new CustomEvent('background-sync'));
     }
