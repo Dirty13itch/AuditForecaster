@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Download, Mail, FileText, Calendar, User } from "lucide-react";
+import { ArrowLeft, Download, Mail, FileText, Calendar, User, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { InspectionScore } from "@/components/InspectionScore";
+import { getComplianceBadgeVariant, getComplianceBadgeClassName, getComplianceBadgeText } from "@/lib/compliance";
 import type { ReportInstance, Job, Builder, ChecklistItem } from "@shared/schema";
 
 interface ReportInstanceWithDetails extends ReportInstance {
@@ -68,6 +69,18 @@ export default function ReportInstancePage() {
   const reportData = reportInstance.data ? JSON.parse(reportInstance.data) : {};
   const status = reportInstance.emailedTo ? "Sent" : reportInstance.pdfUrl ? "Finalized" : "Draft";
 
+  // Parse compliance flags safely
+  let complianceData: { violations?: Array<{ metric: string; threshold: number; actualValue: number; severity: string }>; evaluatedAt?: string } | null = null;
+  if (reportInstance.complianceFlags) {
+    try {
+      complianceData = typeof reportInstance.complianceFlags === 'string' 
+        ? JSON.parse(reportInstance.complianceFlags) 
+        : reportInstance.complianceFlags;
+    } catch (e) {
+      console.error('Failed to parse compliance flags:', e);
+    }
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -106,6 +119,91 @@ export default function ReportInstancePage() {
         {checklistItems.length > 0 && (
           <InspectionScore items={checklistItems} />
         )}
+
+        <Card data-testid="card-compliance">
+          <CardHeader>
+            <CardTitle>Minnesota Code Compliance</CardTitle>
+            <CardDescription>2020 Minnesota Energy Code</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Status</span>
+              <Badge 
+                variant={getComplianceBadgeVariant(reportInstance.complianceStatus)}
+                className={getComplianceBadgeClassName(reportInstance.complianceStatus)}
+                data-testid="badge-compliance-status"
+              >
+                {getComplianceBadgeText(reportInstance.complianceStatus)}
+              </Badge>
+            </div>
+
+            {complianceData?.evaluatedAt && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Evaluated</span>
+                <span className="text-sm font-medium" data-testid="text-evaluation-date">
+                  {format(new Date(complianceData.evaluatedAt), 'PPP')}
+                </span>
+              </div>
+            )}
+
+            {reportInstance.complianceStatus === "non-compliant" && complianceData?.violations && complianceData.violations.length > 0 && (
+              <div className="space-y-2">
+                <Separator />
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">Code Violations</h4>
+                  <div className="space-y-3" data-testid="list-violations">
+                    {complianceData.violations.map((violation, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-start gap-2 p-3 rounded-md bg-destructive/10"
+                        data-testid={`violation-${index}`}
+                      >
+                        <AlertTriangle className="w-4 h-4 mt-0.5 text-destructive flex-shrink-0" />
+                        <div className="flex-1 text-sm">
+                          <div className="font-medium text-destructive" data-testid={`violation-metric-${index}`}>
+                            {violation.metric}
+                          </div>
+                          <div className="text-muted-foreground mt-1">
+                            <span>Threshold: {violation.threshold}</span>
+                            <span className="mx-2">•</span>
+                            <span data-testid={`violation-actual-${index}`}>Actual: {violation.actualValue}</span>
+                          </div>
+                          {violation.severity && (
+                            <Badge 
+                              variant={violation.severity === 'critical' ? 'destructive' : 'secondary'}
+                              className="mt-2"
+                              data-testid={`violation-severity-${index}`}
+                            >
+                              {violation.severity}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {reportInstance.complianceStatus === "pending" && (
+              <div className="text-sm text-muted-foreground" data-testid="text-pending-message">
+                Awaiting actual test results to complete compliance evaluation.
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Separator />
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Minnesota Code Requirements</h4>
+                <div className="text-xs text-muted-foreground space-y-1" data-testid="text-code-requirements">
+                  <div>• Total Duct Leakage (TDL): ≤ 4.0 CFM/100 sq ft</div>
+                  <div>• Duct Leakage to Outside (DLO): ≤ 6.0 CFM/100 sq ft</div>
+                  <div>• Air Changes per Hour (ACH50): ≤ 5.0 ACH</div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card data-testid="card-report-info">
           <CardHeader>
