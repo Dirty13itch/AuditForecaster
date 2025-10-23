@@ -7,6 +7,17 @@ export const paginationParamsSchema = z.object({
 
 export type PaginationParams = z.infer<typeof paginationParamsSchema>;
 
+// Photo filter parameters
+export const photoFilterParamsSchema = z.object({
+  jobId: z.string().optional(),
+  checklistItemId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  dateFrom: z.string().optional(), // ISO date string
+  dateTo: z.string().optional(), // ISO date string
+});
+
+export type PhotoFilterParams = z.infer<typeof photoFilterParamsSchema>;
+
 export interface PaginationMeta {
   total: number;
   limit: number;

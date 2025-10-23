@@ -29,7 +29,7 @@ import {
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { randomUUID } from "crypto";
-import { type PaginationParams, type PaginatedResult } from "@shared/pagination";
+import { type PaginationParams, type PaginatedResult, type PhotoFilterParams } from "@shared/pagination";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -95,6 +95,7 @@ export interface IStorage {
   getPhotosPaginated(params: PaginationParams): Promise<PaginatedResult<Photo>>;
   getPhotosByJobPaginated(jobId: string, params: PaginationParams): Promise<PaginatedResult<Photo>>;
   getPhotosByChecklistItemPaginated(checklistItemId: string, params: PaginationParams): Promise<PaginatedResult<Photo>>;
+  getPhotosFilteredPaginated(filters: PhotoFilterParams, params: PaginationParams): Promise<PaginatedResult<Photo>>;
   updatePhoto(id: string, photo: Partial<InsertPhoto>): Promise<Photo | undefined>;
   deletePhoto(id: string): Promise<boolean>;
 
@@ -1604,6 +1605,86 @@ export class MemStorage implements IStorage {
     
     for (const photo of this.photos.values()) {
       if (photo.checklistItemId === checklistItemId) {
+        if (matchedIndex >= offset && data.length < limit) {
+          data.push(photo);
+        }
+        matchedIndex++;
+        
+        if (data.length === limit) {
+          break;
+        }
+      }
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  }
+
+  async getPhotosFilteredPaginated(filters: PhotoFilterParams, params: PaginationParams): Promise<PaginatedResult<Photo>> {
+    const { limit, offset } = params;
+    const { jobId, checklistItemId, tags, dateFrom, dateTo } = filters;
+    
+    // Helper function to check if photo matches all filters
+    const matchesFilters = (photo: Photo): boolean => {
+      // Job filter
+      if (jobId && photo.jobId !== jobId) {
+        return false;
+      }
+      
+      // Checklist item filter
+      if (checklistItemId && photo.checklistItemId !== checklistItemId) {
+        return false;
+      }
+      
+      // Tags filter - photo must have ALL specified tags (AND logic)
+      if (tags && tags.length > 0) {
+        const photoTags = photo.tags ?? [];
+        const hasAllTags = tags.every(tag => photoTags.includes(tag));
+        if (!hasAllTags) {
+          return false;
+        }
+      }
+      
+      // Date range filter
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        if (new Date(photo.uploadedAt) < fromDate) {
+          return false;
+        }
+      }
+      
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999); // End of day
+        if (new Date(photo.uploadedAt) > toDate) {
+          return false;
+        }
+      }
+      
+      return true;
+    };
+    
+    // Count total matching photos
+    let total = 0;
+    for (const photo of this.photos.values()) {
+      if (matchesFilters(photo)) {
+        total++;
+      }
+    }
+    
+    // Get paginated data
+    const data: Photo[] = [];
+    let matchedIndex = 0;
+    
+    for (const photo of this.photos.values()) {
+      if (matchesFilters(photo)) {
         if (matchedIndex >= offset && data.length < limit) {
           data.push(photo);
         }

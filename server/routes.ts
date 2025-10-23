@@ -1086,17 +1086,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Photo Routes
   app.get("/api/photos", isAuthenticated, async (req, res) => {
     try {
-      const { jobId, checklistItemId, limit, offset } = req.query;
+      const { jobId, checklistItemId, tags, dateFrom, dateTo, limit, offset } = req.query;
 
       if (limit !== undefined || offset !== undefined) {
         const params = paginationParamsSchema.parse({ limit, offset });
-        let result;
         
-        if (checklistItemId && typeof checklistItemId === "string") {
-          result = await storage.getPhotosByChecklistItemPaginated(checklistItemId, params);
-        } else if (jobId && typeof jobId === "string") {
-          result = await storage.getPhotosByJobPaginated(jobId, params);
+        // Parse tags - can be single value, comma-separated, or array
+        let parsedTags: string[] | undefined;
+        if (tags) {
+          if (Array.isArray(tags)) {
+            parsedTags = tags.filter((t): t is string => typeof t === 'string');
+          } else if (typeof tags === 'string') {
+            parsedTags = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          }
+        }
+        
+        // Check if any filters are present
+        const hasFilters = jobId || checklistItemId || parsedTags || dateFrom || dateTo;
+        
+        let result;
+        if (hasFilters) {
+          // Use filtered pagination
+          const filters = {
+            jobId: typeof jobId === 'string' ? jobId : undefined,
+            checklistItemId: typeof checklistItemId === 'string' ? checklistItemId : undefined,
+            tags: parsedTags,
+            dateFrom: typeof dateFrom === 'string' ? dateFrom : undefined,
+            dateTo: typeof dateTo === 'string' ? dateTo : undefined,
+          };
+          result = await storage.getPhotosFilteredPaginated(filters, params);
         } else {
+          // No filters, use regular pagination
           result = await storage.getPhotosPaginated(params);
         }
         
