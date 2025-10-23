@@ -145,6 +145,7 @@ export class GoogleCalendarService {
       
       serverLogger.info(`[GoogleCalendar] Deleted event: ${googleEventId}`);
     } catch (error) {
+      // If event is already deleted (404), treat as success
       if (error instanceof Error) {
         const errorWithCode = error as Error & { code?: number };
         if (errorWithCode.code === 404 || error.message?.includes('404')) {
@@ -152,6 +153,7 @@ export class GoogleCalendarService {
           return;
         }
       }
+      // Only throw for non-404 errors
       serverLogger.error('[GoogleCalendar] Error deleting event from Google Calendar:', error);
       throw error;
     }

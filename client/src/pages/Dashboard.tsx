@@ -144,11 +144,20 @@ export default function Dashboard() {
   const totalMileageDeduction = thisMonthMileage.reduce((sum, m) => sum + (safeParseFloat(m.distance.toString()) * STANDARD_MILEAGE_RATE), 0);
   const thisMonthFinancials = totalExpenses + totalMileageDeduction;
 
-  const jobsWithForecasts = forecasts.filter(f => f.actualTDL != null && f.predictedTDL != null).slice(-10);
+  // Filter forecasts with valid non-zero predicted values to ensure accurate calculations
+  const jobsWithForecasts = forecasts
+    .filter(f => f.actualTDL != null && f.predictedTDL != null)
+    .filter(f => {
+      const predicted = safeParseFloat(f.predictedTDL?.toString() ?? "0");
+      return Math.abs(predicted) > 0; // Exclude forecasts with zero or invalid predictions
+    })
+    .slice(-10);
+    
   const forecastAccuracy = jobsWithForecasts.length > 0
     ? safeDivide(jobsWithForecasts.reduce((sum, f) => {
         const actual = safeParseFloat(f.actualTDL?.toString() ?? "0");
         const predicted = safeParseFloat(f.predictedTDL?.toString() ?? "0");
+        // At this point, predicted is guaranteed to be non-zero due to filter above
         const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
         return sum + (100 - variance);
       }, 0), jobsWithForecasts.length)
@@ -193,12 +202,17 @@ export default function Dashboard() {
       .map(j => forecasts.find(f => f.jobId === j.id))
       .filter((f): f is typeof f & { actualTDL: any; predictedTDL: any } => 
         f != null && f.actualTDL != null && f.predictedTDL != null
-      );
+      )
+      .filter(f => {
+        const predicted = safeParseFloat(f.predictedTDL?.toString() ?? "0");
+        return Math.abs(predicted) > 0; // Exclude forecasts with zero predictions
+      });
     
     const avgAccuracy = builderForecasts.length > 0
       ? safeDivide(builderForecasts.reduce((sum, f) => {
           const actual = safeParseFloat(f.actualTDL?.toString() ?? "0");
           const predicted = safeParseFloat(f.predictedTDL?.toString() ?? "0");
+          // Predicted is guaranteed to be non-zero due to filter above
           const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
           return sum + (100 - variance);
         }, 0), builderForecasts.length)
@@ -209,7 +223,7 @@ export default function Dashboard() {
       jobCount: builderJobs.length,
       avgAccuracy,
     };
-  }).sort((a, b) => b.avgAccuracy - a.avgAccuracy);
+  }).sort((a, b) => (b.avgAccuracy ?? 0) - (a.avgAccuracy ?? 0));
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-6">
