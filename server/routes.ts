@@ -1993,6 +1993,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fetch Google Calendar list (merged with user preferences)
+  app.get('/api/google-calendars/list', isAuthenticated, async (req, res) => {
+    try {
+      // Fetch calendars from Google
+      const googleCalendars = await googleCalendarService.fetchCalendarList();
+      
+      // Fetch user preferences
+      const preferences = await storage.getCalendarPreferences();
+      const prefsMap = new Map(preferences.map(p => [p.calendarId, p]));
+      
+      // Merge Google calendars with preferences
+      const mergedCalendars = googleCalendars.map(cal => {
+        const pref = prefsMap.get(cal.id);
+        return {
+          id: cal.id,
+          summary: cal.summary,
+          description: cal.description,
+          backgroundColor: cal.backgroundColor,
+          foregroundColor: cal.foregroundColor,
+          accessRole: cal.accessRole,
+          primary: cal.primary,
+          isEnabled: pref ? pref.isEnabled : true,
+        };
+      });
+      
+      res.json(mergedCalendars);
+    } catch (error: any) {
+      serverLogger.error('[API] Error fetching Google calendar list:', error);
+      res.status(500).json({ message: 'Failed to fetch calendar list', error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
