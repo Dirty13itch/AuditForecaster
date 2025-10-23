@@ -852,7 +852,7 @@ export default function Analytics() {
     .map(([metric, data]) => ({
       metric,
       frequency: data.count,
-      avgOverage: parseFloat((data.totalOverage / data.count).toFixed(2)),
+      avgOverage: data.count > 0 ? parseFloat((data.totalOverage / data.count).toFixed(2)) : 0,
       severity: data.violations[0]?.severity || 'unknown'
     }))
     .sort((a, b) => b.frequency - a.frequency)
@@ -1239,10 +1239,10 @@ export default function Analytics() {
                               const data = payload[0].payload;
                               return (
                                 <div className="bg-card p-3 border rounded-md shadow-md">
-                                  <p className="font-semibold">{data.metric}</p>
-                                  <p className="text-sm">Frequency: {data.frequency}</p>
-                                  <p className="text-sm">Avg Overage: {data.avgOverage.toFixed(2)}</p>
-                                  <p className="text-sm text-muted-foreground capitalize">Severity: {data.severity}</p>
+                                  <p className="font-semibold">{data.metric || 'Unknown'}</p>
+                                  <p className="text-sm">Frequency: {data.frequency || 0}</p>
+                                  <p className="text-sm">Avg Overage: {typeof data.avgOverage === 'number' && !isNaN(data.avgOverage) ? data.avgOverage.toFixed(2) : '0.00'}</p>
+                                  <p className="text-sm text-muted-foreground capitalize">Severity: {data.severity || 'unknown'}</p>
                                 </div>
                               );
                             }
