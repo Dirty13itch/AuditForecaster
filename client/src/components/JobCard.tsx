@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Builder } from "@shared/schema";
+import { getComplianceBadgeVariant, getComplianceBadgeClassName, getComplianceBadgeText } from "@/lib/compliance";
 
 interface JobCardProps {
   id: string;
@@ -70,13 +71,6 @@ export default function JobCard({
     low: { label: "Low", className: "bg-success text-success-foreground" }
   };
 
-  const complianceConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-    compliant: { label: "Compliant", variant: "default" },
-    pending: { label: "Pending", variant: "secondary" },
-    "non-compliant": { label: "Non-Compliant", variant: "destructive" },
-    unknown: { label: "Unknown", variant: "outline" }
-  };
-
   const progress = (completedItems / totalItems) * 100;
   const builder = builders.find(b => b.id === builderId);
   const hasLocation = latitude !== null && longitude !== null && latitude !== undefined && longitude !== undefined;
@@ -130,10 +124,11 @@ export default function JobCard({
             </Badge>
             {complianceStatus && (
               <Badge 
-                variant={complianceConfig[complianceStatus]?.variant || "outline"}
+                variant={getComplianceBadgeVariant(complianceStatus)}
+                className={getComplianceBadgeClassName(complianceStatus)}
                 data-testid={`badge-compliance-${id}`}
               >
-                {complianceConfig[complianceStatus]?.label || complianceStatus}
+                {getComplianceBadgeText(complianceStatus)}
               </Badge>
             )}
           </div>

@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { ReportTemplate, ReportInstance, Job, Builder, ScoreSummary } from "@shared/schema";
 import { DynamicForm } from "@/components/DynamicForm";
 import type { FormSection } from "@shared/types";
+import { getComplianceBadgeVariant, getComplianceBadgeClassName, getComplianceBadgeText } from "@/lib/compliance";
 
 interface ReportSection {
   id: string;
@@ -68,6 +69,7 @@ export default function Reports() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [complianceFilter, setComplianceFilter] = useState("all");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [viewerDialogOpen, setViewerDialogOpen] = useState(false);
@@ -346,8 +348,28 @@ export default function Reports() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-6 md:grid-cols-2">
-              {allReportInstances.map((report) => {
+            <>
+              <div className="flex items-center gap-4">
+                <Select value={complianceFilter} onValueChange={setComplianceFilter}>
+                  <SelectTrigger className="w-64" data-testid="filter-report-compliance">
+                    <SelectValue placeholder="Filter by compliance" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="compliant">Compliant</SelectItem>
+                    <SelectItem value="non-compliant">Non-Compliant</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                {allReportInstances.filter(report => {
+                  if (complianceFilter === "all") return true;
+                  const reportCompliance = report.complianceStatus || "unknown";
+                  return reportCompliance === complianceFilter;
+                }).map((report) => {
                 const job = jobs.find(j => j.id === report.jobId);
                 const template = templates.find(t => t.id === report.templateId);
                 const status = getReportStatus(report);
@@ -373,6 +395,13 @@ export default function Reports() {
                               {score.grade} ({score.passRate.toFixed(0)}%)
                             </Badge>
                           )}
+                          <Badge 
+                            variant={getComplianceBadgeVariant(report.complianceStatus)}
+                            className={getComplianceBadgeClassName(report.complianceStatus)}
+                            data-testid={`badge-report-compliance-${report.id}`}
+                          >
+                            {getComplianceBadgeText(report.complianceStatus)}
+                          </Badge>
                         </div>
                       </div>
                     </CardHeader>
@@ -415,7 +444,8 @@ export default function Reports() {
                   </Card>
                 );
               })}
-            </div>
+              </div>
+            </>
           )}
         </TabsContent>
       </Tabs>
