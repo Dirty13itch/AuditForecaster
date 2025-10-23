@@ -65,6 +65,7 @@ export const scheduleEvents = pgTable("schedule_events", {
   endTime: timestamp("end_time").notNull(),
   notes: text("notes"),
   googleCalendarEventId: text("google_calendar_event_id"),
+  googleCalendarId: text("google_calendar_id"),
   lastSyncedAt: timestamp("last_synced_at"),
   color: text("color"),
 });

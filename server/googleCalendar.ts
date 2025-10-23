@@ -18,6 +18,7 @@ interface GoogleCalendarEvent {
   id?: string | null;
   summary?: string | null;
   description?: string | null;
+  location?: string | null;
   start?: {
     dateTime?: string | null;
   } | null;
@@ -32,6 +33,8 @@ interface GoogleCalendarEvent {
       [key: string]: string;
     };
   } | null;
+  calendarId?: string;
+  colorId?: string | null;
 }
 
 interface GoogleCalendarListItem {
@@ -97,7 +100,11 @@ export async function getUncachableGoogleCalendarClient() {
 }
 
 export class GoogleCalendarService {
-  async syncEventToGoogle(scheduleEvent: ScheduleEvent, job: Job): Promise<string | null> {
+  async syncEventToGoogle(
+    scheduleEvent: ScheduleEvent, 
+    job: Job,
+    calendarId: string = 'primary'
+  ): Promise<string | null> {
     try {
       const calendar = await getUncachableGoogleCalendarClient();
       
@@ -125,7 +132,7 @@ export class GoogleCalendarService {
 
       if (scheduleEvent.googleCalendarEventId) {
         const response = await calendar.events.update({
-          calendarId: 'primary',
+          calendarId,
           eventId: scheduleEvent.googleCalendarEventId,
           requestBody: eventData,
         });
@@ -133,7 +140,7 @@ export class GoogleCalendarService {
         return response.data.id || null;
       } else {
         const response = await calendar.events.insert({
-          calendarId: 'primary',
+          calendarId,
           requestBody: eventData,
         });
         serverLogger.info(`[GoogleCalendar] Created event: ${response.data.id}`);
@@ -145,12 +152,15 @@ export class GoogleCalendarService {
     }
   }
 
-  async deleteEventFromGoogle(googleEventId: string): Promise<void> {
+  async deleteEventFromGoogle(
+    googleEventId: string,
+    calendarId: string = 'primary'
+  ): Promise<void> {
     try {
       const calendar = await getUncachableGoogleCalendarClient();
       
       await calendar.events.delete({
-        calendarId: 'primary',
+        calendarId,
         eventId: googleEventId,
       });
       
@@ -170,20 +180,43 @@ export class GoogleCalendarService {
     }
   }
 
-  async fetchEventsFromGoogle(startDate: Date, endDate: Date): Promise<GoogleCalendarEvent[]> {
+  async fetchEventsFromGoogle(
+    startDate: Date, 
+    endDate: Date, 
+    calendarIds: string[] = ['primary']
+  ): Promise<GoogleCalendarEvent[]> {
     try {
       const calendar = await getUncachableGoogleCalendarClient();
+      const allEvents: GoogleCalendarEvent[] = [];
       
-      const response = await calendar.events.list({
-        calendarId: 'primary',
-        timeMin: startDate.toISOString(),
-        timeMax: endDate.toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-      });
-
-      serverLogger.info(`[GoogleCalendar] Fetched ${response.data.items?.length || 0} events from Google Calendar`);
-      return response.data.items || [];
+      // Fetch events from each calendar
+      for (const calendarId of calendarIds) {
+        try {
+          const response = await calendar.events.list({
+            calendarId,
+            timeMin: startDate.toISOString(),
+            timeMax: endDate.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
+          });
+          
+          // Add calendarId to each event
+          const events = (response.data.items || []).map(event => ({
+            ...event,
+            calendarId,
+          }));
+          
+          allEvents.push(...events);
+          
+          serverLogger.info(`[GoogleCalendar] Fetched ${events.length} events from calendar ${calendarId}`);
+        } catch (error) {
+          // Log error but continue with other calendars
+          serverLogger.error(`[GoogleCalendar] Error fetching events from calendar ${calendarId}:`, error);
+        }
+      }
+      
+      serverLogger.info(`[GoogleCalendar] Total fetched ${allEvents.length} events from ${calendarIds.length} calendars`);
+      return allEvents;
     } catch (error) {
       serverLogger.error('[GoogleCalendar] Error fetching events from Google Calendar:', error);
       throw error;
@@ -238,6 +271,7 @@ export class GoogleCalendarService {
         endTime: new Date(googleEvent.end.dateTime),
         notes: googleEvent.description || null,
         googleCalendarEventId: googleEvent.id,
+        googleCalendarId: googleEvent.calendarId,
         lastSyncedAt: new Date(),
         color: null,
       };

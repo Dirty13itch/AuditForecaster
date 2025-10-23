@@ -461,7 +461,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const start = new Date(startDate as string);
       const end = new Date(endDate as string);
       
-      const googleEvents = await googleCalendarService.fetchEventsFromGoogle(start, end);
+      // Fetch enabled calendars from preferences
+      const preferences = await storage.getCalendarPreferences();
+      const enabledCalendarIds = preferences
+        .filter(p => p.isEnabled)
+        .map(p => p.calendarId);
+      
+      // If no calendars enabled, default to primary
+      const calendarIds = enabledCalendarIds.length > 0 ? enabledCalendarIds : ['primary'];
+      
+      serverLogger.info(`[ScheduleEvents/Sync] Syncing from ${calendarIds.length} calendars: ${calendarIds.join(', ')}`);
+      
+      const googleEvents = await googleCalendarService.fetchEventsFromGoogle(start, end, calendarIds);
       const syncedCount = { created: 0, updated: 0, skipped: 0 };
       
       for (const googleEvent of googleEvents) {
@@ -483,6 +494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             endTime: parsedEvent.endTime,
             notes: parsedEvent.notes,
             googleCalendarEventId: parsedEvent.googleCalendarEventId,
+            googleCalendarId: parsedEvent.googleCalendarId,
             lastSyncedAt: parsedEvent.lastSyncedAt,
           });
           syncedCount.updated++;
@@ -496,6 +508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               endTime: parsedEvent.endTime!,
               notes: parsedEvent.notes,
               googleCalendarEventId: parsedEvent.googleCalendarEventId,
+              googleCalendarId: parsedEvent.googleCalendarId,
               color: parsedEvent.color,
             });
             syncedCount.created++;
@@ -525,10 +538,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const job = await storage.getJob(event.jobId);
         if (job) {
-          const googleEventId = await googleCalendarService.syncEventToGoogle(event, job);
+          const calendarId = event.googleCalendarId || 'primary';
+          const googleEventId = await googleCalendarService.syncEventToGoogle(event, job, calendarId);
           if (googleEventId) {
             const updatedEvent = await storage.updateScheduleEvent(event.id, {
               googleCalendarEventId: googleEventId,
+              googleCalendarId: calendarId,
               lastSyncedAt: new Date(),
             });
             return res.status(201).json(updatedEvent || event);
@@ -573,10 +588,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const job = await storage.getJob(event.jobId);
         if (job) {
-          const googleEventId = await googleCalendarService.syncEventToGoogle(event, job);
+          const calendarId = event.googleCalendarId || 'primary';
+          const googleEventId = await googleCalendarService.syncEventToGoogle(event, job, calendarId);
           if (googleEventId) {
             const updatedEvent = await storage.updateScheduleEvent(event.id, {
               googleCalendarEventId: googleEventId,
+              googleCalendarId: calendarId,
               lastSyncedAt: new Date(),
             });
             return res.json(updatedEvent || event);
@@ -603,7 +620,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (event?.googleCalendarEventId) {
         try {
-          await googleCalendarService.deleteEventFromGoogle(event.googleCalendarEventId);
+          const calendarId = event.googleCalendarId || 'primary';
+          await googleCalendarService.deleteEventFromGoogle(event.googleCalendarEventId, calendarId);
         } catch (syncError) {
           logError('ScheduleEvents/GoogleSync', syncError, { eventId: req.params.id });
         }
