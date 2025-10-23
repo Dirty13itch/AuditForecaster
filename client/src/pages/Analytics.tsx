@@ -292,7 +292,8 @@ export default function Analytics() {
     // Get TDL forecasts for this builder
     const tdlForecasts = completedBuilderJobs
       .map(j => forecasts.find(f => f.jobId === j.id))
-      .filter(f => f && 
+      .filter((f): f is Forecast => 
+        f != null &&
         f.actualTDL != null && 
         f.predictedTDL != null &&
         !isNaN(Number(f.actualTDL)) && 
@@ -302,7 +303,8 @@ export default function Analytics() {
     // Get DLO forecasts for this builder
     const dloForecasts = completedBuilderJobs
       .map(j => forecasts.find(f => f.jobId === j.id))
-      .filter(f => f &&
+      .filter((f): f is Forecast =>
+        f != null &&
         f.actualDLO != null &&
         f.predictedDLO != null &&
         !isNaN(Number(f.actualDLO)) &&
@@ -313,8 +315,8 @@ export default function Analytics() {
     const tdlAccuracy = tdlForecasts.length > 0
       ? safeDivide(tdlForecasts.reduce((sum, f) => {
           return sum + calculateAccuracy(
-            Number(f!.predictedTDL),
-            Number(f!.actualTDL)
+            Number(f.predictedTDL),
+            Number(f.actualTDL)
           );
         }, 0), tdlForecasts.length)
       : 0;
@@ -323,8 +325,8 @@ export default function Analytics() {
     const dloAccuracy = dloForecasts.length > 0
       ? safeDivide(dloForecasts.reduce((sum, f) => {
           return sum + calculateAccuracy(
-            Number(f!.predictedDLO),
-            Number(f!.actualDLO)
+            Number(f.predictedDLO),
+            Number(f.actualDLO)
           );
         }, 0), dloForecasts.length)
       : 0;
@@ -485,29 +487,32 @@ export default function Analytics() {
     .slice(0, 5);
 
   // Forecast Accuracy Calculations
-  const forecastsWithTDL = forecasts.filter(f => 
+  const forecastsWithTDL = forecasts.filter((f): f is Forecast => 
+    f != null &&
     f.actualTDL != null &&
     f.predictedTDL != null &&
     !isNaN(Number(f.actualTDL)) &&
     !isNaN(Number(f.predictedTDL))
   );
 
-  const forecastsWithDLO = forecasts.filter(f =>
+  const forecastsWithDLO = forecasts.filter((f): f is Forecast =>
+    f != null &&
     f.actualDLO != null &&
     f.predictedDLO != null &&
     !isNaN(Number(f.actualDLO)) &&
     !isNaN(Number(f.predictedDLO))
   );
 
-  const forecastsWithData = forecasts.filter(f => 
-    (f.actualTDL != null &&
-     f.predictedTDL != null &&
-     !isNaN(Number(f.actualTDL)) &&
-     !isNaN(Number(f.predictedTDL))) ||
-    (f.actualDLO != null &&
-     f.predictedDLO != null &&
-     !isNaN(Number(f.actualDLO)) &&
-     !isNaN(Number(f.predictedDLO)))
+  const forecastsWithData = forecasts.filter((f): f is Forecast => 
+    f != null &&
+    ((f.actualTDL != null &&
+      f.predictedTDL != null &&
+      !isNaN(Number(f.actualTDL)) &&
+      !isNaN(Number(f.predictedTDL))) ||
+     (f.actualDLO != null &&
+      f.predictedDLO != null &&
+      !isNaN(Number(f.actualDLO)) &&
+      !isNaN(Number(f.predictedDLO))))
   );
 
   // Calculate TDL accuracy
