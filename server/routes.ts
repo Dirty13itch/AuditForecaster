@@ -8,6 +8,7 @@ import { isAuthenticated, getUserId } from "./auth";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { generateReportPDF } from "./pdfGenerator.tsx";
+import { generateThumbnail } from "./thumbnailGenerator";
 import {
   insertBuilderSchema,
   insertJobSchema,
@@ -1564,6 +1565,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
+      
+      // Trigger async thumbnail generation without blocking response
+      setImmediate(async () => {
+        try {
+          serverLogger.info(`[Photos/Create] Starting async thumbnail generation for photo ${photo.id}`);
+          const thumbnailPath = await generateThumbnail(objectPath);
+          
+          // Update photo record with thumbnail path
+          await storage.updatePhoto(photo.id, { thumbnailPath });
+          serverLogger.info(`[Photos/Create] Thumbnail generated and saved for photo ${photo.id}`);
+        } catch (thumbnailError) {
+          // Log error but don't fail the upload
+          serverLogger.error(`[Photos/Create] Failed to generate thumbnail for photo ${photo.id}:`, thumbnailError);
+        }
+      });
       
       res.status(201).json(photo);
     } catch (error) {

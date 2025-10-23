@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 interface Photo {
   id: string;
   url: string;
+  thumbnailPath?: string | null;
   timestamp: string;
   itemNumber?: number;
 }
@@ -80,10 +81,10 @@ export default function PhotoGallery({
                 </div>
               )}
 
-              {/* Main image with native lazy loading */}
+              {/* Main image with native lazy loading - use thumbnail if available */}
               {!hasFailed && (
                 <img
-                  src={photo.url}
+                  src={photo.thumbnailPath || photo.url}
                   alt={`Inspection photo ${photo.id}`}
                   className={`w-full h-full object-cover transition-opacity duration-300 ${
                     isLoaded ? 'opacity-100' : 'opacity-0'

@@ -148,6 +148,7 @@ export default function Photos() {
   const photos = allPhotos.map(photo => ({
     id: photo.id,
     url: photo.fullUrl ?? photo.url ?? '',
+    thumbnailPath: photo.thumbnailPath,
     timestamp: new Date(photo.uploadedAt).toLocaleString(),
     itemNumber: photo.checklistItemId ? parseInt(photo.checklistItemId) : undefined,
   }));
