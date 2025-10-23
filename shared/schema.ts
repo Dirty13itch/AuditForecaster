@@ -52,6 +52,9 @@ export const jobs = pgTable("jobs", {
   builderSignatureUrl: text("builder_signature_url"),
   builderSignedAt: timestamp("builder_signed_at"),
   builderSignerName: text("builder_signer_name"),
+  complianceStatus: text("compliance_status"),
+  complianceFlags: jsonb("compliance_flags"),
+  lastComplianceCheck: timestamp("last_compliance_check"),
 });
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -111,6 +114,9 @@ export const reportInstances = pgTable("report_instances", {
   emailedAt: timestamp("emailed_at"),
   createdAt: timestamp("created_at").default(sql`now()`),
   scoreSummary: text("score_summary"),
+  complianceStatus: text("compliance_status"),
+  complianceFlags: jsonb("compliance_flags"),
+  lastComplianceCheck: timestamp("last_compliance_check"),
 });
 
 export const forecasts = pgTable("forecasts", {
@@ -148,6 +154,29 @@ export const photos = pgTable("photos", {
   uploadedAt: timestamp("uploaded_at").notNull().default(sql`now()`),
 });
 
+export const complianceRules = pgTable("compliance_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id"),
+  codeYear: text("code_year").notNull(),
+  metricType: text("metric_type").notNull(),
+  threshold: decimal("threshold", { precision: 10, scale: 2 }).notNull(),
+  units: text("units").notNull(),
+  severity: text("severity").notNull(),
+  isActive: boolean("is_active").default(true),
+  description: text("description"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+});
+
+export const complianceHistory = pgTable("compliance_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  evaluatedAt: timestamp("evaluated_at").notNull().default(sql`now()`),
+  status: text("status").notNull(),
+  violations: jsonb("violations"),
+  ruleSnapshot: jsonb("rule_snapshot"),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -179,6 +208,8 @@ export const updateChecklistItemSchema = z.object({
   voiceNoteDuration: z.number().nullable().optional(),
 });
 export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, uploadedAt: true });
+export const insertComplianceRuleSchema = createInsertSchema(complianceRules).omit({ id: true, createdAt: true });
+export const insertComplianceHistorySchema = createInsertSchema(complianceHistory).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -192,6 +223,8 @@ export type ReportInstance = typeof reportInstances.$inferSelect;
 export type Forecast = typeof forecasts.$inferSelect;
 export type ChecklistItem = typeof checklistItems.$inferSelect;
 export type Photo = typeof photos.$inferSelect;
+export type ComplianceRule = typeof complianceRules.$inferSelect;
+export type ComplianceHistory = typeof complianceHistory.$inferSelect;
 export type InsertBuilder = z.infer<typeof insertBuilderSchema>;
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type InsertScheduleEvent = z.infer<typeof insertScheduleEventSchema>;
@@ -203,3 +236,5 @@ export type InsertForecast = z.infer<typeof insertForecastSchema>;
 export type InsertChecklistItem = z.infer<typeof insertChecklistItemSchema>;
 export type UpdateChecklistItem = z.infer<typeof updateChecklistItemSchema>;
 export type InsertPhoto = z.infer<typeof insertPhotoSchema>;
+export type InsertComplianceRule = z.infer<typeof insertComplianceRuleSchema>;
+export type InsertComplianceHistory = z.infer<typeof insertComplianceHistorySchema>;

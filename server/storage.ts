@@ -21,6 +21,10 @@ import {
   type InsertForecast,
   type ChecklistItem,
   type InsertChecklistItem,
+  type ComplianceRule,
+  type InsertComplianceRule,
+  type ComplianceHistory,
+  type InsertComplianceHistory,
   type ScoreSummary,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
@@ -95,6 +99,14 @@ export interface IStorage {
   updateChecklistItem(id: string, item: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined>;
   deleteChecklistItem(id: string): Promise<boolean>;
 
+  createComplianceRule(rule: InsertComplianceRule): Promise<ComplianceRule>;
+  getComplianceRules(): Promise<ComplianceRule[]>;
+  updateComplianceRule(id: string, rule: Partial<InsertComplianceRule>): Promise<ComplianceRule | undefined>;
+  deleteComplianceRule(id: string): Promise<boolean>;
+
+  getComplianceHistory(entityType?: string, entityId?: string): Promise<ComplianceHistory[]>;
+  createComplianceHistoryEntry(entry: InsertComplianceHistory): Promise<ComplianceHistory>;
+
   recalculateReportScore(reportInstanceId: string): Promise<void>;
 }
 
@@ -110,6 +122,8 @@ export class MemStorage implements IStorage {
   private photos: Map<string, Photo>;
   private forecasts: Map<string, Forecast>;
   private checklistItems: Map<string, ChecklistItem>;
+  private complianceRules: Map<string, ComplianceRule>;
+  private complianceHistory: Map<string, ComplianceHistory>;
 
   constructor() {
     this.users = new Map();
@@ -123,6 +137,8 @@ export class MemStorage implements IStorage {
     this.photos = new Map();
     this.forecasts = new Map();
     this.checklistItems = new Map();
+    this.complianceRules = new Map();
+    this.complianceHistory = new Map();
 
     this.initializeSampleData();
   }
@@ -860,6 +876,53 @@ export class MemStorage implements IStorage {
     this.checklistItems.set(checklistItem3Id, checklistItem3);
     this.checklistItems.set(checklistItem4Id, checklistItem4);
     this.checklistItems.set(checklistItem5Id, checklistItem5);
+
+    const complianceRule1Id = randomUUID();
+    const complianceRule2Id = randomUUID();
+    const complianceRule3Id = randomUUID();
+
+    const complianceRule1: ComplianceRule = {
+      id: complianceRule1Id,
+      userId: null,
+      codeYear: "2023 MN",
+      metricType: "TDL",
+      threshold: "4.00",
+      units: "CFM/100 sq ft",
+      severity: "critical",
+      isActive: true,
+      description: "Total Duct Leakage must be 4 CFM/100 sq ft or less per Minnesota energy code",
+      createdAt: new Date(),
+    };
+
+    const complianceRule2: ComplianceRule = {
+      id: complianceRule2Id,
+      userId: null,
+      codeYear: "2023 MN",
+      metricType: "DLO",
+      threshold: "6.00",
+      units: "CFM/100 sq ft",
+      severity: "critical",
+      isActive: true,
+      description: "Duct Leakage to Outside must be 6 CFM/100 sq ft or less per Minnesota energy code",
+      createdAt: new Date(),
+    };
+
+    const complianceRule3: ComplianceRule = {
+      id: complianceRule3Id,
+      userId: null,
+      codeYear: "2023 MN",
+      metricType: "ACH50",
+      threshold: "5.00",
+      units: "ACH",
+      severity: "major",
+      isActive: true,
+      description: "Air Changes per Hour at 50 Pascals should be 5.0 or less for optimal energy efficiency",
+      createdAt: new Date(),
+    };
+
+    this.complianceRules.set(complianceRule1Id, complianceRule1);
+    this.complianceRules.set(complianceRule2Id, complianceRule2);
+    this.complianceRules.set(complianceRule3Id, complianceRule3);
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -1302,6 +1365,71 @@ export class MemStorage implements IStorage {
 
   async deleteChecklistItem(id: string): Promise<boolean> {
     return this.checklistItems.delete(id);
+  }
+
+  async createComplianceRule(insertRule: InsertComplianceRule): Promise<ComplianceRule> {
+    const id = randomUUID();
+    const rule: ComplianceRule = {
+      id,
+      userId: insertRule.userId ?? null,
+      codeYear: insertRule.codeYear,
+      metricType: insertRule.metricType,
+      threshold: insertRule.threshold,
+      units: insertRule.units,
+      severity: insertRule.severity,
+      isActive: insertRule.isActive ?? true,
+      description: insertRule.description ?? null,
+      createdAt: new Date(),
+    };
+    this.complianceRules.set(id, rule);
+    return rule;
+  }
+
+  async getComplianceRules(): Promise<ComplianceRule[]> {
+    return Array.from(this.complianceRules.values()).filter(
+      (rule) => rule.isActive,
+    );
+  }
+
+  async updateComplianceRule(id: string, updates: Partial<InsertComplianceRule>): Promise<ComplianceRule | undefined> {
+    const rule = this.complianceRules.get(id);
+    if (!rule) return undefined;
+    const updated = { ...rule, ...updates };
+    this.complianceRules.set(id, updated);
+    return updated;
+  }
+
+  async deleteComplianceRule(id: string): Promise<boolean> {
+    return this.complianceRules.delete(id);
+  }
+
+  async getComplianceHistory(entityType?: string, entityId?: string): Promise<ComplianceHistory[]> {
+    let history = Array.from(this.complianceHistory.values());
+    
+    if (entityType) {
+      history = history.filter((h) => h.entityType === entityType);
+    }
+    
+    if (entityId) {
+      history = history.filter((h) => h.entityId === entityId);
+    }
+    
+    return history.sort((a, b) => b.evaluatedAt.getTime() - a.evaluatedAt.getTime());
+  }
+
+  async createComplianceHistoryEntry(insertEntry: InsertComplianceHistory): Promise<ComplianceHistory> {
+    const id = randomUUID();
+    const entry: ComplianceHistory = {
+      id,
+      entityType: insertEntry.entityType,
+      entityId: insertEntry.entityId,
+      evaluatedAt: insertEntry.evaluatedAt ?? new Date(),
+      status: insertEntry.status,
+      violations: insertEntry.violations ?? null,
+      ruleSnapshot: insertEntry.ruleSnapshot ?? null,
+    };
+    this.complianceHistory.set(id, entry);
+    return entry;
   }
 
   async recalculateReportScore(reportInstanceId: string): Promise<void> {
