@@ -140,14 +140,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/auth/user", (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "You must be logged in to access this" });
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to access this" });
+      }
+      
+      // Remove password from response
+      const user = req.user as any;
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      logError('Auth/GetUser', error);
+      res.status(500).json({ message: "We're having trouble retrieving your account information. Please try again." });
     }
-    
-    // Remove password from response
-    const user = req.user as any;
-    const { password: _, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
   });
 
   app.get("/api/builders", isAuthenticated, async (_req, res) => {
