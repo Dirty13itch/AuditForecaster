@@ -24,6 +24,18 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**October 2025 - Builder Performance Tracking:**
+- Added comprehensive builder comparison analytics to Analytics page
+- Sortable metrics table: Total Jobs, Completion Rate, Forecast Accuracy, Avg Time, Issues, Monthly Volume
+- Performance tier badges: Excellent (≥85%), Good (≥70%), Needs Improvement (<70%)
+- Top performer highlighting with trophy icon
+- Trend indicators (up/down/stable) based on 6-month active-month averages
+- Builder comparison chart (grouped bars for top 5 builders)
+- Builder trend analysis (line chart showing job completion trends)
+- Guards against false positives for low-volume builders (minimum 3 jobs required)
+- Alphabetical and numeric column sorting with localeCompare and numeric comparison
+- Location: `client/src/pages/Analytics.tsx`
+
 **October 2025 - Analytics Dashboard:**
 - Added comprehensive Analytics page (`/analytics`) with inspection metrics
 - Inspection volume trends (6-month line chart showing completed inspections)
