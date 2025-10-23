@@ -23,6 +23,7 @@ import {
   insertComplianceRuleSchema,
   insertForecastSchema,
   insertCalendarPreferenceSchema,
+  insertUploadSessionSchema,
 } from "@shared/schema";
 import { paginationParamsSchema } from "@shared/pagination";
 import {
@@ -2197,6 +2198,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       serverLogger.error('[API] Error fetching Google calendar list:', error);
       res.status(500).json({ message: 'Failed to fetch calendar list', error: error.message });
+    }
+  });
+
+  app.post("/api/upload-sessions", isAuthenticated, async (req, res) => {
+    try {
+      const validated = insertUploadSessionSchema.parse(req.body);
+      const session = await storage.createUploadSession(validated);
+      res.status(201).json(session);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create upload session');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/upload-sessions", isAuthenticated, async (req, res) => {
+    try {
+      const sessions = await storage.getUploadSessions();
+      res.json(sessions);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch upload sessions');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/upload-sessions/:id/acknowledge", isAuthenticated, async (req, res) => {
+    try {
+      await storage.acknowledgeUploadSession(req.params.id);
+      res.json({ message: "Upload session acknowledged successfully" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'acknowledge upload session');
+      res.status(status).json({ message });
     }
   });
 

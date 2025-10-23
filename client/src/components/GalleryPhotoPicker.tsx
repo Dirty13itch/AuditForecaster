@@ -302,6 +302,44 @@ export function GalleryPhotoPicker({
         });
       }
 
+      // Create upload session for cleanup reminder (only if photos were actually uploaded or queued)
+      if (uploadedCount + queuedCount > 0) {
+        const sessionData = {
+          timestamp: new Date(),
+          photoCount: uploadedCount + queuedCount,
+          jobId: jobId,
+          acknowledged: false,
+        };
+
+        try {
+          const sessionResponse = await fetch("/api/upload-sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sessionData),
+            credentials: "include",
+          });
+
+          if (!sessionResponse.ok) {
+            throw new Error("Failed to create upload session");
+          }
+        } catch (error) {
+          // Check if it's a network error
+          if (!navigator.onLine || (error instanceof Error && error.message.includes('Failed to fetch'))) {
+            // Queue the session creation for when we're back online
+            clientLogger.info('Network offline, queueing upload session creation', sessionData);
+            await addToSyncQueue({
+              method: "POST",
+              url: "/api/upload-sessions",
+              data: sessionData,
+              headers: { "Content-Type": "application/json" },
+            });
+          } else {
+            // Log non-network errors but don't fail the upload process
+            clientLogger.error("Failed to create upload session:", error);
+          }
+        }
+      }
+
       // Clean up
       clearAll();
       onUploadComplete?.();

@@ -217,6 +217,15 @@ export const calendarPreferences = pgTable("calendar_preferences", {
   createdAt: timestamp("created_at").default(sql`now()`),
 });
 
+export const uploadSessions = pgTable("upload_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  timestamp: timestamp("timestamp").notNull(),
+  photoCount: integer("photo_count").notNull(),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
+  acknowledged: boolean("acknowledged").default(false),
+  acknowledgedAt: timestamp("acknowledged_at"),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -252,6 +261,10 @@ export const insertComplianceRuleSchema = createInsertSchema(complianceRules).om
 export const insertComplianceHistorySchema = createInsertSchema(complianceHistory).omit({ id: true });
 export const insertCalendarPreferenceSchema = createInsertSchema(calendarPreferences).omit({ id: true, createdAt: true });
 export const insertGoogleEventSchema = createInsertSchema(googleEvents).omit({ id: true, createdAt: true });
+export const insertUploadSessionSchema = createInsertSchema(uploadSessions).omit({ id: true }).extend({
+  timestamp: z.coerce.date(),
+  acknowledgedAt: z.coerce.date().nullable().optional(),
+});
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -284,3 +297,5 @@ export type CalendarPreference = typeof calendarPreferences.$inferSelect;
 export type InsertCalendarPreference = z.infer<typeof insertCalendarPreferenceSchema>;
 export type GoogleEvent = typeof googleEvents.$inferSelect;
 export type InsertGoogleEvent = z.infer<typeof insertGoogleEventSchema>;
+export type UploadSession = typeof uploadSessions.$inferSelect;
+export type InsertUploadSession = z.infer<typeof insertUploadSessionSchema>;

@@ -7,6 +7,7 @@ import TopBar from "@/components/TopBar";
 import PhotoGallery from "@/components/PhotoGallery";
 import BottomNav from "@/components/BottomNav";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import { PhotoCleanupBanner } from "@/components/PhotoCleanupBanner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -346,6 +347,8 @@ export default function Photos() {
       
       <main className="pt-20 px-4 md:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="space-y-6">
+          <PhotoCleanupBanner />
+          
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />

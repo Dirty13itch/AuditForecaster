@@ -29,6 +29,8 @@ import {
   type InsertCalendarPreference,
   type GoogleEvent,
   type InsertGoogleEvent,
+  type UploadSession,
+  type InsertUploadSession,
   type ScoreSummary,
   users,
   builders,
@@ -45,6 +47,7 @@ import {
   complianceHistory,
   calendarPreferences,
   googleEvents,
+  uploadSessions,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams } from "@shared/pagination";
@@ -161,6 +164,11 @@ export interface IStorage {
   markGoogleEventAsConverted(id: string, jobId: string): Promise<GoogleEvent | undefined>;
 
   recalculateReportScore(reportInstanceId: string): Promise<void>;
+
+  // Upload sessions for photo cleanup reminder
+  createUploadSession(data: InsertUploadSession): Promise<UploadSession>;
+  getUploadSessions(): Promise<UploadSession[]>;
+  acknowledgeUploadSession(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -947,6 +955,24 @@ export class DatabaseStorage implements IStorage {
     await this.updateReportInstance(reportInstanceId, {
       scoreSummary: JSON.stringify(scoreSummary),
     });
+  }
+
+  async createUploadSession(data: InsertUploadSession): Promise<UploadSession> {
+    const result = await db.insert(uploadSessions).values(data).returning();
+    return result[0];
+  }
+
+  async getUploadSessions(): Promise<UploadSession[]> {
+    return await db.select().from(uploadSessions).orderBy(desc(uploadSessions.timestamp));
+  }
+
+  async acknowledgeUploadSession(id: string): Promise<void> {
+    await db.update(uploadSessions)
+      .set({ 
+        acknowledged: true, 
+        acknowledgedAt: new Date() 
+      })
+      .where(eq(uploadSessions.id, id));
   }
 }
 
