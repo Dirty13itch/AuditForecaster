@@ -352,6 +352,15 @@ export default function Analytics() {
       return isThisMonth(new Date(j.scheduledDate));
     });
     
+    // Calculate compliance rate for this builder
+    const builderJobsWithCompliance = builderJobs.filter(j => 
+      j.complianceStatus === 'compliant' || j.complianceStatus === 'non-compliant'
+    );
+    const builderCompliantJobs = builderJobs.filter(j => j.complianceStatus === 'compliant');
+    const complianceRate = builderJobsWithCompliance.length > 0
+      ? (builderCompliantJobs.length / builderJobsWithCompliance.length * 100)
+      : 0;
+    
     return {
       builder,
       totalJobs: builderJobs.length,
@@ -361,6 +370,7 @@ export default function Analytics() {
       avgInspectionTime: avgTime,
       commonIssuesCount: failedItems.length,
       jobsThisMonth: thisMonthJobs.length,
+      complianceRate,
     };
   });
 
@@ -555,15 +565,10 @@ export default function Analytics() {
     return (recentTDLAccuracy * recentTDLForecasts.length + recentDLOAccuracy * recentDLOForecasts.length) / totalRecent;
   })();
 
-  interface BestForecastType {
-    forecast: Forecast;
-    accuracy: number;
-    job?: Job;
-    type: 'TDL' | 'DLO';
-  }
+  type BestForecastResult = { forecast: Forecast; accuracy: number; job?: Job; type: 'TDL' | 'DLO' } | null;
   
-  const bestForecast: BestForecastType | null = (() => {
-    let best: BestForecastType | null = null;
+  const bestForecast: BestForecastResult = (() => {
+    const candidates: Array<{ forecast: Forecast; accuracy: number; job?: Job; type: 'TDL' | 'DLO' }> = [];
     
     // Check TDL forecasts
     forecastsWithTDL.forEach(f => {
@@ -571,10 +576,8 @@ export default function Analytics() {
         parseFloat(f.predictedTDL!.toString()),
         parseFloat(f.actualTDL!.toString())
       );
-      if (!best || accuracy > best.accuracy) {
-        const job = jobsMap.get(f.jobId);
-        best = { forecast: f, accuracy, job, type: 'TDL' as const };
-      }
+      const job = jobsMap.get(f.jobId);
+      candidates.push({ forecast: f, accuracy, job, type: 'TDL' });
     });
     
     // Check DLO forecasts
@@ -583,13 +586,15 @@ export default function Analytics() {
         parseFloat(f.predictedDLO!.toString()),
         parseFloat(f.actualDLO!.toString())
       );
-      if (!best || accuracy > best.accuracy) {
-        const job = jobsMap.get(f.jobId);
-        best = { forecast: f, accuracy, job, type: 'DLO' as const };
-      }
+      const job = jobsMap.get(f.jobId);
+      candidates.push({ forecast: f, accuracy, job, type: 'DLO' });
     });
     
-    return best;
+    if (candidates.length === 0) return null;
+    
+    return candidates.reduce((best, current) => 
+      current.accuracy > best.accuracy ? current : best
+    );
   })();
 
   const monthlyAccuracyData = last6Months.map(month => {
@@ -767,6 +772,91 @@ export default function Analytics() {
     if (accuracy >= 80) return 'text-yellow-600';
     return 'text-destructive';
   };
+
+  // Compliance Metrics Calculations
+  
+  // Filter jobs with evaluated compliance status (compliant or non-compliant)
+  const jobsWithComplianceData = jobs.filter(j => 
+    j.complianceStatus === 'compliant' || j.complianceStatus === 'non-compliant'
+  );
+  
+  const compliantJobs = jobs.filter(j => j.complianceStatus === 'compliant');
+  const nonCompliantJobs = jobs.filter(j => j.complianceStatus === 'non-compliant');
+  
+  // Monthly compliance rate data for 6-month chart
+  const monthlyComplianceData = last6Months.map(month => {
+    const monthJobsWithCompliance = jobsWithComplianceData.filter(j => {
+      if (!j.completedDate && !j.scheduledDate) return false;
+      const jobDate = j.completedDate || j.scheduledDate;
+      const jobMonth = format(new Date(jobDate!), 'MMM yyyy');
+      return jobMonth === month;
+    });
+    
+    const monthCompliantJobs = monthJobsWithCompliance.filter(j => j.complianceStatus === 'compliant');
+    const monthNonCompliantJobs = monthJobsWithCompliance.filter(j => j.complianceStatus === 'non-compliant');
+    
+    const totalEvaluated = monthJobsWithCompliance.length;
+    const compliantRate = totalEvaluated > 0 ? (monthCompliantJobs.length / totalEvaluated * 100) : 0;
+    const nonCompliantRate = totalEvaluated > 0 ? (monthNonCompliantJobs.length / totalEvaluated * 100) : 0;
+    
+    return {
+      month,
+      compliantRate: parseFloat(compliantRate.toFixed(1)),
+      nonCompliantRate: parseFloat(nonCompliantRate.toFixed(1)),
+      totalEvaluated
+    };
+  });
+  
+  // Parse compliance violations from non-compliant jobs
+  interface Violation {
+    metric: string;
+    threshold: number;
+    actualValue: number;
+    severity: string;
+  }
+  
+  interface ComplianceFlags {
+    violations: Violation[];
+    evaluatedAt: string;
+  }
+  
+  const violationFrequency: Record<string, { count: number; totalOverage: number; violations: Violation[] }> = {};
+  
+  nonCompliantJobs.forEach(job => {
+    if (job.complianceFlags) {
+      try {
+        const flags = typeof job.complianceFlags === 'string' 
+          ? JSON.parse(job.complianceFlags) as ComplianceFlags
+          : job.complianceFlags as ComplianceFlags;
+        
+        if (flags.violations && Array.isArray(flags.violations)) {
+          flags.violations.forEach(violation => {
+            const metric = violation.metric;
+            if (!violationFrequency[metric]) {
+              violationFrequency[metric] = { count: 0, totalOverage: 0, violations: [] };
+            }
+            violationFrequency[metric].count++;
+            const overage = violation.actualValue - violation.threshold;
+            violationFrequency[metric].totalOverage += overage;
+            violationFrequency[metric].violations.push(violation);
+          });
+        }
+      } catch (e) {
+        // Skip invalid JSON
+        console.error('Invalid complianceFlags JSON:', e);
+      }
+    }
+  });
+  
+  const topViolationsData = Object.entries(violationFrequency)
+    .map(([metric, data]) => ({
+      metric,
+      frequency: data.count,
+      avgOverage: parseFloat((data.totalOverage / data.count).toFixed(2)),
+      severity: data.violations[0]?.severity || 'unknown'
+    }))
+    .sort((a, b) => b.frequency - a.frequency)
+    .slice(0, 10);
 
   return (
     <div className="min-h-screen bg-background pb-6">
@@ -1080,6 +1170,100 @@ export default function Analytics() {
             </CardContent>
           </Card>
 
+          {/* Compliance Metrics Section */}
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Minnesota Code Compliance</h2>
+            
+            {/* Compliance Pass-Rate Trends */}
+            <div className="grid gap-6 md:grid-cols-2 mb-6">
+              <Card data-testid="card-compliance-trends">
+                <CardHeader>
+                  <CardTitle>Compliance Pass-Rate Trends</CardTitle>
+                  <CardDescription>Monthly pass rates over 6 months</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : monthlyComplianceData.some(d => d.totalEvaluated > 0) ? (
+                    <ResponsiveContainer width="100%" height={300} data-testid="chart-compliance-trends">
+                      <LineChart data={monthlyComplianceData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis domain={[0, 100]} label={{ value: 'Pass Rate (%)', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="compliantRate" 
+                          stroke="#28A745" 
+                          strokeWidth={2}
+                          name="Compliant Rate %"
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="nonCompliantRate" 
+                          stroke="#DC3545" 
+                          strokeWidth={2}
+                          name="Non-Compliant Rate %"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <CheckCircle2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="font-medium">No compliance data available</p>
+                      <p className="text-sm mt-2">Jobs need compliance evaluation to show trends</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Top Code Violations */}
+              <Card data-testid="card-top-violations">
+                <CardHeader>
+                  <CardTitle>Most Common Code Violations</CardTitle>
+                  <CardDescription>Frequency of compliance failures</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : topViolationsData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300} data-testid="chart-top-violations">
+                      <BarChart data={topViolationsData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="metric" />
+                        <YAxis label={{ value: 'Frequency', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip 
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-card p-3 border rounded-md shadow-md">
+                                  <p className="font-semibold">{data.metric}</p>
+                                  <p className="text-sm">Frequency: {data.frequency}</p>
+                                  <p className="text-sm">Avg Overage: {data.avgOverage.toFixed(2)}</p>
+                                  <p className="text-sm text-muted-foreground capitalize">Severity: {data.severity}</p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar dataKey="frequency" fill="#DC3545" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="font-medium">No violation data available</p>
+                      <p className="text-sm mt-2">Non-compliant jobs will show violation patterns here</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
           {/* Builder Performance Comparison */}
           <Card data-testid="card-builder-performance">
             <CardHeader>
@@ -1172,6 +1356,18 @@ export default function Analytics() {
                             <Button 
                               variant="ghost" 
                               size="sm" 
+                              onClick={() => handleSort('complianceRate')}
+                              data-testid="button-sort-complianceRate"
+                              className="hover-elevate"
+                            >
+                              Compliance Rate
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
                               onClick={() => handleSort('avgInspectionTime')}
                               data-testid="button-sort-avgInspectionTime"
                               className="hover-elevate"
@@ -1232,6 +1428,19 @@ export default function Analytics() {
                               </TableCell>
                               <TableCell className="text-center font-semibold">
                                 {stat.avgAccuracy > 0 ? `${stat.avgAccuracy.toFixed(1)}%` : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-center font-semibold">
+                                <span 
+                                  className={
+                                    stat.complianceRate >= 90 ? 'text-success' : 
+                                    stat.complianceRate >= 70 ? 'text-yellow-600' : 
+                                    stat.complianceRate > 0 ? 'text-destructive' : 
+                                    'text-muted-foreground'
+                                  }
+                                  data-testid={`text-builder-compliance-${stat.builder.id}`}
+                                >
+                                  {stat.complianceRate > 0 ? `${stat.complianceRate.toFixed(1)}%` : 'N/A'}
+                                </span>
                               </TableCell>
                               <TableCell className="text-center">
                                 {stat.avgInspectionTime > 0 ? Math.round(stat.avgInspectionTime) : 'N/A'}
@@ -1391,20 +1600,25 @@ export default function Analytics() {
                       <p className="text-sm text-muted-foreground">Best Forecast</p>
                       {isLoading ? (
                         <Skeleton className="h-8 w-16" />
-                      ) : bestForecast ? (
-                        <p className="text-3xl font-bold text-success" data-testid="text-best-forecast">
-                          {bestForecast.accuracy.toFixed(1)}%
-                        </p>
+                      ) : bestForecast && bestForecast.accuracy !== undefined ? (
+                        <>
+                          <p className="text-3xl font-bold text-success" data-testid="text-best-forecast">
+                            {bestForecast.accuracy.toFixed(1)}%
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {bestForecast.job?.completedDate 
+                              ? `${format(new Date(bestForecast.job.completedDate), 'MMM d, yyyy')} (${bestForecast.type})`
+                              : 'No data'}
+                          </p>
+                        </>
                       ) : (
-                        <p className="text-3xl font-bold text-muted-foreground" data-testid="text-best-forecast">
-                          N/A
-                        </p>
+                        <>
+                          <p className="text-3xl font-bold text-muted-foreground" data-testid="text-best-forecast">
+                            N/A
+                          </p>
+                          <p className="text-xs text-muted-foreground">No data</p>
+                        </>
                       )}
-                      <p className="text-xs text-muted-foreground">
-                        {bestForecast?.job?.completedDate 
-                          ? `${format(new Date(bestForecast.job.completedDate), 'MMM d, yyyy')} (${bestForecast.type})`
-                          : 'No data'}
-                      </p>
                     </div>
                     <div className="p-3 rounded-md bg-yellow-500/10">
                       <Award className="h-6 w-6 text-yellow-600" />
