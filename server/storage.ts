@@ -211,6 +211,12 @@ export class MemStorage implements IStorage {
       latitude: 40.0992,
       longitude: -83.1141,
       notes: "HOA requires completion before November 1st",
+      builderSignatureUrl: null,
+      builderSignedAt: null,
+      builderSignerName: null,
+      complianceStatus: null,
+      complianceFlags: null,
+      lastComplianceCheck: null,
     };
 
     const job2: Job = {
@@ -229,6 +235,12 @@ export class MemStorage implements IStorage {
       latitude: 40.1579,
       longitude: -83.0753,
       notes: "Builder requesting expedited turnaround",
+      builderSignatureUrl: null,
+      builderSignedAt: null,
+      builderSignerName: null,
+      complianceStatus: null,
+      complianceFlags: null,
+      lastComplianceCheck: null,
     };
 
     const job3: Job = {
@@ -247,6 +259,12 @@ export class MemStorage implements IStorage {
       latitude: 40.1261,
       longitude: -82.9291,
       notes: "All items passed - report sent to builder",
+      builderSignatureUrl: null,
+      builderSignedAt: null,
+      builderSignerName: null,
+      complianceStatus: null,
+      complianceFlags: null,
+      lastComplianceCheck: null,
     };
 
     this.jobs.set(job1Id, job1);
@@ -726,6 +744,10 @@ export class MemStorage implements IStorage {
       emailedTo: "john.martinez@mihomes.com",
       emailedAt: new Date("2025-10-15T15:30:00"),
       createdAt: new Date("2025-10-15T15:00:00"),
+      scoreSummary: null,
+      complianceStatus: null,
+      complianceFlags: null,
+      lastComplianceCheck: null,
     };
 
     const reportInstance2: ReportInstance = {
@@ -746,6 +768,10 @@ export class MemStorage implements IStorage {
       emailedTo: null,
       emailedAt: null,
       createdAt: new Date("2025-10-22T11:00:00"),
+      scoreSummary: null,
+      complianceStatus: null,
+      complianceFlags: null,
+      lastComplianceCheck: null,
     };
 
     this.reportInstances.set(reportInstance1Id, reportInstance1);
@@ -998,6 +1024,12 @@ export class MemStorage implements IStorage {
       latitude: insertJob.latitude ?? null,
       longitude: insertJob.longitude ?? null,
       notes: insertJob.notes ?? null,
+      builderSignatureUrl: insertJob.builderSignatureUrl ?? null,
+      builderSignedAt: insertJob.builderSignedAt ?? null,
+      builderSignerName: insertJob.builderSignerName ?? null,
+      complianceStatus: null,
+      complianceFlags: null,
+      lastComplianceCheck: null,
     };
     this.jobs.set(id, job);
     return job;
@@ -1202,6 +1234,9 @@ export class MemStorage implements IStorage {
       emailedAt: insertInstance.emailedAt ?? null,
       createdAt: new Date(),
       scoreSummary: null,
+      complianceStatus: null,
+      complianceFlags: null,
+      lastComplianceCheck: null,
     };
     this.reportInstances.set(id, instance);
 
@@ -1237,7 +1272,8 @@ export class MemStorage implements IStorage {
       filePath: insertPhoto.filePath,
       caption: insertPhoto.caption ?? null,
       tags: insertPhoto.tags ?? null,
-      uploadedAt: insertPhoto.uploadedAt ?? new Date(),
+      annotationData: insertPhoto.annotationData ?? null,
+      uploadedAt: new Date(),
     };
     this.photos.set(id, photo);
     return photo;
@@ -1280,8 +1316,10 @@ export class MemStorage implements IStorage {
       jobId: insertForecast.jobId,
       predictedTDL: insertForecast.predictedTDL ?? null,
       predictedDLO: insertForecast.predictedDLO ?? null,
+      predictedACH50: insertForecast.predictedACH50 ?? null,
       actualTDL: insertForecast.actualTDL ?? null,
       actualDLO: insertForecast.actualDLO ?? null,
+      actualACH50: insertForecast.actualACH50 ?? null,
       confidence: insertForecast.confidence ?? null,
     };
     this.forecasts.set(id, forecast);
