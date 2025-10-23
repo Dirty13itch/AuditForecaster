@@ -23,6 +23,7 @@ import {
   insertComplianceRuleSchema,
   insertForecastSchema,
 } from "@shared/schema";
+import { paginationParamsSchema } from "@shared/pagination";
 import {
   evaluateJobCompliance,
   evaluateReportCompliance,
@@ -155,11 +156,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/builders", isAuthenticated, async (_req, res) => {
+  app.get("/api/builders", isAuthenticated, async (req, res) => {
     try {
+      if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        const params = paginationParamsSchema.parse(req.query);
+        const result = await storage.getBuildersPaginated(params);
+        return res.json(result);
+      }
       const builders = await storage.getAllBuilders();
       res.json(builders);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch builders');
       res.status(status).json({ message });
     }
@@ -224,11 +234,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/jobs", isAuthenticated, async (_req, res) => {
+  app.get("/api/jobs", isAuthenticated, async (req, res) => {
     try {
+      if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        const params = paginationParamsSchema.parse(req.query);
+        const result = await storage.getJobsPaginated(params);
+        return res.json(result);
+      }
       const jobs = await storage.getAllJobs();
       res.json(jobs);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch jobs');
       res.status(status).json({ message });
     }
@@ -488,16 +507,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/expenses", isAuthenticated, async (req, res) => {
     try {
-      const { jobId } = req.query;
+      const { jobId, limit, offset } = req.query;
 
-      if (jobId && typeof jobId === "string") {
-        const expenses = await storage.getExpensesByJob(jobId);
-        return res.json(expenses);
+      if (limit !== undefined || offset !== undefined) {
+        const params = paginationParamsSchema.parse({ limit, offset });
+        let result;
+        
+        if (jobId && typeof jobId === "string") {
+          result = await storage.getExpensesByJobPaginated(jobId, params);
+        } else {
+          result = await storage.getExpensesPaginated(params);
+        }
+        
+        return res.json(result);
       }
 
-      const expenses = await storage.getAllExpenses();
+      let expenses;
+      if (jobId && typeof jobId === "string") {
+        expenses = await storage.getExpensesByJob(jobId);
+      } else {
+        expenses = await storage.getAllExpenses();
+      }
+
       res.json(expenses);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch expenses');
       res.status(status).json({ message });
     }
@@ -564,18 +601,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/mileage-logs", isAuthenticated, async (req, res) => {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, limit, offset } = req.query;
 
+      if (limit !== undefined || offset !== undefined) {
+        const params = paginationParamsSchema.parse({ limit, offset });
+        const result = await storage.getMileageLogsPaginated(params);
+        return res.json(result);
+      }
+
+      let logs;
       if (startDate && endDate) {
         const start = new Date(startDate as string);
         const end = new Date(endDate as string);
-        const logs = await storage.getMileageLogsByDateRange(start, end);
-        return res.json(logs);
+        logs = await storage.getMileageLogsByDateRange(start, end);
+      } else {
+        logs = await storage.getAllMileageLogs();
       }
 
-      const logs = await storage.getAllMileageLogs();
       res.json(logs);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch mileage logs');
       res.status(status).json({ message });
     }
@@ -711,21 +759,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/report-instances", isAuthenticated, async (req, res) => {
     try {
-      const { jobId } = req.query;
+      const { jobId, limit, offset } = req.query;
 
+      let instances;
       if (jobId && typeof jobId === "string") {
-        const instances = await storage.getReportInstancesByJob(jobId);
-        
-        const withScores = instances.map(inst => ({
-          ...inst,
-          scoreSummary: inst.scoreSummary ? JSON.parse(inst.scoreSummary) : null,
-        }));
-        
-        return res.json(withScores);
+        instances = await storage.getReportInstancesByJob(jobId);
+      } else {
+        instances = await storage.getAllReportInstances();
       }
 
-      res.status(400).json({ message: "Please provide a job ID to view report instances" });
+      const withScores = instances.map(inst => ({
+        ...inst,
+        scoreSummary: inst.scoreSummary ? JSON.parse(inst.scoreSummary) : null,
+      }));
+
+      if (limit !== undefined || offset !== undefined) {
+        const params = paginationParamsSchema.parse({ limit, offset });
+        const result = createPaginatedResult(withScores, params);
+        return res.json(result);
+      }
+
+      res.json(withScores);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch report instances');
       res.status(status).json({ message });
     }
@@ -1027,26 +1086,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Photo Routes
   app.get("/api/photos", isAuthenticated, async (req, res) => {
     try {
-      const { jobId, checklistItemId } = req.query;
+      const { jobId, checklistItemId, limit, offset } = req.query;
 
+      if (limit !== undefined || offset !== undefined) {
+        const params = paginationParamsSchema.parse({ limit, offset });
+        let result;
+        
+        if (checklistItemId && typeof checklistItemId === "string") {
+          result = await storage.getPhotosByChecklistItemPaginated(checklistItemId, params);
+        } else if (jobId && typeof jobId === "string") {
+          result = await storage.getPhotosByJobPaginated(jobId, params);
+        } else {
+          result = await storage.getPhotosPaginated(params);
+        }
+        
+        return res.json(result);
+      }
+
+      let photos;
       if (checklistItemId && typeof checklistItemId === "string") {
-        const photos = await storage.getPhotosByChecklistItem(checklistItemId);
-        return res.json(photos);
+        photos = await storage.getPhotosByChecklistItem(checklistItemId);
+      } else if (jobId && typeof jobId === "string") {
+        photos = await storage.getPhotosByJob(jobId);
+      } else {
+        photos = await storage.getAllPhotos();
       }
 
-      if (jobId && typeof jobId === "string") {
-        const photos = await storage.getPhotosByJob(jobId);
-        return res.json(photos);
-      }
-
-      const jobs = await storage.getAllJobs();
-      const allPhotos = [];
-      for (const job of jobs) {
-        const photos = await storage.getPhotosByJob(job.id);
-        allPhotos.push(...photos);
-      }
-      res.json(allPhotos);
+      res.json(photos);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch photos');
       res.status(status).json({ message });
     }

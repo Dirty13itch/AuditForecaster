@@ -29,6 +29,7 @@ import {
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { randomUUID } from "crypto";
+import { type PaginationParams, type PaginatedResult } from "@shared/pagination";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -38,12 +39,14 @@ export interface IStorage {
   createBuilder(builder: InsertBuilder): Promise<Builder>;
   getBuilder(id: string): Promise<Builder | undefined>;
   getAllBuilders(): Promise<Builder[]>;
+  getBuildersPaginated(params: PaginationParams): Promise<PaginatedResult<Builder>>;
   updateBuilder(id: string, builder: Partial<InsertBuilder>): Promise<Builder | undefined>;
   deleteBuilder(id: string): Promise<boolean>;
 
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
   getAllJobs(): Promise<Job[]>;
+  getJobsPaginated(params: PaginationParams): Promise<PaginatedResult<Job>>;
   updateJob(id: string, job: Partial<InsertJob>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<boolean>;
 
@@ -57,13 +60,16 @@ export interface IStorage {
   createExpense(expense: InsertExpense): Promise<Expense>;
   getExpense(id: string): Promise<Expense | undefined>;
   getAllExpenses(): Promise<Expense[]>;
+  getExpensesPaginated(params: PaginationParams): Promise<PaginatedResult<Expense>>;
   getExpensesByJob(jobId: string): Promise<Expense[]>;
+  getExpensesByJobPaginated(jobId: string, params: PaginationParams): Promise<PaginatedResult<Expense>>;
   updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined>;
   deleteExpense(id: string): Promise<boolean>;
 
   createMileageLog(log: InsertMileageLog): Promise<MileageLog>;
   getMileageLog(id: string): Promise<MileageLog | undefined>;
   getAllMileageLogs(): Promise<MileageLog[]>;
+  getMileageLogsPaginated(params: PaginationParams): Promise<PaginatedResult<MileageLog>>;
   getMileageLogsByDateRange(startDate: Date, endDate: Date): Promise<MileageLog[]>;
   updateMileageLog(id: string, log: Partial<InsertMileageLog>): Promise<MileageLog | undefined>;
   deleteMileageLog(id: string): Promise<boolean>;
@@ -76,13 +82,19 @@ export interface IStorage {
 
   createReportInstance(instance: InsertReportInstance): Promise<ReportInstance>;
   getReportInstance(id: string): Promise<ReportInstance | undefined>;
+  getAllReportInstances(): Promise<ReportInstance[]>;
   getReportInstancesByJob(jobId: string): Promise<ReportInstance[]>;
+  getReportInstancesPaginated(params: PaginationParams): Promise<PaginatedResult<ReportInstance>>;
   updateReportInstance(id: string, instance: Partial<InsertReportInstance>): Promise<ReportInstance | undefined>;
 
   createPhoto(photo: InsertPhoto): Promise<Photo>;
   getPhoto(id: string): Promise<Photo | undefined>;
+  getAllPhotos(): Promise<Photo[]>;
   getPhotosByJob(jobId: string): Promise<Photo[]>;
   getPhotosByChecklistItem(checklistItemId: string): Promise<Photo[]>;
+  getPhotosPaginated(params: PaginationParams): Promise<PaginatedResult<Photo>>;
+  getPhotosByJobPaginated(jobId: string, params: PaginationParams): Promise<PaginatedResult<Photo>>;
+  getPhotosByChecklistItemPaginated(checklistItemId: string, params: PaginationParams): Promise<PaginatedResult<Photo>>;
   updatePhoto(id: string, photo: Partial<InsertPhoto>): Promise<Photo | undefined>;
   deletePhoto(id: string): Promise<boolean>;
 
@@ -994,6 +1006,39 @@ export class MemStorage implements IStorage {
     return Array.from(this.builders.values());
   }
 
+  async getBuildersPaginated(params: PaginationParams): Promise<PaginatedResult<Builder>> {
+    const { limit, offset } = params;
+    const total = this.builders.size;
+    
+    const data: Builder[] = [];
+    let currentIndex = 0;
+    
+    for (const builder of this.builders.values()) {
+      if (currentIndex < offset) {
+        currentIndex++;
+        continue;
+      }
+      
+      if (data.length < limit) {
+        data.push(builder);
+      } else {
+        break;
+      }
+      
+      currentIndex++;
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  }
+
   async updateBuilder(id: string, updates: Partial<InsertBuilder>): Promise<Builder | undefined> {
     const builder = this.builders.get(id);
     if (!builder) return undefined;
@@ -1041,6 +1086,39 @@ export class MemStorage implements IStorage {
 
   async getAllJobs(): Promise<Job[]> {
     return Array.from(this.jobs.values());
+  }
+
+  async getJobsPaginated(params: PaginationParams): Promise<PaginatedResult<Job>> {
+    const { limit, offset } = params;
+    const total = this.jobs.size;
+    
+    const data: Job[] = [];
+    let currentIndex = 0;
+    
+    for (const job of this.jobs.values()) {
+      if (currentIndex < offset) {
+        currentIndex++;
+        continue;
+      }
+      
+      if (data.length < limit) {
+        data.push(job);
+      } else {
+        break;
+      }
+      
+      currentIndex++;
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
   }
 
   async updateJob(id: string, updates: Partial<InsertJob>): Promise<Job | undefined> {
@@ -1124,10 +1202,80 @@ export class MemStorage implements IStorage {
     return Array.from(this.expenses.values());
   }
 
+  async getExpensesPaginated(params: PaginationParams): Promise<PaginatedResult<Expense>> {
+    const { limit, offset } = params;
+    const total = this.expenses.size;
+    
+    const data: Expense[] = [];
+    let currentIndex = 0;
+    
+    for (const expense of this.expenses.values()) {
+      if (currentIndex < offset) {
+        currentIndex++;
+        continue;
+      }
+      
+      if (data.length < limit) {
+        data.push(expense);
+      } else {
+        break;
+      }
+      
+      currentIndex++;
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  }
+
   async getExpensesByJob(jobId: string): Promise<Expense[]> {
     return Array.from(this.expenses.values()).filter(
       (expense) => expense.jobId === jobId,
     );
+  }
+
+  async getExpensesByJobPaginated(jobId: string, params: PaginationParams): Promise<PaginatedResult<Expense>> {
+    const { limit, offset } = params;
+    
+    let total = 0;
+    for (const expense of this.expenses.values()) {
+      if (expense.jobId === jobId) {
+        total++;
+      }
+    }
+    
+    const data: Expense[] = [];
+    let matchedIndex = 0;
+    
+    for (const expense of this.expenses.values()) {
+      if (expense.jobId === jobId) {
+        if (matchedIndex >= offset && data.length < limit) {
+          data.push(expense);
+        }
+        matchedIndex++;
+        
+        if (data.length === limit) {
+          break;
+        }
+      }
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
   }
 
   async updateExpense(id: string, updates: Partial<InsertExpense>): Promise<Expense | undefined> {
@@ -1168,6 +1316,39 @@ export class MemStorage implements IStorage {
 
   async getAllMileageLogs(): Promise<MileageLog[]> {
     return Array.from(this.mileageLogs.values());
+  }
+
+  async getMileageLogsPaginated(params: PaginationParams): Promise<PaginatedResult<MileageLog>> {
+    const { limit, offset } = params;
+    const total = this.mileageLogs.size;
+    
+    const data: MileageLog[] = [];
+    let currentIndex = 0;
+    
+    for (const log of this.mileageLogs.values()) {
+      if (currentIndex < offset) {
+        currentIndex++;
+        continue;
+      }
+      
+      if (data.length < limit) {
+        data.push(log);
+      } else {
+        break;
+      }
+      
+      currentIndex++;
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
   }
 
   async getMileageLogsByDateRange(startDate: Date, endDate: Date): Promise<MileageLog[]> {
@@ -1249,10 +1430,47 @@ export class MemStorage implements IStorage {
     return this.reportInstances.get(id);
   }
 
+  async getAllReportInstances(): Promise<ReportInstance[]> {
+    return Array.from(this.reportInstances.values());
+  }
+
   async getReportInstancesByJob(jobId: string): Promise<ReportInstance[]> {
     return Array.from(this.reportInstances.values()).filter(
       (instance) => instance.jobId === jobId,
     );
+  }
+
+  async getReportInstancesPaginated(params: PaginationParams): Promise<PaginatedResult<ReportInstance>> {
+    const { limit, offset } = params;
+    const total = this.reportInstances.size;
+    
+    const data: ReportInstance[] = [];
+    let currentIndex = 0;
+    
+    for (const instance of this.reportInstances.values()) {
+      if (currentIndex < offset) {
+        currentIndex++;
+        continue;
+      }
+      
+      if (data.length < limit) {
+        data.push(instance);
+      } else {
+        break;
+      }
+      
+      currentIndex++;
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
   }
 
   async updateReportInstance(id: string, updates: Partial<InsertReportInstance>): Promise<ReportInstance | undefined> {
@@ -1283,6 +1501,10 @@ export class MemStorage implements IStorage {
     return this.photos.get(id);
   }
 
+  async getAllPhotos(): Promise<Photo[]> {
+    return Array.from(this.photos.values());
+  }
+
   async getPhotosByJob(jobId: string): Promise<Photo[]> {
     return Array.from(this.photos.values()).filter(
       (photo) => photo.jobId === jobId,
@@ -1293,6 +1515,113 @@ export class MemStorage implements IStorage {
     return Array.from(this.photos.values()).filter(
       (photo) => photo.checklistItemId === checklistItemId,
     );
+  }
+
+  async getPhotosPaginated(params: PaginationParams): Promise<PaginatedResult<Photo>> {
+    const { limit, offset } = params;
+    const total = this.photos.size;
+    
+    const data: Photo[] = [];
+    let currentIndex = 0;
+    
+    for (const photo of this.photos.values()) {
+      if (currentIndex < offset) {
+        currentIndex++;
+        continue;
+      }
+      
+      if (data.length < limit) {
+        data.push(photo);
+      } else {
+        break;
+      }
+      
+      currentIndex++;
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  }
+
+  async getPhotosByJobPaginated(jobId: string, params: PaginationParams): Promise<PaginatedResult<Photo>> {
+    const { limit, offset } = params;
+    
+    let total = 0;
+    for (const photo of this.photos.values()) {
+      if (photo.jobId === jobId) {
+        total++;
+      }
+    }
+    
+    const data: Photo[] = [];
+    let matchedIndex = 0;
+    
+    for (const photo of this.photos.values()) {
+      if (photo.jobId === jobId) {
+        if (matchedIndex >= offset && data.length < limit) {
+          data.push(photo);
+        }
+        matchedIndex++;
+        
+        if (data.length === limit) {
+          break;
+        }
+      }
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  }
+
+  async getPhotosByChecklistItemPaginated(checklistItemId: string, params: PaginationParams): Promise<PaginatedResult<Photo>> {
+    const { limit, offset } = params;
+    
+    let total = 0;
+    for (const photo of this.photos.values()) {
+      if (photo.checklistItemId === checklistItemId) {
+        total++;
+      }
+    }
+    
+    const data: Photo[] = [];
+    let matchedIndex = 0;
+    
+    for (const photo of this.photos.values()) {
+      if (photo.checklistItemId === checklistItemId) {
+        if (matchedIndex >= offset && data.length < limit) {
+          data.push(photo);
+        }
+        matchedIndex++;
+        
+        if (data.length === limit) {
+          break;
+        }
+      }
+    }
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
   }
 
   async updatePhoto(id: string, updates: Partial<InsertPhoto>): Promise<Photo | undefined> {
