@@ -37,7 +37,7 @@ export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   address: text("address").notNull(),
-  builderId: varchar("builder_id"),
+  builderId: varchar("builder_id").references(() => builders.id, { onDelete: 'cascade' }),
   contractor: text("contractor").notNull(),
   status: text("status").notNull(),
   inspectionType: text("inspection_type").notNull(),
@@ -59,7 +59,7 @@ export const jobs = pgTable("jobs", {
 
 export const scheduleEvents = pgTable("schedule_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull(),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   title: text("title").notNull(),
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time").notNull(),
@@ -81,14 +81,14 @@ export const googleEvents = pgTable("google_events", {
   endTime: timestamp("end_time").notNull(),
   colorId: text("color_id"),
   isConverted: boolean("is_converted").default(false),
-  convertedToJobId: varchar("converted_to_job_id"),
+  convertedToJobId: varchar("converted_to_job_id").references(() => jobs.id, { onDelete: 'set null' }),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").default(sql`now()`),
 });
 
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id"),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'cascade' }),
   category: text("category").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description"),
@@ -123,8 +123,8 @@ export const reportTemplates = pgTable("report_templates", {
 
 export const reportInstances = pgTable("report_instances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull(),
-  templateId: varchar("template_id").notNull(),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  templateId: varchar("template_id").notNull().references(() => reportTemplates.id, { onDelete: 'cascade' }),
   data: text("data").notNull(),
   pdfUrl: text("pdf_url"),
   emailedTo: text("emailed_to"),
@@ -138,7 +138,7 @@ export const reportInstances = pgTable("report_instances", {
 
 export const forecasts = pgTable("forecasts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull(),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   predictedTDL: decimal("predicted_tdl", { precision: 10, scale: 2 }),
   predictedDLO: decimal("predicted_dlo", { precision: 10, scale: 2 }),
   predictedACH50: decimal("predicted_ach50", { precision: 10, scale: 2 }),
@@ -150,7 +150,7 @@ export const forecasts = pgTable("forecasts", {
 
 export const checklistItems = pgTable("checklist_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull(),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   itemNumber: integer("item_number").notNull(),
   title: text("title").notNull(),
   completed: boolean("completed").default(false),
@@ -164,8 +164,8 @@ export const checklistItems = pgTable("checklist_items", {
 
 export const photos = pgTable("photos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull(),
-  checklistItemId: varchar("checklist_item_id"),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  checklistItemId: varchar("checklist_item_id").references(() => checklistItems.id, { onDelete: 'set null' }),
   filePath: text("file_path").notNull(),
   fullUrl: text("full_url"),
   hash: text("hash"),
