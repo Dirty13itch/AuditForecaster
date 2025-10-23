@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight } from "lucide-react";
-import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth } from "date-fns";
+import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight, Award } from "lucide-react";
+import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth, subDays } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,14 @@ const STATUS_COLORS = {
   review: "#FD7E14",
   completed: "#28A745",
 };
+
+const ISSUE_COLORS = [
+  '#2E5BBA', // Blue
+  '#28A745', // Green
+  '#FFC107', // Yellow
+  '#DC3545', // Red
+  '#6C757D', // Gray
+];
 
 export default function Analytics() {
   const [, setLocation] = useLocation();
@@ -119,6 +127,58 @@ export default function Analytics() {
     .sort((a, b) => b.frequency - a.frequency)
     .slice(0, 10);
 
+  // Performance optimization: Create job lookup map to avoid repeated finds
+  const jobsMap = new Map(jobs.map(j => [j.id, j]));
+
+  // Create Set of displayed months for exact alignment with chart
+  const displayedMonths = new Set(last6Months);
+
+  // Monthly issue tracking for trend analysis (exact chart months)
+  const monthlyIssues = checklistItems
+    .filter(item => {
+      const job = jobsMap.get(item.jobId);
+      if (!job?.completedDate || item.completed || job.status !== 'completed') return false;
+      
+      // Check if job's month is in the displayed months
+      const jobMonth = format(new Date(job.completedDate), 'MMM yyyy');
+      return displayedMonths.has(jobMonth);
+    })
+    .reduce((acc, item) => {
+      const job = jobsMap.get(item.jobId);
+      if (!job?.completedDate) return acc;
+      
+      const month = format(new Date(job.completedDate), 'MMM yyyy');
+      const issueName = item.title;
+      
+      if (!acc[month]) acc[month] = {};
+      acc[month][issueName] = (acc[month][issueName] || 0) + 1;
+      
+      return acc;
+    }, {} as Record<string, Record<string, number>>);
+
+  // Calculate top issues from the 6-month data only
+  const issueFrequency6Months: Record<string, number> = {};
+  Object.values(monthlyIssues).forEach(monthData => {
+    Object.entries(monthData).forEach(([issue, count]) => {
+      issueFrequency6Months[issue] = (issueFrequency6Months[issue] || 0) + count;
+    });
+  });
+
+  // Get top 5 issues for trend chart based on 6-month window
+  const topIssues = Object.entries(issueFrequency6Months)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name]) => name);
+
+  // Format data for line chart
+  const issuesTrendData = last6Months.map(month => {
+    const dataPoint: any = { month };
+    topIssues.forEach(issue => {
+      dataPoint[issue] = monthlyIssues[month]?.[issue] || 0;
+    });
+    return dataPoint;
+  });
+
   const tagCounts = photos.reduce((acc, photo) => {
     (photo.tags || []).forEach(tag => {
       acc[tag] = (acc[tag] || 0) + 1;
@@ -183,6 +243,42 @@ export default function Analytics() {
     }
   };
 
+  // Get trend indicator for an issue
+  const getIssueTrend = (issueName: string, monthlyData: Record<string, Record<string, number>>) => {
+    const now = new Date();
+    const currentMonth = format(now, 'MMM yyyy');
+    const last3Months = Array.from({ length: 3 }, (_, i) => {
+      const date = subMonths(now, i + 1);
+      return format(date, 'MMM yyyy');
+    });
+    
+    const currentCount = monthlyData[currentMonth]?.[issueName] || 0;
+    const avgLast3Months = last3Months.reduce((sum, month) => {
+      return sum + (monthlyData[month]?.[issueName] || 0);
+    }, 0) / 3;
+    
+    if (currentCount > avgLast3Months * 1.3) {
+      return { icon: TrendingUp, color: 'text-destructive', label: 'Worsening' };
+    } else if (currentCount < avgLast3Months * 0.7) {
+      return { icon: TrendingDown, color: 'text-success', label: 'Improving' };
+    }
+    return { icon: Minus, color: 'text-muted-foreground', label: 'Stable' };
+  };
+
+  // Forecast Accuracy Helper Function
+  const calculateAccuracy = (predicted: number, actual: number): number => {
+    if (predicted === null || predicted === undefined || 
+        actual === null || actual === undefined) return 0;
+    
+    // Handle zero predicted value
+    if (predicted === 0) {
+      return actual === 0 ? 100 : 0; // Perfect if both zero, else 0%
+    }
+    
+    const variance = Math.abs(actual - predicted) / predicted * 100;
+    return Math.max(0, 100 - variance);
+  };
+
   // Builder Performance Metrics Calculation
   const builderStats = builders.map(builder => {
     const builderJobs = jobs.filter(j => j.builderId === builder.id);
@@ -202,17 +298,46 @@ export default function Analytics() {
           }, 0) / completedBuilderJobs.filter(j => j.completedDate && j.scheduledDate).length
       : 0;
     
-    const builderForecasts = completedBuilderJobs
+    // Get TDL forecasts for this builder
+    const tdlForecasts = completedBuilderJobs
       .map(j => forecasts.find(f => f.jobId === j.id))
-      .filter(f => f && f.actualTDL && f.predictedTDL);
+      .filter(f => f && 
+        f.actualTDL !== null && f.actualTDL !== undefined && 
+        f.predictedTDL !== null && f.predictedTDL !== undefined
+      );
     
-    const avgAccuracy = builderForecasts.length > 0
-      ? builderForecasts.reduce((sum, f) => {
-          const actual = parseFloat(f!.actualTDL?.toString() || "0");
-          const predicted = parseFloat(f!.predictedTDL?.toString() || "0");
-          const variance = Math.abs(actual - predicted) / predicted * 100;
-          return sum + (100 - variance);
-        }, 0) / builderForecasts.length
+    // Get DLO forecasts for this builder
+    const dloForecasts = completedBuilderJobs
+      .map(j => forecasts.find(f => f.jobId === j.id))
+      .filter(f => f &&
+        f.actualDLO !== null && f.actualDLO !== undefined &&
+        f.predictedDLO !== null && f.predictedDLO !== undefined
+      );
+    
+    // Calculate TDL accuracy
+    const tdlAccuracy = tdlForecasts.length > 0
+      ? tdlForecasts.reduce((sum, f) => {
+          return sum + calculateAccuracy(
+            parseFloat(f!.predictedTDL!.toString()),
+            parseFloat(f!.actualTDL!.toString())
+          );
+        }, 0) / tdlForecasts.length
+      : 0;
+    
+    // Calculate DLO accuracy
+    const dloAccuracy = dloForecasts.length > 0
+      ? dloForecasts.reduce((sum, f) => {
+          return sum + calculateAccuracy(
+            parseFloat(f!.predictedDLO!.toString()),
+            parseFloat(f!.actualDLO!.toString())
+          );
+        }, 0) / dloForecasts.length
+      : 0;
+    
+    // Calculate weighted average of both TDL and DLO
+    const totalForecasts = tdlForecasts.length + dloForecasts.length;
+    const avgAccuracy = totalForecasts > 0
+      ? (tdlAccuracy * tdlForecasts.length + dloAccuracy * dloForecasts.length) / totalForecasts
       : 0;
     
     const builderChecklistItems = builderJobs.flatMap(job => 
@@ -288,7 +413,7 @@ export default function Analytics() {
     // Get jobs for this builder in the last 6 months (excluding current month)
     const last6MonthsJobs = allJobs.filter(j => {
       if (j.builderId !== stat.builder.id) return false;
-      const jobDate = new Date(j.createdAt || j.scheduledDate || Date.now());
+      const jobDate = new Date(j.scheduledDate || j.completedDate || Date.now());
       const now = new Date();
       const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
       const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -304,7 +429,7 @@ export default function Analytics() {
     // Guards against false positives for low-volume builders
     const monthsWithJobs = new Set(
       last6MonthsJobs.map(j => {
-        const date = new Date(j.createdAt || j.scheduledDate || Date.now());
+        const date = new Date(j.scheduledDate || j.completedDate || Date.now());
         return `${date.getFullYear()}-${date.getMonth()}`;
       })
     ).size;
@@ -348,6 +473,300 @@ export default function Analytics() {
   const topBuilders = builderStats
     .sort((a, b) => b.totalJobs - a.totalJobs)
     .slice(0, 5);
+
+  // Forecast Accuracy Calculations
+  const forecastsWithTDL = forecasts.filter(f => 
+    f.actualTDL !== null && f.actualTDL !== undefined &&
+    f.predictedTDL !== null && f.predictedTDL !== undefined
+  );
+
+  const forecastsWithDLO = forecasts.filter(f =>
+    f.actualDLO !== null && f.actualDLO !== undefined &&
+    f.predictedDLO !== null && f.predictedDLO !== undefined
+  );
+
+  const forecastsWithData = forecasts.filter(f => 
+    (f.actualTDL !== null && f.actualTDL !== undefined &&
+     f.predictedTDL !== null && f.predictedTDL !== undefined) ||
+    (f.actualDLO !== null && f.actualDLO !== undefined &&
+     f.predictedDLO !== null && f.predictedDLO !== undefined)
+  );
+
+  // Calculate TDL accuracy
+  const tdlAccuracy = forecastsWithTDL.length > 0
+    ? forecastsWithTDL.reduce((sum, f) => {
+        return sum + calculateAccuracy(
+          parseFloat(f.predictedTDL!.toString()),
+          parseFloat(f.actualTDL!.toString())
+        );
+      }, 0) / forecastsWithTDL.length
+    : 0;
+
+  // Calculate DLO accuracy
+  const dloAccuracy = forecastsWithDLO.length > 0
+    ? forecastsWithDLO.reduce((sum, f) => {
+        return sum + calculateAccuracy(
+          parseFloat(f.predictedDLO!.toString()),
+          parseFloat(f.actualDLO!.toString())
+        );
+      }, 0) / forecastsWithDLO.length
+    : 0;
+
+  // Calculate overall accuracy (weighted average of TDL and DLO)
+  const overallAccuracy = (() => {
+    const totalForecasts = forecastsWithTDL.length + forecastsWithDLO.length;
+    if (totalForecasts === 0) return 0;
+    return (tdlAccuracy * forecastsWithTDL.length + dloAccuracy * forecastsWithDLO.length) / totalForecasts;
+  })();
+
+  const thirtyDaysAgo = subDays(new Date(), 30);
+  
+  const recentTDLForecasts = forecastsWithTDL.filter(f => {
+    const job = jobsMap.get(f.jobId);
+    return job?.completedDate && new Date(job.completedDate) >= thirtyDaysAgo;
+  });
+
+  const recentDLOForecasts = forecastsWithDLO.filter(f => {
+    const job = jobsMap.get(f.jobId);
+    return job?.completedDate && new Date(job.completedDate) >= thirtyDaysAgo;
+  });
+
+  const recentTDLAccuracy = recentTDLForecasts.length > 0
+    ? recentTDLForecasts.reduce((sum, f) => {
+        return sum + calculateAccuracy(
+          parseFloat(f.predictedTDL!.toString()),
+          parseFloat(f.actualTDL!.toString())
+        );
+      }, 0) / recentTDLForecasts.length
+    : 0;
+
+  const recentDLOAccuracy = recentDLOForecasts.length > 0
+    ? recentDLOForecasts.reduce((sum, f) => {
+        return sum + calculateAccuracy(
+          parseFloat(f.predictedDLO!.toString()),
+          parseFloat(f.actualDLO!.toString())
+        );
+      }, 0) / recentDLOForecasts.length
+    : 0;
+
+  const recentAccuracy = (() => {
+    const totalRecent = recentTDLForecasts.length + recentDLOForecasts.length;
+    if (totalRecent === 0) return 0;
+    return (recentTDLAccuracy * recentTDLForecasts.length + recentDLOAccuracy * recentDLOForecasts.length) / totalRecent;
+  })();
+
+  interface BestForecastType {
+    forecast: Forecast;
+    accuracy: number;
+    job?: Job;
+    type: 'TDL' | 'DLO';
+  }
+  
+  const bestForecast: BestForecastType | null = (() => {
+    let best: BestForecastType | null = null;
+    
+    // Check TDL forecasts
+    forecastsWithTDL.forEach(f => {
+      const accuracy = calculateAccuracy(
+        parseFloat(f.predictedTDL!.toString()),
+        parseFloat(f.actualTDL!.toString())
+      );
+      if (!best || accuracy > best.accuracy) {
+        const job = jobsMap.get(f.jobId);
+        best = { forecast: f, accuracy, job, type: 'TDL' as const };
+      }
+    });
+    
+    // Check DLO forecasts
+    forecastsWithDLO.forEach(f => {
+      const accuracy = calculateAccuracy(
+        parseFloat(f.predictedDLO!.toString()),
+        parseFloat(f.actualDLO!.toString())
+      );
+      if (!best || accuracy > best.accuracy) {
+        const job = jobsMap.get(f.jobId);
+        best = { forecast: f, accuracy, job, type: 'DLO' as const };
+      }
+    });
+    
+    return best;
+  })();
+
+  const monthlyAccuracyData = last6Months.map(month => {
+    const monthTDLForecasts = forecastsWithTDL.filter(f => {
+      const job = jobsMap.get(f.jobId);
+      if (!job?.completedDate) return false;
+      return format(new Date(job.completedDate), 'MMM yyyy') === month;
+    });
+
+    const monthDLOForecasts = forecastsWithDLO.filter(f => {
+      const job = jobsMap.get(f.jobId);
+      if (!job?.completedDate) return false;
+      return format(new Date(job.completedDate), 'MMM yyyy') === month;
+    });
+    
+    const tdlAccuracy = monthTDLForecasts.length > 0
+      ? monthTDLForecasts.reduce((sum, f) => {
+          const accuracy = calculateAccuracy(
+            parseFloat(f.predictedTDL!.toString()),
+            parseFloat(f.actualTDL!.toString())
+          );
+          return sum + accuracy;
+        }, 0) / monthTDLForecasts.length
+      : 0;
+
+    const dloAccuracy = monthDLOForecasts.length > 0
+      ? monthDLOForecasts.reduce((sum, f) => {
+          const accuracy = calculateAccuracy(
+            parseFloat(f.predictedDLO!.toString()),
+            parseFloat(f.actualDLO!.toString())
+          );
+          return sum + accuracy;
+        }, 0) / monthDLOForecasts.length
+      : 0;
+    
+    return { 
+      month, 
+      tdlAccuracy: parseFloat(tdlAccuracy.toFixed(1)),
+      dloAccuracy: parseFloat(dloAccuracy.toFixed(1))
+    };
+  });
+
+  const accuracyDistribution = (() => {
+    const dist = {
+      'Excellent (>95%)': 0,
+      'Good (90-95%)': 0,
+      'Fair (80-90%)': 0,
+      'Needs Improvement (<80%)': 0
+    };
+
+    // Count TDL accuracies
+    forecastsWithTDL.forEach(f => {
+      const accuracy = calculateAccuracy(
+        parseFloat(f.predictedTDL!.toString()),
+        parseFloat(f.actualTDL!.toString())
+      );
+      if (accuracy > 95) dist['Excellent (>95%)']++;
+      else if (accuracy >= 90) dist['Good (90-95%)']++;
+      else if (accuracy >= 80) dist['Fair (80-90%)']++;
+      else dist['Needs Improvement (<80%)']++;
+    });
+
+    // Count DLO accuracies
+    forecastsWithDLO.forEach(f => {
+      const accuracy = calculateAccuracy(
+        parseFloat(f.predictedDLO!.toString()),
+        parseFloat(f.actualDLO!.toString())
+      );
+      if (accuracy > 95) dist['Excellent (>95%)']++;
+      else if (accuracy >= 90) dist['Good (90-95%)']++;
+      else if (accuracy >= 80) dist['Fair (80-90%)']++;
+      else dist['Needs Improvement (<80%)']++;
+    });
+
+    return dist;
+  })();
+
+  const accuracyDistributionData = Object.entries(accuracyDistribution).map(([range, count]) => ({
+    range,
+    count
+  }));
+
+  const [forecastSortColumn, setForecastSortColumn] = useState<string>('accuracy');
+  const [forecastSortDirection, setForecastSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  const handleForecastSort = (column: string) => {
+    if (forecastSortColumn === column) {
+      setForecastSortDirection(forecastSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setForecastSortColumn(column);
+      setForecastSortDirection('desc');
+    }
+  };
+
+  const forecastTableData = forecastsWithData.map(f => {
+    const job = jobsMap.get(f.jobId);
+    
+    // TDL data
+    const hasTDL = f.predictedTDL !== null && f.predictedTDL !== undefined && 
+                   f.actualTDL !== null && f.actualTDL !== undefined;
+    const predictedTDL = hasTDL ? parseFloat(f.predictedTDL!.toString()) : null;
+    const actualTDL = hasTDL ? parseFloat(f.actualTDL!.toString()) : null;
+    const tdlVariance = hasTDL && predictedTDL !== null && actualTDL !== null ? actualTDL - predictedTDL : null;
+    const tdlAccuracy = hasTDL && predictedTDL !== null && actualTDL !== null ? calculateAccuracy(predictedTDL, actualTDL) : null;
+    
+    // DLO data
+    const hasDLO = f.predictedDLO !== null && f.predictedDLO !== undefined && 
+                   f.actualDLO !== null && f.actualDLO !== undefined;
+    const predictedDLO = hasDLO ? parseFloat(f.predictedDLO!.toString()) : null;
+    const actualDLO = hasDLO ? parseFloat(f.actualDLO!.toString()) : null;
+    const dloVariance = hasDLO && predictedDLO !== null && actualDLO !== null ? actualDLO - predictedDLO : null;
+    const dloAccuracy = hasDLO && predictedDLO !== null && actualDLO !== null ? calculateAccuracy(predictedDLO, actualDLO) : null;
+    
+    // Overall accuracy (average of available metrics)
+    let overallAccuracy = 0;
+    if (tdlAccuracy !== null && dloAccuracy !== null) {
+      overallAccuracy = (tdlAccuracy + dloAccuracy) / 2;
+    } else if (tdlAccuracy !== null) {
+      overallAccuracy = tdlAccuracy;
+    } else if (dloAccuracy !== null) {
+      overallAccuracy = dloAccuracy;
+    }
+    
+    return {
+      id: f.id,
+      jobName: job?.name || 'Unknown Job',
+      predictedTDL,
+      actualTDL,
+      tdlVariance,
+      tdlAccuracy,
+      predictedDLO,
+      actualDLO,
+      dloVariance,
+      dloAccuracy,
+      accuracy: overallAccuracy,
+      date: job?.completedDate ? new Date(job.completedDate) : null
+    };
+  });
+
+  const sortedForecasts = [...forecastTableData].sort((a, b) => {
+    let aVal = a[forecastSortColumn as keyof typeof a];
+    let bVal = b[forecastSortColumn as keyof typeof b];
+    
+    if (forecastSortColumn === 'date') {
+      aVal = a.date?.getTime() || 0;
+      bVal = b.date?.getTime() || 0;
+    }
+    
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return forecastSortDirection === 'asc' 
+        ? aVal.localeCompare(bVal) 
+        : bVal.localeCompare(aVal);
+    } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return forecastSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    }
+    return 0;
+  });
+
+  const getAccuracyBadgeColor = (accuracy: number) => {
+    if (accuracy > 95) return 'bg-green-600 text-white';
+    if (accuracy >= 90) return 'bg-blue-500 text-white';
+    if (accuracy >= 80) return 'bg-yellow-500 text-white';
+    return 'bg-red-600 text-white';
+  };
+
+  const getAccuracyLabel = (accuracy: number) => {
+    if (accuracy > 95) return 'Excellent';
+    if (accuracy >= 90) return 'Good';
+    if (accuracy >= 80) return 'Fair';
+    return 'Needs Improvement';
+  };
+
+  const getAccuracyColor = (accuracy: number) => {
+    if (accuracy > 90) return 'text-success';
+    if (accuracy >= 80) return 'text-yellow-600';
+    return 'text-destructive';
+  };
 
   return (
     <div className="min-h-screen bg-background pb-6">
@@ -579,23 +998,34 @@ export default function Analytics() {
                       <TableHead>Issue Description</TableHead>
                       <TableHead className="text-center">Frequency</TableHead>
                       <TableHead className="text-center">% of Inspections</TableHead>
+                      <TableHead className="text-center">Trend</TableHead>
                       <TableHead className="text-right">Severity</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {commonIssues.map((issue, index) => (
-                      <TableRow key={issue.name}>
-                        <TableCell className="font-medium">{index + 1}</TableCell>
-                        <TableCell>{issue.name}</TableCell>
-                        <TableCell className="text-center font-semibold">{issue.frequency}</TableCell>
-                        <TableCell className="text-center">{issue.percentage}%</TableCell>
-                        <TableCell className="text-right">
-                          <Badge className={getSeverityColor(issue.severity)}>
-                            {issue.severity}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {commonIssues.map((issue, index) => {
+                      const trend = getIssueTrend(issue.name, monthlyIssues);
+                      const Icon = trend.icon;
+                      return (
+                        <TableRow key={issue.name}>
+                          <TableCell className="font-medium">{index + 1}</TableCell>
+                          <TableCell>{issue.name}</TableCell>
+                          <TableCell className="text-center font-semibold">{issue.frequency}</TableCell>
+                          <TableCell className="text-center">{issue.percentage}%</TableCell>
+                          <TableCell className="text-center">
+                            <div className={`flex items-center justify-center gap-1 ${trend.color}`} data-testid={`trend-indicator-${index}`}>
+                              <Icon className="h-4 w-4" />
+                              <span className="text-xs">{trend.label}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge className={getSeverityColor(issue.severity)}>
+                              {issue.severity}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               ) : (
@@ -603,6 +1033,48 @@ export default function Analytics() {
                   <CheckCircle2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="font-medium">No failed items found</p>
                   <p className="text-sm mt-2">All completed inspections are passing!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Common Issues Trend Chart */}
+          <Card data-testid="card-common-issues-trend">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Common Issues Trend
+              </CardTitle>
+              <CardDescription>Track how top issues are changing over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-[300px] w-full" />
+              ) : topIssues.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300} data-testid="chart-issues-trend">
+                  <LineChart data={issuesTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    {topIssues.map((issue, idx) => (
+                      <Line
+                        key={issue}
+                        type="monotone"
+                        dataKey={issue}
+                        stroke={ISSUE_COLORS[idx % ISSUE_COLORS.length]}
+                        strokeWidth={2}
+                        name={issue}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="font-medium">No trend data available</p>
+                  <p className="text-sm mt-2">Complete more inspections to see issue trends</p>
                 </div>
               )}
             </CardContent>
@@ -839,6 +1311,381 @@ export default function Analytics() {
               )}
             </CardContent>
           </Card>
+
+          {/* Forecast Accuracy Tracking */}
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold" data-testid="text-forecast-accuracy-title">Forecast Accuracy Tracking</h2>
+              <p className="text-muted-foreground">Track prediction accuracy and improve forecasting skills over time</p>
+            </div>
+
+            {/* Accuracy Metric Cards */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              <Card data-testid="card-overall-accuracy">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Overall Accuracy</p>
+                      {isLoading ? (
+                        <Skeleton className="h-8 w-16" />
+                      ) : (
+                        <p className={`text-3xl font-bold ${getAccuracyColor(overallAccuracy)}`} data-testid="text-overall-accuracy">
+                          {overallAccuracy > 0 ? `${overallAccuracy.toFixed(1)}%` : 'N/A'}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">{forecastsWithData.length} forecasts</p>
+                    </div>
+                    <div className="p-3 rounded-md bg-primary/10">
+                      <Target className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-tdl-accuracy">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">TDL Accuracy</p>
+                      {isLoading ? (
+                        <Skeleton className="h-8 w-16" />
+                      ) : (
+                        <p className={`text-3xl font-bold ${getAccuracyColor(tdlAccuracy)}`} data-testid="text-tdl-accuracy">
+                          {tdlAccuracy > 0 ? `${tdlAccuracy.toFixed(1)}%` : 'N/A'}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Total Duct Leakage</p>
+                    </div>
+                    <div className="p-3 rounded-md bg-blue-500/10">
+                      <CheckCircle2 className="h-6 w-6 text-blue-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-dlo-accuracy">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">DLO Accuracy</p>
+                      {isLoading ? (
+                        <Skeleton className="h-8 w-16" />
+                      ) : (
+                        <p className={`text-3xl font-bold ${getAccuracyColor(dloAccuracy)}`} data-testid="text-dlo-accuracy">
+                          {dloAccuracy > 0 ? `${dloAccuracy.toFixed(1)}%` : 'N/A'}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Duct Leakage to Outside</p>
+                    </div>
+                    <div className="p-3 rounded-md bg-purple-500/10">
+                      <CheckCircle2 className="h-6 w-6 text-purple-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-best-forecast">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Best Forecast</p>
+                      {isLoading ? (
+                        <Skeleton className="h-8 w-16" />
+                      ) : bestForecast ? (
+                        <p className="text-3xl font-bold text-success" data-testid="text-best-forecast">
+                          {bestForecast.accuracy.toFixed(1)}%
+                        </p>
+                      ) : (
+                        <p className="text-3xl font-bold text-muted-foreground" data-testid="text-best-forecast">
+                          N/A
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {bestForecast?.job?.completedDate 
+                          ? `${format(new Date(bestForecast.job.completedDate), 'MMM d, yyyy')} (${bestForecast.type})`
+                          : 'No data'}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-md bg-yellow-500/10">
+                      <Award className="h-6 w-6 text-yellow-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Accuracy Charts */}
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card data-testid="card-accuracy-trend">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Accuracy Trend
+                  </CardTitle>
+                  <CardDescription>Monthly TDL and DLO forecast accuracy over time</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : forecastsWithData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300} data-testid="chart-accuracy-trend">
+                      <LineChart data={monthlyAccuracyData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis domain={[0, 100]} label={{ value: 'Accuracy (%)', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="tdlAccuracy" 
+                          stroke="#28A745" 
+                          strokeWidth={2}
+                          name="TDL Accuracy %"
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="dloAccuracy" 
+                          stroke="#2E5BBA" 
+                          strokeWidth={2}
+                          name="DLO Accuracy %"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="font-medium">No forecast data available</p>
+                      <p className="text-sm mt-2">Add forecasts with actual results to see trends</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-accuracy-distribution">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Accuracy Distribution
+                  </CardTitle>
+                  <CardDescription>How forecasts are distributed by accuracy range</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : forecastsWithData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300} data-testid="chart-accuracy-distribution">
+                      <BarChart data={accuracyDistributionData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="range" angle={-15} textAnchor="end" height={80} />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="count" fill="#2E5BBA" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="font-medium">No distribution data available</p>
+                      <p className="text-sm mt-2">Complete forecasts to see accuracy distribution</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Detailed Forecast Table */}
+            <Card data-testid="card-forecast-details">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Detailed Forecast Analysis
+                </CardTitle>
+                <CardDescription>Individual forecast predictions vs actual results</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-[400px] w-full" />
+                ) : sortedForecasts.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table data-testid="table-forecast-details">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('jobName')}
+                              data-testid="button-sort-jobName"
+                              className="hover-elevate -ml-3"
+                            >
+                              Job Name
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('predictedTDL')}
+                              data-testid="button-sort-predictedTDL"
+                              className="hover-elevate"
+                            >
+                              Predicted TDL
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('actualTDL')}
+                              data-testid="button-sort-actualTDL"
+                              className="hover-elevate"
+                            >
+                              Actual TDL
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('tdlVariance')}
+                              data-testid="button-sort-tdlVariance"
+                              className="hover-elevate"
+                            >
+                              TDL Variance
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('predictedDLO')}
+                              data-testid="button-sort-predictedDLO"
+                              className="hover-elevate"
+                            >
+                              Predicted DLO
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('actualDLO')}
+                              data-testid="button-sort-actualDLO"
+                              className="hover-elevate"
+                            >
+                              Actual DLO
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('dloVariance')}
+                              data-testid="button-sort-dloVariance"
+                              className="hover-elevate"
+                            >
+                              DLO Variance
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('accuracy')}
+                              data-testid="button-sort-accuracy"
+                              className="hover-elevate"
+                            >
+                              Accuracy
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleForecastSort('date')}
+                              data-testid="button-sort-date"
+                              className="hover-elevate"
+                            >
+                              Date
+                              <ArrowUpDown className="h-4 w-4 ml-2" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-right">Quality</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedForecasts.map((forecast) => (
+                          <TableRow 
+                            key={forecast.id}
+                            className="hover-elevate"
+                            data-testid={`row-forecast-${forecast.id}`}
+                          >
+                            <TableCell className="font-medium">{forecast.jobName}</TableCell>
+                            <TableCell className="text-center">
+                              {forecast.predictedTDL !== null ? forecast.predictedTDL.toFixed(2) : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold">
+                              {forecast.actualTDL !== null ? forecast.actualTDL.toFixed(2) : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {forecast.tdlVariance !== null ? (
+                                <span className={forecast.tdlVariance > 0 ? 'text-destructive' : 'text-success'}>
+                                  {forecast.tdlVariance > 0 ? '+' : ''}{forecast.tdlVariance.toFixed(2)}
+                                </span>
+                              ) : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {forecast.predictedDLO !== null ? forecast.predictedDLO.toFixed(2) : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold">
+                              {forecast.actualDLO !== null ? forecast.actualDLO.toFixed(2) : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {forecast.dloVariance !== null ? (
+                                <span className={forecast.dloVariance > 0 ? 'text-destructive' : 'text-success'}>
+                                  {forecast.dloVariance > 0 ? '+' : ''}{forecast.dloVariance.toFixed(2)}
+                                </span>
+                              ) : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className={`font-semibold ${getAccuracyColor(forecast.accuracy)}`}>
+                                {forecast.accuracy.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {forecast.date ? format(forecast.date, 'MMM d, yyyy') : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Badge 
+                                className={getAccuracyBadgeColor(forecast.accuracy)}
+                                data-testid={`badge-accuracy-${forecast.id}`}
+                              >
+                                {getAccuracyLabel(forecast.accuracy)}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="font-medium">No forecast details available</p>
+                    <p className="text-sm mt-2">Add forecasts with predicted and actual TDL values</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </main>
     </div>
