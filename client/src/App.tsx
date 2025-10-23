@@ -74,6 +74,11 @@ function Router() {
           <Inspection />
         </RouteErrorBoundary>
       )} />
+      <Route path="/photos" component={() => (
+        <RouteErrorBoundary>
+          <Photos />
+        </RouteErrorBoundary>
+      )} />
       <Route path="/photos/:id" component={() => (
         <RouteErrorBoundary>
           <Photos />
