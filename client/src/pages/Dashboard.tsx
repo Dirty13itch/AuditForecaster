@@ -31,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import type { Job, Builder, ScheduleEvent, Expense, MileageLog, ReportInstance, Forecast } from "@shared/schema";
+import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
 
 const STANDARD_MILEAGE_RATE = 0.67;
 
@@ -139,18 +140,18 @@ export default function Dashboard() {
     return logDate >= thisMonthStart && logDate <= thisMonthEnd && m.isWorkRelated;
   });
 
-  const totalExpenses = thisMonthExpenses.reduce((sum, e) => sum + parseFloat(e.amount.toString()), 0);
-  const totalMileageDeduction = thisMonthMileage.reduce((sum, m) => sum + (parseFloat(m.distance.toString()) * STANDARD_MILEAGE_RATE), 0);
+  const totalExpenses = thisMonthExpenses.reduce((sum, e) => sum + safeParseFloat(e.amount.toString()), 0);
+  const totalMileageDeduction = thisMonthMileage.reduce((sum, m) => sum + (safeParseFloat(m.distance.toString()) * STANDARD_MILEAGE_RATE), 0);
   const thisMonthFinancials = totalExpenses + totalMileageDeduction;
 
   const jobsWithForecasts = forecasts.filter(f => f.actualTDL && f.predictedTDL).slice(-10);
   const forecastAccuracy = jobsWithForecasts.length > 0
-    ? jobsWithForecasts.reduce((sum, f) => {
-        const actual = parseFloat(f.actualTDL?.toString() || "0");
-        const predicted = parseFloat(f.predictedTDL?.toString() || "0");
-        const variance = Math.abs(actual - predicted) / predicted * 100;
+    ? safeDivide(jobsWithForecasts.reduce((sum, f) => {
+        const actual = safeParseFloat(f.actualTDL?.toString() || "0");
+        const predicted = safeParseFloat(f.predictedTDL?.toString() || "0");
+        const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
         return sum + (100 - variance);
-      }, 0) / jobsWithForecasts.length
+      }, 0), jobsWithForecasts.length)
     : 0;
 
   const todayEvents = scheduleEvents.filter(e => isToday(new Date(e.startTime)));
@@ -193,12 +194,12 @@ export default function Dashboard() {
       .filter(f => f && f.actualTDL && f.predictedTDL);
     
     const avgAccuracy = builderForecasts.length > 0
-      ? builderForecasts.reduce((sum, f) => {
-          const actual = parseFloat(f!.actualTDL?.toString() || "0");
-          const predicted = parseFloat(f!.predictedTDL?.toString() || "0");
-          const variance = Math.abs(actual - predicted) / predicted * 100;
+      ? safeDivide(builderForecasts.reduce((sum, f) => {
+          const actual = safeParseFloat(f!.actualTDL?.toString() || "0");
+          const predicted = safeParseFloat(f!.predictedTDL?.toString() || "0");
+          const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
           return sum + (100 - variance);
-        }, 0) / builderForecasts.length
+        }, 0), builderForecasts.length)
       : 0;
 
     return {
@@ -284,7 +285,7 @@ export default function Dashboard() {
                     {isLoading ? (
                       <Skeleton className="h-8 w-24" />
                     ) : (
-                      <p className="text-3xl font-bold" data-testid="text-month-financials">${thisMonthFinancials.toFixed(2)}</p>
+                      <p className="text-3xl font-bold" data-testid="text-month-financials">${safeToFixed(thisMonthFinancials, 2)}</p>
                     )}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <span>Expenses + Mileage</span>
@@ -305,7 +306,7 @@ export default function Dashboard() {
                     {isLoading ? (
                       <Skeleton className="h-8 w-16" />
                     ) : (
-                      <p className="text-3xl font-bold" data-testid="text-forecast-accuracy">{forecastAccuracy.toFixed(1)}%</p>
+                      <p className="text-3xl font-bold" data-testid="text-forecast-accuracy">{safeToFixed(forecastAccuracy, 1)}%</p>
                     )}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <span>Last 10 jobs</span>
@@ -602,7 +603,7 @@ export default function Dashboard() {
                         <div className="text-right">
                           <p className="font-semibold">{stat.jobCount} jobs</p>
                           <p className="text-sm text-muted-foreground">
-                            {stat.avgAccuracy.toFixed(1)}% accuracy
+                            {safeToFixed(stat.avgAccuracy, 1)}% accuracy
                           </p>
                         </div>
                       </div>

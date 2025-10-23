@@ -3,6 +3,7 @@ import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/
 import { renderToBuffer } from '@react-pdf/renderer';
 import type { Job, Builder, ChecklistItem, Photo, Forecast, ReportInstance } from '@shared/schema';
 import { calculateScore } from '../shared/scoring';
+import { safeToFixed, safeParseFloat, safeDivide } from '../shared/numberUtils';
 
 interface ReportSection {
   id: string;
@@ -335,7 +336,7 @@ function ScoreSummarySection({ checklistItems }: { checklistItems: ChecklistItem
       <View style={styles.scoreGrid}>
         <View style={styles.scoreCard}>
           <Text style={styles.scoreLabel}>Pass Rate</Text>
-          <Text style={styles.scoreValue}>{score.passRate.toFixed(1)}%</Text>
+          <Text style={styles.scoreValue}>{safeToFixed(score.passRate, 1)}%</Text>
         </View>
         <View style={styles.scoreCard}>
           <Text style={styles.scoreLabel}>Grade</Text>
@@ -343,7 +344,7 @@ function ScoreSummarySection({ checklistItems }: { checklistItems: ChecklistItem
         </View>
         <View style={styles.scoreCard}>
           <Text style={styles.scoreLabel}>Completion</Text>
-          <Text style={styles.scoreValue}>{score.completionRate.toFixed(1)}%</Text>
+          <Text style={styles.scoreValue}>{safeToFixed(score.completionRate, 1)}%</Text>
         </View>
       </View>
       <View style={styles.scoreBreakdown}>
@@ -515,7 +516,7 @@ function ForecastSection({ forecasts }: { forecasts: Forecast[] }) {
                 <Text style={styles.tableCell}>{forecast.predictedTDL} CFM25</Text>
                 <Text style={styles.tableCell}>{forecast.actualTDL} CFM25</Text>
                 <Text style={styles.tableCell}>
-                  {((parseFloat(forecast.actualTDL) - parseFloat(forecast.predictedTDL)) / parseFloat(forecast.predictedTDL) * 100).toFixed(1)}%
+                  {safeToFixed(safeDivide(safeParseFloat(forecast.actualTDL) - safeParseFloat(forecast.predictedTDL), safeParseFloat(forecast.predictedTDL)) * 100, 1)}%
                 </Text>
               </View>
             )}
@@ -525,7 +526,7 @@ function ForecastSection({ forecasts }: { forecasts: Forecast[] }) {
                 <Text style={styles.tableCell}>{forecast.predictedDLO}%</Text>
                 <Text style={styles.tableCell}>{forecast.actualDLO}%</Text>
                 <Text style={styles.tableCell}>
-                  {((parseFloat(forecast.actualDLO) - parseFloat(forecast.predictedDLO)) / parseFloat(forecast.predictedDLO) * 100).toFixed(1)}%
+                  {safeToFixed(safeDivide(safeParseFloat(forecast.actualDLO) - safeParseFloat(forecast.predictedDLO), safeParseFloat(forecast.predictedDLO)) * 100, 1)}%
                 </Text>
               </View>
             )}

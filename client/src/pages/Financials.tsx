@@ -44,6 +44,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import type { Expense, MileageLog, Job } from "@shared/schema";
 import { insertExpenseSchema, insertMileageLogSchema } from "@shared/schema";
+import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
 
 type DateRange = "week" | "month" | "year" | "custom";
 
@@ -124,15 +125,15 @@ export default function Financials() {
   }, [filteredMileageLogs]);
 
   const summary = useMemo(() => {
-    const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
-    const workExpenses = filteredExpenses.filter((exp) => exp.isWorkRelated).reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
-    const personalExpenses = filteredExpenses.filter((exp) => !exp.isWorkRelated).reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
-    const totalMileage = filteredMileageLogs.reduce((sum, log) => sum + parseFloat(log.distance), 0);
-    const workMileage = filteredMileageLogs.filter((log) => log.isWorkRelated).reduce((sum, log) => sum + parseFloat(log.distance), 0);
+    const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + safeParseFloat(exp.amount), 0);
+    const workExpenses = filteredExpenses.filter((exp) => exp.isWorkRelated).reduce((sum, exp) => sum + safeParseFloat(exp.amount), 0);
+    const personalExpenses = filteredExpenses.filter((exp) => !exp.isWorkRelated).reduce((sum, exp) => sum + safeParseFloat(exp.amount), 0);
+    const totalMileage = filteredMileageLogs.reduce((sum, log) => sum + safeParseFloat(log.distance), 0);
+    const workMileage = filteredMileageLogs.filter((log) => log.isWorkRelated).reduce((sum, log) => sum + safeParseFloat(log.distance), 0);
     const mileageDeduction = workMileage * 0.67;
 
     const categoryBreakdown = filteredExpenses.reduce((acc, exp) => {
-      acc[exp.category] = (acc[exp.category] || 0) + parseFloat(exp.amount);
+      acc[exp.category] = (acc[exp.category] || 0) + safeParseFloat(exp.amount);
       return acc;
     }, {} as Record<string, number>);
 
@@ -216,7 +217,7 @@ export default function Financials() {
         onSuccess: () => {
           toast({
             title: isWorkRelated ? "Marked as Work" : "Marked as Personal",
-            description: `${parseFloat(log.distance).toFixed(1)} miles classified`,
+            description: `${safeToFixed(safeParseFloat(log.distance), 1)} miles classified`,
             variant: isWorkRelated ? "default" : "default",
           });
           setCurrentMileageIndex(0);
@@ -271,7 +272,7 @@ export default function Financials() {
     const rows = filteredExpenses.map((exp) => [
       format(new Date(exp.date), "yyyy-MM-dd"),
       exp.category,
-      `$${parseFloat(exp.amount).toFixed(2)}`,
+      `$${safeToFixed(safeParseFloat(exp.amount), 2)}`,
       exp.description || "",
       exp.isWorkRelated ? "Work" : "Personal",
       jobs.find((j) => j.id === exp.jobId)?.name || "N/A",
@@ -352,7 +353,7 @@ export default function Financials() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-expenses">
-              ${summary.totalExpenses.toFixed(2)}
+              ${safeToFixed(summary.totalExpenses, 2)}
             </div>
             <p className="text-xs text-muted-foreground">{filteredExpenses.length} transactions</p>
           </CardContent>
@@ -365,7 +366,7 @@ export default function Financials() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary" data-testid="text-work-expenses">
-              ${summary.workExpenses.toFixed(2)}
+              ${safeToFixed(summary.workExpenses, 2)}
             </div>
             <p className="text-xs text-muted-foreground">Business deductible</p>
           </CardContent>
@@ -378,7 +379,7 @@ export default function Financials() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-personal-expenses">
-              ${summary.personalExpenses.toFixed(2)}
+              ${safeToFixed(summary.personalExpenses, 2)}
             </div>
             <p className="text-xs text-muted-foreground">Non-deductible</p>
           </CardContent>
@@ -391,9 +392,9 @@ export default function Financials() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-mileage">
-              {summary.totalMileage.toFixed(1)} mi
+              {safeToFixed(summary.totalMileage, 1)} mi
             </div>
-            <p className="text-xs text-muted-foreground">{summary.workMileage.toFixed(1)} mi work</p>
+            <p className="text-xs text-muted-foreground">{safeToFixed(summary.workMileage, 1)} mi work</p>
           </CardContent>
         </Card>
 
@@ -404,7 +405,7 @@ export default function Financials() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-success" data-testid="text-mileage-deduction">
-              ${summary.mileageDeduction.toFixed(2)}
+              ${safeToFixed(summary.mileageDeduction, 2)}
             </div>
             <p className="text-xs text-muted-foreground">@$0.67/mile</p>
           </CardContent>
@@ -502,7 +503,7 @@ export default function Financials() {
                         <div className="flex items-center gap-3">
                           <div className="text-right">
                             <p className="text-lg font-bold" data-testid={`text-expense-amount-${expense.id}`}>
-                              ${parseFloat(expense.amount).toFixed(2)}
+                              ${safeToFixed(safeParseFloat(expense.amount), 2)}
                             </p>
                           </div>
                           <Button
@@ -579,10 +580,10 @@ export default function Financials() {
                               <Car className="h-5 w-5 text-primary" />
                               <div>
                                 <p className="text-2xl font-bold" data-testid="text-trip-distance">
-                                  {parseFloat(unclassifiedMileage[currentMileageIndex].distance).toFixed(1)} miles
+                                  {safeToFixed(safeParseFloat(unclassifiedMileage[currentMileageIndex].distance), 1)} miles
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  Potential deduction: ${(parseFloat(unclassifiedMileage[currentMileageIndex].distance) * 0.67).toFixed(2)}
+                                  Potential deduction: ${safeToFixed(safeParseFloat(unclassifiedMileage[currentMileageIndex].distance) * 0.67, 2)}
                                 </p>
                               </div>
                             </div>
@@ -669,12 +670,12 @@ export default function Financials() {
                           <Badge variant={log.isWorkRelated ? "default" : "secondary"} className="shrink-0">
                             {log.isWorkRelated ? "Work" : "Personal"}
                           </Badge>
-                          <p className="text-sm truncate">{parseFloat(log.distance).toFixed(1)} mi</p>
+                          <p className="text-sm truncate">{safeToFixed(safeParseFloat(log.distance), 1)} mi</p>
                         </div>
                         <p className="text-xs text-muted-foreground">{format(new Date(log.date), "MMM d")}</p>
                       </div>
                       {log.isWorkRelated && (
-                        <p className="text-sm font-medium text-success">${(parseFloat(log.distance) * 0.67).toFixed(2)}</p>
+                        <p className="text-sm font-medium text-success">${safeToFixed(safeParseFloat(log.distance) * 0.67, 2)}</p>
                       )}
                     </div>
                   ))}

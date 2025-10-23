@@ -25,6 +25,7 @@ import {
 } from "recharts";
 import type { Job, ChecklistItem, Photo, Builder, Forecast } from "@shared/schema";
 import { getTagConfig } from "@shared/photoTags";
+import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
 
 const STATUS_COLORS = {
   pending: "#FFC107",
@@ -122,7 +123,7 @@ export default function Analytics() {
     .map(([name, data]) => ({
       name,
       frequency: data.count,
-      percentage: completedInspections > 0 ? ((data.count / completedInspections) * 100).toFixed(1) : '0.0',
+      percentage: completedInspections > 0 ? safeToFixed((data.count / completedInspections) * 100, 1) : '0.0',
       severity: data.count > 10 ? 'Critical' : data.count > 5 ? 'Major' : 'Minor',
     }))
     .sort((a, b) => b.frequency - a.frequency)
@@ -254,9 +255,9 @@ export default function Analytics() {
     });
     
     const currentCount = monthlyData[currentMonth]?.[issueName] || 0;
-    const avgLast3Months = last3Months.reduce((sum, month) => {
+    const avgLast3Months = safeDivide(last3Months.reduce((sum, month) => {
       return sum + (monthlyData[month]?.[issueName] || 0);
-    }, 0) / 3;
+    }, 0), 3);
     
     if (currentCount > avgLast3Months * 1.3) {
       return { icon: TrendingUp, color: 'text-destructive', label: 'Worsening' };
@@ -276,7 +277,7 @@ export default function Analytics() {
       return actual === 0 ? 100 : 0; // Perfect if both zero, else 0%
     }
     
-    const variance = Math.abs(actual - predicted) / predicted * 100;
+    const variance = safeDivide(Math.abs(actual - predicted), predicted) * 100;
     return Math.max(0, 100 - variance);
   };
 
@@ -317,28 +318,28 @@ export default function Analytics() {
     
     // Calculate TDL accuracy
     const tdlAccuracy = tdlForecasts.length > 0
-      ? tdlForecasts.reduce((sum, f) => {
+      ? safeDivide(tdlForecasts.reduce((sum, f) => {
           return sum + calculateAccuracy(
-            parseFloat(f!.predictedTDL!.toString()),
-            parseFloat(f!.actualTDL!.toString())
+            safeParseFloat(f!.predictedTDL!.toString()),
+            safeParseFloat(f!.actualTDL!.toString())
           );
-        }, 0) / tdlForecasts.length
+        }, 0), tdlForecasts.length)
       : 0;
     
     // Calculate DLO accuracy
     const dloAccuracy = dloForecasts.length > 0
-      ? dloForecasts.reduce((sum, f) => {
+      ? safeDivide(dloForecasts.reduce((sum, f) => {
           return sum + calculateAccuracy(
-            parseFloat(f!.predictedDLO!.toString()),
-            parseFloat(f!.actualDLO!.toString())
+            safeParseFloat(f!.predictedDLO!.toString()),
+            safeParseFloat(f!.actualDLO!.toString())
           );
-        }, 0) / dloForecasts.length
+        }, 0), dloForecasts.length)
       : 0;
     
     // Calculate weighted average of both TDL and DLO
     const totalForecasts = tdlForecasts.length + dloForecasts.length;
     const avgAccuracy = totalForecasts > 0
-      ? (tdlAccuracy * tdlForecasts.length + dloAccuracy * dloForecasts.length) / totalForecasts
+      ? safeDivide(tdlAccuracy * tdlForecasts.length + dloAccuracy * dloForecasts.length, totalForecasts)
       : 0;
     
     const builderChecklistItems = builderJobs.flatMap(job => 
@@ -445,7 +446,12 @@ export default function Analytics() {
       })
     ).size;
     
-    const avgJobsPerActiveMonth = last6MonthsJobs.length / monthsWithJobs;
+    // Guard against division by zero
+    if (monthsWithJobs === 0) {
+      return <Minus className="h-4 w-4 text-muted-foreground" />;
+    }
+    
+    const avgJobsPerActiveMonth = safeDivide(last6MonthsJobs.length, monthsWithJobs);
     
     // Compare current month to average (20% threshold)
     if (stat.jobsThisMonth > avgJobsPerActiveMonth * 1.2) {
@@ -461,8 +467,8 @@ export default function Analytics() {
     .slice(0, 5)
     .map(stat => ({
       name: stat.builder.name,
-      'Completion Rate': parseFloat(stat.completionRate.toFixed(1)),
-      'Forecast Accuracy': parseFloat(stat.avgAccuracy.toFixed(1)),
+      'Completion Rate': safeParseFloat(safeToFixed(stat.completionRate, 1)),
+      'Forecast Accuracy': safeParseFloat(safeToFixed(stat.avgAccuracy, 1)),
     }));
 
   const builderTrendData = last6Months.map(month => {
@@ -505,29 +511,29 @@ export default function Analytics() {
 
   // Calculate TDL accuracy
   const tdlAccuracy = forecastsWithTDL.length > 0
-    ? forecastsWithTDL.reduce((sum, f) => {
+    ? safeDivide(forecastsWithTDL.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          parseFloat(f.predictedTDL!.toString()),
-          parseFloat(f.actualTDL!.toString())
+          safeParseFloat(f.predictedTDL!.toString()),
+          safeParseFloat(f.actualTDL!.toString())
         );
-      }, 0) / forecastsWithTDL.length
+      }, 0), forecastsWithTDL.length)
     : 0;
 
   // Calculate DLO accuracy
   const dloAccuracy = forecastsWithDLO.length > 0
-    ? forecastsWithDLO.reduce((sum, f) => {
+    ? safeDivide(forecastsWithDLO.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          parseFloat(f.predictedDLO!.toString()),
-          parseFloat(f.actualDLO!.toString())
+          safeParseFloat(f.predictedDLO!.toString()),
+          safeParseFloat(f.actualDLO!.toString())
         );
-      }, 0) / forecastsWithDLO.length
+      }, 0), forecastsWithDLO.length)
     : 0;
 
   // Calculate overall accuracy (weighted average of TDL and DLO)
   const overallAccuracy = (() => {
     const totalForecasts = forecastsWithTDL.length + forecastsWithDLO.length;
     if (totalForecasts === 0) return 0;
-    return (tdlAccuracy * forecastsWithTDL.length + dloAccuracy * forecastsWithDLO.length) / totalForecasts;
+    return safeDivide(tdlAccuracy * forecastsWithTDL.length + dloAccuracy * forecastsWithDLO.length, totalForecasts);
   })();
 
   const thirtyDaysAgo = subDays(new Date(), 30);
@@ -543,27 +549,27 @@ export default function Analytics() {
   });
 
   const recentTDLAccuracy = recentTDLForecasts.length > 0
-    ? recentTDLForecasts.reduce((sum, f) => {
+    ? safeDivide(recentTDLForecasts.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          parseFloat(f.predictedTDL!.toString()),
-          parseFloat(f.actualTDL!.toString())
+          safeParseFloat(f.predictedTDL!.toString()),
+          safeParseFloat(f.actualTDL!.toString())
         );
-      }, 0) / recentTDLForecasts.length
+      }, 0), recentTDLForecasts.length)
     : 0;
 
   const recentDLOAccuracy = recentDLOForecasts.length > 0
-    ? recentDLOForecasts.reduce((sum, f) => {
+    ? safeDivide(recentDLOForecasts.reduce((sum, f) => {
         return sum + calculateAccuracy(
-          parseFloat(f.predictedDLO!.toString()),
-          parseFloat(f.actualDLO!.toString())
+          safeParseFloat(f.predictedDLO!.toString()),
+          safeParseFloat(f.actualDLO!.toString())
         );
-      }, 0) / recentDLOForecasts.length
+      }, 0), recentDLOForecasts.length)
     : 0;
 
   const recentAccuracy = (() => {
     const totalRecent = recentTDLForecasts.length + recentDLOForecasts.length;
     if (totalRecent === 0) return 0;
-    return (recentTDLAccuracy * recentTDLForecasts.length + recentDLOAccuracy * recentDLOForecasts.length) / totalRecent;
+    return safeDivide(recentTDLAccuracy * recentTDLForecasts.length + recentDLOAccuracy * recentDLOForecasts.length, totalRecent);
   })();
 
   type BestForecastResult = { forecast: Forecast; accuracy: number; job?: Job; type: 'TDL' | 'DLO' } | null;
@@ -574,8 +580,8 @@ export default function Analytics() {
     // Check TDL forecasts
     forecastsWithTDL.forEach(f => {
       const accuracy = calculateAccuracy(
-        parseFloat(f.predictedTDL!.toString()),
-        parseFloat(f.actualTDL!.toString())
+        safeParseFloat(f.predictedTDL!.toString()),
+        safeParseFloat(f.actualTDL!.toString())
       );
       const job = jobsMap.get(f.jobId);
       candidates.push({ forecast: f, accuracy, job, type: 'TDL' });
@@ -584,8 +590,8 @@ export default function Analytics() {
     // Check DLO forecasts
     forecastsWithDLO.forEach(f => {
       const accuracy = calculateAccuracy(
-        parseFloat(f.predictedDLO!.toString()),
-        parseFloat(f.actualDLO!.toString())
+        safeParseFloat(f.predictedDLO!.toString()),
+        safeParseFloat(f.actualDLO!.toString())
       );
       const job = jobsMap.get(f.jobId);
       candidates.push({ forecast: f, accuracy, job, type: 'DLO' });
@@ -612,29 +618,29 @@ export default function Analytics() {
     });
     
     const tdlAccuracy = monthTDLForecasts.length > 0
-      ? monthTDLForecasts.reduce((sum, f) => {
+      ? safeDivide(monthTDLForecasts.reduce((sum, f) => {
           const accuracy = calculateAccuracy(
-            parseFloat(f.predictedTDL!.toString()),
-            parseFloat(f.actualTDL!.toString())
+            safeParseFloat(f.predictedTDL!.toString()),
+            safeParseFloat(f.actualTDL!.toString())
           );
           return sum + accuracy;
-        }, 0) / monthTDLForecasts.length
+        }, 0), monthTDLForecasts.length)
       : 0;
 
     const dloAccuracy = monthDLOForecasts.length > 0
-      ? monthDLOForecasts.reduce((sum, f) => {
+      ? safeDivide(monthDLOForecasts.reduce((sum, f) => {
           const accuracy = calculateAccuracy(
-            parseFloat(f.predictedDLO!.toString()),
-            parseFloat(f.actualDLO!.toString())
+            safeParseFloat(f.predictedDLO!.toString()),
+            safeParseFloat(f.actualDLO!.toString())
           );
           return sum + accuracy;
-        }, 0) / monthDLOForecasts.length
+        }, 0), monthDLOForecasts.length)
       : 0;
     
     return { 
       month, 
-      tdlAccuracy: parseFloat(tdlAccuracy.toFixed(1)),
-      dloAccuracy: parseFloat(dloAccuracy.toFixed(1))
+      tdlAccuracy: safeParseFloat(safeToFixed(tdlAccuracy, 1)),
+      dloAccuracy: safeParseFloat(safeToFixed(dloAccuracy, 1))
     };
   });
 
@@ -649,8 +655,8 @@ export default function Analytics() {
     // Count TDL accuracies
     forecastsWithTDL.forEach(f => {
       const accuracy = calculateAccuracy(
-        parseFloat(f.predictedTDL!.toString()),
-        parseFloat(f.actualTDL!.toString())
+        safeParseFloat(f.predictedTDL!.toString()),
+        safeParseFloat(f.actualTDL!.toString())
       );
       if (accuracy > 95) dist['Excellent (>95%)']++;
       else if (accuracy >= 90) dist['Good (90-95%)']++;
@@ -661,8 +667,8 @@ export default function Analytics() {
     // Count DLO accuracies
     forecastsWithDLO.forEach(f => {
       const accuracy = calculateAccuracy(
-        parseFloat(f.predictedDLO!.toString()),
-        parseFloat(f.actualDLO!.toString())
+        safeParseFloat(f.predictedDLO!.toString()),
+        safeParseFloat(f.actualDLO!.toString())
       );
       if (accuracy > 95) dist['Excellent (>95%)']++;
       else if (accuracy >= 90) dist['Good (90-95%)']++;
@@ -696,23 +702,23 @@ export default function Analytics() {
     // TDL data
     const hasTDL = f.predictedTDL !== null && f.predictedTDL !== undefined && 
                    f.actualTDL !== null && f.actualTDL !== undefined;
-    const predictedTDL = hasTDL ? parseFloat(f.predictedTDL!.toString()) : null;
-    const actualTDL = hasTDL ? parseFloat(f.actualTDL!.toString()) : null;
+    const predictedTDL = hasTDL ? safeParseFloat(f.predictedTDL!.toString()) : null;
+    const actualTDL = hasTDL ? safeParseFloat(f.actualTDL!.toString()) : null;
     const tdlVariance = hasTDL && predictedTDL !== null && actualTDL !== null ? actualTDL - predictedTDL : null;
     const tdlAccuracy = hasTDL && predictedTDL !== null && actualTDL !== null ? calculateAccuracy(predictedTDL, actualTDL) : null;
     
     // DLO data
     const hasDLO = f.predictedDLO !== null && f.predictedDLO !== undefined && 
                    f.actualDLO !== null && f.actualDLO !== undefined;
-    const predictedDLO = hasDLO ? parseFloat(f.predictedDLO!.toString()) : null;
-    const actualDLO = hasDLO ? parseFloat(f.actualDLO!.toString()) : null;
+    const predictedDLO = hasDLO ? safeParseFloat(f.predictedDLO!.toString()) : null;
+    const actualDLO = hasDLO ? safeParseFloat(f.actualDLO!.toString()) : null;
     const dloVariance = hasDLO && predictedDLO !== null && actualDLO !== null ? actualDLO - predictedDLO : null;
     const dloAccuracy = hasDLO && predictedDLO !== null && actualDLO !== null ? calculateAccuracy(predictedDLO, actualDLO) : null;
     
     // Overall accuracy (average of available metrics)
     let overallAccuracy = 0;
     if (tdlAccuracy !== null && dloAccuracy !== null) {
-      overallAccuracy = (tdlAccuracy + dloAccuracy) / 2;
+      overallAccuracy = safeDivide(tdlAccuracy + dloAccuracy, 2);
     } else if (tdlAccuracy !== null) {
       overallAccuracy = tdlAccuracy;
     } else if (dloAccuracy !== null) {
@@ -797,13 +803,13 @@ export default function Analytics() {
     const monthNonCompliantJobs = monthJobsWithCompliance.filter(j => j.complianceStatus === 'non-compliant');
     
     const totalEvaluated = monthJobsWithCompliance.length;
-    const compliantRate = totalEvaluated > 0 ? (monthCompliantJobs.length / totalEvaluated * 100) : 0;
-    const nonCompliantRate = totalEvaluated > 0 ? (monthNonCompliantJobs.length / totalEvaluated * 100) : 0;
+    const compliantRate = totalEvaluated > 0 ? safeDivide(monthCompliantJobs.length, totalEvaluated) * 100 : 0;
+    const nonCompliantRate = totalEvaluated > 0 ? safeDivide(monthNonCompliantJobs.length, totalEvaluated) * 100 : 0;
     
     return {
       month,
-      compliantRate: parseFloat(compliantRate.toFixed(1)),
-      nonCompliantRate: parseFloat(nonCompliantRate.toFixed(1)),
+      compliantRate: safeParseFloat(safeToFixed(compliantRate, 1)),
+      nonCompliantRate: safeParseFloat(safeToFixed(nonCompliantRate, 1)),
       totalEvaluated
     };
   });
@@ -852,7 +858,7 @@ export default function Analytics() {
     .map(([metric, data]) => ({
       metric,
       frequency: data.count,
-      avgOverage: data.count > 0 ? parseFloat((data.totalOverage / data.count).toFixed(2)) : 0,
+      avgOverage: data.count > 0 ? safeParseFloat(safeToFixed(safeDivide(data.totalOverage, data.count), 2)) : 0,
       severity: data.violations[0]?.severity || 'unknown'
     }))
     .sort((a, b) => b.frequency - a.frequency)
@@ -917,7 +923,7 @@ export default function Analytics() {
                       <Skeleton className="h-8 w-16" />
                     ) : (
                       <p className="text-3xl font-bold" data-testid="text-completion-rate">
-                        {completionRate.toFixed(1)}%
+                        {safeToFixed(completionRate, 1)}%
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">Jobs completed</p>
@@ -938,7 +944,7 @@ export default function Analytics() {
                       <Skeleton className="h-8 w-16" />
                     ) : (
                       <p className="text-3xl font-bold" data-testid="text-avg-items">
-                        {avgItemsPerInspection.toFixed(1)}
+                        {safeToFixed(avgItemsPerInspection, 1)}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">Checklist items</p>
@@ -1241,7 +1247,7 @@ export default function Analytics() {
                                 <div className="bg-card p-3 border rounded-md shadow-md">
                                   <p className="font-semibold">{data.metric || 'Unknown'}</p>
                                   <p className="text-sm">Frequency: {data.frequency || 0}</p>
-                                  <p className="text-sm">Avg Overage: {typeof data.avgOverage === 'number' && !isNaN(data.avgOverage) ? data.avgOverage.toFixed(2) : '0.00'}</p>
+                                  <p className="text-sm">Avg Overage: {typeof data.avgOverage === 'number' && !isNaN(data.avgOverage) ? safeToFixed(data.avgOverage, 2) : '0.00'}</p>
                                   <p className="text-sm text-muted-foreground capitalize">Severity: {data.severity || 'unknown'}</p>
                                 </div>
                               );
@@ -1424,10 +1430,10 @@ export default function Analytics() {
                               <TableCell className="text-center">{stat.totalJobs}</TableCell>
                               <TableCell className="text-center">{stat.completedJobs}</TableCell>
                               <TableCell className="text-center font-semibold">
-                                {stat.completionRate.toFixed(1)}%
+                                {safeToFixed(stat.completionRate, 1)}%
                               </TableCell>
                               <TableCell className="text-center font-semibold">
-                                {stat.avgAccuracy > 0 ? `${stat.avgAccuracy.toFixed(1)}%` : 'N/A'}
+                                {stat.avgAccuracy > 0 ? `${safeToFixed(stat.avgAccuracy, 1)}%` : 'N/A'}
                               </TableCell>
                               <TableCell className="text-center font-semibold">
                                 <span 
@@ -1439,7 +1445,7 @@ export default function Analytics() {
                                   }
                                   data-testid={`text-builder-compliance-${stat.builder.id}`}
                                 >
-                                  {stat.complianceRate > 0 ? `${stat.complianceRate.toFixed(1)}%` : 'N/A'}
+                                  {stat.complianceRate > 0 ? `${safeToFixed(stat.complianceRate, 1)}%` : 'N/A'}
                                 </span>
                               </TableCell>
                               <TableCell className="text-center">
@@ -1539,7 +1545,7 @@ export default function Analytics() {
                         <Skeleton className="h-8 w-16" />
                       ) : (
                         <p className={`text-3xl font-bold ${getAccuracyColor(overallAccuracy)}`} data-testid="text-overall-accuracy">
-                          {overallAccuracy > 0 ? `${overallAccuracy.toFixed(1)}%` : 'N/A'}
+                          {overallAccuracy > 0 ? `${safeToFixed(overallAccuracy, 1)}%` : 'N/A'}
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">{forecastsWithData.length} forecasts</p>
@@ -1560,7 +1566,7 @@ export default function Analytics() {
                         <Skeleton className="h-8 w-16" />
                       ) : (
                         <p className={`text-3xl font-bold ${getAccuracyColor(tdlAccuracy)}`} data-testid="text-tdl-accuracy">
-                          {tdlAccuracy > 0 ? `${tdlAccuracy.toFixed(1)}%` : 'N/A'}
+                          {tdlAccuracy > 0 ? `${safeToFixed(tdlAccuracy, 1)}%` : 'N/A'}
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">Total Duct Leakage</p>
@@ -1581,7 +1587,7 @@ export default function Analytics() {
                         <Skeleton className="h-8 w-16" />
                       ) : (
                         <p className={`text-3xl font-bold ${getAccuracyColor(dloAccuracy)}`} data-testid="text-dlo-accuracy">
-                          {dloAccuracy > 0 ? `${dloAccuracy.toFixed(1)}%` : 'N/A'}
+                          {dloAccuracy > 0 ? `${safeToFixed(dloAccuracy, 1)}%` : 'N/A'}
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">Duct Leakage to Outside</p>
@@ -1603,7 +1609,7 @@ export default function Analytics() {
                       ) : bestForecast && bestForecast.accuracy !== undefined ? (
                         <>
                           <p className="text-3xl font-bold text-success" data-testid="text-best-forecast">
-                            {bestForecast.accuracy.toFixed(1)}%
+                            {safeToFixed(bestForecast.accuracy, 1)}%
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {bestForecast.job?.completedDate 
@@ -1844,34 +1850,34 @@ export default function Analytics() {
                           >
                             <TableCell className="font-medium">{forecast.jobName}</TableCell>
                             <TableCell className="text-center">
-                              {forecast.predictedTDL !== null ? forecast.predictedTDL.toFixed(2) : 'N/A'}
+                              {forecast.predictedTDL !== null ? safeToFixed(forecast.predictedTDL, 2) : 'N/A'}
                             </TableCell>
                             <TableCell className="text-center font-semibold">
-                              {forecast.actualTDL !== null ? forecast.actualTDL.toFixed(2) : 'N/A'}
+                              {forecast.actualTDL !== null ? safeToFixed(forecast.actualTDL, 2) : 'N/A'}
                             </TableCell>
                             <TableCell className="text-center">
                               {forecast.tdlVariance !== null ? (
                                 <span className={forecast.tdlVariance > 0 ? 'text-destructive' : 'text-success'}>
-                                  {forecast.tdlVariance > 0 ? '+' : ''}{forecast.tdlVariance.toFixed(2)}
+                                  {forecast.tdlVariance > 0 ? '+' : ''}{safeToFixed(forecast.tdlVariance, 2)}
                                 </span>
                               ) : 'N/A'}
                             </TableCell>
                             <TableCell className="text-center">
-                              {forecast.predictedDLO !== null ? forecast.predictedDLO.toFixed(2) : 'N/A'}
+                              {forecast.predictedDLO !== null ? safeToFixed(forecast.predictedDLO, 2) : 'N/A'}
                             </TableCell>
                             <TableCell className="text-center font-semibold">
-                              {forecast.actualDLO !== null ? forecast.actualDLO.toFixed(2) : 'N/A'}
+                              {forecast.actualDLO !== null ? safeToFixed(forecast.actualDLO, 2) : 'N/A'}
                             </TableCell>
                             <TableCell className="text-center">
                               {forecast.dloVariance !== null ? (
                                 <span className={forecast.dloVariance > 0 ? 'text-destructive' : 'text-success'}>
-                                  {forecast.dloVariance > 0 ? '+' : ''}{forecast.dloVariance.toFixed(2)}
+                                  {forecast.dloVariance > 0 ? '+' : ''}{safeToFixed(forecast.dloVariance, 2)}
                                 </span>
                               ) : 'N/A'}
                             </TableCell>
                             <TableCell className="text-center">
                               <span className={`font-semibold ${getAccuracyColor(forecast.accuracy)}`}>
-                                {forecast.accuracy.toFixed(1)}%
+                                {safeToFixed(forecast.accuracy, 1)}%
                               </span>
                             </TableCell>
                             <TableCell className="text-center">

@@ -1,6 +1,7 @@
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { safeToFixed, safeDivide } from "@shared/numberUtils";
 
 interface ForecastCardProps {
   title: string;
@@ -20,11 +21,17 @@ export default function ForecastCard({
   threshold 
 }: ForecastCardProps) {
   const hasActual = actual !== undefined;
-  const variance = hasActual ? ((actual - predicted) / predicted) * 100 : 0;
+  // When predicted is 0, variance is undefined unless actual is also 0
+  const variance = hasActual 
+    ? (predicted === 0 
+        ? (actual === 0 ? 0 : Infinity) 
+        : safeDivide(actual - predicted, predicted) * 100)
+    : 0;
   const passedTest = hasActual && threshold ? actual <= threshold : undefined;
 
   const getVarianceColor = () => {
     if (!hasActual) return "text-muted-foreground";
+    if (!isFinite(variance)) return "text-destructive";
     if (variance > 10) return "text-destructive";
     if (variance < -10) return "text-success";
     return "text-muted-foreground";
@@ -32,6 +39,7 @@ export default function ForecastCard({
 
   const getVarianceIcon = () => {
     if (!hasActual) return null;
+    if (!isFinite(variance)) return <TrendingUp className="h-4 w-4" />;
     if (variance > 5) return <TrendingUp className="h-4 w-4" />;
     if (variance < -5) return <TrendingDown className="h-4 w-4" />;
     return <Minus className="h-4 w-4" />;
@@ -59,7 +67,7 @@ export default function ForecastCard({
           <div>
             <p className="text-xs text-muted-foreground mb-1">Predicted</p>
             <p className="text-2xl font-bold" data-testid="text-predicted">
-              {predicted.toFixed(1)}
+              {safeToFixed(predicted, 1)}
               <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>
             </p>
             {confidence && (
@@ -73,12 +81,12 @@ export default function ForecastCard({
             <div>
               <p className="text-xs text-muted-foreground mb-1">Actual</p>
               <p className="text-2xl font-bold" data-testid="text-actual">
-                {actual.toFixed(1)}
+                {safeToFixed(actual, 1)}
                 <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>
               </p>
               <div className={`flex items-center gap-1 mt-1 text-xs ${getVarianceColor()}`} data-testid="text-variance">
                 {getVarianceIcon()}
-                <span>{Math.abs(variance).toFixed(1)}%</span>
+                <span>{isFinite(variance) ? `${safeToFixed(Math.abs(variance), 1)}%` : 'N/A'}</span>
               </div>
             </div>
           ) : (

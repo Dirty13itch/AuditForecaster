@@ -24,6 +24,7 @@ import type { ReportTemplate, ReportInstance, Job, Builder, ScoreSummary } from 
 import { DynamicForm } from "@/components/DynamicForm";
 import type { FormSection } from "@shared/types";
 import { getComplianceBadgeVariant, getComplianceBadgeClassName, getComplianceBadgeText } from "@/lib/compliance";
+import { safeToFixed } from "@shared/numberUtils";
 
 interface ReportSection {
   id: string;
@@ -392,7 +393,7 @@ export default function Reports() {
                               variant={getScoreBadgeVariant(score.passRate)} 
                               data-testid={`badge-score-${report.id}`}
                             >
-                              {score.grade} ({score.passRate.toFixed(0)}%)
+                              {score.grade} ({safeToFixed(score.passRate, 0)}%)
                             </Badge>
                           )}
                           <Badge 
