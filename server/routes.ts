@@ -312,6 +312,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk delete jobs
+  app.delete("/api/jobs/bulk", isAuthenticated, async (req, res) => {
+    const bulkDeleteSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one job ID is required"),
+    });
+
+    try {
+      const { ids } = bulkDeleteSchema.parse(req.body);
+      
+      // Limit bulk operations to 200 items for safety
+      if (ids.length > 200) {
+        return res.status(400).json({ message: "Cannot delete more than 200 jobs at once" });
+      }
+
+      const deleted = await storage.bulkDeleteJobs(ids);
+      res.json({ deleted, total: ids.length });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'bulk delete jobs');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Export jobs
+  app.post("/api/jobs/export", isAuthenticated, async (req, res) => {
+    const exportSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one job ID is required"),
+      format: z.enum(['csv', 'json']),
+    });
+
+    try {
+      const { ids, format } = exportSchema.parse(req.body);
+      
+      // Limit export to 1000 items for safety
+      if (ids.length > 1000) {
+        return res.status(400).json({ message: "Cannot export more than 1000 jobs at once" });
+      }
+
+      // Fetch jobs by IDs
+      const jobs = await Promise.all(
+        ids.map(id => storage.getJob(id))
+      );
+      const validJobs = jobs.filter((j): j is NonNullable<typeof j> => j !== undefined);
+
+      // Fetch builders for enrichment (for builderName)
+      const builderIds = Array.from(new Set(validJobs.map(j => j.builderId).filter(Boolean)));
+      const builders = await Promise.all(
+        builderIds.map(id => storage.getBuilder(id))
+      );
+      const builderMap = new Map(builders.filter(Boolean).map(b => [b!.id, b!]));
+
+      if (format === 'json') {
+        // Return JSON directly
+        res.json(validJobs);
+      } else {
+        // Generate CSV
+        const csvRows: string[] = [
+          // Header row
+          'ID,Name,Address,Contractor,Status,Priority,Builder ID,Builder Name,Scheduled Date,Completed Date,Completed Items,Total Items,Inspection Type,Compliance Status,Notes'
+        ];
+
+        // Data rows
+        for (const job of validJobs) {
+          const builder = job.builderId ? builderMap.get(job.builderId) : undefined;
+          const builderName = builder?.name ?? '';
+
+          const row = [
+            job.id,
+            job.name,
+            job.address ?? '',
+            job.contractor ?? '',
+            job.status ?? '',
+            job.priority ?? '',
+            job.builderId ?? '',
+            builderName,
+            job.scheduledDate ? new Date(job.scheduledDate).toISOString() : '',
+            job.completedDate ? new Date(job.completedDate).toISOString() : '',
+            job.completedItems ?? '',
+            job.totalItems ?? '',
+            job.inspectionType ?? '',
+            job.complianceStatus ?? '',
+            job.notes ?? '',
+          ].map(field => {
+            // Escape commas and quotes in CSV
+            const str = String(field);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          }).join(',');
+
+          csvRows.push(row);
+        }
+
+        const csv = csvRows.join('\n');
+        
+        // Set headers for CSV download
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="jobs-export-${Date.now()}.csv"`);
+        res.send(csv);
+      }
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'export jobs');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/schedule-events", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate, jobId } = req.query;

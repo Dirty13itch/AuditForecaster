@@ -49,6 +49,7 @@ export interface IStorage {
   getJobsPaginated(params: PaginationParams): Promise<PaginatedResult<Job>>;
   updateJob(id: string, job: Partial<InsertJob>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<boolean>;
+  bulkDeleteJobs(ids: string[]): Promise<number>;
 
   createScheduleEvent(event: InsertScheduleEvent): Promise<ScheduleEvent>;
   getScheduleEvent(id: string): Promise<ScheduleEvent | undefined>;
@@ -1136,6 +1137,16 @@ export class MemStorage implements IStorage {
 
   async deleteJob(id: string): Promise<boolean> {
     return this.jobs.delete(id);
+  }
+
+  async bulkDeleteJobs(ids: string[]): Promise<number> {
+    let deleted = 0;
+    for (const id of ids) {
+      if (this.jobs.delete(id)) {
+        deleted++;
+      }
+    }
+    return deleted;
   }
 
   async createScheduleEvent(insertEvent: InsertScheduleEvent): Promise<ScheduleEvent> {
