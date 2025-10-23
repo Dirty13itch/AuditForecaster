@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight, Award } from "lucide-react";
 import { analyticsLogger } from "@/lib/logger";
-import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth, subDays } from "date-fns";
+import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth, subDays, isWithinInterval, eachMonthOfInterval, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import type { Job, ChecklistItem, Photo, Builder, Forecast } from "@shared/schem
 import { getTagConfig } from "@shared/photoTags";
 import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
 import { calculateAccuracy } from "@shared/forecastAccuracy";
+import { DateRangePicker, type DateRange } from "@/components/DateRangePicker";
 
 const STATUS_COLORS = {
   pending: "#FFC107",
@@ -43,10 +44,50 @@ const ISSUE_COLORS = [
   '#6C757D', // Gray
 ];
 
+const STORAGE_KEY = 'analytics-date-range';
+
 export default function Analytics() {
   const [, setLocation] = useLocation();
   const [sortColumn, setSortColumn] = useState<string>('completionRate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  
+  // Initialize date range with last 6 months (to maintain current behavior)
+  const getInitialDateRange = (): DateRange => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.from && parsed.to) {
+          return {
+            from: new Date(parsed.from),
+            to: new Date(parsed.to),
+          };
+        }
+      }
+    } catch (error) {
+      analyticsLogger.error('Failed to load date range from localStorage', { error });
+    }
+    
+    // Default: last 6 months
+    return {
+      from: subMonths(new Date(), 5),
+      to: new Date(),
+    };
+  };
+  
+  const [dateRange, setDateRange] = useState<DateRange>(getInitialDateRange);
+  
+  // Persist date range to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        from: dateRange.from.toISOString(),
+        to: dateRange.to.toISOString(),
+      }));
+    } catch (error) {
+      analyticsLogger.error('Failed to save date range to localStorage', { error });
+    }
+  }, [dateRange]);
 
   const { data: jobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -70,8 +111,24 @@ export default function Analytics() {
 
   const isLoading = jobsLoading || itemsLoading || photosLoading || buildersLoading || forecastsLoading;
 
-  const totalInspections = jobs.length;
-  const completedJobs = jobs.filter(j => j.status === "completed" && j.completedDate && j.scheduledDate);
+  // Helper function to check if a date is within the selected range
+  const isInDateRange = (date: Date | string | null | undefined): boolean => {
+    if (!date) return false;
+    const checkDate = new Date(date);
+    return isWithinInterval(checkDate, {
+      start: startOfDay(dateRange.from),
+      end: endOfDay(dateRange.to),
+    });
+  };
+
+  // Filter jobs by selected date range
+  const jobsInRange = jobs.filter(j => {
+    const relevantDate = j.completedDate || j.scheduledDate;
+    return isInDateRange(relevantDate);
+  });
+
+  const totalInspections = jobsInRange.length;
+  const completedJobs = jobsInRange.filter(j => j.status === "completed" && j.completedDate && j.scheduledDate);
   
   const avgInspectionTime = completedJobs.length > 0
     ? completedJobs.reduce((sum, job) => {
@@ -82,28 +139,32 @@ export default function Analytics() {
     : 0;
 
   const completionRate = totalInspections > 0
-    ? (jobs.filter(j => j.status === "completed").length / totalInspections * 100)
+    ? (jobsInRange.filter(j => j.status === "completed").length / totalInspections * 100)
     : 0;
 
   const avgItemsPerInspection = totalInspections > 0
-    ? (checklistItems.length / totalInspections)
+    ? (checklistItems.filter(item => {
+        const job = jobs.find(j => j.id === item.jobId);
+        return job && isInDateRange(job.completedDate || job.scheduledDate);
+      }).length / totalInspections)
     : 0;
 
-  const last6Months = Array.from({ length: 6 }, (_, i) => {
-    const date = subMonths(new Date(), 5 - i);
-    return format(date, 'MMM yyyy');
-  });
+  // Generate month labels based on selected date range
+  const monthsInRange = eachMonthOfInterval({
+    start: startOfMonth(dateRange.from),
+    end: startOfMonth(dateRange.to),
+  }).map(date => format(date, 'MMM yyyy'));
 
-  const monthlyInspectionData = last6Months.map(month => {
+  const monthlyInspectionData = monthsInRange.map(month => {
     const count = jobs.filter(j => {
-      if (!j.completedDate) return false;
+      if (!j.completedDate || !isInDateRange(j.completedDate)) return false;
       const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
       return jobMonth === month;
     }).length;
     return { month, inspections: count };
   });
 
-  const completedJobIds = jobs.filter(j => j.status === 'completed').map(j => j.id);
+  const completedJobIds = jobsInRange.filter(j => j.status === 'completed').map(j => j.id);
   const failedItems = checklistItems.filter(item => 
     !item.completed && completedJobIds.includes(item.jobId)
   );
@@ -119,7 +180,7 @@ export default function Analytics() {
     return acc;
   }, {} as Record<string, { count: number; photoRequired: boolean }>);
 
-  const completedInspections = jobs.filter(j => j.status === 'completed').length;
+  const completedInspections = jobsInRange.filter(j => j.status === 'completed').length;
   const commonIssues = Object.entries(issueFrequency)
     .map(([name, data]) => ({
       name,
@@ -134,7 +195,7 @@ export default function Analytics() {
   const jobsMap = new Map(jobs.map(j => [j.id, j]));
 
   // Create Set of displayed months for exact alignment with chart
-  const displayedMonths = new Set(last6Months);
+  const displayedMonths = new Set(monthsInRange);
 
   // Monthly issue tracking for trend analysis (exact chart months)
   const monthlyIssues = checklistItems
@@ -142,7 +203,9 @@ export default function Analytics() {
       const job = jobsMap.get(item.jobId);
       if (!job?.completedDate || item.completed || job.status !== 'completed') return false;
       
-      // Check if job's month is in the displayed months
+      // Check if job is within date range and month is in displayed months
+      if (!isInDateRange(job.completedDate)) return false;
+      
       const jobMonth = format(new Date(job.completedDate), 'MMM yyyy');
       return displayedMonths.has(jobMonth);
     })
@@ -174,7 +237,7 @@ export default function Analytics() {
     .map(([name]) => name);
 
   // Format data for line chart
-  const issuesTrendData = last6Months.map(month => {
+  const issuesTrendData = monthsInRange.map(month => {
     const dataPoint: Record<string, string | number> = { month };
     topIssues.forEach(issue => {
       dataPoint[issue] = monthlyIssues[month]?.[issue] ?? 0;
@@ -182,12 +245,17 @@ export default function Analytics() {
     return dataPoint;
   });
 
-  const tagCounts = photos.reduce((acc, photo) => {
-    (photo.tags ?? []).forEach(tag => {
-      acc[tag] = (acc[tag] ?? 0) + 1;
-    });
-    return acc;
-  }, {} as Record<string, number>);
+  const tagCounts = photos
+    .filter(photo => {
+      const job = jobs.find(j => j.id === photo.jobId);
+      return job && isInDateRange(job.completedDate || job.scheduledDate);
+    })
+    .reduce((acc, photo) => {
+      (photo.tags ?? []).forEach(tag => {
+        acc[tag] = (acc[tag] ?? 0) + 1;
+      });
+      return acc;
+    }, {} as Record<string, number>);
 
   const photoTagData = Object.entries(tagCounts)
     .map(([tag, count]) => {
@@ -201,10 +269,9 @@ export default function Analytics() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
-  const statusBreakdownData = last6Months.map(month => {
-    const monthStart = startOfMonth(subMonths(new Date(), 5 - last6Months.indexOf(month)));
+  const statusBreakdownData = monthsInRange.map(month => {
     const jobsInMonth = jobs.filter(j => {
-      if (!j.scheduledDate) return false;
+      if (!j.scheduledDate || !isInDateRange(j.scheduledDate)) return false;
       const jobMonth = format(new Date(j.scheduledDate), 'MMM yyyy');
       return jobMonth === month;
     });
@@ -272,7 +339,7 @@ export default function Analytics() {
 
   // Builder Performance Metrics Calculation
   const builderStats = builders.map(builder => {
-    const builderJobs = jobs.filter(j => j.builderId === builder.id);
+    const builderJobs = jobsInRange.filter(j => j.builderId === builder.id);
     const completedBuilderJobs = builderJobs.filter(j => j.status === 'completed');
     
     const completionRate = builderJobs.length > 0
@@ -466,7 +533,7 @@ export default function Analytics() {
       'Forecast Accuracy': safeParseFloat(safeToFixed(stat.avgAccuracy, 1)),
     }));
 
-  const builderTrendData = last6Months.map(month => {
+  const builderTrendData = monthsInRange.map(month => {
     const monthData: Record<string, string | number> = { month };
     builderStats
       .sort((a, b) => b.totalJobs - a.totalJobs)
@@ -474,6 +541,7 @@ export default function Analytics() {
       .forEach(stat => {
         const jobsInMonth = jobs.filter(j => {
           if (!j.completedDate || j.builderId !== stat.builder.id) return false;
+          if (!isInDateRange(j.completedDate)) return false;
           const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
           return jobMonth === month;
         }).length;
@@ -486,34 +554,36 @@ export default function Analytics() {
     .sort((a, b) => b.totalJobs - a.totalJobs)
     .slice(0, 5);
 
-  // Forecast Accuracy Calculations
-  const forecastsWithTDL = forecasts.filter((f): f is Forecast => 
-    f != null &&
-    f.actualTDL != null &&
-    f.predictedTDL != null &&
-    !isNaN(Number(f.actualTDL)) &&
-    !isNaN(Number(f.predictedTDL))
-  );
+  // Forecast Accuracy Calculations (filtered by date range)
+  const forecastsWithTDL = forecasts.filter((f): f is Forecast => {
+    if (!f || f.actualTDL == null || f.predictedTDL == null) return false;
+    if (isNaN(Number(f.actualTDL)) || isNaN(Number(f.predictedTDL))) return false;
+    const job = jobsMap.get(f.jobId);
+    return job != null && isInDateRange(job.completedDate || job.scheduledDate);
+  });
 
-  const forecastsWithDLO = forecasts.filter((f): f is Forecast =>
-    f != null &&
-    f.actualDLO != null &&
-    f.predictedDLO != null &&
-    !isNaN(Number(f.actualDLO)) &&
-    !isNaN(Number(f.predictedDLO))
-  );
+  const forecastsWithDLO = forecasts.filter((f): f is Forecast => {
+    if (!f || f.actualDLO == null || f.predictedDLO == null) return false;
+    if (isNaN(Number(f.actualDLO)) || isNaN(Number(f.predictedDLO))) return false;
+    const job = jobsMap.get(f.jobId);
+    return job != null && isInDateRange(job.completedDate || job.scheduledDate);
+  });
 
-  const forecastsWithData = forecasts.filter((f): f is Forecast => 
-    f != null &&
-    ((f.actualTDL != null &&
-      f.predictedTDL != null &&
-      !isNaN(Number(f.actualTDL)) &&
-      !isNaN(Number(f.predictedTDL))) ||
-     (f.actualDLO != null &&
-      f.predictedDLO != null &&
-      !isNaN(Number(f.actualDLO)) &&
-      !isNaN(Number(f.predictedDLO))))
-  );
+  const forecastsWithData = forecasts.filter((f): f is Forecast => {
+    if (!f) return false;
+    const job = jobsMap.get(f.jobId);
+    if (!job || !isInDateRange(job.completedDate || job.scheduledDate)) return false;
+    return (
+      (f.actualTDL != null &&
+        f.predictedTDL != null &&
+        !isNaN(Number(f.actualTDL)) &&
+        !isNaN(Number(f.predictedTDL))) ||
+      (f.actualDLO != null &&
+        f.predictedDLO != null &&
+        !isNaN(Number(f.actualDLO)) &&
+        !isNaN(Number(f.predictedDLO)))
+    );
+  });
 
   // Calculate TDL accuracy
   const tdlAccuracy = forecastsWithTDL.length > 0
@@ -610,16 +680,16 @@ export default function Analytics() {
     );
   })();
 
-  const monthlyAccuracyData = last6Months.map(month => {
+  const monthlyAccuracyData = monthsInRange.map(month => {
     const monthTDLForecasts = forecastsWithTDL.filter(f => {
       const job = jobsMap.get(f.jobId);
-      if (!job?.completedDate) return false;
+      if (!job?.completedDate || !isInDateRange(job.completedDate)) return false;
       return format(new Date(job.completedDate), 'MMM yyyy') === month;
     });
 
     const monthDLOForecasts = forecastsWithDLO.filter(f => {
       const job = jobsMap.get(f.jobId);
-      if (!job?.completedDate) return false;
+      if (!job?.completedDate || !isInDateRange(job.completedDate)) return false;
       return format(new Date(job.completedDate), 'MMM yyyy') === month;
     });
     
@@ -793,18 +863,19 @@ export default function Analytics() {
   // Compliance Metrics Calculations
   
   // Filter jobs with evaluated compliance status (compliant or non-compliant)
-  const jobsWithComplianceData = jobs.filter(j => 
+  const jobsWithComplianceData = jobsInRange.filter(j => 
     j.complianceStatus === 'compliant' || j.complianceStatus === 'non-compliant'
   );
   
-  const compliantJobs = jobs.filter(j => j.complianceStatus === 'compliant');
-  const nonCompliantJobs = jobs.filter(j => j.complianceStatus === 'non-compliant');
+  const compliantJobs = jobsInRange.filter(j => j.complianceStatus === 'compliant');
+  const nonCompliantJobs = jobsInRange.filter(j => j.complianceStatus === 'non-compliant');
   
   // Monthly compliance rate data for 6-month chart
-  const monthlyComplianceData = last6Months.map(month => {
+  const monthlyComplianceData = monthsInRange.map(month => {
     const monthJobsWithCompliance = jobsWithComplianceData.filter(j => {
       if (!j.completedDate && !j.scheduledDate) return false;
       const jobDate = j.completedDate || j.scheduledDate;
+      if (!isInDateRange(jobDate)) return false;
       const jobMonth = format(new Date(jobDate!), 'MMM yyyy');
       return jobMonth === month;
     });
@@ -878,9 +949,16 @@ export default function Analytics() {
     <div className="min-h-screen bg-background pb-6">
       <main className="pt-6 px-4 md:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">Analytics</h1>
-            <p className="text-muted-foreground">Deep insights into inspection trends and common issues</p>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold" data-testid="text-page-title">Analytics</h1>
+              <p className="text-muted-foreground">Deep insights into inspection trends and common issues</p>
+            </div>
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              data-testid="daterange-picker-analytics"
+            />
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4" data-testid="card-inspection-metrics">
@@ -974,7 +1052,7 @@ export default function Analytics() {
                   <TrendingUp className="h-5 w-5" />
                   Inspection Volume Trend
                 </CardTitle>
-                <CardDescription>Completed inspections over the last 6 months</CardDescription>
+                <CardDescription>Completed inspections over selected period</CardDescription>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -1038,7 +1116,7 @@ export default function Analytics() {
                 <BarChart3 className="h-5 w-5" />
                 Inspection Status Breakdown
               </CardTitle>
-              <CardDescription>Status distribution over the last 6 months</CardDescription>
+              <CardDescription>Status distribution over selected period</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -1195,7 +1273,7 @@ export default function Analytics() {
               <Card data-testid="card-compliance-trends">
                 <CardHeader>
                   <CardTitle>Compliance Pass-Rate Trends</CardTitle>
-                  <CardDescription>Monthly pass rates over 6 months</CardDescription>
+                  <CardDescription>Monthly pass rates for selected period</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
@@ -1504,7 +1582,7 @@ export default function Analytics() {
                   <div className="space-y-4">
                     <div>
                       <h3 className="text-lg font-semibold">Builder Performance Trends</h3>
-                      <p className="text-sm text-muted-foreground">Job completion trends over the last 6 months for top 5 builders</p>
+                      <p className="text-sm text-muted-foreground">Job completion trends for top 5 builders over selected period</p>
                     </div>
                     <ResponsiveContainer width="100%" height={400}>
                       <LineChart data={builderTrendData} data-testid="chart-builder-trends">
