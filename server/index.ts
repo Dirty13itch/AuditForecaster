@@ -8,6 +8,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
+import { serverLogger } from "./logger";
 
 const app = express();
 
@@ -112,13 +113,13 @@ app.use(async (req, res, next) => {
       
       req.login(devUser, (err) => {
         if (err) {
-          console.error('Auto-login failed:', err);
+          serverLogger.error('Auto-login failed:', err);
           return next();
         }
         next();
       });
     } catch (error) {
-      console.error('Auto-login failed:', error);
+      serverLogger.error('Auto-login failed:', error);
       next();
     }
   } else {
@@ -216,7 +217,7 @@ app.use((req, res, next) => {
           log(`Recalculated scores for ${recalculated} existing reports`);
         }
       } catch (error) {
-        console.error('Failed to recalculate scores on startup:', error);
+        serverLogger.error('Failed to recalculate scores on startup:', error);
       }
       
       // Evaluate compliance for all existing jobs
@@ -241,7 +242,7 @@ app.use((req, res, next) => {
           log(`Evaluated compliance for ${jobsEvaluated} jobs and ${reportsEvaluated} reports`);
         }
       } catch (error) {
-        console.error('Failed to evaluate compliance on startup:', error);
+        serverLogger.error('Failed to evaluate compliance on startup:', error);
       }
     }
   });

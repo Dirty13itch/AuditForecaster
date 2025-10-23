@@ -76,8 +76,8 @@ export default function Photos() {
 
           <PhotoGallery
             photos={filteredPhotos}
-            onPhotoClick={(photo) => console.log('View photo:', photo)}
-            onPhotoDelete={(id) => console.log('Delete photo:', id)}
+            onPhotoClick={(photo) => {}}
+            onPhotoDelete={(id) => {}}
           />
         </div>
       </main>

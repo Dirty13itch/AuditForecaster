@@ -15,27 +15,27 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 class Logger {
   private config: LoggerConfig;
-  private isDevelopment: boolean;
+  private isProduction: boolean;
 
   constructor(config: Partial<LoggerConfig> = {}) {
-    this.isDevelopment = import.meta.env.MODE === 'development';
+    this.isProduction = process.env.NODE_ENV === 'production';
     this.config = {
-      minLevel: this.isDevelopment ? 'debug' : 'warn',
-      enabledInProduction: false,
+      minLevel: this.isProduction ? 'warn' : 'debug',
+      enabledInProduction: true,
       ...config,
     };
   }
 
   private shouldLog(level: LogLevel): boolean {
-    if (!this.isDevelopment && !this.config.enabledInProduction) {
-      return false;
+    if (!this.isProduction || this.config.enabledInProduction) {
+      return LOG_LEVELS[level] >= LOG_LEVELS[this.config.minLevel];
     }
-    return LOG_LEVELS[level] >= LOG_LEVELS[this.config.minLevel];
+    return false;
   }
 
   private formatMessage(level: LogLevel, message: string, ...args: any[]): [string, ...any[]] {
     const timestamp = new Date().toISOString();
-    const prefix = this.config.prefix || 'App';
+    const prefix = this.config.prefix || 'Server';
     const formattedMessage = `[${timestamp}] [${prefix}] [${level.toUpperCase()}] ${message}`;
     return [formattedMessage, ...args];
   }
@@ -62,25 +62,7 @@ class Logger {
     if (this.shouldLog('error')) {
       console.error(...this.formatMessage('error', message, ...args));
     }
-    
-    // In production, this could send to a logging service
-    // Example: this.sendToLoggingService(message, args);
-  }
-
-  // Placeholder for future logging service integration
-  private sendToLoggingService(message: string, args: any[]): void {
-    // TODO: Implement logging service integration (e.g., Sentry, LogRocket, etc.)
-    // This could be configured to send errors to a remote service in production
   }
 }
 
-// Create logger instances for different modules
-export const queryClientLogger = new Logger({ prefix: 'QueryClient' });
-export const syncQueueLogger = new Logger({ prefix: 'SyncQueue' });
-export const analyticsLogger = new Logger({ prefix: 'Analytics' });
-
-// Default logger for general use
-export const logger = new Logger();
-export const clientLogger = new Logger({ prefix: 'Client' });
-
-export default logger;
+export const serverLogger = new Logger({ prefix: 'Server' });

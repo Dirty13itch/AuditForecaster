@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { clientLogger } from "@/lib/logger";
 
 interface SignatureCaptureProps {
   open: boolean;
@@ -221,7 +222,7 @@ export function SignatureCapture({ open, onClose, onSave, jobName }: SignatureCa
       clearSignature();
       onClose();
     } catch (error) {
-      console.error('Error saving signature:', error);
+      clientLogger.error('Error saving signature:', error);
       toast({
         title: "Error",
         description: "Failed to save signature. Please try again.",

@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import type { ScheduleEvent, Job } from '@shared/schema';
+import { serverLogger } from './logger';
 
 interface ConnectionSettings {
   settings: {
@@ -117,18 +118,18 @@ export class GoogleCalendarService {
           eventId: scheduleEvent.googleCalendarEventId,
           requestBody: eventData,
         });
-        console.log(`[GoogleCalendar] Updated event: ${response.data.id}`);
+        serverLogger.info(`[GoogleCalendar] Updated event: ${response.data.id}`);
         return response.data.id || null;
       } else {
         const response = await calendar.events.insert({
           calendarId: 'primary',
           requestBody: eventData,
         });
-        console.log(`[GoogleCalendar] Created event: ${response.data.id}`);
+        serverLogger.info(`[GoogleCalendar] Created event: ${response.data.id}`);
         return response.data.id || null;
       }
     } catch (error) {
-      console.error('[GoogleCalendar] Error syncing event to Google Calendar:', error);
+      serverLogger.error('[GoogleCalendar] Error syncing event to Google Calendar:', error);
       throw error;
     }
   }
@@ -142,16 +143,16 @@ export class GoogleCalendarService {
         eventId: googleEventId,
       });
       
-      console.log(`[GoogleCalendar] Deleted event: ${googleEventId}`);
+      serverLogger.info(`[GoogleCalendar] Deleted event: ${googleEventId}`);
     } catch (error) {
       if (error instanceof Error) {
         const errorWithCode = error as Error & { code?: number };
         if (errorWithCode.code === 404 || error.message?.includes('404')) {
-          console.log(`[GoogleCalendar] Event ${googleEventId} not found, already deleted`);
+          serverLogger.info(`[GoogleCalendar] Event ${googleEventId} not found, already deleted`);
           return;
         }
       }
-      console.error('[GoogleCalendar] Error deleting event from Google Calendar:', error);
+      serverLogger.error('[GoogleCalendar] Error deleting event from Google Calendar:', error);
       throw error;
     }
   }
@@ -168,10 +169,10 @@ export class GoogleCalendarService {
         orderBy: 'startTime',
       });
 
-      console.log(`[GoogleCalendar] Fetched ${response.data.items?.length || 0} events from Google Calendar`);
+      serverLogger.info(`[GoogleCalendar] Fetched ${response.data.items?.length || 0} events from Google Calendar`);
       return response.data.items || [];
     } catch (error) {
-      console.error('[GoogleCalendar] Error fetching events from Google Calendar:', error);
+      serverLogger.error('[GoogleCalendar] Error fetching events from Google Calendar:', error);
       throw error;
     }
   }
@@ -201,7 +202,7 @@ export class GoogleCalendarService {
         color: null,
       };
     } catch (error) {
-      console.error('[GoogleCalendar] Error parsing Google event:', error);
+      serverLogger.error('[GoogleCalendar] Error parsing Google event:', error);
       return null;
     }
   }

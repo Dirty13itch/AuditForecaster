@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { InspectionScore } from "@/components/InspectionScore";
 import { getComplianceBadgeVariant, getComplianceBadgeClassName, getComplianceBadgeText } from "@/lib/compliance";
 import type { ReportInstance, Job, Builder, ChecklistItem } from "@shared/schema";
+import { clientLogger } from "@/lib/logger";
 
 interface ReportInstanceWithDetails extends ReportInstance {
   job?: Job;
@@ -77,7 +78,7 @@ export default function ReportInstancePage() {
         ? JSON.parse(reportInstance.complianceFlags) 
         : reportInstance.complianceFlags;
     } catch (e) {
-      console.error('Failed to parse compliance flags:', e);
+      clientLogger.error('Failed to parse compliance flags:', e);
     }
   }
 

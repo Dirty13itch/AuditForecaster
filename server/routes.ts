@@ -30,13 +30,14 @@ import {
   updateReportComplianceStatus,
 } from "./complianceService";
 import { ZodError } from "zod";
+import { serverLogger } from "./logger";
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
   const errorMessage = error instanceof Error ? error.message : String(error);
   const errorStack = error instanceof Error ? error.stack : undefined;
   
-  console.error(`[${context}] Error:`, {
+  serverLogger.error(`[${context}] Error:`, {
     message: errorMessage,
     stack: errorStack,
     ...additionalInfo,

@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { clientLogger } from "@/lib/logger";
 
 interface PhotoOCRProps {
   open: boolean;
@@ -97,7 +98,7 @@ export function PhotoOCR({ open, photoUrl, jobId, onClose, onAutoFill }: PhotoOC
       await worker.terminate();
       workerRef.current = null;
     } catch (error) {
-      console.error("OCR Error:", error);
+      clientLogger.error("OCR Error:", error);
       toast({
         title: "OCR Failed",
         description: "Failed to extract text from photo. Please try again.",

@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { clientLogger } from "@/lib/logger";
 
 interface VoiceRecorderProps {
   open: boolean;
@@ -160,7 +161,7 @@ export default function VoiceRecorder({
       setDuration(0);
       startTimer();
     } catch (error) {
-      console.error("Error accessing microphone:", error);
+      clientLogger.error("Error accessing microphone:", error);
       if (error instanceof Error && error.name === "NotAllowedError") {
         setPermissionDenied(true);
         toast({
@@ -236,7 +237,7 @@ export default function VoiceRecorder({
       resetRecording();
       onOpenChange(false);
     } catch (error) {
-      console.error("Error saving voice note:", error);
+      clientLogger.error("Error saving voice note:", error);
       toast({
         title: "Failed to save voice note",
         description: "An error occurred while saving. Please try again.",
@@ -259,7 +260,7 @@ export default function VoiceRecorder({
       resetRecording();
       onOpenChange(false);
     } catch (error) {
-      console.error("Error deleting voice note:", error);
+      clientLogger.error("Error deleting voice note:", error);
       toast({
         title: "Failed to delete voice note",
         description: "An error occurred while deleting. Please try again.",

@@ -1,13 +1,14 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { clientLogger } from "./lib/logger";
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
-        console.log('[SW] Service Worker registered successfully:', registration.scope);
+        clientLogger.info('[SW] Service Worker registered successfully:', registration.scope);
         
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
@@ -15,7 +16,7 @@ if ('serviceWorker' in navigator) {
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[SW] New version available. Reload to update.');
+                clientLogger.info('[SW] New version available. Reload to update.');
                 
                 if (confirm('A new version is available. Reload to update?')) {
                   newWorker.postMessage({ type: 'SKIP_WAITING' });
@@ -27,7 +28,7 @@ if ('serviceWorker' in navigator) {
         });
       })
       .catch((error) => {
-        console.error('[SW] Service Worker registration failed:', error);
+        clientLogger.error('[SW] Service Worker registration failed:', error);
       });
   });
   
@@ -41,7 +42,7 @@ if ('serviceWorker' in navigator) {
   
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data.type === 'BACKGROUND_SYNC') {
-      console.log('[SW] Background sync message received');
+      clientLogger.info('[SW] Background sync message received');
       window.dispatchEvent(new CustomEvent('background-sync'));
     }
   });

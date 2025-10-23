@@ -518,9 +518,8 @@ export default function Reports() {
                 onSubmit={(data) => {
                   toast({
                     title: "Form Submitted",
-                    description: "Check the console for form data",
+                    description: "Form data captured successfully",
                   });
-                  console.log("Form Data:", data);
                 }}
               />
             </ScrollArea>

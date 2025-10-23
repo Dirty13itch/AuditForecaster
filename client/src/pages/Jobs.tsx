@@ -36,6 +36,7 @@ import { SignatureCapture } from "@/components/SignatureCapture";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, Photo, ChecklistItem } from "@shared/schema";
+import { clientLogger } from "@/lib/logger";
 import ChecklistItemComponent from "@/components/ChecklistItem";
 import {
   TAG_CATEGORIES,
@@ -368,7 +369,7 @@ export default function Jobs() {
       setSignatureDialogOpen(false);
       setSelectedJobForSignature(null);
     } catch (error) {
-      console.error("Error saving signature:", error);
+      clientLogger.error("Error saving signature:", error);
       throw error;
     }
   };

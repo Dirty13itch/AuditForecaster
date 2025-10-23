@@ -1,4 +1,5 @@
 import type { ConditionalRule, FormField } from "@shared/types";
+import { clientLogger } from "@/lib/logger";
 
 export function evaluateCondition(
   rule: ConditionalRule,
@@ -39,7 +40,7 @@ export function evaluateCondition(
       return fieldValue === false || fieldValue === 'false' || fieldValue === 'no' || fieldValue === undefined || fieldValue === null || fieldValue === '';
     
     default:
-      console.warn(`Unknown operator: ${rule.operator}`);
+      clientLogger.warn(`Unknown operator: ${rule.operator}`);
       return false;
   }
 }
@@ -54,7 +55,7 @@ export function shouldShowField(
   }
 
   if (visitedFields.has(field.id)) {
-    console.warn(`Circular dependency detected for field: ${field.id}`);
+    clientLogger.warn(`Circular dependency detected for field: ${field.id}`);
     return false;
   }
 

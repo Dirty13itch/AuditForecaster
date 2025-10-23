@@ -4,6 +4,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import type { Job, Builder, ChecklistItem, Photo, Forecast, ReportInstance } from '@shared/schema';
 import { calculateScore } from '../shared/scoring';
 import { safeToFixed, safeParseFloat, safeDivide } from '../shared/numberUtils';
+import { serverLogger } from './logger';
 
 interface ReportSection {
   id: string;
@@ -678,7 +679,7 @@ export async function generateReportPDF(data: PDFGenerationData): Promise<Buffer
     const buffer = await renderToBuffer(pdfDocument);
     return buffer;
   } catch (error) {
-    console.error('Error generating PDF:', error);
+    serverLogger.error('Error generating PDF:', error);
     throw new Error(`PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

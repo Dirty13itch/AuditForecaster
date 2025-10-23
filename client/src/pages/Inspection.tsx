@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { clientLogger } from "@/lib/logger";
 
 interface ChecklistItemData {
   id: string;
@@ -99,7 +100,7 @@ export default function Inspection() {
         description: "Your voice note has been saved successfully.",
       });
     } catch (error) {
-      console.error("Error uploading voice note:", error);
+      clientLogger.error("Error uploading voice note:", error);
       toast({
         title: "Failed to save voice note",
         description: "An error occurred while uploading. Please try again.",
@@ -125,7 +126,7 @@ export default function Inspection() {
         description: "Your voice note has been removed.",
       });
     } catch (error) {
-      console.error("Error deleting voice note:", error);
+      clientLogger.error("Error deleting voice note:", error);
       toast({
         title: "Failed to delete voice note",
         description: "An error occurred while deleting. Please try again.",

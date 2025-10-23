@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSyncQueueCount, processSyncQueue } from '@/lib/syncQueue';
+import { clientLogger } from '@/lib/logger';
 
 export interface NetworkStatus {
   isOnline: boolean;
@@ -43,7 +44,7 @@ class NetworkStatusManager {
       return;
     }
 
-    console.log('[NetworkStatusManager] Initializing singleton');
+    clientLogger.info('[NetworkStatusManager] Initializing singleton');
 
     // Set up global online/offline event listeners (only once)
     window.addEventListener('online', this.handleOnline);
@@ -62,7 +63,7 @@ class NetworkStatusManager {
    * Global online event handler - processes sync queue with concurrency protection
    */
   private handleOnline = async () => {
-    console.log('[NetworkStatusManager] Network is online');
+    clientLogger.info('[NetworkStatusManager] Network is online');
     
     this.updateStatus({ isOnline: true });
 
@@ -70,7 +71,7 @@ class NetworkStatusManager {
     if (count > 0) {
       // Check global lock to prevent concurrent processing
       if (this.isSyncInProgress) {
-        console.log('[NetworkStatusManager] Sync already in progress, skipping duplicate call');
+        clientLogger.info('[NetworkStatusManager] Sync already in progress, skipping duplicate call');
         return;
       }
 
@@ -80,10 +81,10 @@ class NetworkStatusManager {
 
       try {
         const result = await processSyncQueue((current, total) => {
-          console.log(`[NetworkStatusManager] Syncing: ${current}/${total}`);
+          clientLogger.debug(`[NetworkStatusManager] Syncing: ${current}/${total}`);
         });
 
-        console.log('[NetworkStatusManager] Sync complete:', result);
+        clientLogger.info('[NetworkStatusManager] Sync complete:', result);
 
         const remainingCount = await getSyncQueueCount();
         this.updateStatus({
@@ -91,7 +92,7 @@ class NetworkStatusManager {
           isSyncing: false,
         });
       } catch (error) {
-        console.error('[NetworkStatusManager] Error during sync:', error);
+        clientLogger.error('[NetworkStatusManager] Error during sync:', error);
         this.updateStatus({ isSyncing: false });
       } finally {
         // Release lock
@@ -101,7 +102,7 @@ class NetworkStatusManager {
   };
 
   private handleOffline = () => {
-    console.log('[NetworkStatusManager] Network is offline');
+    clientLogger.info('[NetworkStatusManager] Network is offline');
     this.updateStatus({ isOnline: false, isSyncing: false });
   };
 
@@ -110,7 +111,7 @@ class NetworkStatusManager {
       const count = await getSyncQueueCount();
       this.updateStatus({ pendingSync: count });
     } catch (error) {
-      console.error('[NetworkStatusManager] Error getting pending count:', error);
+      clientLogger.error('[NetworkStatusManager] Error getting pending count:', error);
     }
   }
 
@@ -149,13 +150,13 @@ class NetworkStatusManager {
    */
   async forceSync(): Promise<{ success: number; failed: number } | null> {
     if (!navigator.onLine) {
-      console.warn('[NetworkStatusManager] Cannot sync while offline');
+      clientLogger.warn('[NetworkStatusManager] Cannot sync while offline');
       return null;
     }
 
     // Check global lock
     if (this.isSyncInProgress) {
-      console.log('[NetworkStatusManager] Sync already in progress, skipping force sync');
+      clientLogger.info('[NetworkStatusManager] Sync already in progress, skipping force sync');
       return null;
     }
 
@@ -165,10 +166,10 @@ class NetworkStatusManager {
 
     try {
       const result = await processSyncQueue((current, total) => {
-        console.log(`[NetworkStatusManager] Force syncing: ${current}/${total}`);
+        clientLogger.debug(`[NetworkStatusManager] Force syncing: ${current}/${total}`);
       });
 
-      console.log('[NetworkStatusManager] Force sync complete:', result);
+      clientLogger.info('[NetworkStatusManager] Force sync complete:', result);
 
       const remainingCount = await getSyncQueueCount();
       this.updateStatus({
@@ -178,7 +179,7 @@ class NetworkStatusManager {
 
       return result;
     } catch (error) {
-      console.error('[NetworkStatusManager] Error during force sync:', error);
+      clientLogger.error('[NetworkStatusManager] Error during force sync:', error);
       this.updateStatus({ isSyncing: false });
       throw error;
     } finally {

@@ -1,5 +1,6 @@
 import type { IStorage } from "./storage";
 import type { Job, ReportInstance, Forecast, ChecklistItem, ComplianceRule } from "@shared/schema";
+import { serverLogger } from "./logger";
 
 export interface ComplianceViolation {
   ruleId: string;
@@ -135,7 +136,7 @@ export async function evaluateJobCompliance(
       evaluatedAt,
     };
   } catch (error) {
-    console.error(`Error evaluating job compliance for job ${jobId}:`, error);
+    serverLogger.error(`Error evaluating job compliance for job ${jobId}:`, error);
     return {
       status: "unknown",
       violations: [],
@@ -280,7 +281,7 @@ export async function evaluateReportCompliance(
       evaluatedAt,
     };
   } catch (error) {
-    console.error(`Error evaluating report compliance for report ${reportId}:`, error);
+    serverLogger.error(`Error evaluating report compliance for report ${reportId}:`, error);
     return {
       status: "unknown",
       violations: [],
@@ -320,7 +321,7 @@ export async function updateJobComplianceStatus(
 
     return updatedJob;
   } catch (error) {
-    console.error(`Error updating job compliance status for job ${jobId}:`, error);
+    serverLogger.error(`Error updating job compliance status for job ${jobId}:`, error);
     return undefined;
   }
 }
@@ -356,7 +357,7 @@ export async function updateReportComplianceStatus(
 
     return updatedReport;
   } catch (error) {
-    console.error(`Error updating report compliance status for report ${reportId}:`, error);
+    serverLogger.error(`Error updating report compliance status for report ${reportId}:`, error);
     return undefined;
   }
 }
