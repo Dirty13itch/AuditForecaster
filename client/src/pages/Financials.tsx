@@ -43,7 +43,7 @@ import { useAutoSave } from "@/hooks/useAutoSave";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import { SelectionToolbar, commonBulkActions } from "@/components/SelectionToolbar";
-import { BulkDeleteDialog, BulkExportDialog } from "@/components/BulkActionDialogs";
+import { BulkDeleteDialog, BulkExportDialog, type ExportFormat } from "@/components/BulkActionDialogs";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -200,6 +200,95 @@ export default function Financials() {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       setDeleteExpenseId(null);
       toast({ title: "Success", description: "Expense deleted successfully" });
+    },
+  });
+
+  const deleteExpensesMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const response = await apiRequest("DELETE", "/api/expenses/bulk", { ids });
+      return response as any;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      toast({
+        title: "Expenses deleted",
+        description: `Successfully deleted ${data.deleted} of ${data.total} expenses`,
+      });
+      actions.deselectAll();
+      setShowDeleteDialog(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: async ({ ids, format }: { ids: string[], format: ExportFormat }) => {
+      const response = await fetch("/api/expenses/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids, format }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Export failed");
+      }
+      
+      // Branch before consuming response body
+      if (format === 'csv') {
+        // For CSV, download the blob directly
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `expenses-export-${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Can't easily parse CSV count, use IDs length as approximation
+        return { format, count: ids.length };
+      }
+      
+      // JSON format - parse the response to get actual count
+      const data = await response.json();
+      const count = Array.isArray(data) ? data.length : ids.length;
+      
+      // Trigger download of JSON
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `expenses-export-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      return { format, count };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Export successful",
+        description: `Exported ${data.count} expenses as ${data.format.toUpperCase()}`,
+      });
+      setShowExportDialog(false);
+      actions.deselectAll();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Export failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -815,27 +904,22 @@ export default function Financials() {
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={() => {
-          console.log("Bulk delete expenses:", selectedIds);
-          toast({ title: "Success", description: `${selectedIds.length} expenses deleted` });
-          actions.deselectAll();
-          setShowDeleteDialog(false);
+          deleteExpensesMutation.mutate(Array.from(selectedIds));
         }}
         selectedCount={metadata.selectedCount}
         entityName="expenses"
-        isPending={false}
+        isPending={deleteExpensesMutation.isPending}
       />
 
       <BulkExportDialog
         open={showExportDialog}
         onOpenChange={setShowExportDialog}
         onConfirm={(format) => {
-          console.log("Bulk export expenses:", selectedIds, "format:", format);
-          toast({ title: "Success", description: `${selectedIds.length} expenses exported as ${format}` });
-          setShowExportDialog(false);
+          exportMutation.mutate({ ids: Array.from(selectedIds), format });
         }}
         selectedCount={metadata.selectedCount}
         entityName="expenses"
-        isPending={false}
+        isPending={exportMutation.isPending}
       />
     </div>
   );
