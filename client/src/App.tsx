@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
 import Photos from "@/pages/Photos";
@@ -23,19 +24,71 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/jobs" component={Jobs} />
-      <Route path="/schedule" component={Schedule} />
-      <Route path="/builders" component={Builders} />
-      <Route path="/financials" component={Financials} />
-      <Route path="/reports" component={Reports} />
-      <Route path="/reports/:id" component={ReportInstancePage} />
-      <Route path="/analytics" component={Analytics} />
-      <Route path="/settings" component={SettingsPage} />
-      <Route path="/inspection/:id" component={Inspection} />
-      <Route path="/photos/:id" component={Photos} />
-      <Route path="/forecast/:id" component={Forecast} />
-      <Route component={NotFound} />
+      <Route path="/" component={() => (
+        <RouteErrorBoundary>
+          <Dashboard />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/jobs" component={() => (
+        <RouteErrorBoundary>
+          <Jobs />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/schedule" component={() => (
+        <RouteErrorBoundary>
+          <Schedule />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/builders" component={() => (
+        <RouteErrorBoundary>
+          <Builders />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/financials" component={() => (
+        <RouteErrorBoundary>
+          <Financials />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/reports" component={() => (
+        <RouteErrorBoundary>
+          <Reports />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/reports/:id" component={() => (
+        <RouteErrorBoundary>
+          <ReportInstancePage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/analytics" component={() => (
+        <RouteErrorBoundary>
+          <Analytics />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/settings" component={() => (
+        <RouteErrorBoundary>
+          <SettingsPage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/inspection/:id" component={() => (
+        <RouteErrorBoundary>
+          <Inspection />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/photos/:id" component={() => (
+        <RouteErrorBoundary>
+          <Photos />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/forecast/:id" component={() => (
+        <RouteErrorBoundary>
+          <Forecast />
+        </RouteErrorBoundary>
+      )} />
+      <Route component={() => (
+        <RouteErrorBoundary>
+          <NotFound />
+        </RouteErrorBoundary>
+      )} />
     </Switch>
   );
 }
