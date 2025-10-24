@@ -1003,7 +1003,7 @@ function TierDistributionSection({ summary }: { summary: DashboardPDFData['summa
         </View>
         <View style={dashboardStyles.legendItem}>
           <View style={[dashboardStyles.legendDot, { backgroundColor: '#DC3545' }]} />
-          <Text style={dashboardStyles.legendText}>Failing: > 3.0</Text>
+          <Text style={dashboardStyles.legendText}>Failing: {">"}  3.0</Text>
         </View>
       </View>
     </View>
