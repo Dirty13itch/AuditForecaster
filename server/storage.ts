@@ -173,6 +173,10 @@ export interface IStorage {
   createUploadSession(data: InsertUploadSession): Promise<UploadSession>;
   getUploadSessions(): Promise<UploadSession[]>;
   acknowledgeUploadSession(id: string): Promise<void>;
+
+  // Dashboard methods
+  getDashboardSummary(): Promise<any>;
+  getBuilderLeaderboard(): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1026,6 +1030,231 @@ export class DatabaseStorage implements IStorage {
         acknowledgedAt: new Date() 
       })
       .where(eq(uploadSessions.id, id));
+  }
+
+  async getDashboardSummary(): Promise<any> {
+    const completedJobs = await db.select()
+      .from(jobs)
+      .innerJoin(forecasts, eq(jobs.id, forecasts.jobId))
+      .where(eq(jobs.status, 'completed'));
+
+    const jobsWithACH50 = completedJobs
+      .filter(row => row.forecasts.actualACH50 != null)
+      .map(row => ({
+        jobId: row.jobs.id,
+        ach50: parseFloat(row.forecasts.actualACH50?.toString() || '0'),
+        completedDate: row.jobs.completedDate,
+      }));
+
+    const totalInspections = jobsWithACH50.length;
+    
+    if (totalInspections === 0) {
+      return {
+        totalInspections: 0,
+        averageACH50: 0,
+        tierDistribution: [],
+        passRate: 0,
+        failRate: 0,
+        tax45LEligibleCount: 0,
+        totalPotentialTaxCredits: 0,
+        monthlyHighlights: [],
+      };
+    }
+
+    const calculateTier = (ach50: number): string => {
+      if (ach50 <= 1.0) return 'Elite';
+      if (ach50 <= 1.5) return 'Excellent';
+      if (ach50 <= 2.0) return 'Very Good';
+      if (ach50 <= 2.5) return 'Good';
+      if (ach50 <= 3.0) return 'Passing';
+      return 'Failing';
+    };
+
+    const getTierColor = (tier: string): string => {
+      const colors: Record<string, string> = {
+        'Elite': '#0B7285',
+        'Excellent': '#2E8B57',
+        'Very Good': '#3FA34D',
+        'Good': '#A0C34E',
+        'Passing': '#FFC107',
+        'Failing': '#DC3545',
+      };
+      return colors[tier] || '#6C757D';
+    };
+
+    const totalACH50 = jobsWithACH50.reduce((sum, job) => sum + job.ach50, 0);
+    const averageACH50 = totalACH50 / totalInspections;
+
+    const tierCounts: Record<string, number> = {
+      'Elite': 0,
+      'Excellent': 0,
+      'Very Good': 0,
+      'Good': 0,
+      'Passing': 0,
+      'Failing': 0,
+    };
+
+    let passCount = 0;
+    let failCount = 0;
+    let tax45LEligibleCount = 0;
+
+    jobsWithACH50.forEach(job => {
+      const tier = calculateTier(job.ach50);
+      tierCounts[tier]++;
+      
+      if (job.ach50 <= 3.0) {
+        passCount++;
+        tax45LEligibleCount++;
+      } else {
+        failCount++;
+      }
+    });
+
+    const tierDistribution = Object.entries(tierCounts).map(([tier, count]) => ({
+      tier,
+      count,
+      percentage: (count / totalInspections) * 100,
+      color: getTierColor(tier),
+    }));
+
+    const passRate = (passCount / totalInspections) * 100;
+    const failRate = (failCount / totalInspections) * 100;
+    const totalPotentialTaxCredits = tax45LEligibleCount * 2000;
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonthJobs = jobsWithACH50.filter(job => 
+      job.completedDate && new Date(job.completedDate) >= startOfMonth
+    );
+
+    const monthlyHighlights = [];
+    
+    if (thisMonthJobs.length > 0) {
+      const bestThisMonth = Math.min(...thisMonthJobs.map(j => j.ach50));
+      monthlyHighlights.push({
+        label: 'Best Performance This Month',
+        value: `${bestThisMonth.toFixed(2)} ACH50`,
+        type: 'success',
+      });
+
+      monthlyHighlights.push({
+        label: 'Inspections This Month',
+        value: thisMonthJobs.length,
+        type: 'info',
+      });
+
+      const monthlyPassRate = (thisMonthJobs.filter(j => j.ach50 <= 3.0).length / thisMonthJobs.length) * 100;
+      monthlyHighlights.push({
+        label: 'Monthly Pass Rate',
+        value: `${monthlyPassRate.toFixed(1)}%`,
+        type: monthlyPassRate >= 80 ? 'success' : 'warning',
+      });
+    }
+
+    return {
+      totalInspections,
+      averageACH50,
+      tierDistribution,
+      passRate,
+      failRate,
+      tax45LEligibleCount,
+      totalPotentialTaxCredits,
+      monthlyHighlights,
+    };
+  }
+
+  async getBuilderLeaderboard(): Promise<any[]> {
+    const allBuilders = await db.select().from(builders);
+    const completedJobs = await db.select()
+      .from(jobs)
+      .innerJoin(forecasts, eq(jobs.id, forecasts.jobId))
+      .where(eq(jobs.status, 'completed'));
+
+    const calculateTier = (ach50: number): string => {
+      if (ach50 <= 1.0) return 'Elite';
+      if (ach50 <= 1.5) return 'Excellent';
+      if (ach50 <= 2.0) return 'Very Good';
+      if (ach50 <= 2.5) return 'Good';
+      if (ach50 <= 3.0) return 'Passing';
+      return 'Failing';
+    };
+
+    const getTierColor = (tier: string): string => {
+      const colors: Record<string, string> = {
+        'Elite': '#0B7285',
+        'Excellent': '#2E8B57',
+        'Very Good': '#3FA34D',
+        'Good': '#A0C34E',
+        'Passing': '#FFC107',
+        'Failing': '#DC3545',
+      };
+      return colors[tier] || '#6C757D';
+    };
+
+    const leaderboard = allBuilders.map(builder => {
+      const builderJobs = completedJobs
+        .filter(row => row.jobs.builderId === builder.id && row.forecasts.actualACH50 != null)
+        .map(row => ({
+          jobId: row.jobs.id,
+          ach50: parseFloat(row.forecasts.actualACH50?.toString() || '0'),
+          completedDate: row.jobs.completedDate,
+        }));
+
+      if (builderJobs.length === 0) {
+        return null;
+      }
+
+      const totalACH50 = builderJobs.reduce((sum, job) => sum + job.ach50, 0);
+      const averageACH50 = totalACH50 / builderJobs.length;
+      const tier = calculateTier(averageACH50);
+      
+      const passCount = builderJobs.filter(job => job.ach50 <= 3.0).length;
+      const passRate = (passCount / builderJobs.length) * 100;
+      
+      const bestACH50 = Math.min(...builderJobs.map(j => j.ach50));
+      
+      const sortedByDate = builderJobs.sort((a, b) => {
+        const dateA = a.completedDate ? new Date(a.completedDate).getTime() : 0;
+        const dateB = b.completedDate ? new Date(b.completedDate).getTime() : 0;
+        return dateB - dateA;
+      });
+      const latestACH50 = sortedByDate.length > 0 ? sortedByDate[0].ach50 : null;
+
+      const tierCounts: Record<string, number> = {
+        'Elite': 0,
+        'Excellent': 0,
+        'Very Good': 0,
+        'Good': 0,
+        'Passing': 0,
+        'Failing': 0,
+      };
+
+      builderJobs.forEach(job => {
+        const jobTier = calculateTier(job.ach50);
+        tierCounts[jobTier]++;
+      });
+
+      const tierDistribution = Object.entries(tierCounts).map(([tierName, count]) => ({
+        tier: tierName,
+        count,
+        percentage: (count / builderJobs.length) * 100,
+        color: getTierColor(tierName),
+      }));
+
+      return {
+        builderId: builder.id,
+        builderName: builder.name,
+        averageACH50,
+        tier,
+        totalJobs: builderJobs.length,
+        passRate,
+        bestACH50,
+        latestACH50,
+        tierDistribution,
+      };
+    }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+    return leaderboard.sort((a, b) => a.averageACH50 - b.averageACH50);
   }
 }
 

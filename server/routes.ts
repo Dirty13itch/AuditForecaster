@@ -2430,6 +2430,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/dashboard/summary", isAuthenticated, async (req, res) => {
+    try {
+      const summary = await storage.getDashboardSummary();
+      res.json(summary);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch dashboard summary');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/dashboard/leaderboard", isAuthenticated, async (req, res) => {
+    try {
+      const leaderboard = await storage.getBuilderLeaderboard();
+      res.json(leaderboard);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder leaderboard');
+      res.status(status).json({ message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
