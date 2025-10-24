@@ -59,6 +59,8 @@ export const jobs = pgTable("jobs", {
   sourceGoogleEventId: varchar("source_google_event_id"),
   originalScheduledDate: timestamp("original_scheduled_date"),
   isCancelled: boolean("is_cancelled").default(false),
+  completionGoogleEventId: varchar("completion_google_event_id"),
+  completionGoogleCalendarId: varchar("completion_google_calendar_id"),
 });
 
 export const scheduleEvents = pgTable("schedule_events", {

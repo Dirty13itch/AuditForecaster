@@ -100,6 +100,111 @@ export async function getUncachableGoogleCalendarClient() {
 }
 
 export class GoogleCalendarService {
+  private updatesCalendarIdCache: string | null = null;
+
+  async findCalendarByName(name: string): Promise<string | null> {
+    try {
+      // Return cached value if available
+      if (name === 'Shaun - Updates' && this.updatesCalendarIdCache) {
+        return this.updatesCalendarIdCache;
+      }
+
+      const calendars = await this.fetchCalendarList();
+      const calendar = calendars.find(cal => cal.summary === name);
+
+      // Cache the "Shaun - Updates" calendar ID for future use
+      if (calendar && name === 'Shaun - Updates') {
+        this.updatesCalendarIdCache = calendar.id;
+      }
+
+      return calendar?.id || null;
+    } catch (error) {
+      serverLogger.error(`[GoogleCalendar] Error finding calendar "${name}":`, error);
+      return null;
+    }
+  }
+
+  async createCompletionEvent(
+    job: Job,
+    calendarId: string,
+    builder: { name: string } | null = null,
+    forecast: { actualACH50: string | null } | null = null
+  ): Promise<string | null> {
+    try {
+      const calendar = await getUncachableGoogleCalendarClient();
+      
+      // Extract ACH50 score from forecast
+      const ach50Score = forecast?.actualACH50 ? parseFloat(forecast.actualACH50) : null;
+      const ach50Display = ach50Score !== null ? `${ach50Score} ACH50` : 'Not tested';
+      const ach50Result = ach50Score !== null && ach50Score <= 3.0 ? 'PASSED' : 'FAILED';
+      
+      // Format description with completion details
+      const description = `
+COMPLETION DETAILS
+==================
+Inspection Type: ${job.inspectionType}
+Address: ${job.address}
+Builder: ${builder?.name || 'N/A'}
+
+BLOWER DOOR TEST
+----------------
+ACH50: ${ach50Display}
+Result: ${ach50Score !== null ? `${ach50Result} Minnesota Code (3.0 ACH50 max)` : 'Not applicable'}
+
+NOTES
+-----
+${job.notes || 'No notes'}
+
+View Full Report: ${process.env.REPL_URL || 'https://app.example.com'}/jobs/${job.id}
+`.trim();
+
+      // Use completedDate or current time
+      const completionTime = job.completedDate || new Date();
+      const endTime = new Date(completionTime.getTime() + 30 * 60 * 1000); // 30 minutes later
+
+      const eventData = {
+        summary: job.name,
+        description,
+        location: job.address,
+        start: {
+          dateTime: completionTime.toISOString(),
+          timeZone: 'America/Chicago',
+        },
+        end: {
+          dateTime: endTime.toISOString(),
+          timeZone: 'America/Chicago',
+        },
+      };
+
+      // Check if we should update existing event or create new one
+      if (job.completionGoogleEventId) {
+        try {
+          const response = await calendar.events.update({
+            calendarId,
+            eventId: job.completionGoogleEventId,
+            requestBody: eventData,
+          });
+          serverLogger.info(`[GoogleCalendar] Updated completion event: ${response.data.id}`);
+          return response.data.id || null;
+        } catch (error) {
+          // If update fails (e.g., event was deleted), create a new one
+          serverLogger.warn(`[GoogleCalendar] Failed to update existing event, creating new one:`, error);
+        }
+      }
+
+      // Create new event
+      const response = await calendar.events.insert({
+        calendarId,
+        requestBody: eventData,
+      });
+      serverLogger.info(`[GoogleCalendar] Created completion event: ${response.data.id}`);
+      return response.data.id || null;
+    } catch (error) {
+      serverLogger.error('[GoogleCalendar] Error creating completion event:', error);
+      throw error;
+    }
+  }
+
   async syncEventToGoogle(
     scheduleEvent: ScheduleEvent, 
     job: Job,

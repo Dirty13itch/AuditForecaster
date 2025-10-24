@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,13 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
+import { generateJobName } from "@shared/jobNameGenerator";
 import type { Job, Builder } from "@shared/schema";
 
 const JOB_TYPES = [
@@ -105,6 +106,19 @@ export default function JobDialog({
     enabled: !!job && open,
   });
 
+  // Watch for changes to auto-generate name for new jobs
+  const inspectionType = form.watch('inspectionType');
+  const scheduledDate = form.watch('scheduledDate');
+  const address = form.watch('address');
+
+  useEffect(() => {
+    // Only auto-generate for new jobs (not editing)
+    if (!job && inspectionType && scheduledDate && address) {
+      const autoName = generateJobName(scheduledDate, inspectionType, address);
+      form.setValue('name', autoName);
+    }
+  }, [inspectionType, scheduledDate, address, job, form]);
+
   const handleSubmit = async (data: JobFormValues) => {
     await onSave(data);
     form.reset();
@@ -139,11 +153,14 @@ export default function JobDialog({
                     <FormLabel>Job Name *</FormLabel>
                     <FormControl>
                       <Input 
-                        placeholder="e.g., Johnson Residence" 
+                        placeholder="e.g., 01-23-25_Final 123 Main St" 
                         {...field} 
                         data-testid="input-job-name"
                       />
                     </FormControl>
+                    <FormDescription className="text-xs">
+                      Format: MM-DD-YY_Type Address
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

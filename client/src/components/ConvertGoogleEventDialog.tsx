@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar, MapPin, Clock } from 'lucide-react';
 import { format } from 'date-fns';
+import { generateJobName, detectInspectionTypeFromTitle } from '@shared/jobNameGenerator';
 import type { GoogleEvent, Builder } from '@shared/schema';
 
 const convertEventSchema = z.object({
@@ -49,12 +50,6 @@ const JOB_TYPES = [
   'Other'
 ];
 
-function extractInspectionType(title: string): string {
-  const titleUpper = title.toUpperCase();
-  if (titleUpper.includes('SV2')) return 'Pre-Drywall Inspection';
-  if (titleUpper.includes('TEST')) return 'Final Testing';
-  return '';
-}
 
 function extractBuilder(title: string, builders: Builder[]): string {
   // Always default to M/I Homes builder if it exists
@@ -105,12 +100,19 @@ export function ConvertGoogleEventDialog({
   
   useEffect(() => {
     if (googleEvent && builders.length > 0) {
-      const detectedType = extractInspectionType(googleEvent.title);
+      const detectedType = detectInspectionTypeFromTitle(googleEvent.title);
       const detectedBuilder = extractBuilder(googleEvent.title, builders);
       const defaultPrice = getDefaultPricing(detectedType);
       
+      // Auto-generate the job name
+      const autoName = generateJobName(
+        new Date(googleEvent.startTime),
+        detectedType,
+        googleEvent.location || ''
+      );
+      
       form.reset({
-        name: googleEvent.title || '',
+        name: autoName,
         address: googleEvent.location || '',
         inspectionType: detectedType,
         builderId: detectedBuilder,
@@ -180,7 +182,7 @@ export function ConvertGoogleEventDialog({
   
   if (!googleEvent) return null;
   
-  const detectedType = extractInspectionType(googleEvent.title);
+  const detectedType = detectInspectionTypeFromTitle(googleEvent.title);
   const detectedBuilder = builders.find(b => b.id === extractBuilder(googleEvent.title, builders));
   const detectedPrice = getDefaultPricing(detectedType);
   
@@ -247,6 +249,9 @@ export function ConvertGoogleEventDialog({
                   <FormControl>
                     <Input {...field} data-testid="input-job-name" />
                   </FormControl>
+                  <FormDescription className="text-xs">
+                    Format: MM-DD-YY_Type Address
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
