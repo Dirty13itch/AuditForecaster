@@ -1,6 +1,6 @@
-const CACHE_NAME = 'field-inspection-v1';
-const API_CACHE_NAME = 'field-inspection-api-v1';
-const STATIC_CACHE_NAME = 'field-inspection-static-v1';
+const CACHE_NAME = 'field-inspection-v2';
+const API_CACHE_NAME = 'field-inspection-api-v2';
+const STATIC_CACHE_NAME = 'field-inspection-static-v2';
 
 const STATIC_ASSETS = [
   '/',
