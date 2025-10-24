@@ -703,7 +703,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         googleEvents: { created: 0, updated: 0 },
       };
       
+      // Create a map of Google event IDs for quick lookup
+      const googleEventIdMap = new Map<string, any>();
+      
       for (const googleEvent of googleEvents) {
+        if (googleEvent.id) {
+          googleEventIdMap.set(googleEvent.id, googleEvent);
+        }
+        
         const parsedEvent = googleCalendarService.parseGoogleEventToScheduleEvent(googleEvent);
         
         if (parsedEvent && parsedEvent.jobId) {
@@ -779,10 +786,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       }
+      
+      // Calendar sync intelligence: detect cancelled and rescheduled jobs
+      const syncIntelligence = {
+        cancelled: 0,
+        rescheduled: 0,
+        completedButRescheduled: 0,
+      };
+      
+      try {
+        // Get all jobs with sourceGoogleEventId in the date range
+        const allJobs = await storage.getAllJobs();
+        const jobsWithSourceEvent = allJobs.filter(job => 
+          job.sourceGoogleEventId && 
+          job.scheduledDate && 
+          job.scheduledDate >= start && 
+          job.scheduledDate <= end
+        );
+        
+        for (const job of jobsWithSourceEvent) {
+          const googleEvent = googleEventIdMap.get(job.sourceGoogleEventId!);
+          
+          if (!googleEvent) {
+            // Event no longer exists in Google Calendar → mark as cancelled
+            if (!job.isCancelled) {
+              await storage.updateJob(job.id, { isCancelled: true });
+              syncIntelligence.cancelled++;
+              serverLogger.info(`[CalendarSync] Marked job ${job.id} as cancelled (event ${job.sourceGoogleEventId} not found)`);
+            }
+          } else if (googleEvent.start?.dateTime) {
+            // Event exists → check for rescheduling
+            const googleEventStartTime = new Date(googleEvent.start.dateTime);
+            const jobScheduledDate = new Date(job.scheduledDate);
+            
+            // Compare dates (ignore milliseconds)
+            const timeDiffMs = Math.abs(googleEventStartTime.getTime() - jobScheduledDate.getTime());
+            const isRescheduled = timeDiffMs > 60000; // More than 1 minute difference
+            
+            if (isRescheduled) {
+              const updates: Partial<InsertJob> = {};
+              
+              // Set originalScheduledDate if not already set
+              if (!job.originalScheduledDate) {
+                updates.originalScheduledDate = jobScheduledDate;
+              }
+              
+              // Update scheduledDate to match Google Calendar
+              updates.scheduledDate = googleEventStartTime;
+              
+              // If job is already completed, log warning
+              if (job.status === 'completed') {
+                serverLogger.warn(`[CalendarSync] Job ${job.id} is completed but event was rescheduled from ${jobScheduledDate.toISOString()} to ${googleEventStartTime.toISOString()}`);
+                syncIntelligence.completedButRescheduled++;
+              } else {
+                syncIntelligence.rescheduled++;
+              }
+              
+              await storage.updateJob(job.id, updates);
+              serverLogger.info(`[CalendarSync] Updated job ${job.id} schedule: ${jobScheduledDate.toISOString()} → ${googleEventStartTime.toISOString()}`);
+            }
+            
+            // Unmark as cancelled if it was previously cancelled
+            if (job.isCancelled) {
+              await storage.updateJob(job.id, { isCancelled: false });
+              serverLogger.info(`[CalendarSync] Unmarked job ${job.id} as cancelled (event ${job.sourceGoogleEventId} found again)`);
+            }
+          }
+        }
+      } catch (error) {
+        serverLogger.error('[CalendarSync] Error during calendar sync intelligence:', error);
+        // Don't fail the entire sync if intelligence fails
+      }
 
       res.json({
         message: "Sync completed successfully",
         syncedCount,
+        syncIntelligence,
         totalProcessed: googleEvents.length,
       });
     } catch (error) {
