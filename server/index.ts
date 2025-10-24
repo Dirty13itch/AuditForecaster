@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { serverLogger } from "./logger";
 import { storage } from "./storage";
+import { getConfig } from "./config";
+import type { Server } from "http";
 
 const app = express();
 
@@ -11,6 +13,7 @@ declare module 'http' {
     rawBody: unknown
   }
 }
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
@@ -48,81 +51,176 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  const server = await registerRoutes(app);
+// Singleton server instance to prevent duplicate listeners
+let serverInstance: Server | null = null;
+let isShuttingDown = false;
 
-  app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+// Graceful shutdown handler
+async function gracefulShutdown(signal: string) {
+  if (isShuttingDown) {
+    serverLogger.debug(`[Server] Already shutting down, ignoring ${signal}`);
+    return;
   }
+  
+  isShuttingDown = true;
+  serverLogger.info(`[Server] ${signal} received, starting graceful shutdown...`);
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, async () => {
-    log(`serving on port ${port}`);
+  if (serverInstance) {
+    serverInstance.close((err) => {
+      if (err) {
+        serverLogger.error('[Server] Error during server shutdown:', err);
+        process.exit(1);
+      }
+      serverLogger.info('[Server] HTTP server closed successfully');
+      process.exit(0);
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      serverLogger.warn('[Server] Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  } else {
+    process.exit(0);
+  }
+}
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught errors
+process.on('uncaughtException', (err) => {
+  serverLogger.error('[Server] Uncaught exception:', err);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  serverLogger.error('[Server] Unhandled rejection at:', promise, 'reason:', reason);
+});
+
+async function startServer() {
+  try {
+    // Validate configuration first - will throw if missing required env vars
+    const config = getConfig();
     
-    // Recalculate scores for all existing reports in development
-    if (process.env.NODE_ENV === 'development') {
-      try {
-        const jobs = await storage.getAllJobs();
-        let recalculated = 0;
-        for (const job of jobs) {
-          const instances = await storage.getReportInstancesByJob(job.id);
-          for (const instance of instances) {
-            await storage.recalculateReportScore(instance.id);
-            recalculated++;
-          }
-        }
-        if (recalculated > 0) {
-          log(`Recalculated scores for ${recalculated} existing reports`);
-        }
-      } catch (error) {
-        serverLogger.error('Failed to recalculate scores on startup:', error);
-      }
-      
-      // Evaluate compliance for all existing jobs
-      try {
-        const { updateJobComplianceStatus, updateReportComplianceStatus } = await import('./complianceService');
-        const jobs = await storage.getAllJobs();
-        let jobsEvaluated = 0;
-        let reportsEvaluated = 0;
-        
-        for (const job of jobs) {
-          await updateJobComplianceStatus(storage, job.id);
-          jobsEvaluated++;
-          
-          const instances = await storage.getReportInstancesByJob(job.id);
-          for (const instance of instances) {
-            await updateReportComplianceStatus(storage, instance.id);
-            reportsEvaluated++;
-          }
-        }
-        
-        if (jobsEvaluated > 0 || reportsEvaluated > 0) {
-          log(`Evaluated compliance for ${jobsEvaluated} jobs and ${reportsEvaluated} reports`);
-        }
-      } catch (error) {
-        serverLogger.error('Failed to evaluate compliance on startup:', error);
-      }
+    const server = await registerRoutes(app);
+    
+    // Store server instance for graceful shutdown
+    serverInstance = server;
+
+    app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+
+      res.status(status).json({ message });
+      throw err;
+    });
+
+    // importantly only setup vite in development and after
+    // setting up all the other routes so the catch-all route
+    // doesn't interfere with the other routes
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
     }
-  });
-})();
+
+    // ALWAYS serve the app on the port specified in the environment variable PORT
+    // Other ports are firewalled. Default to 5000 if not specified.
+    // this serves both the API and the client.
+    // It is the only port that is not firewalled.
+    const port = parseInt(process.env.PORT || '5000', 10);
+    
+    return new Promise<void>((resolve, reject) => {
+      const onError = (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') {
+          serverLogger.error(`[Server] Port ${port} is already in use. Another process may be running.`);
+          
+          // In development, try to recover gracefully
+          if (process.env.NODE_ENV === 'development') {
+            serverLogger.warn('[Server] Development mode: attempting to kill existing process and retry...');
+            setTimeout(() => {
+              server.listen(port, '0.0.0.0', () => {
+                serverLogger.info(`[Server] Successfully recovered and listening on port ${port}`);
+                resolve();
+              });
+            }, 2000);
+          } else {
+            reject(err);
+          }
+        } else {
+          serverLogger.error('[Server] Failed to start:', err);
+          reject(err);
+        }
+      };
+
+      server.once('error', onError);
+      
+      server.listen({
+        port,
+        host: "0.0.0.0",
+        reusePort: true,
+      }, async () => {
+        server.removeListener('error', onError);
+        log(`serving on port ${port}`);
+        
+        // Recalculate scores for all existing reports in development
+        if (process.env.NODE_ENV === 'development') {
+          try {
+            const jobs = await storage.getAllJobs();
+            let recalculated = 0;
+            for (const job of jobs) {
+              const instances = await storage.getReportInstancesByJob(job.id);
+              for (const instance of instances) {
+                await storage.recalculateReportScore(instance.id);
+                recalculated++;
+              }
+            }
+            if (recalculated > 0) {
+              log(`Recalculated scores for ${recalculated} existing reports`);
+            }
+          } catch (error) {
+            serverLogger.error('Failed to recalculate scores on startup:', error);
+          }
+          
+          // Evaluate compliance for all existing jobs
+          try {
+            const { updateJobComplianceStatus, updateReportComplianceStatus } = await import('./complianceService');
+            const jobs = await storage.getAllJobs();
+            let jobsEvaluated = 0;
+            let reportsEvaluated = 0;
+            
+            for (const job of jobs) {
+              await updateJobComplianceStatus(storage, job.id);
+              jobsEvaluated++;
+              
+              const instances = await storage.getReportInstancesByJob(job.id);
+              for (const instance of instances) {
+                await updateReportComplianceStatus(storage, instance.id);
+                reportsEvaluated++;
+              }
+            }
+            
+            if (jobsEvaluated > 0 || reportsEvaluated > 0) {
+              log(`Evaluated compliance for ${jobsEvaluated} jobs and ${reportsEvaluated} reports`);
+            }
+          } catch (error) {
+            serverLogger.error('Failed to evaluate compliance on startup:', error);
+          }
+        }
+        
+        resolve();
+      });
+    });
+  } catch (error) {
+    serverLogger.error('[Server] Startup failed:', error);
+    throw error;
+  }
+}
+
+// Start the server
+startServer().catch((error) => {
+  serverLogger.error('[Server] Fatal error during startup:', error);
+  process.exit(1);
+});

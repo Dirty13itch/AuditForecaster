@@ -7,6 +7,7 @@ import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "
 import { ObjectPermission } from "./objectAcl";
 import { generateReportPDF } from "./pdfGenerator.tsx";
 import { generateThumbnail } from "./thumbnailGenerator";
+import { healthz, readyz, status } from "./health";
 import {
   insertBuilderSchema,
   insertJobSchema,
@@ -66,6 +67,11 @@ function handleDatabaseError(error: unknown, operation: string): { status: numbe
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoints (no authentication required for monitoring)
+  app.get("/healthz", healthz);
+  app.get("/readyz", readyz);
+  app.get("/api/status", status);
+  
   // Setup Replit Auth middleware
   await setupAuth(app);
 

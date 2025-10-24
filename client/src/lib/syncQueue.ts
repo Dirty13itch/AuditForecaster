@@ -92,14 +92,34 @@ async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function checkAuthStatus(): Promise<boolean> {
+  try {
+    const response = await fetch('/api/auth/user', {
+      credentials: 'include',
+    });
+    return response.ok;
+  } catch (error) {
+    syncQueueLogger.warn('Auth check failed:', error);
+    return false;
+  }
+}
+
 export async function processSyncQueue(
   onProgress?: (current: number, total: number) => void
-): Promise<{ success: number; failed: number }> {
+): Promise<{ success: number; failed: number; authError?: boolean }> {
   syncQueueLogger.info('Processing sync queue...');
   
   if (!navigator.onLine) {
     syncQueueLogger.info('Offline, skipping sync');
     return { success: 0, failed: 0 };
+  }
+
+  // Check authentication before processing queue
+  const isAuthenticated = await checkAuthStatus();
+  if (!isAuthenticated) {
+    syncQueueLogger.warn('Not authenticated - sync queue processing skipped');
+    syncQueueLogger.warn('User needs to log in before queued mutations can be synced');
+    return { success: 0, failed: 0, authError: true };
   }
 
   const queue = await getSyncQueue();
@@ -137,6 +157,11 @@ export async function processSyncQueue(
         await removeFromSyncQueue(request.id);
         successCount++;
         syncQueueLogger.info('Successfully synced request:', request.id);
+      } else if (response.status === 401) {
+        // Authentication error - stop processing queue
+        syncQueueLogger.error('Authentication expired during sync - stopping queue processing');
+        syncQueueLogger.warn('User needs to log in to sync remaining requests');
+        return { success: successCount, failed: failedCount + 1, authError: true };
       } else {
         await updateRetryCount(request.id, request.retries + 1);
         failedCount++;
