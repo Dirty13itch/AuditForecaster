@@ -437,6 +437,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create job from Google Calendar event
+  app.post("/api/jobs/from-event", isAuthenticated, async (req, res) => {
+    const schema = z.object({
+      eventId: z.string().min(1, "Event ID is required"),
+    });
+
+    try {
+      const { eventId } = schema.parse(req.body);
+      
+      // Fetch the Google event
+      const googleEvent = await storage.getGoogleEvent(eventId);
+      if (!googleEvent) {
+        return res.status(404).json({ message: "Calendar event not found" });
+      }
+
+      if (googleEvent.isConverted) {
+        return res.status(400).json({ message: "This calendar event has already been converted to a job" });
+      }
+
+      // Check for existing job with same sourceGoogleEventId to prevent duplicates
+      const existingJob = await storage.getJobBySourceEventId(googleEvent.id);
+      if (existingJob) {
+        return res.status(409).json({
+          message: "Job already created from this event",
+          job: existingJob
+        });
+      }
+
+      // Import utilities from shared/jobNameGenerator.ts
+      const { detectInspectionTypeFromTitle, generateJobName } = await import("@shared/jobNameGenerator");
+
+      // Detect inspection type from event title
+      const inspectionType = detectInspectionTypeFromTitle(googleEvent.title) || "Other";
+
+      // Generate job name using event date and location
+      const jobName = generateJobName(
+        googleEvent.startTime,
+        inspectionType,
+        googleEvent.location || "No location"
+      );
+
+      // Create the job
+      const newJob = await storage.createJob({
+        name: jobName,
+        address: googleEvent.location || "",
+        contractor: "To be assigned",
+        status: "scheduled",
+        inspectionType: inspectionType,
+        scheduledDate: googleEvent.startTime,
+        priority: "medium",
+        sourceGoogleEventId: googleEvent.id,
+        originalScheduledDate: googleEvent.startTime,
+        notes: googleEvent.description || "",
+      });
+
+      // Mark the Google event as converted
+      await storage.markGoogleEventAsConverted(googleEvent.id, newJob.id);
+
+      res.status(201).json(newJob);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('CreateJobFromEvent', error);
+      res.status(500).json({ message: "Failed to create job from calendar event" });
+    }
+  });
+
+  // Get today's unconverted Google calendar events
+  app.get("/api/google-events/today", isAuthenticated, async (req, res) => {
+    try {
+      const events = await storage.getTodaysUnconvertedGoogleEvents();
+      res.json(events);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch today\'s Google events');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get today's in-progress/scheduled jobs
+  app.get("/api/jobs/today", isAuthenticated, async (req, res) => {
+    try {
+      const jobs = await storage.getTodaysJobsByStatus(['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review']);
+      res.json(jobs);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch today\'s jobs');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get today's completed jobs
+  app.get("/api/jobs/completed-today", isAuthenticated, async (req, res) => {
+    try {
+      const jobs = await storage.getTodaysJobsByStatus(['completed']);
+      res.json(jobs);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch completed jobs');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/schedule-events", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate, jobId } = req.query;

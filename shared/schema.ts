@@ -56,6 +56,9 @@ export const jobs = pgTable("jobs", {
   complianceStatus: text("compliance_status"),
   complianceFlags: jsonb("compliance_flags"),
   lastComplianceCheck: timestamp("last_compliance_check"),
+  sourceGoogleEventId: varchar("source_google_event_id"),
+  originalScheduledDate: timestamp("original_scheduled_date"),
+  isCancelled: boolean("is_cancelled").default(false),
 });
 
 export const scheduleEvents = pgTable("schedule_events", {

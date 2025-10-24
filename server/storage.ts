@@ -68,6 +68,7 @@ export interface IStorage {
 
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
+  getJobBySourceEventId(sourceEventId: string): Promise<Job | undefined>;
   getAllJobs(): Promise<Job[]>;
   getJobsPaginated(params: PaginationParams): Promise<PaginatedResult<Job>>;
   updateJob(id: string, job: Partial<InsertJob>): Promise<Job | undefined>;
@@ -159,9 +160,12 @@ export interface IStorage {
   getGoogleEvent(id: string): Promise<GoogleEvent | undefined>;
   getGoogleEventByGoogleId(googleEventId: string, calendarId: string): Promise<GoogleEvent | undefined>;
   getGoogleEventsByDateRange(startDate: Date, endDate: Date): Promise<GoogleEvent[]>;
+  getTodaysUnconvertedGoogleEvents(): Promise<GoogleEvent[]>;
   updateGoogleEvent(id: string, event: Partial<InsertGoogleEvent>): Promise<GoogleEvent | undefined>;
   deleteGoogleEvent(id: string): Promise<boolean>;
   markGoogleEventAsConverted(id: string, jobId: string): Promise<GoogleEvent | undefined>;
+  getJobsByStatus(statuses: string[]): Promise<Job[]>;
+  getTodaysJobsByStatus(statuses: string[]): Promise<Job[]>;
 
   recalculateReportScore(reportInstanceId: string): Promise<void>;
 
@@ -242,6 +246,13 @@ export class DatabaseStorage implements IStorage {
 
   async getJob(id: string): Promise<Job | undefined> {
     const result = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getJobBySourceEventId(sourceEventId: string): Promise<Job | undefined> {
+    const result = await db.select().from(jobs)
+      .where(eq(jobs.sourceGoogleEventId, sourceEventId))
+      .limit(1);
     return result[0];
   }
 
@@ -932,6 +943,48 @@ export class DatabaseStorage implements IStorage {
       .where(eq(googleEvents.id, id))
       .returning();
     return result[0];
+  }
+
+  async getTodaysUnconvertedGoogleEvents(): Promise<GoogleEvent[]> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db.select().from(googleEvents)
+      .where(
+        and(
+          gte(googleEvents.startTime, startOfDay),
+          lte(googleEvents.startTime, endOfDay),
+          eq(googleEvents.isConverted, false)
+        )
+      )
+      .orderBy(asc(googleEvents.startTime));
+  }
+
+  async getJobsByStatus(statuses: string[]): Promise<Job[]> {
+    return await db.select().from(jobs)
+      .where(inArray(jobs.status, statuses))
+      .orderBy(desc(jobs.scheduledDate));
+  }
+
+  async getTodaysJobsByStatus(statuses: string[]): Promise<Job[]> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db.select().from(jobs)
+      .where(
+        and(
+          inArray(jobs.status, statuses),
+          gte(jobs.scheduledDate, startOfDay),
+          lte(jobs.scheduledDate, endOfDay)
+        )
+      )
+      .orderBy(asc(jobs.scheduledDate));
   }
 
   async recalculateReportScore(reportInstanceId: string): Promise<void> {
