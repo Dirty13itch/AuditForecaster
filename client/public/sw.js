@@ -78,6 +78,15 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // NEVER intercept auth routes - let browser handle OAuth redirects naturally
+  if (url.pathname.startsWith('/api/login') || 
+      url.pathname.startsWith('/api/callback') ||
+      url.pathname.startsWith('/api/logout') ||
+      url.pathname.startsWith('/api/auth/')) {
+    // Let the browser handle these naturally (no service worker interception)
+    return;
+  }
+
   if (request.method === 'GET') {
     if (url.pathname.startsWith('/api/')) {
       event.respondWith(networkFirstStrategy(request));
