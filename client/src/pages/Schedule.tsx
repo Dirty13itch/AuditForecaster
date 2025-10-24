@@ -163,11 +163,33 @@ export default function Schedule() {
 
   const createEventMutation = useMutation({
     mutationFn: async (data: { jobId: string; title: string; startTime: Date; endTime: Date }) => {
-      return apiRequest('POST', '/api/schedule-events', data);
+      const response = await apiRequest('POST', '/api/schedule-events', data);
+      
+      // Check for queued response (202 Accepted)
+      if (response.status === 202) {
+        const json = await response.json();
+        return { response, data: json };
+      }
+      
+      // 204 No Content, 205 Reset Content, 304 Not Modified = no body
+      if (response.status === 204 || response.status === 205 || response.status === 304) {
+        return { response, data: null };
+      }
+      
+      // All other success responses = parse JSON
+      const json = await response.json();
+      return { response, data: json };
     },
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
+      if (data?.queued) {
+        toast({ 
+          title: 'Event queued for sync', 
+          description: 'Event will be created when back online'
+        });
+      } else {
+        toast({ title: 'Event created successfully' });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
-      toast({ title: 'Event created successfully' });
     },
     onError: () => {
       toast({ title: 'Failed to create event', variant: 'destructive' });
@@ -176,11 +198,33 @@ export default function Schedule() {
 
   const updateEventMutation = useMutation({
     mutationFn: async (data: { id: string; startTime: Date; endTime: Date }) => {
-      return apiRequest('PUT', `/api/schedule-events/${data.id}`, { startTime: data.startTime, endTime: data.endTime });
+      const response = await apiRequest('PUT', `/api/schedule-events/${data.id}`, { startTime: data.startTime, endTime: data.endTime });
+      
+      // Check for queued response (202 Accepted)
+      if (response.status === 202) {
+        const json = await response.json();
+        return { response, data: json };
+      }
+      
+      // 204 No Content, 205 Reset Content, 304 Not Modified = no body
+      if (response.status === 204 || response.status === 205 || response.status === 304) {
+        return { response, data: null };
+      }
+      
+      // All other success responses = parse JSON
+      const json = await response.json();
+      return { response, data: json };
     },
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
+      if (data?.queued) {
+        toast({ 
+          title: 'Event queued for sync', 
+          description: 'Event will be updated when back online'
+        });
+      } else {
+        toast({ title: 'Event updated successfully' });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
-      toast({ title: 'Event updated successfully' });
     },
     onError: () => {
       toast({ title: 'Failed to update event', variant: 'destructive' });
@@ -189,11 +233,33 @@ export default function Schedule() {
 
   const deleteEventMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest('DELETE', `/api/schedule-events/${id}`);
+      const response = await apiRequest('DELETE', `/api/schedule-events/${id}`);
+      
+      // Check for queued response (202 Accepted)
+      if (response.status === 202) {
+        const json = await response.json();
+        return { response, data: json };
+      }
+      
+      // 204 No Content, 205 Reset Content, 304 Not Modified = no body
+      if (response.status === 204 || response.status === 205 || response.status === 304) {
+        return { response, data: null };
+      }
+      
+      // All other success responses = parse JSON
+      const json = await response.json();
+      return { response, data: json };
     },
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
+      if (data?.queued) {
+        toast({ 
+          title: 'Event queued for sync', 
+          description: 'Event will be deleted when back online'
+        });
+      } else {
+        toast({ title: 'Event deleted successfully' });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
-      toast({ title: 'Event deleted successfully' });
     },
     onError: () => {
       toast({ title: 'Failed to delete event', variant: 'destructive' });
