@@ -2112,6 +2112,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/dashboard/export", isAuthenticated, async (req, res) => {
+    try {
+      const [summary, leaderboard] = await Promise.all([
+        storage.getDashboardSummary(),
+        storage.getBuilderLeaderboard(),
+      ]);
+
+      const { generateDashboardPDF } = await import('./pdfGenerator.tsx');
+      const pdfBuffer = await generateDashboardPDF({
+        summary,
+        leaderboard,
+      });
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="dashboard-report-${dateStr}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      logError('Dashboard/ExportPDF', error);
+      res.status(500).json({ message: "We're having trouble generating the PDF. Please try again." });
+    }
+  });
+
+  app.post("/api/dashboard/export/email", isAuthenticated, async (req, res) => {
+    const emailSchema = z.object({
+      emails: z.array(z.string().email()).min(1, "At least one email address is required"),
+    });
+
+    try {
+      const { emails } = emailSchema.parse(req.body);
+
+      const [summary, leaderboard] = await Promise.all([
+        storage.getDashboardSummary(),
+        storage.getBuilderLeaderboard(),
+      ]);
+
+      const { generateDashboardPDF } = await import('./pdfGenerator.tsx');
+      const pdfBuffer = await generateDashboardPDF({
+        summary,
+        leaderboard,
+      });
+
+      serverLogger.info('Dashboard PDF email requested', {
+        recipients: emails,
+        pdfSize: pdfBuffer.length,
+      });
+
+      res.json({ 
+        message: `Dashboard report queued for delivery to ${emails.length} recipient${emails.length > 1 ? 's' : ''}`,
+        recipients: emails 
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Dashboard/EmailPDF', error);
+      res.status(500).json({ message: "We're having trouble sending the email. Please try again." });
+    }
+  });
+
   app.get("/api/checklist-items", isAuthenticated, async (req, res) => {
     try {
       const { jobId } = req.query;

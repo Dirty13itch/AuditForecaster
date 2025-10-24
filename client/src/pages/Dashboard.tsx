@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, BarChart3, DollarSign, Target } from "lucide-react";
+import { Trophy, BarChart3, DollarSign, Target, Download, Mail, FileText } from "lucide-react";
 import { TierSummaryCard } from "@/components/dashboard/TierSummaryCard";
 import { LeaderboardTable } from "@/components/dashboard/LeaderboardTable";
 import { TrendChart } from "@/components/dashboard/TrendChart";
@@ -9,8 +9,113 @@ import { TaxCreditPanel } from "@/components/dashboard/TaxCreditPanel";
 import { MonthlyHighlights } from "@/components/dashboard/MonthlyHighlights";
 import type { DashboardSummary, BuilderLeaderboardEntry } from "@shared/dashboardTypes";
 import type { Forecast, Job } from "@shared/schema";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useState } from "react";
 
 export default function Dashboard() {
+  const { toast } = useToast();
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailAddresses, setEmailAddresses] = useState("");
+  
+  const downloadMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/dashboard/export", {
+        method: "GET",
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to download PDF");
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.download = `dashboard-report-${dateStr}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Dashboard report downloaded successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const emailMutation = useMutation({
+    mutationFn: async (emails: string[]) => {
+      const response = await apiRequest("POST", "/api/dashboard/export/email", { emails });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Success",
+        description: data.message,
+      });
+      setEmailDialogOpen(false);
+      setEmailAddresses("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const handleDownload = () => {
+    downloadMutation.mutate();
+  };
+  
+  const handleEmailSubmit = () => {
+    const emails = emailAddresses
+      .split(",")
+      .map(email => email.trim())
+      .filter(email => email.length > 0);
+    
+    if (emails.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please enter at least one email address",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    emailMutation.mutate(emails);
+  };
   const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
     queryKey: ["/api/dashboard/summary"],
   });
@@ -37,7 +142,39 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold" data-testid="text-page-title">Builder Performance Dashboard</h1>
             <p className="text-muted-foreground">Track ACH50 performance, rankings, and tax credits</p>
           </div>
-          <Trophy className="h-10 w-10 text-warning" />
+          <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="default" 
+                  disabled={downloadMutation.isPending || emailMutation.isPending}
+                  data-testid="button-export-pdf"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Export PDF
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onClick={handleDownload}
+                  disabled={downloadMutation.isPending}
+                  data-testid="menuitem-download"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {downloadMutation.isPending ? "Downloading..." : "Download"}
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setEmailDialogOpen(true)}
+                  disabled={emailMutation.isPending}
+                  data-testid="menuitem-email"
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Email to Managers
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Trophy className="h-10 w-10 text-warning" />
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -157,6 +294,49 @@ export default function Dashboard() {
           />
         </div>
       </div>
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent data-testid="dialog-email-export">
+          <DialogHeader>
+            <DialogTitle>Email Dashboard Report</DialogTitle>
+            <DialogDescription>
+              Enter email addresses separated by commas to send the dashboard PDF report.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-addresses">Email Addresses</Label>
+              <Input
+                id="email-addresses"
+                placeholder="manager1@example.com, manager2@example.com"
+                value={emailAddresses}
+                onChange={(e) => setEmailAddresses(e.target.value)}
+                data-testid="input-email-addresses"
+              />
+              <p className="text-xs text-muted-foreground">
+                Separate multiple email addresses with commas
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEmailDialogOpen(false)}
+              disabled={emailMutation.isPending}
+              data-testid="button-cancel-email"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEmailSubmit}
+              disabled={emailMutation.isPending}
+              data-testid="button-send-email"
+            >
+              {emailMutation.isPending ? "Sending..." : "Send Email"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

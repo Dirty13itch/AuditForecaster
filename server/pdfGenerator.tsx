@@ -690,3 +690,448 @@ export async function generateReportPDF(data: PDFGenerationData): Promise<Buffer
     throw new Error(`PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+interface DashboardPDFData {
+  summary: {
+    totalInspections: number;
+    averageACH50: number;
+    tierDistribution: Array<{ tier: string; count: number; percentage: number; color: string }>;
+    passRate: number;
+    failRate: number;
+    tax45LEligibleCount: number;
+    totalPotentialTaxCredits: number;
+    monthlyHighlights: Array<{ label: string; value: string | number; type: 'success' | 'info' | 'warning' }>;
+  };
+  leaderboard: Array<{
+    builderId: string;
+    builderName: string;
+    averageACH50: number;
+    tier: string;
+    totalJobs: number;
+    passRate: number;
+  }>;
+}
+
+const dashboardStyles = StyleSheet.create({
+  page: {
+    padding: 40,
+    fontSize: 11,
+    fontFamily: 'Helvetica',
+  },
+  header: {
+    marginBottom: 30,
+    paddingBottom: 15,
+    borderBottom: '2 solid #2E5BBA',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#2E5BBA',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6C757D',
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    gap: 15,
+    marginBottom: 25,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    padding: 15,
+    borderRadius: 4,
+    border: '1 solid #DEE2E6',
+  },
+  metricLabel: {
+    fontSize: 9,
+    color: '#6C757D',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#212529',
+    marginBottom: 3,
+  },
+  metricSubtext: {
+    fontSize: 8,
+    color: '#6C757D',
+  },
+  section: {
+    marginBottom: 25,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#212529',
+    marginBottom: 12,
+    paddingBottom: 6,
+    borderBottom: '1 solid #DEE2E6',
+  },
+  tierGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  tierCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 4,
+    border: '1 solid #DEE2E6',
+    marginBottom: 8,
+  },
+  tierName: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  tierStats: {
+    fontSize: 9,
+    color: '#495057',
+    marginBottom: 2,
+  },
+  tierBar: {
+    height: 8,
+    borderRadius: 4,
+    marginTop: 6,
+  },
+  leaderboardTable: {
+    border: '1 solid #DEE2E6',
+    borderRadius: 4,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#E9ECEF',
+    padding: 10,
+    borderBottom: '1 solid #DEE2E6',
+  },
+  tableHeaderCell: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#495057',
+    textTransform: 'uppercase',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    padding: 10,
+    borderBottom: '1 solid #F8F9FA',
+  },
+  tableCell: {
+    fontSize: 10,
+    color: '#212529',
+  },
+  highlightCard: {
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    borderRadius: 4,
+    marginBottom: 8,
+    border: '1 solid #DEE2E6',
+  },
+  highlightLabel: {
+    fontSize: 9,
+    color: '#6C757D',
+    marginBottom: 4,
+  },
+  highlightValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#212529',
+  },
+  taxCreditPanel: {
+    backgroundColor: '#FFF9E6',
+    padding: 15,
+    borderRadius: 4,
+    border: '1 solid #FFC107',
+  },
+  taxCreditTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#856404',
+    marginBottom: 10,
+  },
+  taxCreditRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  taxCreditLabel: {
+    fontSize: 10,
+    color: '#856404',
+  },
+  taxCreditValue: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#856404',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 40,
+    right: 40,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTop: '1 solid #DEE2E6',
+    fontSize: 9,
+    color: '#6C757D',
+  },
+  legend: {
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 4,
+  },
+  legendTitle: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  legendText: {
+    fontSize: 8,
+    color: '#495057',
+  },
+});
+
+function DashboardHeader() {
+  return (
+    <View style={dashboardStyles.header}>
+      <Text style={dashboardStyles.headerTitle}>Builder Performance Dashboard</Text>
+      <Text style={dashboardStyles.headerSubtitle}>
+        Generated on {new Date().toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}
+      </Text>
+    </View>
+  );
+}
+
+function MetricsSection({ summary }: { summary: DashboardPDFData['summary'] }) {
+  return (
+    <View style={dashboardStyles.metricsGrid}>
+      <View style={dashboardStyles.metricCard}>
+        <Text style={dashboardStyles.metricLabel}>Total Inspections</Text>
+        <Text style={dashboardStyles.metricValue}>{summary.totalInspections}</Text>
+        <Text style={dashboardStyles.metricSubtext}>Completed</Text>
+      </View>
+      <View style={dashboardStyles.metricCard}>
+        <Text style={dashboardStyles.metricLabel}>Average ACH50</Text>
+        <Text style={dashboardStyles.metricValue}>{summary.averageACH50.toFixed(2)}</Text>
+        <Text style={dashboardStyles.metricSubtext}>Lower is better</Text>
+      </View>
+      <View style={dashboardStyles.metricCard}>
+        <Text style={dashboardStyles.metricLabel}>Pass Rate</Text>
+        <Text style={[dashboardStyles.metricValue, { color: '#28A745' }]}>
+          {summary.passRate.toFixed(1)}%
+        </Text>
+        <Text style={dashboardStyles.metricSubtext}>≤3.0 ACH50</Text>
+      </View>
+      <View style={dashboardStyles.metricCard}>
+        <Text style={dashboardStyles.metricLabel}>45L Eligible</Text>
+        <Text style={dashboardStyles.metricValue}>{summary.tax45LEligibleCount}</Text>
+        <Text style={dashboardStyles.metricSubtext}>Homes</Text>
+      </View>
+    </View>
+  );
+}
+
+function TierDistributionSection({ summary }: { summary: DashboardPDFData['summary'] }) {
+  return (
+    <View style={dashboardStyles.section}>
+      <Text style={dashboardStyles.sectionTitle}>Tier Distribution</Text>
+      <View style={dashboardStyles.tierGrid}>
+        {summary.tierDistribution.map((tier) => (
+          <View key={tier.tier} style={dashboardStyles.tierCard}>
+            <Text style={[dashboardStyles.tierName, { color: tier.color }]}>
+              {tier.tier}
+            </Text>
+            <Text style={dashboardStyles.tierStats}>
+              Count: {tier.count} ({tier.percentage.toFixed(1)}%)
+            </Text>
+            <View 
+              style={[
+                dashboardStyles.tierBar, 
+                { 
+                  backgroundColor: tier.color,
+                  width: `${tier.percentage}%`
+                }
+              ]} 
+            />
+          </View>
+        ))}
+      </View>
+      <View style={dashboardStyles.legend}>
+        <Text style={dashboardStyles.legendTitle}>ACH50 Tier Ranges:</Text>
+        <View style={dashboardStyles.legendItem}>
+          <View style={[dashboardStyles.legendDot, { backgroundColor: '#0B7285' }]} />
+          <Text style={dashboardStyles.legendText}>Elite: 0.5 - 1.0</Text>
+        </View>
+        <View style={dashboardStyles.legendItem}>
+          <View style={[dashboardStyles.legendDot, { backgroundColor: '#2E8B57' }]} />
+          <Text style={dashboardStyles.legendText}>Excellent: 1.0 - 1.5</Text>
+        </View>
+        <View style={dashboardStyles.legendItem}>
+          <View style={[dashboardStyles.legendDot, { backgroundColor: '#3FA34D' }]} />
+          <Text style={dashboardStyles.legendText}>Very Good: 1.5 - 2.0</Text>
+        </View>
+        <View style={dashboardStyles.legendItem}>
+          <View style={[dashboardStyles.legendDot, { backgroundColor: '#A0C34E' }]} />
+          <Text style={dashboardStyles.legendText}>Good: 2.0 - 2.5</Text>
+        </View>
+        <View style={dashboardStyles.legendItem}>
+          <View style={[dashboardStyles.legendDot, { backgroundColor: '#FFC107' }]} />
+          <Text style={dashboardStyles.legendText}>Passing: 2.5 - 3.0</Text>
+        </View>
+        <View style={dashboardStyles.legendItem}>
+          <View style={[dashboardStyles.legendDot, { backgroundColor: '#DC3545' }]} />
+          <Text style={dashboardStyles.legendText}>Failing: > 3.0</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function LeaderboardSection({ leaderboard }: { leaderboard: DashboardPDFData['leaderboard'] }) {
+  if (leaderboard.length === 0) return null;
+
+  const top10 = leaderboard.slice(0, 10);
+
+  return (
+    <View style={dashboardStyles.section} break>
+      <Text style={dashboardStyles.sectionTitle}>Builder Leaderboard (Top 10)</Text>
+      <View style={dashboardStyles.leaderboardTable}>
+        <View style={dashboardStyles.tableHeader}>
+          <Text style={[dashboardStyles.tableHeaderCell, { width: '30%' }]}>Builder</Text>
+          <Text style={[dashboardStyles.tableHeaderCell, { width: '20%', textAlign: 'center' }]}>Avg ACH50</Text>
+          <Text style={[dashboardStyles.tableHeaderCell, { width: '20%', textAlign: 'center' }]}>Tier</Text>
+          <Text style={[dashboardStyles.tableHeaderCell, { width: '15%', textAlign: 'center' }]}>Jobs</Text>
+          <Text style={[dashboardStyles.tableHeaderCell, { width: '15%', textAlign: 'center' }]}>Pass %</Text>
+        </View>
+        {top10.map((entry, index) => (
+          <View key={entry.builderId} style={dashboardStyles.tableRow}>
+            <Text style={[dashboardStyles.tableCell, { width: '30%' }]}>
+              {index + 1}. {entry.builderName}
+            </Text>
+            <Text style={[dashboardStyles.tableCell, { width: '20%', textAlign: 'center' }]}>
+              {entry.averageACH50.toFixed(2)}
+            </Text>
+            <Text style={[dashboardStyles.tableCell, { width: '20%', textAlign: 'center' }]}>
+              {entry.tier}
+            </Text>
+            <Text style={[dashboardStyles.tableCell, { width: '15%', textAlign: 'center' }]}>
+              {entry.totalJobs}
+            </Text>
+            <Text style={[dashboardStyles.tableCell, { width: '15%', textAlign: 'center' }]}>
+              {entry.passRate.toFixed(1)}%
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function HighlightsSection({ highlights }: { highlights: DashboardPDFData['summary']['monthlyHighlights'] }) {
+  if (highlights.length === 0) return null;
+
+  return (
+    <View style={dashboardStyles.section}>
+      <Text style={dashboardStyles.sectionTitle}>Monthly Highlights</Text>
+      {highlights.map((highlight, index) => (
+        <View key={index} style={dashboardStyles.highlightCard}>
+          <Text style={dashboardStyles.highlightLabel}>{highlight.label}</Text>
+          <Text style={dashboardStyles.highlightValue}>{highlight.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function TaxCreditSection({ summary }: { summary: DashboardPDFData['summary'] }) {
+  const creditsPerHome = 5000;
+  const totalCredits = summary.tax45LEligibleCount * creditsPerHome;
+
+  return (
+    <View style={dashboardStyles.section}>
+      <Text style={dashboardStyles.sectionTitle}>Tax Credit Summary</Text>
+      <View style={dashboardStyles.taxCreditPanel}>
+        <Text style={dashboardStyles.taxCreditTitle}>45L Tax Credit Potential</Text>
+        <View style={dashboardStyles.taxCreditRow}>
+          <Text style={dashboardStyles.taxCreditLabel}>Eligible Homes:</Text>
+          <Text style={dashboardStyles.taxCreditValue}>{summary.tax45LEligibleCount}</Text>
+        </View>
+        <View style={dashboardStyles.taxCreditRow}>
+          <Text style={dashboardStyles.taxCreditLabel}>Credit per Home:</Text>
+          <Text style={dashboardStyles.taxCreditValue}>
+            ${creditsPerHome.toLocaleString()}
+          </Text>
+        </View>
+        <View style={dashboardStyles.taxCreditRow}>
+          <Text style={dashboardStyles.taxCreditLabel}>Total Potential Credits:</Text>
+          <Text style={dashboardStyles.taxCreditValue}>
+            ${totalCredits.toLocaleString()}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function DashboardFooter() {
+  return (
+    <View style={dashboardStyles.footer} fixed>
+      <Text>Builder Performance Dashboard Report</Text>
+      <Text>Track ACH50 performance, rankings, and tax credits</Text>
+    </View>
+  );
+}
+
+function DashboardReportDocument({ data }: { data: DashboardPDFData }) {
+  return (
+    <Document>
+      <Page size="LETTER" style={dashboardStyles.page}>
+        <DashboardHeader />
+        <MetricsSection summary={data.summary} />
+        <TierDistributionSection summary={data.summary} />
+        <HighlightsSection highlights={data.summary.monthlyHighlights} />
+        <DashboardFooter />
+      </Page>
+      
+      <Page size="LETTER" style={dashboardStyles.page}>
+        <LeaderboardSection leaderboard={data.leaderboard} />
+        <TaxCreditSection summary={data.summary} />
+        <DashboardFooter />
+      </Page>
+    </Document>
+  );
+}
+
+export async function generateDashboardPDF(data: DashboardPDFData): Promise<Buffer> {
+  try {
+    const pdfDocument = <DashboardReportDocument data={data} />;
+    const buffer = await renderToBuffer(pdfDocument);
+    return buffer;
+  } catch (error) {
+    serverLogger.error('Error generating dashboard PDF:', error);
+    throw new Error(`Dashboard PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
