@@ -57,8 +57,10 @@ function isUser(user: Express.User): user is User {
 // Serialize user to session
 passport.serializeUser((user: Express.User, done) => {
   if (isUser(user)) {
+    serverLogger.info(`[Passport] Serializing user: ${user.id}`);
     done(null, user.id);
   } else {
+    serverLogger.error('[Passport] Cannot serialize - invalid user object');
     done(new Error("Invalid user object"));
   }
 });
@@ -66,9 +68,16 @@ passport.serializeUser((user: Express.User, done) => {
 // Deserialize user from session using storage layer
 passport.deserializeUser(async (id: string, done) => {
   try {
+    serverLogger.info(`[Passport] Deserializing user ID: ${id}`);
     const user = await storage.getUser(id);
+    if (user) {
+      serverLogger.info(`[Passport] Successfully deserialized user: ${user.username}`);
+    } else {
+      serverLogger.warn(`[Passport] User not found for ID: ${id}`);
+    }
     done(null, user || null);
   } catch (error) {
+    serverLogger.error('[Passport] Deserialization error:', error);
     done(error);
   }
 });
@@ -86,11 +95,12 @@ app.use(session({
   store: sessionStore,
   secret: process.env.SESSION_SECRET || 'development-secret-only',
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: process.env.NODE_ENV === 'development', // Allow session creation in dev
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax' // Critical for Replit preview environment
   }
 }));
 
@@ -100,7 +110,10 @@ app.use(passport.session());
 
 // Development auto-login middleware
 app.use(async (req, res, next) => {
-  if (!req.isAuthenticated() && process.env.NODE_ENV === 'development') {
+  const isAuth = req.isAuthenticated();
+  serverLogger.info(`[AutoLogin] Request to ${req.path} - isAuthenticated: ${isAuth}, sessionID: ${req.sessionID?.slice(0, 8)}...`);
+  
+  if (!isAuth && process.env.NODE_ENV === 'development') {
     serverLogger.info('[AutoLogin] User not authenticated, attempting auto-login');
     try {
       // Try to get or create a dev user
@@ -118,16 +131,24 @@ app.use(async (req, res, next) => {
           serverLogger.error('[AutoLogin] Login failed:', err);
           return next();
         }
-        serverLogger.info('[AutoLogin] Successfully logged in as dev-user');
-        next();
+        
+        // Explicitly save the session to ensure it persists
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            serverLogger.error('[AutoLogin] Session save failed:', saveErr);
+          } else {
+            serverLogger.info(`[AutoLogin] Successfully logged in as dev-user, session saved`);
+          }
+          next();
+        });
       });
     } catch (error) {
       serverLogger.error('[AutoLogin] Error during auto-login:', error);
       next();
     }
   } else {
-    if (req.isAuthenticated()) {
-      serverLogger.debug('[AutoLogin] User already authenticated, skipping auto-login');
+    if (isAuth) {
+      serverLogger.debug(`[AutoLogin] User already authenticated, user: ${(req.user as User)?.username}`);
     }
     next();
   }

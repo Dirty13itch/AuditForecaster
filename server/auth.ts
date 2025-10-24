@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import type { User } from "@shared/schema";
+import { serverLogger } from "./logger";
 
 // Type guard to check if req.user is a valid User object with an id
 function isUserWithId(user: unknown): user is User {
@@ -15,12 +16,19 @@ function isUserWithId(user: unknown): user is User {
 // This checks for authenticated user in the session populated by passport
 export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   // Check if user is authenticated via passport session
-  if (req.isAuthenticated()) {
+  const isAuth = req.isAuthenticated();
+  
+  if (isAuth) {
+    serverLogger.debug(`[Auth] ✓ Request to ${req.path} authenticated - User: ${(req.user as User)?.username || 'unknown'}`);
     return next();
   }
   
-  // Log authentication failure for debugging
-  console.log(`[Auth] Request to ${req.path} failed authentication. Session ID: ${req.sessionID}, User: ${req.user ? 'exists' : 'null'}`);
+  // Log authentication failure for debugging (redacted for security)
+  serverLogger.error(`[Auth] ✗ Request to ${req.path} FAILED authentication`);
+  serverLogger.error(`[Auth]   - Session ID: ${req.sessionID?.slice(0, 8)}...`);
+  serverLogger.error(`[Auth]   - req.user: ${req.user ? `{id: ${(req.user as any).id}, username: ${(req.user as any).username}}` : 'null/undefined'}`);
+  serverLogger.error(`[Auth]   - req.session: ${req.session ? 'exists' : 'null/undefined'}`);
+  serverLogger.error(`[Auth]   - req.session.passport: ${req.session?.passport ? JSON.stringify(req.session.passport) : 'not found'}`);
   
   // User is not authenticated, return 401 Unauthorized
   res.status(401).json({ 
