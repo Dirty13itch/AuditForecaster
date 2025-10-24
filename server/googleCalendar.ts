@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import type { ScheduleEvent, Job } from '@shared/schema';
 import { serverLogger } from './logger';
+import { DateTime } from 'luxon';
 
 interface ConnectionSettings {
   settings: {
@@ -21,9 +22,11 @@ interface GoogleCalendarEvent {
   location?: string | null;
   start?: {
     dateTime?: string | null;
+    date?: string | null;
   } | null;
   end?: {
     dateTime?: string | null;
+    date?: string | null;
   } | null;
   extendedProperties?: {
     private?: {
@@ -35,6 +38,10 @@ interface GoogleCalendarEvent {
   } | null;
   calendarId?: string;
   colorId?: string | null;
+  status?: string | null;
+  organizer?: {
+    email?: string | null;
+  } | null;
 }
 
 interface GoogleCalendarListItem {
@@ -49,6 +56,31 @@ interface GoogleCalendarListItem {
 }
 
 let connectionSettings: ConnectionSettings | undefined;
+
+// Convert all-day event date from calendar timezone to UTC with proper DST handling
+// Minnesota-based field inspector uses Central Time (America/Chicago)
+// Central is UTC-6 (CST) in winter or UTC-5 (CDT) in summer
+// Note: Google Calendar stores all-day events in the calendar's timezone,
+// but the API doesn't always include timezone metadata in the response.
+// For production: read calendar settings to get the correct timezone.
+export function allDayDateToUTC(dateString: string, timezone: string = 'America/Chicago'): Date | null {
+  try {
+    // Parse date in format YYYY-MM-DD and create midnight in the calendar's timezone
+    // Luxon handles DST transitions automatically
+    const dt = DateTime.fromISO(dateString, { zone: timezone }).startOf('day');
+    
+    if (!dt.isValid) {
+      serverLogger.warn(`[GoogleCalendar] Invalid all-day date: ${dateString} in timezone ${timezone} - skipping`);
+      return null;
+    }
+    
+    // Convert to JavaScript Date in UTC
+    return dt.toJSDate();
+  } catch (error) {
+    serverLogger.error(`[GoogleCalendar] Error converting all-day date ${dateString}:`, error);
+    return null;
+  }
+}
 
 async function getAccessToken() {
   if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
@@ -280,7 +312,27 @@ export class GoogleCalendarService {
 
   parseGoogleEventToScheduleEvent(googleEvent: GoogleCalendarEvent): Partial<ScheduleEvent> | null {
     try {
-      if (!googleEvent.start?.dateTime || !googleEvent.end?.dateTime) {
+      // Check if event has been cancelled
+      if (googleEvent.status === 'cancelled') {
+        serverLogger.info(`[GoogleCalendar] Skipping cancelled event: ${googleEvent.id}`);
+        return null;
+      }
+
+      // Get start and end times (support both timed and all-day events)
+      const startTime = googleEvent.start?.dateTime 
+        ? new Date(googleEvent.start.dateTime)
+        : googleEvent.start?.date
+        ? allDayDateToUTC(googleEvent.start.date)
+        : null;
+
+      const endTime = googleEvent.end?.dateTime
+        ? new Date(googleEvent.end.dateTime)
+        : googleEvent.end?.date
+        ? allDayDateToUTC(googleEvent.end.date)
+        : null;
+
+      if (!startTime || !endTime) {
+        serverLogger.warn(`[GoogleCalendar] Event ${googleEvent.id} missing start or end time`);
         return null;
       }
 
@@ -291,12 +343,17 @@ export class GoogleCalendarService {
         return null;
       }
 
+      const isAllDay = !googleEvent.start?.dateTime;
+      if (isAllDay) {
+        serverLogger.info(`[GoogleCalendar] Processing all-day event: ${googleEvent.id} (${googleEvent.summary}) - date: ${googleEvent.start?.date}, converted to: ${startTime.toISOString()}`);
+      }
+
       return {
         id: scheduleEventId,
         jobId,
         title: googleEvent.summary || 'Untitled Event',
-        startTime: new Date(googleEvent.start.dateTime),
-        endTime: new Date(googleEvent.end.dateTime),
+        startTime,
+        endTime,
         notes: googleEvent.description || null,
         googleCalendarEventId: googleEvent.id,
         googleCalendarId: googleEvent.calendarId,

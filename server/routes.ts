@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import passport from "passport";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
-import { googleCalendarService, getUncachableGoogleCalendarClient } from "./googleCalendar";
+import { googleCalendarService, getUncachableGoogleCalendarClient, allDayDateToUTC } from "./googleCalendar";
 import { isAuthenticated, getUserId } from "./auth";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
@@ -750,7 +750,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } else {
           // Event not linked to job → GoogleEvent
-          if (!googleEvent.id || !googleEvent.start?.dateTime || !googleEvent.end?.dateTime) {
+          if (!googleEvent.id) {
+            continue;
+          }
+
+          // Get start and end times (support both timed and all-day events)
+          // For all-day events, convert from Central Time to UTC with proper DST handling
+          const startTime = googleEvent.start?.dateTime 
+            ? new Date(googleEvent.start.dateTime)
+            : googleEvent.start?.date
+            ? allDayDateToUTC(googleEvent.start.date)
+            : null;
+
+          const endTime = googleEvent.end?.dateTime
+            ? new Date(googleEvent.end.dateTime)
+            : googleEvent.end?.date
+            ? allDayDateToUTC(googleEvent.end.date)
+            : null;
+
+          if (!startTime || !endTime) {
+            serverLogger.warn(`[ScheduleSync] Skipping event ${googleEvent.id} - missing start or end time`);
             continue;
           }
 
@@ -762,8 +781,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               title: googleEvent.summary || 'Untitled',
               description: googleEvent.description || null,
               location: googleEvent.location || null,
-              startTime: new Date(googleEvent.start.dateTime),
-              endTime: new Date(googleEvent.end.dateTime),
+              startTime,
+              endTime,
               colorId: googleEvent.colorId || null,
               lastSyncedAt: new Date(),
             });
@@ -775,8 +794,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               title: googleEvent.summary || 'Untitled',
               description: googleEvent.description || null,
               location: googleEvent.location || null,
-              startTime: new Date(googleEvent.start.dateTime),
-              endTime: new Date(googleEvent.end.dateTime),
+              startTime,
+              endTime,
               colorId: googleEvent.colorId || null,
               isConverted: false,
               convertedToJobId: null,
@@ -809,14 +828,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (!googleEvent) {
             // Event no longer exists in Google Calendar → mark as cancelled
+            // Log details before marking to help diagnose false positives
             if (!job.isCancelled) {
+              serverLogger.warn(`[CalendarSync] Job ${job.id} "${job.name}" source event ${job.sourceGoogleEventId} not found in calendars: ${calendarIds.join(', ')}`);
+              serverLogger.warn(`[CalendarSync] Marking job ${job.id} as cancelled. Job scheduled: ${job.scheduledDate}`);
               await storage.updateJob(job.id, { isCancelled: true });
               syncIntelligence.cancelled++;
-              serverLogger.info(`[CalendarSync] Marked job ${job.id} as cancelled (event ${job.sourceGoogleEventId} not found)`);
             }
-          } else if (googleEvent.start?.dateTime) {
+          } else {
             // Event exists → check for rescheduling
-            const googleEventStartTime = new Date(googleEvent.start.dateTime);
+            // Get start time (support both timed and all-day events)
+            // For all-day events, convert from Central Time to UTC with proper DST handling
+            const googleEventStartTime = googleEvent.start?.dateTime 
+              ? new Date(googleEvent.start.dateTime)
+              : googleEvent.start?.date
+              ? allDayDateToUTC(googleEvent.start.date)
+              : null;
+            
+            if (!googleEventStartTime) {
+              serverLogger.error(`[CalendarSync] Event ${job.sourceGoogleEventId} has no start time`);
+              continue;
+            }
+            
             const jobScheduledDate = new Date(job.scheduledDate);
             
             // Compare dates (ignore milliseconds)
