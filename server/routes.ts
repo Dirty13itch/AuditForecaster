@@ -897,8 +897,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         syncIntelligence,
         totalProcessed: googleEvents.length,
       });
-    } catch (error) {
+    } catch (error: any) {
       logError('ScheduleEvents/Sync', error, { startDate, endDate });
+      
+      // Check if this is an authentication error
+      const isAuthError = error.message?.toLowerCase().includes('unauthorized') ||
+                         error.message?.toLowerCase().includes('authentication') ||
+                         error.message?.toLowerCase().includes('invalid credentials') ||
+                         error.message?.toLowerCase().includes('not connected') ||
+                         error.code === 401 ||
+                         error.status === 401;
+      
+      if (isAuthError) {
+        return res.status(401).json({ 
+          message: 'Google Calendar authentication required. Please log out and reconnect your Google account in Settings.',
+        });
+      }
+      
       const { status, message } = handleDatabaseError(error, 'sync schedule events from Google Calendar');
       res.status(status).json({ message });
     }
@@ -2534,6 +2549,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(mergedCalendars);
     } catch (error: any) {
       serverLogger.error('[API] Error fetching Google calendar list:', error);
+      
+      // Check if this is an authentication error
+      const isAuthError = error.message?.toLowerCase().includes('unauthorized') ||
+                         error.message?.toLowerCase().includes('authentication') ||
+                         error.message?.toLowerCase().includes('invalid credentials') ||
+                         error.code === 401 ||
+                         error.status === 401;
+      
+      if (isAuthError) {
+        return res.status(401).json({ 
+          message: 'Google Calendar authentication expired. Please log out and reconnect your Google account in Settings.',
+          error: error.message 
+        });
+      }
+      
       res.status(500).json({ message: 'Failed to fetch calendar list', error: error.message });
     }
   });

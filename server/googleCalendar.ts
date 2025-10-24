@@ -56,6 +56,64 @@ interface GoogleCalendarListItem {
 }
 
 let connectionSettings: ConnectionSettings | undefined;
+let tokenRefreshPromise: Promise<string> | null = null; // Mutex for concurrent token refresh
+
+// Helper function to detect Google Calendar authentication errors
+// Handles multiple error formats from Google API
+function isAuthError(error: any): boolean {
+  if (!error) return false;
+  
+  // Check HTTP status codes
+  if (error.code === 401 || error.status === 401) return true;
+  
+  // Check Google API error response format
+  if (error.response?.status === 401) return true;
+  if (error.response?.data?.error?.code === 401) return true;
+  
+  // Check Google API error details
+  if (error.errors?.[0]?.reason === 'authError') return true;
+  if (error.errors?.[0]?.reason === 'unauthorized') return true;
+  
+  // Check error message content
+  const message = (error.message || '').toLowerCase();
+  const errorString = (error.toString() || '').toLowerCase();
+  
+  return message.includes('unauthorized') || 
+         message.includes('invalid credentials') ||
+         message.includes('authentication') ||
+         message.includes('unauthenticated') ||
+         errorString.includes('401') ||
+         errorString.includes('unauthorized');
+}
+
+// Wrapper for automatic retry with fresh token on auth errors
+// This provides self-healing behavior when tokens expire
+async function withTokenRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isAuthError(error)) {
+      serverLogger.warn(`[GoogleCalendar] Authentication error in ${operationName}, refreshing token and retrying...`);
+      
+      // Clear cached token and force fresh token fetch
+      await getAccessToken(true);
+      
+      // Retry the operation once with fresh token
+      try {
+        serverLogger.info(`[GoogleCalendar] Retrying ${operationName} with fresh token`);
+        return await operation();
+      } catch (retryError) {
+        serverLogger.error(`[GoogleCalendar] Retry failed for ${operationName} after token refresh:`, retryError);
+        throw retryError;
+      }
+    }
+    // Not an auth error, propagate immediately
+    throw error;
+  }
+}
 
 // Convert all-day event date from calendar timezone to UTC with proper DST handling
 // Minnesota-based field inspector uses Central Time (America/Chicago)
@@ -82,42 +140,80 @@ export function allDayDateToUTC(dateString: string, timezone: string = 'America/
   }
 }
 
-async function getAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
+// Get Google Calendar access token with automatic refresh and concurrent protection
+// forceRefresh: Clear cache and fetch fresh token regardless of expiry
+async function getAccessToken(forceRefresh = false): Promise<string> {
+  // If force refresh requested, clear all cached state
+  if (forceRefresh) {
+    serverLogger.info('[GoogleCalendar] Force token refresh requested, clearing cache');
+    connectionSettings = undefined;
+    tokenRefreshPromise = null;
   }
   
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
-  }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-calendar',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
+  // Return cached token if still valid and not forcing refresh
+  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
+    serverLogger.debug('[GoogleCalendar] Using cached access token');
+    const accessToken = connectionSettings.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+    if (accessToken) {
+      return accessToken;
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  if (!connectionSettings) {
-    throw new Error('Google Calendar not connected');
   }
-
-  const accessToken = connectionSettings.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
-
-  if (!accessToken) {
-    throw new Error('Google Calendar access token not found');
+  
+  // If another request is already refreshing the token, wait for it
+  // This prevents multiple simultaneous refresh requests (mutex pattern)
+  if (tokenRefreshPromise) {
+    serverLogger.debug('[GoogleCalendar] Token refresh already in progress, waiting...');
+    return tokenRefreshPromise;
   }
-  return accessToken;
+  
+  // Start token refresh process
+  serverLogger.info('[GoogleCalendar] Fetching fresh access token from Replit connector');
+  
+  tokenRefreshPromise = (async () => {
+    try {
+      const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+      const xReplitToken = process.env.REPL_IDENTITY 
+        ? 'repl ' + process.env.REPL_IDENTITY 
+        : process.env.WEB_REPL_RENEWAL 
+        ? 'depl ' + process.env.WEB_REPL_RENEWAL 
+        : null;
+
+      if (!xReplitToken) {
+        throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+      }
+
+      connectionSettings = await fetch(
+        'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-calendar',
+        {
+          headers: {
+            'Accept': 'application/json',
+            'X_REPLIT_TOKEN': xReplitToken
+          }
+        }
+      ).then(res => res.json()).then(data => data.items?.[0]);
+
+      if (!connectionSettings) {
+        throw new Error('Google Calendar not connected. Please reconnect in Replit integrations.');
+      }
+
+      const accessToken = connectionSettings.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Google Calendar access token not found in connection settings');
+      }
+      
+      serverLogger.info('[GoogleCalendar] Successfully obtained fresh access token');
+      return accessToken;
+    } catch (error) {
+      serverLogger.error('[GoogleCalendar] Failed to fetch access token:', error);
+      throw error;
+    } finally {
+      // Clear mutex after refresh completes (success or failure)
+      tokenRefreshPromise = null;
+    }
+  })();
+  
+  return tokenRefreshPromise;
 }
 
 export async function getUncachableGoogleCalendarClient() {
@@ -165,7 +261,7 @@ export class GoogleCalendarService {
     job: Job,
     calendarId: string = 'primary'
   ): Promise<string | null> {
-    try {
+    return withTokenRetry(async () => {
       const calendar = await getUncachableGoogleCalendarClient();
       
       // Minnesota-based field inspector uses Central Time Zone (America/Chicago)
@@ -206,17 +302,14 @@ export class GoogleCalendarService {
         serverLogger.info(`[GoogleCalendar] Created event: ${response.data.id}`);
         return response.data.id || null;
       }
-    } catch (error) {
-      serverLogger.error('[GoogleCalendar] Error syncing event to Google Calendar:', error);
-      throw error;
-    }
+    }, 'syncEventToGoogle');
   }
 
   async deleteEventFromGoogle(
     googleEventId: string,
     calendarId: string = 'primary'
   ): Promise<void> {
-    try {
+    return withTokenRetry(async () => {
       const calendar = await getUncachableGoogleCalendarClient();
       
       await calendar.events.delete({
@@ -225,7 +318,7 @@ export class GoogleCalendarService {
       });
       
       serverLogger.info(`[GoogleCalendar] Deleted event: ${googleEventId}`);
-    } catch (error) {
+    }, 'deleteEventFromGoogle').catch(error => {
       // If event is already deleted (404), treat as success
       if (error instanceof Error) {
         const errorWithCode = error as Error & { code?: number };
@@ -237,7 +330,7 @@ export class GoogleCalendarService {
       // Only throw for non-404 errors
       serverLogger.error('[GoogleCalendar] Error deleting event from Google Calendar:', error);
       throw error;
-    }
+    });
   }
 
   async fetchEventsFromGoogle(
@@ -245,7 +338,7 @@ export class GoogleCalendarService {
     endDate: Date, 
     calendarIds: string[] = ['primary']
   ): Promise<GoogleCalendarEvent[]> {
-    try {
+    return withTokenRetry(async () => {
       const calendar = await getUncachableGoogleCalendarClient();
       const allEvents: GoogleCalendarEvent[] = [];
       
@@ -270,21 +363,22 @@ export class GoogleCalendarService {
           
           serverLogger.info(`[GoogleCalendar] Fetched ${events.length} events from calendar ${calendarId}`);
         } catch (error) {
-          // Log error but continue with other calendars
+          // If auth error, let it bubble up for retry
+          if (isAuthError(error)) {
+            throw error;
+          }
+          // Log other errors but continue with remaining calendars
           serverLogger.error(`[GoogleCalendar] Error fetching events from calendar ${calendarId}:`, error);
         }
       }
       
       serverLogger.info(`[GoogleCalendar] Total fetched ${allEvents.length} events from ${calendarIds.length} calendars`);
       return allEvents;
-    } catch (error) {
-      serverLogger.error('[GoogleCalendar] Error fetching events from Google Calendar:', error);
-      throw error;
-    }
+    }, 'fetchEventsFromGoogle');
   }
 
   async fetchCalendarList(): Promise<GoogleCalendarListItem[]> {
-    try {
+    return withTokenRetry(async () => {
       const calendar = await getUncachableGoogleCalendarClient();
       
       const response = await calendar.calendarList.list({
@@ -304,10 +398,7 @@ export class GoogleCalendarService {
         primary: cal.primary,
         selected: cal.selected,
       }));
-    } catch (error) {
-      serverLogger.error('[GoogleCalendar] Error fetching calendar list:', error);
-      throw error;
-    }
+    }, 'fetchCalendarList');
   }
 
   parseGoogleEventToScheduleEvent(googleEvent: GoogleCalendarEvent): Partial<ScheduleEvent> | null {
