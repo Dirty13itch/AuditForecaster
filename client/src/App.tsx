@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
 import Photos from "@/pages/Photos";
@@ -19,6 +20,7 @@ import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
 import Analytics from "@/pages/Analytics";
 import SettingsPage from "@/pages/SettingsPage";
+import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -98,29 +100,51 @@ function Router() {
   );
 }
 
-function App() {
+function AppContent() {
+  const { user, isLoading, isAuthenticated } = useAuth();
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Landing />;
+  }
+
+  return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <div className="flex flex-col flex-1">
+          <header className="flex items-center justify-between p-2 border-b">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          </header>
+          <main className="flex-1 overflow-auto">
+            <Router />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1">
-                <header className="flex items-center justify-between p-2 border-b">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                </header>
-                <main className="flex-1 overflow-auto">
-                  <Router />
-                </main>
-              </div>
-            </div>
-          </SidebarProvider>
+          <AppContent />
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Building2, DollarSign, FileText, BarChart3, Settings, Wifi, WifiOff, CloudUpload, RefreshCw } from "lucide-react";
+import { Home, ClipboardList, Calendar, Building2, DollarSign, FileText, BarChart3, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const menuItems = [
   {
@@ -65,6 +66,35 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { isOnline, pendingSync, isSyncing, forceSync } = useNetworkStatus();
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const handleLogout = () => {
+    window.location.href = "/api/logout";
+  };
+
+  const getUserInitials = () => {
+    if (!user) return "U";
+    const firstName = user.firstName || "";
+    const lastName = user.lastName || "";
+    if (firstName && lastName) {
+      return `${firstName[0]}${lastName[0]}`.toUpperCase();
+    }
+    if (firstName) return firstName[0].toUpperCase();
+    if (user.email) return user.email[0].toUpperCase();
+    return "U";
+  };
+
+  const getUserName = () => {
+    if (!user) return "User";
+    const firstName = user.firstName || "";
+    const lastName = user.lastName || "";
+    if (firstName && lastName) {
+      return `${firstName} ${lastName}`;
+    }
+    if (firstName) return firstName;
+    if (user.email) return user.email;
+    return "User";
+  };
 
   const handleForceSync = async () => {
     if (!isOnline) {
@@ -147,11 +177,11 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex items-center gap-3 p-2" data-testid="user-profile">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="" alt="User" />
-                <AvatarFallback>JD</AvatarFallback>
+                <AvatarImage src={user?.profileImageUrl} alt={getUserName()} />
+                <AvatarFallback>{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">John Doe</p>
+                <p className="text-sm font-medium truncate">{getUserName()}</p>
                 <div className="flex items-center gap-2">
                   {isOnline ? (
                     <div className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="status-online">
@@ -179,6 +209,12 @@ export function AppSidebar() {
                 </div>
               </div>
             </div>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout} data-testid="button-logout">
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

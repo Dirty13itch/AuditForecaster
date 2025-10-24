@@ -1,10 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import passport from "passport";
-import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { googleCalendarService, getUncachableGoogleCalendarClient, allDayDateToUTC } from "./googleCalendar";
-import { isAuthenticated, getUserId } from "./auth";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { generateReportPDF } from "./pdfGenerator.tsx";
@@ -18,7 +16,6 @@ import {
   insertReportTemplateSchema,
   insertReportInstanceSchema,
   insertPhotoSchema,
-  insertUserSchema,
   insertChecklistItemSchema,
   updateChecklistItemSchema,
   insertComplianceRuleSchema,
@@ -69,93 +66,21 @@ function handleDatabaseError(error: unknown, operation: string): { status: numbe
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Authentication routes
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const { username, password } = insertUserSchema.parse(req.body);
-      
-      // Check if user already exists
-      const existingUser = await storage.getUserByUsername(username);
-      if (existingUser) {
-        return res.status(400).json({ message: "This username is already taken. Please choose another." });
-      }
-      
-      // Hash password with bcrypt
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      // Create user
-      const user = await storage.createUser({
-        username,
-        password: hashedPassword
-      });
-      
-      // Remove password from response
-      const { password: _, ...userWithoutPassword } = user;
-      
-      // Log user in after registration
-      req.login(user, (err) => {
-        if (err) {
-          logError('Auth/Register', err, { username });
-          return res.status(500).json({ message: "Account created successfully, but we couldn't log you in. Please try logging in manually." });
-        }
-        res.status(201).json(userWithoutPassword);
-      });
-    } catch (error) {
-      if (error instanceof ZodError) {
-        const { status, message } = handleValidationError(error);
-        return res.status(status).json({ message });
-      }
-      logError('Auth/Register', error);
-      res.status(500).json({ message: "We couldn't create your account. Please try again." });
-    }
-  });
+  // Setup Replit Auth middleware
+  await setupAuth(app);
 
-  app.post("/api/auth/login", (req, res, next) => {
-    passport.authenticate('local', (err: any, user: any, info: any) => {
-      if (err) {
-        logError('Auth/Login', err);
-        return res.status(500).json({ message: "We're having trouble logging you in. Please try again." });
-      }
+  // Replit Auth route - get authenticated user
+  app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
       if (!user) {
-        return res.status(401).json({ message: info?.message || "Incorrect username or password" });
+        return res.status(404).json({ message: "User not found" });
       }
-      
-      req.login(user, (err) => {
-        if (err) {
-          logError('Auth/LoginSession', err);
-          return res.status(500).json({ message: "We couldn't complete your login. Please try again." });
-        }
-        
-        // Remove password from response
-        const { password: _, ...userWithoutPassword } = user;
-        res.json(userWithoutPassword);
-      });
-    })(req, res, next);
-  });
-
-  app.post("/api/auth/logout", (req, res) => {
-    req.logout((err) => {
-      if (err) {
-        logError('Auth/Logout', err);
-        return res.status(500).json({ message: "We couldn't log you out. Please try again." });
-      }
-      res.json({ message: "Logged out successfully" });
-    });
-  });
-
-  app.get("/api/auth/user", (req, res) => {
-    try {
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "You must be logged in to access this" });
-      }
-      
-      // Remove password from response
-      const user = req.user as any;
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json(user);
     } catch (error) {
       logError('Auth/GetUser', error);
-      res.status(500).json({ message: "We're having trouble retrieving your account information. Please try again." });
+      res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 

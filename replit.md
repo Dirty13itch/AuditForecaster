@@ -16,7 +16,9 @@ The frontend is built with **React** and **TypeScript**, using **Vite** for fast
 
 ### Backend Architecture
 
-The backend uses **Express.js** with **Node.js** and **TypeScript**. **PostgreSQL** (via Neon serverless) is the primary database, accessed through **Drizzle ORM** for type-safe queries with full referential integrity via foreign key constraints and cascade deletes. API architecture is RESTful, with routes defined in `server/routes.ts` and data access abstracted via `server/storage.ts` using the DatabaseStorage class. **Zod** schemas are used for request/response validation. **Passport.js** with a local strategy, **Bcrypt** for password hashing, and **Express sessions** with a PostgreSQL-backed store handle authentication and session management. All data persists across server restarts with proper relationships maintained automatically.
+The backend uses **Express.js** with **Node.js** and **TypeScript**. **PostgreSQL** (via Neon serverless) is the primary database, accessed through **Drizzle ORM** for type-safe queries with full referential integrity via foreign key constraints and cascade deletes. API architecture is RESTful, with routes defined in `server/routes.ts` and data access abstracted via `server/storage.ts` using the DatabaseStorage class. **Zod** schemas are used for request/response validation. 
+
+**Authentication** uses **Replit Auth** (OpenID Connect) with production-ready session management. Users authenticate via `/api/login` (supports Google, GitHub, X, Apple, email/password) and logout via `/api/logout`. Sessions are stored in PostgreSQL with proper expiration handling. The `replitAuth.ts` module handles OIDC flow, token validation, and automatic user record creation/updates (upsert pattern based on OIDC `sub` claim). Frontend uses `useAuth` hook to check authentication status and conditionally render landing page vs authenticated app. All data persists across server restarts with proper relationships maintained automatically.
 
 ### Data Model
 
