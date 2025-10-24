@@ -255,17 +255,32 @@ export const upsertUserSchema = createInsertSchema(users).pick({
 export const insertBuilderSchema = createInsertSchema(builders).omit({ id: true, totalJobs: true });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
   builderSignatureUrl: z.string().nullable().optional(),
-  builderSignedAt: z.date().nullable().optional(),
+  builderSignedAt: z.coerce.date().nullable().optional(),
   builderSignerName: z.string().nullable().optional(),
+  scheduledDate: z.coerce.date().nullable().optional(),
+  completedDate: z.coerce.date().nullable().optional(),
+  originalScheduledDate: z.coerce.date().nullable().optional(),
+  lastComplianceCheck: z.coerce.date().nullable().optional(),
   pricing: z.union([z.number(), z.string()]).transform(val => 
     typeof val === 'number' ? val.toString() : val
   ).optional(),
 });
-export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit({ id: true });
-export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true });
-export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true });
+export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit({ id: true }).extend({
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+  lastSyncedAt: z.coerce.date().nullable().optional(),
+});
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true }).extend({
+  date: z.coerce.date(),
+});
+export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true }).extend({
+  date: z.coerce.date(),
+});
 export const insertReportTemplateSchema = createInsertSchema(reportTemplates).omit({ id: true, createdAt: true });
-export const insertReportInstanceSchema = createInsertSchema(reportInstances).omit({ id: true, createdAt: true });
+export const insertReportInstanceSchema = createInsertSchema(reportInstances).omit({ id: true, createdAt: true }).extend({
+  emailedAt: z.coerce.date().nullable().optional(),
+  lastComplianceCheck: z.coerce.date().nullable().optional(),
+});
 export const insertForecastSchema = createInsertSchema(forecasts).omit({ id: true });
 export const insertChecklistItemSchema = createInsertSchema(checklistItems).omit({ id: true });
 export const updateChecklistItemSchema = z.object({
@@ -282,9 +297,17 @@ export const updateChecklistItemSchema = z.object({
 });
 export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, uploadedAt: true });
 export const insertComplianceRuleSchema = createInsertSchema(complianceRules).omit({ id: true, createdAt: true });
-export const insertComplianceHistorySchema = createInsertSchema(complianceHistory).omit({ id: true });
-export const insertCalendarPreferenceSchema = createInsertSchema(calendarPreferences).omit({ id: true, createdAt: true });
-export const insertGoogleEventSchema = createInsertSchema(googleEvents).omit({ id: true, createdAt: true });
+export const insertComplianceHistorySchema = createInsertSchema(complianceHistory).omit({ id: true }).extend({
+  evaluatedAt: z.coerce.date(),
+});
+export const insertCalendarPreferenceSchema = createInsertSchema(calendarPreferences).omit({ id: true, createdAt: true }).extend({
+  lastSyncedAt: z.coerce.date().nullable().optional(),
+});
+export const insertGoogleEventSchema = createInsertSchema(googleEvents).omit({ id: true, createdAt: true }).extend({
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+  lastSyncedAt: z.coerce.date().nullable().optional(),
+});
 export const insertUploadSessionSchema = createInsertSchema(uploadSessions).omit({ id: true }).extend({
   timestamp: z.coerce.date(),
   acknowledgedAt: z.coerce.date().nullable().optional(),
