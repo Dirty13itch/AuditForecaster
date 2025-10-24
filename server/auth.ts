@@ -19,6 +19,9 @@ export function isAuthenticated(req: Request, res: Response, next: NextFunction)
     return next();
   }
   
+  // Log authentication failure for debugging
+  console.log(`[Auth] Request to ${req.path} failed authentication. Session ID: ${req.sessionID}, User: ${req.user ? 'exists' : 'null'}`);
+  
   // User is not authenticated, return 401 Unauthorized
   res.status(401).json({ 
     message: "Authentication required. Please log in to access this resource." 

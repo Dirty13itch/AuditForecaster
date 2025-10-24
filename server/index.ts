@@ -101,10 +101,12 @@ app.use(passport.session());
 // Development auto-login middleware
 app.use(async (req, res, next) => {
   if (!req.isAuthenticated() && process.env.NODE_ENV === 'development') {
+    serverLogger.info('[AutoLogin] User not authenticated, attempting auto-login');
     try {
       // Try to get or create a dev user
       let devUser = await storage.getUserByUsername('dev-user');
       if (!devUser) {
+        serverLogger.info('[AutoLogin] Creating new dev-user');
         devUser = await storage.createUser({
           username: 'dev-user',
           password: 'dev-password' // Not hashed in dev mode for convenience
@@ -113,16 +115,20 @@ app.use(async (req, res, next) => {
       
       req.login(devUser, (err) => {
         if (err) {
-          serverLogger.error('Auto-login failed:', err);
+          serverLogger.error('[AutoLogin] Login failed:', err);
           return next();
         }
+        serverLogger.info('[AutoLogin] Successfully logged in as dev-user');
         next();
       });
     } catch (error) {
-      serverLogger.error('Auto-login failed:', error);
+      serverLogger.error('[AutoLogin] Error during auto-login:', error);
       next();
     }
   } else {
+    if (req.isAuthenticated()) {
+      serverLogger.debug('[AutoLogin] User already authenticated, skipping auto-login');
+    }
     next();
   }
 });
