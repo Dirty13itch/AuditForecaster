@@ -78,7 +78,6 @@ export const jobs = pgTable("jobs", {
   isCancelled: boolean("is_cancelled").default(false),
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
-  index("idx_jobs_status").on(table.status),
   index("idx_jobs_scheduled_date").on(table.scheduledDate),
   index("idx_jobs_status_scheduled_date").on(table.status, table.scheduledDate),
 ]);
@@ -95,8 +94,8 @@ export const scheduleEvents = pgTable("schedule_events", {
   lastSyncedAt: timestamp("last_synced_at"),
   color: text("color"),
 }, (table) => [
-  index("idx_schedule_events_job_id").on(table.jobId),
-  index("idx_schedule_events_start_time").on(table.startTime),
+  index("idx_schedule_events_job_id_start_time").on(table.jobId, table.startTime),
+  index("idx_schedule_events_google_event_id").on(table.googleCalendarEventId),
 ]);
 
 export const googleEvents = pgTable("google_events", {
@@ -114,6 +113,7 @@ export const googleEvents = pgTable("google_events", {
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").default(sql`now()`),
 }, (table) => [
+  index("idx_google_events_calendar_event").on(table.googleCalendarId, table.googleEventId),
   index("idx_google_events_is_converted").on(table.isConverted),
   index("idx_google_events_start_time").on(table.startTime),
 ]);
@@ -217,9 +217,8 @@ export const photos = pgTable("photos", {
   annotationData: jsonb("annotation_data"),
   uploadedAt: timestamp("uploaded_at").notNull().default(sql`now()`),
 }, (table) => [
-  index("idx_photos_job_id").on(table.jobId),
-  index("idx_photos_uploaded_at").on(table.uploadedAt),
   index("idx_photos_job_id_uploaded_at").on(table.jobId, table.uploadedAt),
+  index("idx_photos_hash").on(table.hash),
 ]);
 
 export const complianceRules = pgTable("compliance_rules", {
