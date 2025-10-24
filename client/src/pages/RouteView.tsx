@@ -97,8 +97,8 @@ function DraggableJobCard({ job, index, moveJob, isCustomSort }: DraggableJobCar
         <CardHeader className="pb-3">
           <div className="flex items-start gap-3">
             {isCustomSort && (
-              <div className="pt-1 cursor-move" data-testid={`handle-drag-${job.id}`}>
-                <GripVertical className="w-5 h-5 text-muted-foreground" />
+              <div className="h-12 w-12 flex items-center justify-center cursor-move flex-shrink-0" data-testid={`handle-drag-${job.id}`}>
+                <GripVertical className="w-6 h-6 text-muted-foreground" />
               </div>
             )}
             <div className="flex-1 min-w-0">

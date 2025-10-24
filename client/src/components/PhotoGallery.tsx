@@ -121,7 +121,7 @@ export default function PhotoGallery({
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => onToggleSelection(photo.id)}
-                    className="h-5 w-5 bg-white border-2"
+                    className="bg-white"
                     data-testid={`checkbox-photo-${photo.id}`}
                   />
                 </div>
@@ -154,14 +154,14 @@ export default function PhotoGallery({
                 <Button
                   size="icon"
                   variant="destructive"
-                  className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={(e) => {
                     e.stopPropagation();
                     onPhotoDelete(photo.id);
                   }}
                   data-testid="button-delete-photo"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-4 w-4" />
                 </Button>
               )}
             </div>

@@ -137,10 +137,78 @@ Use Tailwind units: **4, 6, 8, 12, 16, 24** for consistent rhythm
 - **Use**: Heroicons via CDN (outline style for consistency with CompanyCam aesthetic)
 - **Common Icons**: Camera, check-circle, exclamation-triangle, cloud-upload, wifi-off, map-pin, clipboard-list
 
+## Touch Target Standards (CRITICAL FOR FIELD USE)
+
+### Minimum Touch Target Requirements
+**All interactive elements MUST meet a minimum 48x48px touch target** for reliable interaction with gloves on Samsung Galaxy S23 Ultra in outdoor field conditions.
+
+### Component-Specific Standards
+
+#### Buttons
+All button sizes have been audited and meet the 48px minimum requirement:
+- **size="default"**: min-h-12 (48px) - Standard size for most actions
+- **size="sm"**: min-h-12 (48px) - Same as default to ensure accessibility (no smaller buttons allowed)
+- **size="lg"**: min-h-14 (56px) - Larger for primary/important actions
+- **size="icon"**: h-12 w-12 (48x48px) - Square buttons for icon-only actions
+
+**IMPORTANT**: Never override button sizes with custom height/width classes (e.g., h-6 w-6) as this breaks accessibility.
+
+#### Form Inputs
+- **Text Inputs**: h-12 (48px) height - Ensures easy tapping and text entry with gloves
+- **Select Dropdowns**: h-12 (48px) trigger height - Matches text input height
+- **Select Items**: min-h-12 (48px) with py-3 padding - Each option is easy to tap
+- **Textarea**: min-h-20 (80px) - Larger minimum for text areas
+
+#### Selection Controls
+- **Checkbox**: h-6 w-6 (24px visual) with p-3 padding = 48px total touch target
+  - Visual size kept reasonable while ensuring large clickable area
+  - Never override with custom h-* w-* classes
+- **Radio Button**: h-6 w-6 (24px visual) with p-3 padding = 48px total touch target
+  - Same principle as checkbox for consistency
+- **Switch**: h-10 w-[4.5rem] (40px height, 72px width) - Larger for outdoor use
+
+#### Drag Handles
+- **Route sorting drag handles**: h-12 w-12 (48x48px) with centered grip icon
+- **Schedule drag cards**: min-h-12 (48px) for entire draggable card
+- All drag handles use flex centering to ensure easy grip
+
+#### Special Interactive Elements
+- **Color picker buttons** (PhotoAnnotator): h-12 w-12 (48x48px) - Enlarged from 32px
+- **Navigation buttons**: All use size="icon" (48x48px minimum)
+- **Toolbar action buttons**: All use proper Button component sizing
+- **Photo gallery interactions**: 
+  - Zoom buttons: size="icon" (48x48px)
+  - Delete buttons: size="icon" (48x48px) - no size overrides allowed
+  - Selection checkboxes: Standard checkbox touch target (48x48px)
+
+### Development Rules
+
+#### DO:
+✅ Use standard Button component sizes (default, sm, lg, icon)
+✅ Use standard Input, Select, Checkbox components without size overrides
+✅ Add min-h-12 or h-12 to custom interactive elements
+✅ Test all interactive elements in mobile viewport with touch/tap simulation
+✅ Use flex centering for icons inside touch targets
+
+#### DON'T:
+❌ Never use h-6, h-8, h-9, h-10, w-6, w-8, w-9, w-10 on buttons
+❌ Never override Checkbox/Radio sizes with custom classes
+❌ Never create custom clickable elements smaller than 48x48px
+❌ Never use "micro" buttons or "tiny" action buttons
+❌ Never assume desktop mouse precision - always design for touch
+
+### Testing Checklist
+Before deploying any interactive feature:
+1. Open in mobile viewport (480px width minimum)
+2. Enable DevTools touch emulation
+3. Verify all interactive elements are at least 48x48px
+4. Test with accessibility features enabled
+5. Verify no layout breaks when buttons are larger
+
 ## Special Considerations
 
 ### Field Usability
-- All interactive elements minimum 48px touch target
+- All interactive elements minimum 48px touch target (see Touch Target Standards above)
 - Swipe gestures for photo navigation and card actions
 - Voice notes capability (future enhancement placeholder)
 - GPS location tagging with visual map confirmation

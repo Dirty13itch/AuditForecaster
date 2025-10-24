@@ -76,7 +76,7 @@ function DraggableJobCard({ job }: DraggableJobCardProps) {
   return (
     <div
       ref={drag}
-      className={`p-4 bg-card border rounded-md hover-elevate cursor-move ${isDragging ? 'opacity-50' : ''}`}
+      className={`min-h-12 p-4 bg-card border rounded-md hover-elevate cursor-move ${isDragging ? 'opacity-50' : ''}`}
       data-testid={`card-unscheduled-job-${job.id}`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">

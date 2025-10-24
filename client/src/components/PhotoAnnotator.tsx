@@ -218,7 +218,7 @@ export function PhotoAnnotator({ photoUrl, existingAnnotations = [], onSave, onC
                 {COLORS.map((c) => (
                   <button
                     key={c.value}
-                    className={`h-8 w-8 rounded-md border-2 ${
+                    className={`h-12 w-12 rounded-md border-2 ${
                       color === c.value ? 'border-primary' : 'border-border'
                     }`}
                     style={{ backgroundColor: c.value }}
