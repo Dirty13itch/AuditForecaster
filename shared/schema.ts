@@ -41,6 +41,7 @@ export const jobs = pgTable("jobs", {
   contractor: text("contractor").notNull(),
   status: text("status").notNull(),
   inspectionType: text("inspection_type").notNull(),
+  pricing: decimal("pricing", { precision: 10, scale: 2 }),
   scheduledDate: timestamp("scheduled_date"),
   completedDate: timestamp("completed_date"),
   completedItems: integer("completed_items").default(0),
@@ -232,6 +233,9 @@ export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).exten
   builderSignatureUrl: z.string().nullable().optional(),
   builderSignedAt: z.date().nullable().optional(),
   builderSignerName: z.string().nullable().optional(),
+  pricing: z.union([z.number(), z.string()]).transform(val => 
+    typeof val === 'number' ? val.toString() : val
+  ).optional(),
 });
 export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit({ id: true });
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true });

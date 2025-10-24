@@ -17,12 +17,35 @@ import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import type { Job, Builder } from "@shared/schema";
 
+const JOB_TYPES = [
+  'Pre-Drywall Inspection',
+  'Final Testing',
+  'Blower Door Only',
+  'Duct Blaster Only',
+  'Blower Door Retest',
+  'Infrared Imaging',
+  'Multifamily Project',
+  'Other'
+] as const;
+
+function getDefaultPricing(inspectionType: string): number | undefined {
+  const pricingMap: Record<string, number> = {
+    'Pre-Drywall Inspection': 100,
+    'Final Testing': 350,
+    'Blower Door Only': 200,
+    'Duct Blaster Only': 200,
+    'Blower Door Retest': 200,
+  };
+  return pricingMap[inspectionType];
+}
+
 const jobFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   address: z.string().min(1, "Address is required"),
   builderId: z.string().optional(),
   contractor: z.string().min(1, "Contractor is required"),
-  inspectionType: z.enum(["Pre-Drywall", "Final"]),
+  inspectionType: z.string().min(1, "Inspection type is required"),
+  pricing: z.number().optional(),
   scheduledDate: z.date().optional(),
   priority: z.enum(["low", "medium", "high"]).default("medium"),
   status: z.string().default("pending"),
@@ -59,7 +82,8 @@ export default function JobDialog({
       address: job?.address || "",
       builderId: job?.builderId || "",
       contractor: job?.contractor || "",
-      inspectionType: (job?.inspectionType as "Pre-Drywall" | "Final") || "Pre-Drywall",
+      inspectionType: job?.inspectionType || "",
+      pricing: job?.pricing ? parseFloat(job.pricing as any) : undefined,
       scheduledDate: job?.scheduledDate ? new Date(job.scheduledDate) : undefined,
       priority: (job?.priority as "low" | "medium" | "high") || "medium",
       status: job?.status || "pending",
@@ -194,15 +218,25 @@ export default function JobDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Inspection Type *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        const defaultPrice = getDefaultPricing(value);
+                        if (defaultPrice !== undefined) {
+                          form.setValue('pricing', defaultPrice);
+                        }
+                      }} 
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger data-testid="select-inspection-type">
                           <SelectValue placeholder="Select inspection type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Pre-Drywall">Pre-Drywall</SelectItem>
-                        <SelectItem value="Final">Final</SelectItem>
+                        {JOB_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -211,7 +245,59 @@ export default function JobDialog({
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Priority</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-priority">
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-status">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                        <SelectItem value="pre-inspection">Pre-Inspection</SelectItem>
+                        <SelectItem value="in-progress">In Progress</SelectItem>
+                        <SelectItem value="testing">Testing</SelectItem>
+                        <SelectItem value="review">Review</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="scheduledDate"
@@ -260,49 +346,21 @@ export default function JobDialog({
 
               <FormField
                 control={form.control}
-                name="priority"
+                name="pricing"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Priority</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-priority">
-                          <SelectValue placeholder="Select priority" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-status">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="scheduled">Scheduled</SelectItem>
-                        <SelectItem value="pre-inspection">Pre-Inspection</SelectItem>
-                        <SelectItem value="in-progress">In Progress</SelectItem>
-                        <SelectItem value="testing">Testing</SelectItem>
-                        <SelectItem value="review">Review</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Pricing</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        value={field.value || ""}
+                        data-testid="input-pricing"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

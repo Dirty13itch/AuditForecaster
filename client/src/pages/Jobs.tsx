@@ -931,6 +931,7 @@ export default function Jobs() {
                   builders={builders}
                   status={job.status}
                   inspectionType={job.inspectionType}
+                  pricing={job.pricing}
                   scheduledDate={job.scheduledDate ? format(new Date(job.scheduledDate), "MMM d, yyyy") : undefined}
                   priority={job.priority ?? "medium"}
                   latitude={job.latitude}

@@ -259,6 +259,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/jobs", isAuthenticated, async (req, res) => {
     try {
       const validated = insertJobSchema.parse(req.body);
+      // Sanitize builderId - convert empty string to undefined (which becomes null in DB)
+      if (validated.builderId === '') {
+        validated.builderId = undefined;
+      }
       const job = await storage.createJob(validated);
       res.status(201).json(job);
     } catch (error) {
@@ -287,6 +291,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/jobs/:id", isAuthenticated, async (req, res) => {
     try {
       const validated = insertJobSchema.partial().parse(req.body);
+      // Sanitize builderId - convert empty string to undefined (which becomes null in DB)
+      if (validated.builderId === '') {
+        validated.builderId = undefined;
+      }
       const job = await storage.updateJob(req.params.id, validated);
       if (!job) {
         return res.status(404).json({ message: "Job not found. It may have been deleted." });

@@ -22,6 +22,7 @@ const convertEventSchema = z.object({
   inspectionType: z.string().min(1, 'Inspection type is required'),
   builderId: z.string().optional(),
   contractor: z.string().min(1, 'Contractor is required'),
+  pricing: z.number().optional(),
   notes: z.string().optional(),
   scheduledStartTime: z.string().min(1, 'Start time is required'),
   scheduledEndTime: z.string().min(1, 'End time is required'),
@@ -37,13 +38,41 @@ interface ConvertGoogleEventDialogProps {
   onSuccess?: () => void;
 }
 
+const JOB_TYPES = [
+  'Pre-Drywall Inspection',
+  'Final Testing',
+  'Blower Door Only',
+  'Duct Blaster Only',
+  'Blower Door Retest',
+  'Infrared Imaging',
+  'Multifamily Project',
+  'Other'
+];
+
 function extractInspectionType(title: string): string {
-  const titleLower = title.toLowerCase();
-  if (titleLower.includes('tdl')) return 'TDL';
-  if (titleLower.includes('dlo')) return 'DLO';
-  if (titleLower.includes('final')) return 'Final';
-  if (titleLower.includes('rough')) return 'Rough';
+  const titleUpper = title.toUpperCase();
+  if (titleUpper.includes('SV2')) return 'Pre-Drywall Inspection';
+  if (titleUpper.includes('TEST')) return 'Final Testing';
   return '';
+}
+
+function extractBuilder(title: string, builders: Builder[]): string {
+  // Always default to M/I Homes builder if it exists
+  const miBuilder = builders.find(b => 
+    b.name.includes('M/I') || b.companyName.includes('M/I')
+  );
+  return miBuilder?.id || '';
+}
+
+function getDefaultPricing(inspectionType: string): number | undefined {
+  const pricingMap: Record<string, number> = {
+    'Pre-Drywall Inspection': 100,
+    'Final Testing': 350,
+    'Blower Door Only': 200,
+    'Duct Blaster Only': 200,
+    'Blower Door Retest': 200,
+  };
+  return pricingMap[inspectionType];
 }
 
 export function ConvertGoogleEventDialog({ 
@@ -66,6 +95,7 @@ export function ConvertGoogleEventDialog({
       inspectionType: '',
       builderId: '',
       contractor: '',
+      pricing: undefined,
       notes: '',
       scheduledStartTime: '',
       scheduledEndTime: '',
@@ -74,32 +104,41 @@ export function ConvertGoogleEventDialog({
   });
   
   useEffect(() => {
-    if (googleEvent) {
+    if (googleEvent && builders.length > 0) {
+      const detectedType = extractInspectionType(googleEvent.title);
+      const detectedBuilder = extractBuilder(googleEvent.title, builders);
+      const defaultPrice = getDefaultPricing(detectedType);
+      
       form.reset({
         name: googleEvent.title || '',
         address: googleEvent.location || '',
-        inspectionType: extractInspectionType(googleEvent.title),
-        builderId: '',
+        inspectionType: detectedType,
+        builderId: detectedBuilder,
         contractor: '',
+        pricing: defaultPrice,
         notes: googleEvent.description || '',
         scheduledStartTime: format(new Date(googleEvent.startTime), "yyyy-MM-dd'T'HH:mm"),
         scheduledEndTime: format(new Date(googleEvent.endTime), "yyyy-MM-dd'T'HH:mm"),
         keepSynced: true,
       });
     }
-  }, [googleEvent]);
+  }, [googleEvent, builders]);
   
   const convertMutation = useMutation({
     mutationFn: async (data: ConvertEventFormData) => {
       if (!googleEvent) throw new Error('No Google event selected');
+      
+      // Sanitize builderId - convert empty string to undefined
+      const builderId = data.builderId && data.builderId !== '' ? data.builderId : undefined;
       
       const response = await apiRequest('POST', `/api/google-events/${googleEvent.id}/convert`, {
         jobData: {
           name: data.name,
           address: data.address,
           inspectionType: data.inspectionType,
-          builderId: data.builderId || null,
+          builderId,
           contractor: data.contractor,
+          pricing: data.pricing,
           notes: data.notes,
           status: 'scheduled',
           priority: 'medium',
@@ -141,7 +180,9 @@ export function ConvertGoogleEventDialog({
   
   if (!googleEvent) return null;
   
-  const inspectionTypes = ['TDL', 'DLO', 'Final', 'Rough', 'Pre-drywall', 'Insulation', 'HERS'];
+  const detectedType = extractInspectionType(googleEvent.title);
+  const detectedBuilder = builders.find(b => b.id === extractBuilder(googleEvent.title, builders));
+  const detectedPrice = getDefaultPricing(detectedType);
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -169,6 +210,28 @@ export function ConvertGoogleEventDialog({
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <MapPin className="h-4 w-4" />
               <span data-testid="text-event-location">{googleEvent.location}</span>
+            </div>
+          )}
+          {(detectedType || detectedBuilder || detectedPrice) && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <p className="text-sm font-medium text-foreground mb-1">Auto-detected:</p>
+              <div className="flex flex-wrap gap-2 text-sm">
+                {detectedType && (
+                  <span className="text-foreground" data-testid="text-detected-type">
+                    {detectedType}
+                  </span>
+                )}
+                {detectedPrice && (
+                  <span className="text-foreground" data-testid="text-detected-price">
+                    (${detectedPrice})
+                  </span>
+                )}
+                {detectedBuilder && (
+                  <span className="text-foreground" data-testid="text-detected-builder">
+                    for {detectedBuilder.name}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -217,7 +280,7 @@ export function ConvertGoogleEventDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {inspectionTypes.map(type => (
+                        {JOB_TYPES.map(type => (
                           <SelectItem key={type} value={type}>{type}</SelectItem>
                         ))}
                       </SelectContent>
@@ -253,19 +316,43 @@ export function ConvertGoogleEventDialog({
               />
             </div>
             
-            <FormField
-              control={form.control}
-              name="contractor"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contractor *</FormLabel>
-                  <FormControl>
-                    <Input {...field} data-testid="input-contractor" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="contractor"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contractor *</FormLabel>
+                    <FormControl>
+                      <Input {...field} data-testid="input-contractor" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="pricing"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pricing</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="0.00"
+                        {...field} 
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        value={field.value || ''}
+                        data-testid="input-pricing" 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             
             <FormField
               control={form.control}

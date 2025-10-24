@@ -17,6 +17,7 @@ interface JobCardProps {
   builders?: Builder[];
   status: string;
   inspectionType: string;
+  pricing?: string | null;
   scheduledDate?: string;
   priority?: string;
   latitude?: number | null;
@@ -41,6 +42,7 @@ export default function JobCard({
   builders = [],
   status,
   inspectionType,
+  pricing,
   scheduledDate,
   priority = "medium",
   latitude,
@@ -209,7 +211,14 @@ export default function JobCard({
 
         <div className="pt-2">
           <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-muted-foreground">{inspectionType}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-muted-foreground">{inspectionType}</span>
+              {pricing && (
+                <span className="text-sm font-medium" data-testid="text-pricing">
+                  ${parseFloat(pricing).toFixed(2)}
+                </span>
+              )}
+            </div>
             <span className="font-medium" data-testid="text-progress">
               {completedItems}/{totalItems}
             </span>
