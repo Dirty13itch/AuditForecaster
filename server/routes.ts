@@ -8,6 +8,7 @@ import { ObjectPermission } from "./objectAcl";
 import { generateReportPDF } from "./pdfGenerator.tsx";
 import { generateThumbnail } from "./thumbnailGenerator";
 import { healthz, readyz, status } from "./health";
+import { generateToken, csrfSynchronisedProtection } from "./csrf";
 import {
   insertBuilderSchema,
   insertJobSchema,
@@ -75,6 +76,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Replit Auth middleware
   await setupAuth(app);
 
+  // CSRF token generation endpoint (must be authenticated)
+  app.get("/api/csrf-token", isAuthenticated, (req, res) => {
+    try {
+      const csrfToken = generateToken(req, res);
+      res.json({ csrfToken });
+    } catch (error) {
+      logError('CSRF/GenerateToken', error);
+      res.status(500).json({ message: "Failed to generate CSRF token" });
+    }
+  });
+
   // Replit Auth route - get authenticated user
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
@@ -109,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders", isAuthenticated, async (req, res) => {
+  app.post("/api/builders", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertBuilderSchema.parse(req.body);
       const builder = await storage.createBuilder(validated);
@@ -137,7 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:id", isAuthenticated, async (req, res) => {
+  app.put("/api/builders/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertBuilderSchema.partial().parse(req.body);
       const builder = await storage.updateBuilder(req.params.id, validated);
@@ -155,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/builders/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const deleted = await storage.deleteBuilder(req.params.id);
       if (!deleted) {
@@ -187,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/jobs", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertJobSchema.parse(req.body);
       // Sanitize builderId - convert empty string to undefined (which becomes null in DB)
@@ -219,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/jobs/:id", isAuthenticated, async (req, res) => {
+  app.put("/api/jobs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       // Load existing job to check if status is changing to completed
       const existingJob = await storage.getJob(req.params.id);
@@ -258,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/jobs/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/jobs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const deleted = await storage.deleteJob(req.params.id);
       if (!deleted) {
@@ -272,7 +284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk delete jobs
-  app.delete("/api/jobs/bulk", isAuthenticated, async (req, res) => {
+  app.delete("/api/jobs/bulk", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const bulkDeleteSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one job ID is required"),
     });
@@ -298,7 +310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export jobs
-  app.post("/api/jobs/export", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/export", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const exportSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one job ID is required"),
       format: z.enum(['csv', 'json']),
@@ -386,7 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create job from Google Calendar event
-  app.post("/api/jobs/from-event", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/from-event", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const schema = z.object({
       eventId: z.string().min(1, "Event ID is required"),
     });
@@ -531,7 +543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Convert Google event to job
-  app.post('/api/google-events/:id/convert', isAuthenticated, async (req, res) => {
+  app.post('/api/google-events/:id/convert', isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const { id } = req.params;
       const { jobData, scheduleData, keepSynced } = req.body;
@@ -850,7 +862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/schedule-events", isAuthenticated, async (req, res) => {
+  app.post("/api/schedule-events", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertScheduleEventSchema.parse(req.body);
       const event = await storage.createScheduleEvent(validated);
@@ -897,7 +909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/schedule-events/:id", isAuthenticated, async (req, res) => {
+  app.put("/api/schedule-events/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertScheduleEventSchema.partial().parse(req.body);
       const event = await storage.updateScheduleEvent(req.params.id, validated);
@@ -934,7 +946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/schedule-events/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/schedule-events/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const event = await storage.getScheduleEvent(req.params.id);
       
@@ -993,7 +1005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/expenses", isAuthenticated, async (req, res) => {
+  app.post("/api/expenses", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertExpenseSchema.parse(req.body);
       const expense = await storage.createExpense(validated);
@@ -1021,7 +1033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/expenses/:id", isAuthenticated, async (req, res) => {
+  app.put("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertExpenseSchema.partial().parse(req.body);
       const expense = await storage.updateExpense(req.params.id, validated);
@@ -1039,7 +1051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const deleted = await storage.deleteExpense(req.params.id);
       if (!deleted) {
@@ -1053,7 +1065,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk delete expenses
-  app.delete("/api/expenses/bulk", isAuthenticated, async (req, res) => {
+  app.delete("/api/expenses/bulk", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const bulkDeleteSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one expense ID is required"),
     });
@@ -1079,7 +1091,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export expenses
-  app.post("/api/expenses/export", isAuthenticated, async (req, res) => {
+  app.post("/api/expenses/export", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const exportSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one expense ID is required"),
       format: z.enum(['csv', 'json']),
@@ -1191,7 +1203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/mileage-logs", isAuthenticated, async (req, res) => {
+  app.post("/api/mileage-logs", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertMileageLogSchema.parse(req.body);
       const log = await storage.createMileageLog(validated);
@@ -1219,7 +1231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/mileage-logs/:id", isAuthenticated, async (req, res) => {
+  app.put("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertMileageLogSchema.partial().parse(req.body);
       const log = await storage.updateMileageLog(req.params.id, validated);
@@ -1237,7 +1249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/mileage-logs/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const deleted = await storage.deleteMileageLog(req.params.id);
       if (!deleted) {
@@ -1260,7 +1272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-templates", isAuthenticated, async (req, res) => {
+  app.post("/api/report-templates", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertReportTemplateSchema.parse(req.body);
       const template = await storage.createReportTemplate(validated);
@@ -1288,7 +1300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/report-templates/:id", isAuthenticated, async (req, res) => {
+  app.put("/api/report-templates/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertReportTemplateSchema.partial().parse(req.body);
       const template = await storage.updateReportTemplate(req.params.id, validated);
@@ -1306,7 +1318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/report-templates/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/report-templates/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const deleted = await storage.deleteReportTemplate(req.params.id);
       if (!deleted) {
@@ -1352,7 +1364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-instances", isAuthenticated, async (req, res) => {
+  app.post("/api/report-instances", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertReportInstanceSchema.parse(req.body);
       const instance = await storage.createReportInstance(validated);
@@ -1376,7 +1388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-instances/recalculate-scores", isAuthenticated, async (req, res) => {
+  app.post("/api/report-instances/recalculate-scores", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const jobs = await storage.getAllJobs();
       let recalculated = 0;
@@ -1419,7 +1431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/report-instances/:id", isAuthenticated, async (req, res) => {
+  app.put("/api/report-instances/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertReportInstanceSchema.partial().parse(req.body);
       const instance = await storage.updateReportInstance(req.params.id, validated);
@@ -1437,7 +1449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-instances/:id/generate-pdf", isAuthenticated, async (req, res) => {
+  app.post("/api/report-instances/:id/generate-pdf", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const userId = getUserId(req);
       
@@ -1551,7 +1563,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Object Storage Routes
-  app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
+  app.post("/api/objects/upload", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const objectStorageService = new ObjectStorageService();
       const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL();
@@ -1587,7 +1599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Signature Routes
-  app.post("/api/jobs/:id/signature", isAuthenticated, async (req, res) => {
+  app.post("/api/jobs/:id/signature", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const userId = getUserId(req);
       const { signatureUrl, signerName, signerRole } = req.body;
@@ -1705,7 +1717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/photos", isAuthenticated, async (req, res) => {
+  app.post("/api/photos", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!req.body.filePath) {
@@ -1791,7 +1803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/photos/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertPhotoSchema.partial().parse(req.body);
       const photo = await storage.updatePhoto(req.params.id, validated);
@@ -1809,7 +1821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/photos/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const photo = await storage.getPhoto(req.params.id);
       if (!photo) {
@@ -1837,7 +1849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk delete photos
-  app.delete("/api/photos/bulk", isAuthenticated, async (req, res) => {
+  app.delete("/api/photos/bulk", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const bulkDeleteSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
     });
@@ -1889,7 +1901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk tag photos
-  app.post("/api/photos/bulk-tag", isAuthenticated, async (req, res) => {
+  app.post("/api/photos/bulk-tag", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const bulkTagSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       mode: z.enum(['add', 'remove', 'replace']),
@@ -1917,7 +1929,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export photos
-  app.post("/api/photos/export", isAuthenticated, async (req, res) => {
+  app.post("/api/photos/export", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const exportSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       format: z.enum(['csv', 'json']),
@@ -2017,7 +2029,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forecasts", isAuthenticated, async (req, res) => {
+  app.post("/api/forecasts", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertForecastSchema.parse(req.body);
       const forecast = await storage.createForecast(validated);
@@ -2042,7 +2054,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/forecasts/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/forecasts/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertForecastSchema.partial().parse(req.body);
       const forecast = await storage.updateForecast(req.params.id, validated);
@@ -2114,7 +2126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/dashboard/export/email", isAuthenticated, async (req, res) => {
+  app.post("/api/dashboard/export/email", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const emailSchema = z.object({
       emails: z.array(z.string().email()).min(1, "At least one email address is required"),
     });
@@ -2174,7 +2186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/checklist-items", isAuthenticated, async (req, res) => {
+  app.post("/api/checklist-items", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertChecklistItemSchema.parse(req.body);
       const item = await storage.createChecklistItem(validated);
@@ -2213,7 +2225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/checklist-items/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/checklist-items/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = updateChecklistItemSchema.parse(req.body);
       const item = await storage.updateChecklistItem(req.params.id, validated);
@@ -2242,7 +2254,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/checklist-items/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/checklist-items/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const deleted = await storage.deleteChecklistItem(req.params.id);
       if (!deleted) {
@@ -2274,7 +2286,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/compliance/jobs/:jobId/evaluate", isAuthenticated, async (req, res) => {
+  app.post("/api/compliance/jobs/:jobId/evaluate", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const job = await storage.getJob(req.params.jobId);
       if (!job) {
@@ -2313,7 +2325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/compliance/reports/:reportId/evaluate", isAuthenticated, async (req, res) => {
+  app.post("/api/compliance/reports/:reportId/evaluate", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const report = await storage.getReportInstance(req.params.reportId);
       if (!report) {
@@ -2344,7 +2356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/compliance/rules", isAuthenticated, async (req, res) => {
+  app.post("/api/compliance/rules", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertComplianceRuleSchema.parse(req.body);
       const rule = await storage.createComplianceRule(validated);
@@ -2389,7 +2401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/calendar-preferences', isAuthenticated, async (req, res) => {
+  app.post('/api/calendar-preferences', isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const preferencesData = z.array(insertCalendarPreferenceSchema).parse(req.body);
       const preferences = await storage.saveCalendarPreferences(preferencesData);
@@ -2405,7 +2417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/calendar-preferences/:calendarId/toggle', isAuthenticated, async (req, res) => {
+  app.patch('/api/calendar-preferences/:calendarId/toggle', isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const { calendarId } = req.params;
       const { isEnabled } = z.object({ isEnabled: z.boolean() }).parse(req.body);
@@ -2499,7 +2511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/upload-sessions", isAuthenticated, async (req, res) => {
+  app.post("/api/upload-sessions", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertUploadSessionSchema.parse(req.body);
       const session = await storage.createUploadSession(validated);
@@ -2524,7 +2536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/upload-sessions/:id/acknowledge", isAuthenticated, async (req, res) => {
+  app.patch("/api/upload-sessions/:id/acknowledge", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       await storage.acknowledgeUploadSession(req.params.id);
       res.json({ message: "Upload session acknowledged successfully" });

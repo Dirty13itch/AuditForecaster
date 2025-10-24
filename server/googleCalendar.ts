@@ -86,33 +86,105 @@ function isAuthError(error: any): boolean {
          errorString.includes('unauthorized');
 }
 
-// Wrapper for automatic retry with fresh token on auth errors
-// This provides self-healing behavior when tokens expire
+// Helper function to detect Google Calendar rate limiting errors
+function isRateLimitError(error: any): boolean {
+  if (!error) return false;
+  
+  // Check HTTP status codes
+  if (error.code === 429 || error.status === 429) return true;
+  
+  // Check Google API error response format
+  if (error.response?.status === 429) return true;
+  if (error.response?.data?.error?.code === 429) return true;
+  
+  // Check Google API error reasons
+  if (error.errors?.[0]?.reason === 'rateLimitExceeded') return true;
+  if (error.errors?.[0]?.reason === 'userRateLimitExceeded') return true;
+  if (error.errors?.[0]?.reason === 'quotaExceeded') return true;
+  
+  // Check error message content
+  const message = (error.message || '').toLowerCase();
+  return message.includes('rate limit') || 
+         message.includes('quota') ||
+         message.includes('too many requests');
+}
+
+// Helper function to sleep for exponential backoff
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Wrapper for automatic retry with fresh token on auth errors and exponential backoff on rate limits
+// This provides self-healing behavior when tokens expire and graceful rate limit handling
 async function withTokenRetry<T>(
   operation: () => Promise<T>,
-  operationName: string
+  operationName: string,
+  maxRetries: number = 3
 ): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (isAuthError(error)) {
-      serverLogger.warn(`[GoogleCalendar] Authentication error in ${operationName}, refreshing token and retrying...`);
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
       
-      // Clear cached token and force fresh token fetch
-      await getAccessToken(true);
-      
-      // Retry the operation once with fresh token
-      try {
-        serverLogger.info(`[GoogleCalendar] Retrying ${operationName} with fresh token`);
-        return await operation();
-      } catch (retryError) {
-        serverLogger.error(`[GoogleCalendar] Retry failed for ${operationName} after token refresh:`, retryError);
-        throw retryError;
+      // Handle authentication errors with token refresh
+      if (isAuthError(error)) {
+        if (attempt === 0) {
+          serverLogger.warn(`[GoogleCalendar] Authentication error in ${operationName}, refreshing token and retrying...`);
+          
+          // Clear cached token and force fresh token fetch
+          await getAccessToken(true);
+          
+          // Retry with fresh token
+          try {
+            serverLogger.info(`[GoogleCalendar] Retrying ${operationName} with fresh token`);
+            return await operation();
+          } catch (retryError) {
+            // If retry also fails, continue to rate limit check
+            lastError = retryError;
+          }
+        } else {
+          // Already retried auth once, don't retry again
+          serverLogger.error(`[GoogleCalendar] Authentication retry failed for ${operationName}`);
+          throw error;
+        }
       }
+      
+      // Handle rate limiting with exponential backoff
+      if (isRateLimitError(error)) {
+        if (attempt < maxRetries) {
+          // Calculate exponential backoff with jitter
+          // Base delay: 1s, 2s, 4s (doubling each time)
+          // Add jitter: ±25% randomization to prevent thundering herd
+          const baseDelay = Math.pow(2, attempt) * 1000;
+          const jitter = baseDelay * 0.25 * (Math.random() - 0.5);
+          const delay = baseDelay + jitter;
+          
+          serverLogger.warn(
+            `[GoogleCalendar] Rate limit exceeded in ${operationName}, ` +
+            `retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`
+          );
+          
+          await sleep(delay);
+          continue;
+        } else {
+          serverLogger.error(
+            `[GoogleCalendar] Rate limit exceeded in ${operationName}, ` +
+            `max retries (${maxRetries}) exhausted`
+          );
+          throw error;
+        }
+      }
+      
+      // Not an auth or rate limit error, throw immediately
+      throw error;
     }
-    // Not an auth error, propagate immediately
-    throw error;
   }
+  
+  // Should never reach here, but throw last error just in case
+  throw lastError;
 }
 
 // Convert all-day event date from calendar timezone to UTC with proper DST handling

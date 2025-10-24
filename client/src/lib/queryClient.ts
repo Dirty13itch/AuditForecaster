@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { addToSyncQueue } from "./syncQueue";
 import { queryClientLogger } from "./logger";
+import { fetchCsrfToken, getCsrfToken, clearCsrfToken } from "./csrfToken";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -15,12 +16,53 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   try {
+    // Fetch CSRF token for state-changing requests
+    let csrfToken = getCsrfToken();
+    if (method !== 'GET' && method !== 'HEAD') {
+      if (!csrfToken) {
+        queryClientLogger.debug('[CSRF] No token in cache, fetching...');
+        csrfToken = await fetchCsrfToken();
+      }
+    }
+
+    const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+    if (csrfToken && method !== 'GET' && method !== 'HEAD') {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
     const res = await fetch(url, {
       method,
-      headers: data ? { "Content-Type": "application/json" } : {},
+      headers,
       body: data ? JSON.stringify(data) : undefined,
       credentials: "include",
     });
+
+    // If CSRF validation fails, clear token and retry once
+    if (res.status === 403) {
+      const errorText = await res.text();
+      if (errorText.includes('CSRF') || errorText.includes('csrf')) {
+        queryClientLogger.warn('[CSRF] Token invalid, fetching new token and retrying');
+        clearCsrfToken();
+        csrfToken = await fetchCsrfToken();
+        
+        const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+        if (csrfToken && method !== 'GET' && method !== 'HEAD') {
+          headers['X-CSRF-Token'] = csrfToken;
+        }
+
+        const retryRes = await fetch(url, {
+          method,
+          headers,
+          body: data ? JSON.stringify(data) : undefined,
+          credentials: "include",
+        });
+
+        await throwIfResNotOk(retryRes);
+        return retryRes;
+      }
+      // Not a CSRF error, throw the original error
+      throw new Error(`403: ${errorText}`);
+    }
 
     await throwIfResNotOk(res);
     return res;
@@ -29,11 +71,17 @@ export async function apiRequest(
       queryClientLogger.info('Network error detected, adding to sync queue');
       
       if (method !== 'GET') {
+        const csrfToken = getCsrfToken();
+        const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+        if (csrfToken) {
+          headers['X-CSRF-Token'] = csrfToken;
+        }
+
         await addToSyncQueue({
           method,
           url,
           data,
-          headers: data ? { "Content-Type": "application/json" } : {},
+          headers,
         });
         
         return new Response(
