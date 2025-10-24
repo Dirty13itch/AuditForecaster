@@ -19,6 +19,8 @@ interface JobCardProps {
   inspectionType: string;
   pricing?: string | null;
   scheduledDate?: string;
+  originalScheduledDate?: string | null;
+  isCancelled?: boolean;
   priority?: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -44,6 +46,8 @@ export default function JobCard({
   inspectionType,
   pricing,
   scheduledDate,
+  originalScheduledDate,
+  isCancelled = false,
   priority = "medium",
   latitude,
   longitude,
@@ -124,6 +128,23 @@ export default function JobCard({
             >
               {priorityConfig[priority]?.label || priority}
             </Badge>
+            {isCancelled && (
+              <Badge 
+                variant="destructive"
+                data-testid={`badge-cancelled-${id}`}
+              >
+                Cancelled
+              </Badge>
+            )}
+            {originalScheduledDate && !isCancelled && (
+              <Badge 
+                variant="outline"
+                className="bg-warning/10 text-warning border-warning/20"
+                data-testid={`badge-rescheduled-${id}`}
+              >
+                Rescheduled
+              </Badge>
+            )}
             {complianceStatus && (
               <Badge 
                 variant={getComplianceBadgeVariant(complianceStatus)}
