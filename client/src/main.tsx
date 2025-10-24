@@ -43,8 +43,23 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SW_LOG') {
       const { level, message, args } = event.data;
-      const logMethod = swLogger[level as keyof typeof swLogger] || swLogger.info;
-      logMethod(message, ...args);
+      // Properly bind the logger method to preserve 'this' context
+      switch (level) {
+        case 'debug':
+          swLogger.debug(message, ...args);
+          break;
+        case 'info':
+          swLogger.info(message, ...args);
+          break;
+        case 'warn':
+          swLogger.warn(message, ...args);
+          break;
+        case 'error':
+          swLogger.error(message, ...args);
+          break;
+        default:
+          swLogger.info(message, ...args);
+      }
     }
     
     if (event.data && event.data.type === 'BACKGROUND_SYNC') {
