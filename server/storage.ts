@@ -1297,21 +1297,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDashboardSummary(): Promise<any> {
-    const completedJobs = await db.select()
+    const getTierColor = (tier: string): string => {
+      const colors: Record<string, string> = {
+        'Elite': '#0B7285',
+        'Excellent': '#2E8B57',
+        'Very Good': '#3FA34D',
+        'Good': '#A0C34E',
+        'Passing': '#FFC107',
+        'Failing': '#DC3545',
+      };
+      return colors[tier] || '#6C757D';
+    };
+
+    const overallStats = await db.select({
+      totalInspections: count(jobs.id),
+      averageACH50: sql<number>`AVG(${forecasts.actualACH50})`,
+      eliteCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} <= 1.0 THEN 1 ELSE 0 END)`,
+      excellentCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 1.0 AND ${forecasts.actualACH50} <= 1.5 THEN 1 ELSE 0 END)`,
+      veryGoodCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 1.5 AND ${forecasts.actualACH50} <= 2.0 THEN 1 ELSE 0 END)`,
+      goodCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 2.0 AND ${forecasts.actualACH50} <= 2.5 THEN 1 ELSE 0 END)`,
+      passingCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 2.5 AND ${forecasts.actualACH50} <= 3.0 THEN 1 ELSE 0 END)`,
+      failingCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 3.0 THEN 1 ELSE 0 END)`,
+      passCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} <= 3.0 THEN 1 ELSE 0 END)`,
+      failCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 3.0 THEN 1 ELSE 0 END)`,
+    })
       .from(jobs)
       .innerJoin(forecasts, eq(jobs.id, forecasts.jobId))
-      .where(eq(jobs.status, 'completed'));
+      .where(and(
+        eq(jobs.status, 'completed'),
+        sql`${forecasts.actualACH50} IS NOT NULL`
+      ));
 
-    const jobsWithACH50 = completedJobs
-      .filter(row => row.forecasts.actualACH50 != null)
-      .map(row => ({
-        jobId: row.jobs.id,
-        ach50: parseFloat(row.forecasts.actualACH50?.toString() || '0'),
-        completedDate: row.jobs.completedDate,
-      }));
+    const stats = overallStats[0];
+    const totalInspections = Number(stats.totalInspections) || 0;
 
-    const totalInspections = jobsWithACH50.length;
-    
     if (totalInspections === 0) {
       return {
         totalInspections: 0,
@@ -1325,76 +1344,46 @@ export class DatabaseStorage implements IStorage {
       };
     }
 
-    const calculateTier = (ach50: number): string => {
-      if (ach50 <= 1.0) return 'Elite';
-      if (ach50 <= 1.5) return 'Excellent';
-      if (ach50 <= 2.0) return 'Very Good';
-      if (ach50 <= 2.5) return 'Good';
-      if (ach50 <= 3.0) return 'Passing';
-      return 'Failing';
-    };
+    const averageACH50 = Number(stats.averageACH50) || 0;
+    const passCount = Number(stats.passCount) || 0;
+    const failCount = Number(stats.failCount) || 0;
 
-    const getTierColor = (tier: string): string => {
-      const colors: Record<string, string> = {
-        'Elite': '#0B7285',
-        'Excellent': '#2E8B57',
-        'Very Good': '#3FA34D',
-        'Good': '#A0C34E',
-        'Passing': '#FFC107',
-        'Failing': '#DC3545',
-      };
-      return colors[tier] || '#6C757D';
-    };
-
-    const totalACH50 = jobsWithACH50.reduce((sum, job) => sum + job.ach50, 0);
-    const averageACH50 = totalACH50 / totalInspections;
-
-    const tierCounts: Record<string, number> = {
-      'Elite': 0,
-      'Excellent': 0,
-      'Very Good': 0,
-      'Good': 0,
-      'Passing': 0,
-      'Failing': 0,
-    };
-
-    let passCount = 0;
-    let failCount = 0;
-    let tax45LEligibleCount = 0;
-
-    jobsWithACH50.forEach(job => {
-      const tier = calculateTier(job.ach50);
-      tierCounts[tier]++;
-      
-      if (job.ach50 <= 3.0) {
-        passCount++;
-        tax45LEligibleCount++;
-      } else {
-        failCount++;
-      }
-    });
-
-    const tierDistribution = Object.entries(tierCounts).map(([tier, count]) => ({
-      tier,
-      count,
-      percentage: (count / totalInspections) * 100,
-      color: getTierColor(tier),
-    }));
+    const tierDistribution = [
+      { tier: 'Elite', count: Number(stats.eliteCount) || 0, percentage: ((Number(stats.eliteCount) || 0) / totalInspections) * 100, color: getTierColor('Elite') },
+      { tier: 'Excellent', count: Number(stats.excellentCount) || 0, percentage: ((Number(stats.excellentCount) || 0) / totalInspections) * 100, color: getTierColor('Excellent') },
+      { tier: 'Very Good', count: Number(stats.veryGoodCount) || 0, percentage: ((Number(stats.veryGoodCount) || 0) / totalInspections) * 100, color: getTierColor('Very Good') },
+      { tier: 'Good', count: Number(stats.goodCount) || 0, percentage: ((Number(stats.goodCount) || 0) / totalInspections) * 100, color: getTierColor('Good') },
+      { tier: 'Passing', count: Number(stats.passingCount) || 0, percentage: ((Number(stats.passingCount) || 0) / totalInspections) * 100, color: getTierColor('Passing') },
+      { tier: 'Failing', count: Number(stats.failingCount) || 0, percentage: ((Number(stats.failingCount) || 0) / totalInspections) * 100, color: getTierColor('Failing') },
+    ];
 
     const passRate = (passCount / totalInspections) * 100;
     const failRate = (failCount / totalInspections) * 100;
+    const tax45LEligibleCount = passCount;
     const totalPotentialTaxCredits = tax45LEligibleCount * 2000;
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisMonthJobs = jobsWithACH50.filter(job => 
-      job.completedDate && new Date(job.completedDate) >= startOfMonth
-    );
 
+    const monthlyStats = await db.select({
+      monthlyCount: count(jobs.id),
+      bestACH50: sql<number>`MIN(${forecasts.actualACH50})`,
+      monthlyPassCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} <= 3.0 THEN 1 ELSE 0 END)`,
+    })
+      .from(jobs)
+      .innerJoin(forecasts, eq(jobs.id, forecasts.jobId))
+      .where(and(
+        eq(jobs.status, 'completed'),
+        sql`${forecasts.actualACH50} IS NOT NULL`,
+        gte(jobs.completedDate, startOfMonth)
+      ));
+
+    const monthData = monthlyStats[0];
+    const monthlyCount = Number(monthData.monthlyCount) || 0;
     const monthlyHighlights = [];
-    
-    if (thisMonthJobs.length > 0) {
-      const bestThisMonth = Math.min(...thisMonthJobs.map(j => j.ach50));
+
+    if (monthlyCount > 0) {
+      const bestThisMonth = Number(monthData.bestACH50) || 0;
       monthlyHighlights.push({
         label: 'Best Performance This Month',
         value: `${bestThisMonth.toFixed(2)} ACH50`,
@@ -1403,11 +1392,12 @@ export class DatabaseStorage implements IStorage {
 
       monthlyHighlights.push({
         label: 'Inspections This Month',
-        value: thisMonthJobs.length,
+        value: monthlyCount,
         type: 'info',
       });
 
-      const monthlyPassRate = (thisMonthJobs.filter(j => j.ach50 <= 3.0).length / thisMonthJobs.length) * 100;
+      const monthlyPassCount = Number(monthData.monthlyPassCount) || 0;
+      const monthlyPassRate = (monthlyPassCount / monthlyCount) * 100;
       monthlyHighlights.push({
         label: 'Monthly Pass Rate',
         value: `${monthlyPassRate.toFixed(1)}%`,
@@ -1428,12 +1418,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBuilderLeaderboard(): Promise<any[]> {
-    const allBuilders = await db.select().from(builders);
-    const completedJobs = await db.select()
-      .from(jobs)
-      .innerJoin(forecasts, eq(jobs.id, forecasts.jobId))
-      .where(eq(jobs.status, 'completed'));
-
     const calculateTier = (ach50: number): string => {
       if (ach50 <= 1.0) return 'Elite';
       if (ach50 <= 1.5) return 'Excellent';
@@ -1455,70 +1439,100 @@ export class DatabaseStorage implements IStorage {
       return colors[tier] || '#6C757D';
     };
 
-    const leaderboard = allBuilders.map(builder => {
-      const builderJobs = completedJobs
-        .filter(row => row.jobs.builderId === builder.id && row.forecasts.actualACH50 != null)
-        .map(row => ({
-          jobId: row.jobs.id,
-          ach50: parseFloat(row.forecasts.actualACH50?.toString() || '0'),
-          completedDate: row.jobs.completedDate,
-        }));
+    const builderStats = await db
+      .select({
+        builderId: builders.id,
+        builderName: builders.name,
+        totalJobs: count(jobs.id),
+        averageACH50: sql<number>`AVG(${forecasts.actualACH50})`,
+        bestACH50: sql<number>`MIN(${forecasts.actualACH50})`,
+        passCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} <= 3.0 THEN 1 ELSE 0 END)`,
+        eliteCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} <= 1.0 THEN 1 ELSE 0 END)`,
+        excellentCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 1.0 AND ${forecasts.actualACH50} <= 1.5 THEN 1 ELSE 0 END)`,
+        veryGoodCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 1.5 AND ${forecasts.actualACH50} <= 2.0 THEN 1 ELSE 0 END)`,
+        goodCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 2.0 AND ${forecasts.actualACH50} <= 2.5 THEN 1 ELSE 0 END)`,
+        passingCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 2.5 AND ${forecasts.actualACH50} <= 3.0 THEN 1 ELSE 0 END)`,
+        failingCount: sql<number>`SUM(CASE WHEN ${forecasts.actualACH50} > 3.0 THEN 1 ELSE 0 END)`,
+        latestCompletedDate: sql<Date | null>`MAX(${jobs.completedDate})`,
+      })
+      .from(builders)
+      .leftJoin(jobs, and(
+        eq(builders.id, jobs.builderId),
+        eq(jobs.status, 'completed')
+      ))
+      .leftJoin(forecasts, and(
+        eq(jobs.id, forecasts.jobId),
+        sql`${forecasts.actualACH50} IS NOT NULL`
+      ))
+      .groupBy(builders.id, builders.name);
 
-      if (builderJobs.length === 0) {
-        return null;
+    const latestACH50ByBuilder = await db
+      .select({
+        builderId: jobs.builderId,
+        latestACH50: forecasts.actualACH50,
+      })
+      .from(jobs)
+      .innerJoin(forecasts, eq(jobs.id, forecasts.jobId))
+      .where(and(
+        eq(jobs.status, 'completed'),
+        sql`${forecasts.actualACH50} IS NOT NULL`,
+        sql`${jobs.completedDate} IN (
+          SELECT MAX(j2.completed_date)
+          FROM jobs j2
+          INNER JOIN forecasts f2 ON j2.id = f2.job_id
+          WHERE j2.builder_id = ${jobs.builderId}
+            AND j2.status = 'completed'
+            AND f2.actual_ach50 IS NOT NULL
+        )`
+      ));
+
+    const latestACH50Map = new Map<string, number>();
+    latestACH50ByBuilder.forEach(row => {
+      if (row.builderId && row.latestACH50) {
+        latestACH50Map.set(row.builderId, Number(row.latestACH50));
       }
+    });
 
-      const totalACH50 = builderJobs.reduce((sum, job) => sum + job.ach50, 0);
-      const averageACH50 = totalACH50 / builderJobs.length;
-      const tier = calculateTier(averageACH50);
-      
-      const passCount = builderJobs.filter(job => job.ach50 <= 3.0).length;
-      const passRate = (passCount / builderJobs.length) * 100;
-      
-      const bestACH50 = Math.min(...builderJobs.map(j => j.ach50));
-      
-      const sortedByDate = builderJobs.sort((a, b) => {
-        const dateA = a.completedDate ? new Date(a.completedDate).getTime() : 0;
-        const dateB = b.completedDate ? new Date(b.completedDate).getTime() : 0;
-        return dateB - dateA;
-      });
-      const latestACH50 = sortedByDate.length > 0 ? sortedByDate[0].ach50 : null;
+    const leaderboard = builderStats
+      .map(builder => {
+        const totalJobs = Number(builder.totalJobs) || 0;
+        
+        if (totalJobs === 0) {
+          return null;
+        }
 
-      const tierCounts: Record<string, number> = {
-        'Elite': 0,
-        'Excellent': 0,
-        'Very Good': 0,
-        'Good': 0,
-        'Passing': 0,
-        'Failing': 0,
-      };
+        const averageACH50 = Number(builder.averageACH50) || 0;
+        const tier = calculateTier(averageACH50);
+        const passCount = Number(builder.passCount) || 0;
+        const passRate = (passCount / totalJobs) * 100;
+        const bestACH50 = Number(builder.bestACH50) || 0;
+        const latestACH50 = latestACH50Map.get(builder.builderId) || null;
 
-      builderJobs.forEach(job => {
-        const jobTier = calculateTier(job.ach50);
-        tierCounts[jobTier]++;
-      });
+        const tierDistribution = [
+          { tier: 'Elite', count: Number(builder.eliteCount) || 0, percentage: ((Number(builder.eliteCount) || 0) / totalJobs) * 100, color: getTierColor('Elite') },
+          { tier: 'Excellent', count: Number(builder.excellentCount) || 0, percentage: ((Number(builder.excellentCount) || 0) / totalJobs) * 100, color: getTierColor('Excellent') },
+          { tier: 'Very Good', count: Number(builder.veryGoodCount) || 0, percentage: ((Number(builder.veryGoodCount) || 0) / totalJobs) * 100, color: getTierColor('Very Good') },
+          { tier: 'Good', count: Number(builder.goodCount) || 0, percentage: ((Number(builder.goodCount) || 0) / totalJobs) * 100, color: getTierColor('Good') },
+          { tier: 'Passing', count: Number(builder.passingCount) || 0, percentage: ((Number(builder.passingCount) || 0) / totalJobs) * 100, color: getTierColor('Passing') },
+          { tier: 'Failing', count: Number(builder.failingCount) || 0, percentage: ((Number(builder.failingCount) || 0) / totalJobs) * 100, color: getTierColor('Failing') },
+        ];
 
-      const tierDistribution = Object.entries(tierCounts).map(([tierName, count]) => ({
-        tier: tierName,
-        count,
-        percentage: (count / builderJobs.length) * 100,
-        color: getTierColor(tierName),
-      }));
+        return {
+          builderId: builder.builderId,
+          builderName: builder.builderName,
+          averageACH50,
+          tier,
+          totalJobs,
+          passRate,
+          bestACH50,
+          latestACH50,
+          tierDistribution,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      .sort((a, b) => a.averageACH50 - b.averageACH50);
 
-      return {
-        builderId: builder.id,
-        builderName: builder.name,
-        averageACH50,
-        tier,
-        totalJobs: builderJobs.length,
-        passRate,
-        bestACH50,
-        latestACH50,
-        tierDistribution,
-      };
-    }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-
-    return leaderboard.sort((a, b) => a.averageACH50 - b.averageACH50);
+    return leaderboard;
   }
 
   async getEmailPreferences(userId: string): Promise<EmailPreference | undefined> {
