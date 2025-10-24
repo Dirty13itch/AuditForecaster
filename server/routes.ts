@@ -316,57 +316,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
 
-      // Handle calendar write-back for completed jobs
-      let calendarWarning: string | null = null;
-      if (isCompletingNow) {
-        try {
-          // Find "Shaun - Updates" calendar
-          const updatesCalendarId = await googleCalendarService.findCalendarByName('Shaun - Updates');
-          
-          if (!updatesCalendarId) {
-            serverLogger.warn('[Jobs/Complete] "Shaun - Updates" calendar not found, skipping calendar write');
-            calendarWarning = 'Job completed but calendar event could not be created: "Shaun - Updates" calendar not found';
-          } else {
-            // Fetch builder and forecast data for the event
-            const [builder, forecasts] = await Promise.all([
-              job.builderId ? storage.getBuilder(job.builderId) : Promise.resolve(null),
-              storage.getForecastsByJob(job.id),
-            ]);
-            
-            const forecast = forecasts.length > 0 ? forecasts[0] : null;
-
-            // Create or update completion event
-            const eventId = await googleCalendarService.createCompletionEvent(
-              job,
-              updatesCalendarId,
-              builder,
-              forecast
-            );
-
-            if (eventId) {
-              // Update job with completion event IDs
-              await storage.updateJob(job.id, {
-                completionGoogleEventId: eventId,
-                completionGoogleCalendarId: updatesCalendarId,
-              });
-              serverLogger.info(`[Jobs/Complete] Created completion event ${eventId} for job ${job.id}`);
-            }
-          }
-        } catch (calendarError) {
-          // Log error but don't fail the job update
-          serverLogger.error('[Jobs/Complete] Error creating completion calendar event:', calendarError);
-          calendarWarning = 'Job completed but calendar event creation failed. The job update was successful.';
-        }
-      }
-
-      // Return appropriate response based on calendar write result
-      if (calendarWarning) {
-        return res.status(202).json({ 
-          ...job, 
-          warning: calendarWarning 
-        });
-      }
-
       res.json(job);
     } catch (error) {
       if (error instanceof ZodError) {
