@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Building2, DollarSign, FileText, BarChart3, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut } from "lucide-react";
+import { Home, ClipboardList, Calendar, Map, Building2, DollarSign, FileText, BarChart3, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -34,6 +34,11 @@ const menuItems = [
     title: "Schedule",
     url: "/schedule",
     icon: Calendar,
+  },
+  {
+    title: "Route",
+    url: "/route",
+    icon: Map,
   },
   {
     title: "Builders",

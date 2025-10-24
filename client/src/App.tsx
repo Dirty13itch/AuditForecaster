@@ -14,6 +14,7 @@ import Photos from "@/pages/Photos";
 import Forecast from "@/pages/Forecast";
 import Jobs from "@/pages/Jobs";
 import Schedule from "@/pages/Schedule";
+import RouteView from "@/pages/RouteView";
 import Builders from "@/pages/Builders";
 import Financials from "@/pages/Financials";
 import Reports from "@/pages/Reports";
@@ -39,6 +40,11 @@ function Router() {
       <Route path="/schedule" component={() => (
         <RouteErrorBoundary>
           <Schedule />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/route" component={() => (
+        <RouteErrorBoundary>
+          <RouteView />
         </RouteErrorBoundary>
       )} />
       <Route path="/builders" component={() => (
