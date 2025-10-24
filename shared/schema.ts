@@ -51,7 +51,10 @@ export const builders = pgTable("builders", {
   rating: integer("rating"),
   totalJobs: integer("total_jobs").default(0),
   notes: text("notes"),
-});
+}, (table) => [
+  index("idx_builders_company_name").on(table.companyName),
+  index("idx_builders_name_company").on(table.name, table.companyName),
+]);
 
 export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -85,6 +88,8 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_scheduled_date").on(table.scheduledDate),
   index("idx_jobs_status_scheduled_date").on(table.status, table.scheduledDate),
   index("idx_jobs_created_by").on(table.createdBy),
+  index("idx_jobs_address").on(table.address),
+  index("idx_jobs_status_created_by").on(table.status, table.createdBy),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -101,6 +106,7 @@ export const scheduleEvents = pgTable("schedule_events", {
 }, (table) => [
   index("idx_schedule_events_job_id_start_time").on(table.jobId, table.startTime),
   index("idx_schedule_events_google_event_id").on(table.googleCalendarEventId),
+  index("idx_schedule_events_start_end_time").on(table.startTime, table.endTime),
 ]);
 
 export const googleEvents = pgTable("google_events", {
@@ -224,6 +230,8 @@ export const photos = pgTable("photos", {
 }, (table) => [
   index("idx_photos_job_id_uploaded_at").on(table.jobId, table.uploadedAt),
   index("idx_photos_hash").on(table.hash),
+  index("idx_photos_tags").using("gin", table.tags),
+  index("idx_photos_checklist_item_id").on(table.checklistItemId).where(sql`${table.checklistItemId} IS NOT NULL`),
 ]);
 
 export const complianceRules = pgTable("compliance_rules", {
@@ -284,7 +292,9 @@ export const emailPreferences = pgTable("email_preferences", {
   unsubscribeToken: varchar("unsubscribe_token").unique(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_email_preferences_user_id").on(table.userId),
+]);
 
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
