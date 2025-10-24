@@ -71,7 +71,7 @@ export default function Photos() {
   
   const jobs = jobsData?.data ?? [];
 
-  // Infinite query for photos with pagination and filtering
+  // Infinite query for photos with cursor-based pagination and filtering
   const {
     data,
     fetchNextPage,
@@ -80,14 +80,19 @@ export default function Photos() {
     isLoading,
     isError,
   } = useInfiniteQuery({
-    queryKey: ['/api/photos', selectedTags, jobFilter, dateFrom, dateTo, filterItem],
-    initialPageParam: 0,
-    queryFn: async ({ pageParam = 0 }) => {
-      // Build query string with filters
+    queryKey: ['/api/photos-cursor', selectedTags, jobFilter, dateFrom, dateTo, filterItem],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      // Build query string with filters and cursor
       const params = new URLSearchParams({
-        limit: '20',
-        offset: pageParam.toString(),
+        limit: '50',
+        sortOrder: 'desc',
       });
+      
+      // Add cursor for pagination (if not first page)
+      if (pageParam) {
+        params.append('cursor', pageParam);
+      }
       
       // Add filter parameters
       if (selectedTags.length > 0) {
@@ -117,10 +122,8 @@ export default function Photos() {
       return await res.json();
     },
     getNextPageParam: (lastPage: any) => {
-      // If we got less than 20 photos, we're at the end
-      if (lastPage.data.length < 20) return undefined;
-      // Otherwise, next page starts after current offset + count
-      return lastPage.pagination.offset + lastPage.data.length;
+      // Cursor-based pagination: use nextCursor from response
+      return lastPage.hasMore ? lastPage.nextCursor : undefined;
     },
   });
 
@@ -160,8 +163,8 @@ export default function Photos() {
   // Get unique checklist item numbers from all fetched photos for dynamic filter
   const uniqueItems = Array.from(new Set(photos.map(p => p.itemNumber).filter((n): n is number => n !== undefined))).sort((a, b) => a - b);
 
-  // Get total count from first page pagination metadata
-  const totalPhotos = data?.pages[0]?.pagination.total ?? 0;
+  // Total photos loaded so far (cursor-based pagination doesn't provide total count)
+  const totalPhotos = photos.length;
 
   const handleToggleTag = (tag: PhotoTag) => {
     setSelectedTags(prev => 
@@ -191,7 +194,7 @@ export default function Photos() {
       return response;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/photos-cursor'] });
       toast({
         title: "Photos deleted",
         description: `Successfully deleted ${data.deleted} of ${data.total} photos`,
@@ -218,7 +221,7 @@ export default function Photos() {
       return response;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/photos-cursor'] });
       const modeLabel = data.mode === 'add' ? 'added to' : data.mode === 'remove' ? 'removed from' : 'replaced on';
       toast({
         title: "Tags updated",
@@ -741,7 +744,7 @@ export default function Photos() {
         open={showUploadModal}
         onOpenChange={setShowUploadModal}
         onUploadComplete={() => {
-          queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/photos-cursor'] });
           setShowUploadModal(false);
         }}
         bucketPath="photos"

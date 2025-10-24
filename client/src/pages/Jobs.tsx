@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown } from "lucide-react";
@@ -13,10 +13,15 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, GoogleEvent } from "@shared/schema";
 import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
+import { useAuth, type UserRole } from "@/hooks/useAuth";
 
 export default function Jobs() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  
+  const userRole = (user?.role as UserRole) || 'inspector';
+  const canCreateJobs = userRole === 'admin' || userRole === 'inspector';
 
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
 
@@ -37,11 +42,56 @@ export default function Jobs() {
     queryKey: ["/api/jobs/completed-today"],
   });
 
-  // Fetch all jobs for the full list
-  // TODO: Add pagination for better performance when job count grows (works fine for MVP)
-  const { data: allJobs = [], isLoading: isLoadingAll } = useQuery<Job[]>({
-    queryKey: ["/api/jobs"],
+  // Fetch all jobs with cursor-based infinite scroll pagination
+  const {
+    data: allJobsData,
+    isLoading: isLoadingAll,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["/api/jobs", "infinite"],
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({
+        limit: "20",
+        sortBy: "id",
+        sortOrder: "desc",
+      });
+      if (pageParam) {
+        params.append("cursor", pageParam);
+      }
+      const response = await fetch(`/api/jobs?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch jobs");
+      }
+      return response.json();
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: undefined as string | undefined,
   });
+
+  const allJobs = allJobsData?.pages.flatMap((page) => page.data) ?? [];
+  
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    
+    observer.observe(loadMoreRef.current);
+    
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Fetch builders for job cards
   const { data: builders = [] } = useQuery<Builder[]>({
@@ -78,7 +128,7 @@ export default function Jobs() {
       // Invalidate cache for both new and duplicate jobs
       queryClient.invalidateQueries({ queryKey: ["/api/google-events/today"] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs/today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
       
       if (data.isDuplicate && data.existingJob) {
         toast({
@@ -109,7 +159,7 @@ export default function Jobs() {
       return apiRequest("POST", "/api/jobs", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs/today"] });
       toast({
         title: "Success",
@@ -138,7 +188,11 @@ export default function Jobs() {
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Jobs</h1>
           <p className="text-sm text-muted-foreground">Manage inspections and job workflow</p>
         </div>
-        <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-add-job">
+        <Button 
+          onClick={() => setIsJobDialogOpen(true)} 
+          disabled={!canCreateJobs}
+          data-testid="button-add-job"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Add Job
         </Button>
@@ -208,7 +262,7 @@ export default function Jobs() {
                           </div>
                           <Button
                             onClick={() => startJobMutation.mutate(event.id)}
-                            disabled={startJobMutation.isPending}
+                            disabled={startJobMutation.isPending || !canCreateJobs}
                             size="sm"
                             data-testid={`button-start-job-${event.id}`}
                           >
@@ -367,6 +421,15 @@ export default function Jobs() {
                       onClick={() => navigate(`/inspection/${job.id}`)}
                     />
                   ))}
+                  {hasNextPage && (
+                    <div ref={loadMoreRef} className="flex justify-center py-4">
+                      {isFetchingNextPage ? (
+                        <Loader2 className="w-6 h-6 animate-spin text-primary" data-testid="loader-fetching-more" />
+                      ) : (
+                        <div className="h-4" data-testid="load-more-trigger" />
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </AccordionContent>

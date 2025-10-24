@@ -10,6 +10,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
@@ -23,6 +24,7 @@ import Financials from "@/pages/Financials";
 import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
 import Analytics from "@/pages/Analytics";
+import AuditLogs from "@/pages/AuditLogs";
 import SettingsPage from "@/pages/SettingsPage";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
@@ -82,6 +84,11 @@ function Router() {
       <Route path="/analytics" component={() => (
         <RouteErrorBoundary>
           <Analytics />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/audit-logs" component={() => (
+        <RouteErrorBoundary>
+          <AuditLogs />
         </RouteErrorBoundary>
       )} />
       <Route path="/settings" component={() => (
@@ -164,6 +171,7 @@ function App() {
         <TooltipProvider>
           <AppContent />
           <Toaster />
+          <InstallPrompt />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>

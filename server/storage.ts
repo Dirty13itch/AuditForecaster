@@ -31,6 +31,10 @@ import {
   type InsertGoogleEvent,
   type UploadSession,
   type InsertUploadSession,
+  type EmailPreference,
+  type InsertEmailPreference,
+  type AuditLog,
+  type InsertAuditLog,
   type ScoreSummary,
   users,
   builders,
@@ -48,11 +52,13 @@ import {
   calendarPreferences,
   googleEvents,
   uploadSessions,
+  emailPreferences,
+  auditLogs,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
-import { type PaginationParams, type PaginatedResult, type PhotoFilterParams } from "@shared/pagination";
+import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
 import { db } from "./db";
-import { eq, and, or, gte, lte, inArray, desc, asc, sql, count } from "drizzle-orm";
+import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count } from "drizzle-orm";
 
 export interface IStorage {
   // User operations for Replit Auth
@@ -70,7 +76,10 @@ export interface IStorage {
   getJob(id: string): Promise<Job | undefined>;
   getJobBySourceEventId(sourceEventId: string): Promise<Job | undefined>;
   getAllJobs(): Promise<Job[]>;
+  getJobsByUser(userId: string): Promise<Job[]>;
   getJobsPaginated(params: PaginationParams): Promise<PaginatedResult<Job>>;
+  getJobsCursorPaginated(params: CursorPaginationParams): Promise<CursorPaginatedResult<Job>>;
+  getJobsCursorPaginatedByUser(userId: string, params: CursorPaginationParams): Promise<CursorPaginatedResult<Job>>;
   updateJob(id: string, job: Partial<InsertJob>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<boolean>;
   bulkDeleteJobs(ids: string[]): Promise<number>;
@@ -116,11 +125,14 @@ export interface IStorage {
   getPhoto(id: string): Promise<Photo | undefined>;
   getAllPhotos(): Promise<Photo[]>;
   getPhotosByJob(jobId: string): Promise<Photo[]>;
+  getPhotosByUser(userId: string): Promise<Photo[]>;
   getPhotosByChecklistItem(checklistItemId: string): Promise<Photo[]>;
   getPhotosPaginated(params: PaginationParams): Promise<PaginatedResult<Photo>>;
   getPhotosByJobPaginated(jobId: string, params: PaginationParams): Promise<PaginatedResult<Photo>>;
   getPhotosByChecklistItemPaginated(checklistItemId: string, params: PaginationParams): Promise<PaginatedResult<Photo>>;
   getPhotosFilteredPaginated(filters: PhotoFilterParams, params: PaginationParams): Promise<PaginatedResult<Photo>>;
+  getPhotosCursorPaginated(filters: PhotoFilterParams, params: PhotoCursorPaginationParams): Promise<CursorPaginatedResult<Photo>>;
+  getPhotosCursorPaginatedByUser(userId: string, filters: PhotoFilterParams, params: PhotoCursorPaginationParams): Promise<CursorPaginatedResult<Photo>>;
   updatePhoto(id: string, photo: Partial<InsertPhoto>): Promise<Photo | undefined>;
   deletePhoto(id: string): Promise<boolean>;
   
@@ -174,9 +186,28 @@ export interface IStorage {
   getUploadSessions(): Promise<UploadSession[]>;
   acknowledgeUploadSession(id: string): Promise<void>;
 
+  // Email preferences
+  getEmailPreferences(userId: string): Promise<EmailPreference | undefined>;
+  createEmailPreferences(prefs: InsertEmailPreference): Promise<EmailPreference>;
+  updateEmailPreferences(userId: string, prefs: Partial<InsertEmailPreference>): Promise<EmailPreference | undefined>;
+  getEmailPreferencesByToken(token: string): Promise<EmailPreference | undefined>;
+  generateUnsubscribeToken(userId: string): Promise<string>;
+
   // Dashboard methods
   getDashboardSummary(): Promise<any>;
   getBuilderLeaderboard(): Promise<any[]>;
+
+  // Audit logs
+  createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(params: {
+    limit?: number;
+    offset?: number;
+    userId?: string;
+    action?: string;
+    resourceType?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<{ logs: AuditLog[], total: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -269,6 +300,12 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(jobs);
   }
 
+  async getJobsByUser(userId: string): Promise<Job[]> {
+    return await db.select().from(jobs)
+      .where(eq(jobs.createdBy, userId))
+      .orderBy(desc(jobs.id));
+  }
+
   async getJobsPaginated(params: PaginationParams): Promise<PaginatedResult<Job>> {
     const { limit, offset } = params;
     
@@ -287,6 +324,70 @@ export class DatabaseStorage implements IStorage {
         offset,
         hasMore: offset + limit < total,
       },
+    };
+  }
+
+  async getJobsCursorPaginated(params: CursorPaginationParams): Promise<CursorPaginatedResult<Job>> {
+    const { cursor, limit, sortBy, sortOrder } = params;
+    
+    let query = db.select().from(jobs);
+    
+    if (cursor) {
+      if (sortOrder === 'desc') {
+        query = query.where(lt(jobs.id, cursor));
+      } else {
+        query = query.where(gt(jobs.id, cursor));
+      }
+    }
+    
+    if (sortOrder === 'desc') {
+      query = query.orderBy(desc(jobs.id));
+    } else {
+      query = query.orderBy(asc(jobs.id));
+    }
+    
+    const results = await query.limit(limit + 1);
+    
+    const hasMore = results.length > limit;
+    const data = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : null;
+    
+    return {
+      data,
+      nextCursor,
+      hasMore,
+    };
+  }
+
+  async getJobsCursorPaginatedByUser(userId: string, params: CursorPaginationParams): Promise<CursorPaginatedResult<Job>> {
+    const { cursor, limit, sortBy, sortOrder } = params;
+    
+    let query = db.select().from(jobs).where(eq(jobs.createdBy, userId));
+    
+    if (cursor) {
+      if (sortOrder === 'desc') {
+        query = query.where(and(eq(jobs.createdBy, userId), lt(jobs.id, cursor)));
+      } else {
+        query = query.where(and(eq(jobs.createdBy, userId), gt(jobs.id, cursor)));
+      }
+    }
+    
+    if (sortOrder === 'desc') {
+      query = query.orderBy(desc(jobs.id));
+    } else {
+      query = query.orderBy(asc(jobs.id));
+    }
+    
+    const results = await query.limit(limit + 1);
+    
+    const hasMore = results.length > limit;
+    const data = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : null;
+    
+    return {
+      data,
+      nextCursor,
+      hasMore,
     };
   }
 
@@ -577,6 +678,16 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(photos).where(eq(photos.checklistItemId, checklistItemId));
   }
 
+  async getPhotosByUser(userId: string): Promise<Photo[]> {
+    const results = await db.select({ photo: photos })
+      .from(photos)
+      .leftJoin(jobs, eq(photos.jobId, jobs.id))
+      .where(eq(jobs.createdBy, userId))
+      .orderBy(desc(photos.uploadedAt));
+    
+    return results.map(r => r.photo).filter((p): p is Photo => p !== null);
+  }
+
   async getPhotosPaginated(params: PaginationParams): Promise<PaginatedResult<Photo>> {
     const { limit, offset } = params;
     
@@ -685,6 +796,154 @@ export class DatabaseStorage implements IStorage {
         offset,
         hasMore: offset + limit < total,
       },
+    };
+  }
+
+  async getPhotosCursorPaginated(filters: PhotoFilterParams, params: PhotoCursorPaginationParams): Promise<CursorPaginatedResult<Photo>> {
+    const { cursor, limit, sortOrder } = params;
+    const { jobId, checklistItemId, tags, dateFrom, dateTo } = filters;
+    
+    const conditions = [];
+    
+    // Add filter conditions
+    if (jobId) {
+      conditions.push(eq(photos.jobId, jobId));
+    }
+    
+    if (checklistItemId) {
+      conditions.push(eq(photos.checklistItemId, checklistItemId));
+    }
+    
+    if (tags && tags.length > 0) {
+      conditions.push(sql`${photos.tags} @> ${tags}`);
+    }
+    
+    if (dateFrom) {
+      conditions.push(gte(photos.uploadedAt, new Date(dateFrom)));
+    }
+    
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(lte(photos.uploadedAt, toDate));
+    }
+    
+    // Add cursor condition for pagination
+    if (cursor) {
+      const cursorDate = new Date(cursor);
+      if (sortOrder === 'desc') {
+        conditions.push(lt(photos.uploadedAt, cursorDate));
+      } else {
+        conditions.push(gt(photos.uploadedAt, cursorDate));
+      }
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Fetch limit + 1 to determine if there are more results
+    let query = db.select().from(photos).where(whereClause);
+    
+    // Apply ordering
+    if (sortOrder === 'desc') {
+      query = query.orderBy(desc(photos.uploadedAt));
+    } else {
+      query = query.orderBy(asc(photos.uploadedAt));
+    }
+    
+    const results = await query.limit(limit + 1);
+    
+    // Determine if there are more results
+    const hasMore = results.length > limit;
+    const data = hasMore ? results.slice(0, limit) : results;
+    
+    // Get next cursor from last item's uploadedAt
+    const nextCursor = hasMore && data.length > 0 
+      ? data[data.length - 1].uploadedAt.toISOString()
+      : null;
+    
+    return {
+      data,
+      nextCursor,
+      hasMore,
+    };
+  }
+
+  async getPhotosCursorPaginatedByUser(userId: string, filters: PhotoFilterParams, params: PhotoCursorPaginationParams): Promise<CursorPaginatedResult<Photo>> {
+    const { cursor, limit, sortOrder } = params;
+    const { jobId, checklistItemId, tags, dateFrom, dateTo } = filters;
+    
+    // Build conditions for filtering photos
+    const conditions = [];
+    
+    // Filter by user ownership through jobs table
+    conditions.push(eq(jobs.createdBy, userId));
+    
+    // Add other filter conditions
+    if (jobId) {
+      conditions.push(eq(photos.jobId, jobId));
+    }
+    
+    if (checklistItemId) {
+      conditions.push(eq(photos.checklistItemId, checklistItemId));
+    }
+    
+    if (tags && tags.length > 0) {
+      conditions.push(sql`${photos.tags} @> ${tags}`);
+    }
+    
+    if (dateFrom) {
+      conditions.push(gte(photos.uploadedAt, new Date(dateFrom)));
+    }
+    
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(lte(photos.uploadedAt, toDate));
+    }
+    
+    // Add cursor condition for pagination
+    if (cursor) {
+      const cursorDate = new Date(cursor);
+      if (sortOrder === 'desc') {
+        conditions.push(lt(photos.uploadedAt, cursorDate));
+      } else {
+        conditions.push(gt(photos.uploadedAt, cursorDate));
+      }
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Fetch with join to jobs table for ownership filtering
+    let query = db.select({ photo: photos })
+      .from(photos)
+      .leftJoin(jobs, eq(photos.jobId, jobs.id))
+      .where(whereClause);
+    
+    // Apply ordering
+    if (sortOrder === 'desc') {
+      query = query.orderBy(desc(photos.uploadedAt));
+    } else {
+      query = query.orderBy(asc(photos.uploadedAt));
+    }
+    
+    const results = await query.limit(limit + 1);
+    
+    // Extract photos from joined results
+    const photoResults = results.map(r => r.photo).filter((p): p is Photo => p !== null);
+    
+    // Determine if there are more results
+    const hasMore = photoResults.length > limit;
+    const data = hasMore ? photoResults.slice(0, limit) : photoResults;
+    
+    // Get next cursor from last item's uploadedAt
+    const nextCursor = hasMore && data.length > 0 
+      ? data[data.length - 1].uploadedAt.toISOString()
+      : null;
+    
+    return {
+      data,
+      nextCursor,
+      hasMore,
     };
   }
 
@@ -1260,6 +1519,81 @@ export class DatabaseStorage implements IStorage {
     }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
     return leaderboard.sort((a, b) => a.averageACH50 - b.averageACH50);
+  }
+
+  async getEmailPreferences(userId: string): Promise<EmailPreference | undefined> {
+    const result = await db.select().from(emailPreferences).where(eq(emailPreferences.userId, userId)).limit(1);
+    return result[0];
+  }
+
+  async createEmailPreferences(prefs: InsertEmailPreference): Promise<EmailPreference> {
+    const result = await db.insert(emailPreferences).values(prefs).returning();
+    return result[0];
+  }
+
+  async updateEmailPreferences(userId: string, prefs: Partial<InsertEmailPreference>): Promise<EmailPreference | undefined> {
+    const result = await db
+      .update(emailPreferences)
+      .set({ ...prefs, updatedAt: new Date() })
+      .where(eq(emailPreferences.userId, userId))
+      .returning();
+    return result[0];
+  }
+
+  async getEmailPreferencesByToken(token: string): Promise<EmailPreference | undefined> {
+    const result = await db.select().from(emailPreferences).where(eq(emailPreferences.unsubscribeToken, token)).limit(1);
+    return result[0];
+  }
+
+  async generateUnsubscribeToken(userId: string): Promise<string> {
+    // Generate a unique token for unsubscribe
+    const token = `unsub_${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    await db
+      .update(emailPreferences)
+      .set({ unsubscribeToken: token, updatedAt: new Date() })
+      .where(eq(emailPreferences.userId, userId));
+    return token;
+  }
+
+  async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
+    const [log] = await db.insert(auditLogs).values(data).returning();
+    return log;
+  }
+
+  async getAuditLogs(params: {
+    limit?: number;
+    offset?: number;
+    userId?: string;
+    action?: string;
+    resourceType?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<{ logs: AuditLog[], total: number }> {
+    const { limit = 50, offset = 0, userId, action, resourceType, startDate, endDate } = params;
+    let conditions = [];
+    
+    if (userId) conditions.push(eq(auditLogs.userId, userId));
+    if (action) conditions.push(eq(auditLogs.action, action));
+    if (resourceType) conditions.push(eq(auditLogs.resourceType, resourceType));
+    if (startDate) conditions.push(gte(auditLogs.timestamp, startDate));
+    if (endDate) conditions.push(lte(auditLogs.timestamp, endDate));
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    const logs = await db
+      .select()
+      .from(auditLogs)
+      .where(whereClause)
+      .orderBy(desc(auditLogs.timestamp))
+      .limit(limit)
+      .offset(offset);
+    
+    const [{ count: totalCount }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(auditLogs)
+      .where(whereClause);
+    
+    return { logs, total: Number(totalCount) };
   }
 }
 

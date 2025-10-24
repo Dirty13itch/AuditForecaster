@@ -261,6 +261,15 @@ async function startServer() {
           }
         }
         
+        // Initialize scheduled email jobs
+        try {
+          const { startScheduledEmails } = await import('./email/scheduledEmails');
+          startScheduledEmails();
+          serverLogger.info('[Server] Email notification cron jobs initialized');
+        } catch (error) {
+          serverLogger.error('[Server] Failed to initialize scheduled emails:', error);
+        }
+        
         resolve();
       });
     });

@@ -9,6 +9,8 @@ import { generateReportPDF } from "./pdfGenerator.tsx";
 import { generateThumbnail } from "./thumbnailGenerator";
 import { healthz, readyz, status } from "./health";
 import { generateToken, csrfSynchronisedProtection } from "./csrf";
+import { createAuditLog } from "./auditLogger";
+import { requireRole, checkResourceOwnership, canEdit, canCreate, canDelete, type UserRole } from "./permissions";
 import {
   insertBuilderSchema,
   insertJobSchema,
@@ -24,8 +26,14 @@ import {
   insertForecastSchema,
   insertCalendarPreferenceSchema,
   insertUploadSessionSchema,
+  insertEmailPreferenceSchema,
 } from "@shared/schema";
-import { paginationParamsSchema } from "@shared/pagination";
+import { emailService } from "./email/emailService";
+import { jobAssignedTemplate } from "./email/templates/jobAssigned";
+import { jobStatusChangedTemplate } from "./email/templates/jobStatusChanged";
+import { reportReadyTemplate } from "./email/templates/reportReady";
+import { calendarEventNotificationTemplate } from "./email/templates/calendarEventNotification";
+import { paginationParamsSchema, cursorPaginationParamsSchema, photoCursorPaginationParamsSchema } from "@shared/pagination";
 import {
   evaluateJobCompliance,
   evaluateReportCompliance,
@@ -121,10 +129,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/builders", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderSchema.parse(req.body);
       const builder = await storage.createBuilder(validated);
+      
+      // Audit log: Builder creation
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder.create',
+        resourceType: 'builder',
+        resourceId: builder.id,
+        metadata: { builderName: builder.name, companyName: builder.companyName },
+      }, storage);
+      
       res.status(201).json(builder);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -149,13 +167,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.put("/api/builders/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderSchema.partial().parse(req.body);
       const builder = await storage.updateBuilder(req.params.id, validated);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found. It may have been deleted." });
       }
+      
+      // Audit log: Builder update
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder.update',
+        resourceType: 'builder',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { builderName: builder.name, companyName: builder.companyName },
+      }, storage);
+      
       res.json(builder);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -167,12 +196,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/builders/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
+      const builder = await storage.getBuilder(req.params.id);
       const deleted = await storage.deleteBuilder(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Builder not found. It may have already been deleted." });
       }
+      
+      // Audit log: Builder deletion
+      if (builder) {
+        await createAuditLog(req, {
+          userId: req.user.claims.sub,
+          action: 'builder.delete',
+          resourceType: 'builder',
+          resourceId: req.params.id,
+          metadata: { builderName: builder.name, companyName: builder.companyName },
+        }, storage);
+      }
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete builder');
@@ -180,8 +222,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/jobs", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+      
+      // Inspectors only see their own jobs
+      if (userRole === 'inspector') {
+        if (req.query.cursor !== undefined || req.query.sortBy !== undefined || req.query.sortOrder !== undefined) {
+          const params = cursorPaginationParamsSchema.parse(req.query);
+          const result = await storage.getJobsCursorPaginatedByUser(userId, params);
+          return res.json(result);
+        }
+        const jobs = await storage.getJobsByUser(userId);
+        return res.json(jobs);
+      }
+      
+      // Admins, managers, and viewers see all jobs
+      if (req.query.cursor !== undefined || req.query.sortBy !== undefined || req.query.sortOrder !== undefined) {
+        const params = cursorPaginationParamsSchema.parse(req.query);
+        const result = await storage.getJobsCursorPaginated(params);
+        return res.json(result);
+      }
       if (req.query.limit !== undefined || req.query.offset !== undefined) {
         const params = paginationParamsSchema.parse(req.query);
         const result = await storage.getJobsPaginated(params);
@@ -199,14 +261,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/jobs", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/jobs", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertJobSchema.parse(req.body);
       // Sanitize builderId - convert empty string to undefined (which becomes null in DB)
       if (validated.builderId === '') {
         validated.builderId = undefined;
       }
+      // Set createdBy to current user
+      validated.createdBy = req.user.claims.sub;
+      
       const job = await storage.createJob(validated);
+      
+      // Audit log: Job creation
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'job.create',
+        resourceType: 'job',
+        resourceId: job.id,
+        metadata: { jobName: job.name, address: job.address, status: job.status },
+      }, storage);
+      
       res.status(201).json(job);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -218,12 +293,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/jobs/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
       const job = await storage.getJob(req.params.id);
       if (!job) {
         return res.status(404).json({ message: "Job not found. It may have been deleted or the link may be outdated." });
       }
+      
+      // Check ownership for inspectors
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+      if (userRole === 'inspector' && job.createdBy !== userId) {
+        return res.status(403).json({ message: 'Forbidden: You can only view your own jobs' });
+      }
+      
       res.json(job);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch job');
@@ -231,12 +314,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/jobs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.put("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Load existing job to check if status is changing to completed
       const existingJob = await storage.getJob(req.params.id);
       if (!existingJob) {
         return res.status(404).json({ message: "Job not found. It may have been deleted." });
+      }
+
+      // Check ownership for inspectors
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+      if (userRole === 'inspector' && existingJob.createdBy !== userId) {
+        return res.status(403).json({ message: 'Forbidden: You can only edit your own jobs' });
       }
 
       const validated = insertJobSchema.partial().parse(req.body);
@@ -259,6 +349,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
 
+      // Audit log: Track job status changes
+      if (validated.status && existingJob.status !== validated.status) {
+        await createAuditLog(req, {
+          userId: req.user.claims.sub,
+          action: 'job.status_changed',
+          resourceType: 'job',
+          resourceId: req.params.id,
+          changes: { from: existingJob.status, to: validated.status },
+          metadata: { jobName: existingJob.name, address: existingJob.address },
+        }, storage);
+      } else if (Object.keys(validated).length > 0) {
+        // Log general job updates
+        await createAuditLog(req, {
+          userId: req.user.claims.sub,
+          action: 'job.update',
+          resourceType: 'job',
+          resourceId: req.params.id,
+          changes: validated,
+          metadata: { jobName: existingJob.name },
+        }, storage);
+      }
+
       res.json(job);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -270,12 +382,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/jobs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found. It may have already been deleted." });
+      }
+      
+      // Check ownership for inspectors
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+      if (userRole === 'inspector' && job.createdBy !== userId) {
+        return res.status(403).json({ message: 'Forbidden: You can only delete your own jobs' });
+      }
+      
       const deleted = await storage.deleteJob(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Job not found. It may have already been deleted." });
       }
+      
+      // Audit log: Job deletion
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'job.delete',
+        resourceType: 'job',
+        resourceId: req.params.id,
+        metadata: { jobName: job.name, address: job.address, status: job.status },
+      }, storage);
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete job');
@@ -1364,7 +1498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-instances", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/report-instances", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertReportInstanceSchema.parse(req.body);
       const instance = await storage.createReportInstance(validated);
@@ -1376,6 +1510,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         logError('ReportInstances/ComplianceEvaluation', error, { instanceId: instance.id });
       }
+      
+      // Audit log: Report generation
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'report.generate',
+        resourceType: 'report',
+        resourceId: instance.id,
+        metadata: { jobId: instance.jobId, templateId: instance.templateId },
+      }, storage);
       
       res.status(201).json(instance);
     } catch (error) {
@@ -1660,37 +1803,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Photo Routes
   app.get("/api/photos", isAuthenticated, async (req, res) => {
     try {
-      const { jobId, checklistItemId, tags, dateFrom, dateTo, limit, offset } = req.query;
+      const { jobId, checklistItemId, tags, dateFrom, dateTo, limit, offset, cursor, sortOrder } = req.query;
+
+      // Parse tags - can be single value, comma-separated, or array
+      let parsedTags: string[] | undefined;
+      if (tags) {
+        if (Array.isArray(tags)) {
+          parsedTags = tags.filter((t): t is string => typeof t === 'string');
+        } else if (typeof tags === 'string') {
+          parsedTags = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+        }
+      }
+
+      // Build filters object
+      const filters = {
+        jobId: typeof jobId === 'string' ? jobId : undefined,
+        checklistItemId: typeof checklistItemId === 'string' ? checklistItemId : undefined,
+        tags: parsedTags,
+        dateFrom: typeof dateFrom === 'string' ? dateFrom : undefined,
+        dateTo: typeof dateTo === 'string' ? dateTo : undefined,
+      };
+
+      // Determine pagination mode: cursor-based (new) or offset-based (legacy)
+      const useCursorPagination = cursor !== undefined || sortOrder !== undefined;
+
+      if (useCursorPagination) {
+        // New cursor-based pagination
+        const params = photoCursorPaginationParamsSchema.parse({ cursor, limit, sortOrder });
+        const result = await storage.getPhotosCursorPaginated(filters, params);
+        return res.json(result);
+      }
 
       if (limit !== undefined || offset !== undefined) {
+        // Legacy offset-based pagination
         const params = paginationParamsSchema.parse({ limit, offset });
         
-        // Parse tags - can be single value, comma-separated, or array
-        let parsedTags: string[] | undefined;
-        if (tags) {
-          if (Array.isArray(tags)) {
-            parsedTags = tags.filter((t): t is string => typeof t === 'string');
-          } else if (typeof tags === 'string') {
-            parsedTags = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
-          }
-        }
-        
-        // Check if any filters are present
         const hasFilters = jobId || checklistItemId || parsedTags || dateFrom || dateTo;
         
         let result;
         if (hasFilters) {
-          // Use filtered pagination
-          const filters = {
-            jobId: typeof jobId === 'string' ? jobId : undefined,
-            checklistItemId: typeof checklistItemId === 'string' ? checklistItemId : undefined,
-            tags: parsedTags,
-            dateFrom: typeof dateFrom === 'string' ? dateFrom : undefined,
-            dateTo: typeof dateTo === 'string' ? dateTo : undefined,
-          };
           result = await storage.getPhotosFilteredPaginated(filters, params);
         } else {
-          // No filters, use regular pagination
           result = await storage.getPhotosPaginated(params);
         }
         
@@ -1821,7 +1974,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const photo = await storage.getPhoto(req.params.id);
       if (!photo) {
@@ -1841,6 +1994,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Photo not found. It may have already been deleted." });
       }
+      
+      // Audit log: Photo deletion
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'photo.delete',
+        resourceType: 'photo',
+        resourceId: req.params.id,
+        metadata: { jobId: photo.jobId, filePath: photo.filePath },
+      }, storage);
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete photo');
@@ -2563,6 +2726,179 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch builder leaderboard');
       res.status(status).json({ message });
+    }
+  });
+
+  // Email Preferences API
+  app.get("/api/email-preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let prefs = await storage.getEmailPreferences(userId);
+      
+      // Create default preferences if they don't exist
+      if (!prefs) {
+        prefs = await storage.createEmailPreferences({ userId });
+      }
+      
+      res.json(prefs);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch email preferences');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/email-preferences", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = insertEmailPreferenceSchema.partial().parse(req.body);
+      
+      let prefs = await storage.getEmailPreferences(userId);
+      
+      if (!prefs) {
+        // Create if doesn't exist
+        prefs = await storage.createEmailPreferences({ userId, ...validated });
+      } else {
+        // Update existing
+        prefs = await storage.updateEmailPreferences(userId, validated);
+      }
+      
+      res.json(prefs);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update email preferences');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/email-preferences/unsubscribe/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const prefs = await storage.getEmailPreferencesByToken(token);
+      
+      if (!prefs) {
+        return res.status(404).json({ message: "Invalid unsubscribe token" });
+      }
+      
+      // Unsubscribe from all emails
+      await storage.updateEmailPreferences(prefs.userId, {
+        jobAssigned: false,
+        jobStatusChanged: false,
+        reportReady: false,
+        calendarEvents: false,
+        dailyDigest: false,
+        weeklyPerformanceSummary: false,
+      });
+      
+      res.json({ message: "You have been unsubscribed from all email notifications" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'unsubscribe from emails');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/email-preferences/test", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || !user.email) {
+        return res.status(400).json({ message: "User email not found" });
+      }
+      
+      const prefs = await storage.getEmailPreferences(userId);
+      const unsubscribeToken = prefs?.unsubscribeToken || await storage.generateUnsubscribeToken(userId);
+      
+      const { subject, html } = jobAssignedTemplate({
+        jobName: "Test Inspection - 123 Main St",
+        address: "123 Main Street, City, State 12345",
+        scheduledDate: new Date().toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit'
+        }),
+        builderName: "Test Builder Co.",
+        contractor: "Test Contractor",
+        inspectionType: "Final Inspection",
+        viewJobUrl: `${process.env.APP_URL || 'http://localhost:5000'}/jobs/test`,
+        unsubscribeUrl: `${process.env.APP_URL || 'http://localhost:5000'}/api/email-preferences/unsubscribe/${unsubscribeToken}`,
+        recipientName: user.firstName || undefined,
+      });
+      
+      const result = await emailService.sendEmail(user.email, subject, html);
+      
+      if (result.success) {
+        res.json({ message: "Test email sent successfully", messageId: result.messageId });
+      } else {
+        res.status(500).json({ message: "Failed to send test email", error: result.error });
+      }
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'send test email');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Audit Logs API Routes
+  app.get("/api/audit-logs", isAuthenticated, requireRole('admin', 'manager'), async (req, res) => {
+    try {
+      const params = {
+        limit: Number(req.query.limit) || 50,
+        offset: Number(req.query.offset) || 0,
+        userId: req.query.userId as string | undefined,
+        action: req.query.action as string | undefined,
+        resourceType: req.query.resourceType as string | undefined,
+        startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+        endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+      };
+      
+      const result = await storage.getAuditLogs(params);
+      res.json(result);
+    } catch (error) {
+      logError('AuditLogs/Get', error);
+      res.status(500).json({ message: 'Failed to fetch audit logs' });
+    }
+  });
+
+  app.get("/api/audit-logs/export", isAuthenticated, requireRole('admin', 'manager'), async (req, res) => {
+    try {
+      const params = {
+        userId: req.query.userId as string | undefined,
+        action: req.query.action as string | undefined,
+        resourceType: req.query.resourceType as string | undefined,
+        startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+        endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+      };
+      
+      // Get all matching logs (no pagination for export)
+      const result = await storage.getAuditLogs({ ...params, limit: 10000, offset: 0 });
+      
+      // Convert to CSV
+      const csvRows = [
+        ['Timestamp', 'User ID', 'Action', 'Resource Type', 'Resource ID', 'IP Address', 'User Agent'].join(','),
+        ...result.logs.map(log => [
+          log.timestamp ? new Date(log.timestamp).toISOString() : '',
+          log.userId || '',
+          log.action,
+          log.resourceType,
+          log.resourceId || '',
+          log.ipAddress || '',
+          `"${(log.userAgent || '').replace(/"/g, '""')}"` // Escape quotes in user agent
+        ].join(','))
+      ];
+      
+      const csv = csvRows.join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="audit-logs-${new Date().toISOString()}.csv"`);
+      res.send(csv);
+    } catch (error) {
+      logError('AuditLogs/Export', error);
+      res.status(500).json({ message: 'Failed to export audit logs' });
     }
   });
 

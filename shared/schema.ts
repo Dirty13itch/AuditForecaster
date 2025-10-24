@@ -33,6 +33,9 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  role: text("role", { enum: ["admin", "inspector", "manager", "viewer"] })
+    .notNull()
+    .default("inspector"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -76,10 +79,12 @@ export const jobs = pgTable("jobs", {
   sourceGoogleEventId: varchar("source_google_event_id"),
   originalScheduledDate: timestamp("original_scheduled_date"),
   isCancelled: boolean("is_cancelled").default(false),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
   index("idx_jobs_scheduled_date").on(table.scheduledDate),
   index("idx_jobs_status_scheduled_date").on(table.status, table.scheduledDate),
+  index("idx_jobs_created_by").on(table.createdBy),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -267,6 +272,38 @@ export const uploadSessions = pgTable("upload_sessions", {
   acknowledgedAt: timestamp("acknowledged_at"),
 });
 
+export const emailPreferences = pgTable("email_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  jobAssigned: boolean("job_assigned").default(true),
+  jobStatusChanged: boolean("job_status_changed").default(true),
+  reportReady: boolean("report_ready").default(true),
+  calendarEvents: boolean("calendar_events").default(true),
+  dailyDigest: boolean("daily_digest").default(true),
+  weeklyPerformanceSummary: boolean("weekly_performance_summary").default(true),
+  unsubscribeToken: varchar("unsubscribe_token").unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
+  action: text("action").notNull(),
+  resourceType: text("resource_type").notNull(),
+  resourceId: varchar("resource_id"),
+  changesJson: jsonb("changes_json"),
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  metadata: jsonb("metadata"),
+}, (table) => [
+  index("idx_audit_logs_user_id").on(table.userId),
+  index("idx_audit_logs_resource").on(table.resourceType, table.resourceId),
+  index("idx_audit_logs_timestamp").on(table.timestamp),
+  index("idx_audit_logs_action").on(table.action),
+]);
+
 // For Replit Auth upsert operations
 export const upsertUserSchema = createInsertSchema(users).pick({
   id: true,
@@ -336,6 +373,8 @@ export const insertUploadSessionSchema = createInsertSchema(uploadSessions).omit
   timestamp: z.coerce.date(),
   acknowledgedAt: z.coerce.date().nullable().optional(),
 });
+export const insertEmailPreferenceSchema = createInsertSchema(emailPreferences).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, timestamp: true });
 
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -370,3 +409,7 @@ export type GoogleEvent = typeof googleEvents.$inferSelect;
 export type InsertGoogleEvent = z.infer<typeof insertGoogleEventSchema>;
 export type UploadSession = typeof uploadSessions.$inferSelect;
 export type InsertUploadSession = z.infer<typeof insertUploadSessionSchema>;
+export type EmailPreference = typeof emailPreferences.$inferSelect;
+export type InsertEmailPreference = z.infer<typeof insertEmailPreferenceSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

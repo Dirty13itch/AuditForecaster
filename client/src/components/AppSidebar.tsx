@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Map, Building2, DollarSign, FileText, BarChart3, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut } from "lucide-react";
+import { Home, ClipboardList, Calendar, Map, Building2, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,7 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, type UserRole } from "@/hooks/useAuth";
+import { RoleBadge } from "@/components/RoleBadge";
 
 const menuItems = [
   {
@@ -61,6 +62,11 @@ const menuItems = [
     icon: BarChart3,
   },
   {
+    title: "Audit Logs",
+    url: "/audit-logs",
+    icon: ShieldCheck,
+  },
+  {
     title: "Settings",
     url: "/settings",
     icon: Settings,
@@ -72,6 +78,18 @@ export function AppSidebar() {
   const { isOnline, pendingSync, isSyncing, forceSync } = useNetworkStatus();
   const { toast } = useToast();
   const { user } = useAuth();
+  
+  const userRole = (user?.role as UserRole) || 'inspector';
+  
+  // Filter menu items based on role
+  const filteredMenuItems = menuItems.filter(item => {
+    // Audit Logs only for admin and manager
+    if (item.url === '/audit-logs') {
+      return userRole === 'admin' || userRole === 'manager';
+    }
+    // All other items accessible to all roles
+    return true;
+  });
 
   const handleLogout = () => {
     window.location.href = "/api/logout";
@@ -141,7 +159,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Field Inspection System</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => {
+              {filteredMenuItems.map((item) => {
                 const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
                 return (
                   <SidebarMenuItem key={item.title}>
@@ -186,7 +204,10 @@ export function AppSidebar() {
                 <AvatarFallback>{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{getUserName()}</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-sm font-medium truncate">{getUserName()}</p>
+                  <RoleBadge role={userRole} size="sm" showIcon={false} />
+                </div>
                 <div className="flex items-center gap-2">
                   {isOnline ? (
                     <div className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="status-online">

@@ -155,7 +155,7 @@ export function ConvertGoogleEventDialog({
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/google-events'] });
       
