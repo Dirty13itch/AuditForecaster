@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { clientLogger } from "@/lib/logger";
+import { captureException } from "@/lib/sentry";
 
 interface Props {
   children: ReactNode;
@@ -25,6 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     clientLogger.error("[ErrorBoundary] Caught error:", error, errorInfo);
+    captureException(error, { extra: { errorInfo } });
   }
 
   handleReset = () => {

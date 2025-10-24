@@ -1,3 +1,6 @@
+import { initSentry, Sentry, isSentryEnabled, captureException } from "./sentry";
+initSentry();
+
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -9,6 +12,11 @@ import { getConfig } from "./config";
 import type { Server } from "http";
 
 const app = express();
+
+if (isSentryEnabled()) {
+  app.use(Sentry.Handlers.requestHandler());
+  app.use(Sentry.Handlers.tracingHandler());
+}
 
 // Security headers
 app.use(helmet({
@@ -127,11 +135,13 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Handle uncaught errors
 process.on('uncaughtException', (err) => {
   serverLogger.error('[Server] Uncaught exception:', err);
+  captureException(err);
   gracefulShutdown('uncaughtException');
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   serverLogger.error('[Server] Unhandled rejection at:', promise, 'reason:', reason);
+  captureException(reason);
 });
 
 async function startServer() {
@@ -147,10 +157,16 @@ async function startServer() {
     app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
+      
+      captureException(err);
+      serverLogger.error(`[Server] Request error: ${message}`, err);
 
       res.status(status).json({ message });
-      throw err;
     });
+
+    if (isSentryEnabled()) {
+      app.use(Sentry.Handlers.errorHandler());
+    }
 
     // importantly only setup vite in development and after
     // setting up all the other routes so the catch-all route

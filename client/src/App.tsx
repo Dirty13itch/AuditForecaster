@@ -1,3 +1,6 @@
+import { initSentry } from "@/lib/sentry";
+initSentry();
+
 import { Switch, Route, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";

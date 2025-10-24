@@ -76,7 +76,12 @@ export const jobs = pgTable("jobs", {
   sourceGoogleEventId: varchar("source_google_event_id"),
   originalScheduledDate: timestamp("original_scheduled_date"),
   isCancelled: boolean("is_cancelled").default(false),
-});
+}, (table) => [
+  index("idx_jobs_builder_id").on(table.builderId),
+  index("idx_jobs_status").on(table.status),
+  index("idx_jobs_scheduled_date").on(table.scheduledDate),
+  index("idx_jobs_status_scheduled_date").on(table.status, table.scheduledDate),
+]);
 
 export const scheduleEvents = pgTable("schedule_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -89,7 +94,10 @@ export const scheduleEvents = pgTable("schedule_events", {
   googleCalendarId: text("google_calendar_id"),
   lastSyncedAt: timestamp("last_synced_at"),
   color: text("color"),
-});
+}, (table) => [
+  index("idx_schedule_events_job_id").on(table.jobId),
+  index("idx_schedule_events_start_time").on(table.startTime),
+]);
 
 export const googleEvents = pgTable("google_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -105,7 +113,10 @@ export const googleEvents = pgTable("google_events", {
   convertedToJobId: varchar("converted_to_job_id").references(() => jobs.id, { onDelete: 'set null' }),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").default(sql`now()`),
-});
+}, (table) => [
+  index("idx_google_events_is_converted").on(table.isConverted),
+  index("idx_google_events_start_time").on(table.startTime),
+]);
 
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -116,7 +127,10 @@ export const expenses = pgTable("expenses", {
   receiptUrl: text("receipt_url"),
   date: timestamp("date").notNull(),
   isWorkRelated: boolean("is_work_related").default(true),
-});
+}, (table) => [
+  index("idx_expenses_job_id").on(table.jobId),
+  index("idx_expenses_date").on(table.date),
+]);
 
 export const mileageLogs = pgTable("mileage_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -155,7 +169,9 @@ export const reportInstances = pgTable("report_instances", {
   complianceStatus: text("compliance_status"),
   complianceFlags: jsonb("compliance_flags"),
   lastComplianceCheck: timestamp("last_compliance_check"),
-});
+}, (table) => [
+  index("idx_report_instances_job_id").on(table.jobId),
+]);
 
 export const forecasts = pgTable("forecasts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -167,7 +183,9 @@ export const forecasts = pgTable("forecasts", {
   actualDLO: decimal("actual_dlo", { precision: 10, scale: 2 }),
   actualACH50: decimal("actual_ach50", { precision: 10, scale: 2 }),
   confidence: integer("confidence"),
-});
+}, (table) => [
+  index("idx_forecasts_job_id").on(table.jobId),
+]);
 
 export const checklistItems = pgTable("checklist_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -181,7 +199,10 @@ export const checklistItems = pgTable("checklist_items", {
   photoRequired: boolean("photo_required").default(false),
   voiceNoteUrl: text("voice_note_url"),
   voiceNoteDuration: integer("voice_note_duration"),
-});
+}, (table) => [
+  index("idx_checklist_items_job_id").on(table.jobId),
+  index("idx_checklist_items_status").on(table.status),
+]);
 
 export const photos = pgTable("photos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -195,7 +216,11 @@ export const photos = pgTable("photos", {
   tags: text("tags").array(),
   annotationData: jsonb("annotation_data"),
   uploadedAt: timestamp("uploaded_at").notNull().default(sql`now()`),
-});
+}, (table) => [
+  index("idx_photos_job_id").on(table.jobId),
+  index("idx_photos_uploaded_at").on(table.uploadedAt),
+  index("idx_photos_job_id_uploaded_at").on(table.jobId, table.uploadedAt),
+]);
 
 export const complianceRules = pgTable("compliance_rules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
