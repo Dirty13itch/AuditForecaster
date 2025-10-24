@@ -33,11 +33,11 @@ Key technical implementations include:
 
 Enterprise hardening includes **24 strategic database indexes** optimized for query performance:
 - **Jobs table**: builder_id, scheduled_date, (status, scheduled_date), created_by, address, (status, created_by) for RBAC filtering
-- **Builders table**: company_name, (company_name, name) for typeahead search
-- **Photos table**: (job_id, uploaded_at), hash, tags (GIN array index), checklist_item_id (partial index)
-- **Schedule Events table**: (job_id, start_time), google_event_id, (start_time, end_time) for range queries
+- **Builders table**: company_name, (name, company_name) for search prefix matching
+- **Photos table**: (job_id, uploaded_at), hash, tags (GIN array index), checklist_item_id (partial index WHERE NOT NULL)
+- **Schedule Events table**: (job_id, start_time), google_event_id, (start_time, end_time) for calendar range queries
 - **Audit Logs table**: user_id, (resource_type, resource_id), timestamp, action
-- **Email Preferences table**: user_id, unsubscribe_token (unique)
+- **Email Preferences table**: user_id, unsubscribe_token (unique constraint)
 - **Additional indexes**: on forecasts, expenses, report_instances, checklist_items, google_events, sessions
 
 Other enterprise features include **Sentry** integration for error monitoring and observability (backend and frontend), multi-layered security controls (CSRF protection, rate limiting, Helmet, secure sessions), and comprehensive operational documentation for deployment, backup, and disaster recovery.
