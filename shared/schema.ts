@@ -26,9 +26,10 @@ export const sessions = pgTable(
 );
 
 // User storage table for Replit Auth
+// Note: Users are uniquely identified by OIDC sub (stored in id), not email
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // Keep default for migration compatibility
-  email: varchar("email").unique(),
+  email: varchar("email"), // Removed unique constraint - users identified by OIDC sub
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
