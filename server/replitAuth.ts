@@ -114,6 +114,16 @@ export async function setupAuth(app: Express) {
     
     serverLogger.debug(`[ReplitAuth] Finding strategy for hostname: ${hostname}`);
     
+    // In Replit development environment, allow localhost to use the Replit domain
+    if (hostname === 'localhost' && process.env.REPLIT_DEV_DOMAIN) {
+      const devDomain = process.env.REPLIT_DEV_DOMAIN;
+      const devMatch = domains.find(domain => domain === devDomain);
+      if (devMatch) {
+        serverLogger.debug(`[ReplitAuth] Development mode: localhost → ${devMatch}`);
+        return devMatch;
+      }
+    }
+    
     // Try exact match first
     const exactMatch = domains.find(domain => domain === hostname);
     if (exactMatch) {
@@ -126,6 +136,12 @@ export async function setupAuth(app: Express) {
     if (endsWithMatch) {
       serverLogger.debug(`[ReplitAuth] Subdomain match found: ${endsWithMatch}`);
       return endsWithMatch;
+    }
+    
+    // In development mode with localhost, use first domain as fallback
+    if (hostname === 'localhost' && domains.length > 0) {
+      serverLogger.debug(`[ReplitAuth] Development mode: localhost → ${domains[0]} (fallback)`);
+      return domains[0];
     }
     
     // No match found - throw error instead of falling back
