@@ -193,7 +193,17 @@ export const forecasts = pgTable("forecasts", {
   actualTDL: decimal("actual_tdl", { precision: 10, scale: 2 }),
   actualDLO: decimal("actual_dlo", { precision: 10, scale: 2 }),
   actualACH50: decimal("actual_ach50", { precision: 10, scale: 2 }),
+  cfm50: decimal("cfm50", { precision: 10, scale: 2 }),
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }),
+  houseSurfaceArea: decimal("house_surface_area", { precision: 10, scale: 2 }),
+  testConditions: text("test_conditions"),
+  equipmentNotes: text("equipment_notes"),
+  weatherConditions: text("weather_conditions"),
+  outdoorTemp: decimal("outdoor_temp", { precision: 5, scale: 1 }),
+  indoorTemp: decimal("indoor_temp", { precision: 5, scale: 1 }),
+  windSpeed: decimal("wind_speed", { precision: 5, scale: 1 }),
   confidence: integer("confidence"),
+  recordedAt: timestamp("recorded_at").default(sql`now()`),
 }, (table) => [
   index("idx_forecasts_job_id").on(table.jobId),
 ]);
@@ -352,7 +362,21 @@ export const insertReportInstanceSchema = createInsertSchema(reportInstances).om
   emailedAt: z.coerce.date().nullable().optional(),
   lastComplianceCheck: z.coerce.date().nullable().optional(),
 });
-export const insertForecastSchema = createInsertSchema(forecasts).omit({ id: true });
+export const insertForecastSchema = createInsertSchema(forecasts).omit({ id: true }).extend({
+  recordedAt: z.coerce.date().nullable().optional(),
+  cfm50: z.coerce.number().nullable().optional(),
+  houseVolume: z.coerce.number().nullable().optional(),
+  houseSurfaceArea: z.coerce.number().nullable().optional(),
+  actualTDL: z.coerce.number().nullable().optional(),
+  actualDLO: z.coerce.number().nullable().optional(),
+  actualACH50: z.coerce.number().nullable().optional(),
+  outdoorTemp: z.coerce.number().nullable().optional(),
+  indoorTemp: z.coerce.number().nullable().optional(),
+  windSpeed: z.coerce.number().nullable().optional(),
+  predictedTDL: z.coerce.number().nullable().optional(),
+  predictedDLO: z.coerce.number().nullable().optional(),
+  predictedACH50: z.coerce.number().nullable().optional(),
+});
 export const insertChecklistItemSchema = createInsertSchema(checklistItems).omit({ id: true });
 export const updateChecklistItemSchema = z.object({
   jobId: z.string().optional(),

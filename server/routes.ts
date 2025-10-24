@@ -273,13 +273,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const job = await storage.createJob(validated);
       
+      // Auto-generate checklist items from template based on inspection type
+      if (job.inspectionType) {
+        try {
+          await storage.generateChecklistFromTemplate(job.id, job.inspectionType);
+          serverLogger.info(`[Jobs] Auto-generated checklist for ${job.inspectionType} inspection (Job ${job.id})`);
+        } catch (error) {
+          // Log but don't fail job creation if checklist generation fails
+          serverLogger.error('[Jobs] Failed to auto-generate checklist:', error);
+        }
+      }
+      
       // Audit log: Job creation
       await createAuditLog(req, {
         userId: req.user.claims.sub,
         action: 'job.create',
         resourceType: 'job',
         resourceId: job.id,
-        metadata: { jobName: job.name, address: job.address, status: job.status },
+        metadata: { jobName: job.name, address: job.address, status: job.status, inspectionType: job.inspectionType },
       }, storage);
       
       res.status(201).json(job);

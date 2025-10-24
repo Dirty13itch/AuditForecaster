@@ -152,6 +152,7 @@ export interface IStorage {
   getChecklistItemsByJob(jobId: string): Promise<ChecklistItem[]>;
   updateChecklistItem(id: string, item: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined>;
   deleteChecklistItem(id: string): Promise<boolean>;
+  generateChecklistFromTemplate(jobId: string, inspectionType: string): Promise<ChecklistItem[]>;
 
   createComplianceRule(rule: InsertComplianceRule): Promise<ComplianceRule>;
   getComplianceRules(): Promise<ComplianceRule[]>;
@@ -1024,6 +1025,32 @@ export class DatabaseStorage implements IStorage {
   async deleteForecast(id: string): Promise<boolean> {
     const result = await db.delete(forecasts).where(eq(forecasts.id, id)).returning();
     return result.length > 0;
+  }
+
+  async generateChecklistFromTemplate(jobId: string, inspectionType: string): Promise<ChecklistItem[]> {
+    const { getTemplateForInspectionType } = await import('@shared/checklistTemplates');
+    const template = getTemplateForInspectionType(inspectionType);
+    
+    if (!template) {
+      // No template for this inspection type, return empty array
+      return [];
+    }
+
+    const itemsToCreate = template.items.map(item => ({
+      jobId,
+      itemNumber: item.itemNumber,
+      title: item.title,
+      completed: false,
+      status: 'pending' as const,
+      notes: item.defaultNotes || null,
+      photoCount: 0,
+      photoRequired: item.photoRequired,
+      voiceNoteUrl: null,
+      voiceNoteDuration: null,
+    }));
+
+    const result = await db.insert(checklistItems).values(itemsToCreate).returning();
+    return result;
   }
 
   async createChecklistItem(insertItem: InsertChecklistItem): Promise<ChecklistItem> {

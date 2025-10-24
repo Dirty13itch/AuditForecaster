@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import TopBar from "@/components/TopBar";
 import ChecklistItem from "@/components/ChecklistItem";
 import BottomNav from "@/components/BottomNav";
+import { FinalTestingMeasurements } from "@/components/FinalTestingMeasurements";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -370,6 +371,11 @@ export default function Inspection() {
             </div>
             <Progress value={progress} className="h-3" data-testid="progress-inspection" />
           </div>
+
+          {/* Final Testing Measurements Section - Only show for Final Testing jobs */}
+          {job?.inspectionType === 'Final Testing' && (
+            <FinalTestingMeasurements jobId={jobId!} />
+          )}
 
           {checklistItems.length === 0 ? (
             <div className="bg-card rounded-md border border-card-border p-8 text-center">
