@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Save, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import TopBar from "@/components/TopBar";
 import ChecklistItem from "@/components/ChecklistItem";
 import BottomNav from "@/components/BottomNav";
@@ -12,13 +13,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { clientLogger } from "@/lib/logger";
-import type { ChecklistItem as ChecklistItemType, UpdateChecklistItem } from "@shared/schema";
+import type { ChecklistItem as ChecklistItemType, UpdateChecklistItem, Job } from "@shared/schema";
 
 export default function Inspection() {
   const { id: jobId } = useParams<{ id: string }>();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"dashboard" | "inspection" | "photos" | "forecast">("inspection");
   const [voiceNoteLoadingId, setVoiceNoteLoadingId] = useState<string | null>(null);
+
+  const { data: job, isLoading: isLoadingJob } = useQuery<Job>({
+    queryKey: ["/api/jobs", jobId],
+    queryFn: async () => {
+      if (!jobId) throw new Error("Job ID is required");
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch job");
+      return response.json();
+    },
+    enabled: !!jobId,
+  });
 
   const { data: checklistItems = [], isLoading, isError } = useQuery<ChecklistItemType[]>({
     queryKey: ["/api/checklist-items", jobId],
@@ -235,7 +249,7 @@ export default function Inspection() {
     );
   }
 
-  if (isLoading) {
+  if (isLoading || isLoadingJob) {
     return (
       <div className="min-h-screen bg-background pb-20 md:pb-6">
         <TopBar 
@@ -265,10 +279,21 @@ export default function Inspection() {
     );
   }
 
+  const isRescheduled = job?.originalScheduledDate 
+    && job?.scheduledDate 
+    && job.originalScheduledDate !== job.scheduledDate 
+    && !job?.isCancelled;
+  const formattedOriginalDate = job?.originalScheduledDate 
+    ? format(parseISO(job.originalScheduledDate), "MMM d, yyyy h:mm a")
+    : null;
+  const formattedCurrentDate = job?.scheduledDate 
+    ? format(parseISO(job.scheduledDate), "MMM d, yyyy h:mm a")
+    : null;
+
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-6">
       <TopBar 
-        title="Johnson Residence - Pre-Drywall"
+        title={job?.name ?? "Inspection"}
         isOnline={false}
         pendingSync={5}
       />
@@ -280,13 +305,58 @@ export default function Inspection() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex-1">
-              <h2 className="text-xl font-bold" data-testid="text-page-title">Pre-Drywall Inspection</h2>
-              <p className="text-sm text-muted-foreground">1234 Oak Street, Minneapolis, MN</p>
+              <h2 className="text-xl font-bold" data-testid="text-page-title">{job?.inspectionType ?? "Inspection"}</h2>
+              <p className="text-sm text-muted-foreground">{job?.address}</p>
             </div>
             <Badge variant="outline" className="hidden sm:flex" data-testid="badge-inspection-type">
-              Pre-Drywall
+              {job?.inspectionType}
             </Badge>
           </div>
+
+          {/* Rescheduled Indicator */}
+          {isRescheduled && (
+            <div className="bg-warning/10 border border-warning/20 rounded-md p-4 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-warning">Schedule Changed</h3>
+                  <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
+                    Rescheduled
+                  </Badge>
+                </div>
+                <div className="text-sm space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Originally:</span>
+                    <span className="font-medium">{formattedOriginalDate}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-warning" />
+                    <span className="text-muted-foreground">Now scheduled:</span>
+                    <span className="font-medium text-warning">{formattedCurrentDate}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cancelled Indicator */}
+          {job?.isCancelled && (
+            <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-destructive">Calendar Event Cancelled</h3>
+                  <Badge variant="destructive">
+                    Cancelled
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  The Google Calendar event for this job has been cancelled or deleted.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="bg-card rounded-md border border-card-border p-6">
             <div className="flex items-center justify-between mb-3">

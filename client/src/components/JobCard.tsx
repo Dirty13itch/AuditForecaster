@@ -136,7 +136,7 @@ export default function JobCard({
                 Cancelled
               </Badge>
             )}
-            {originalScheduledDate && !isCancelled && (
+            {originalScheduledDate && scheduledDate && originalScheduledDate !== scheduledDate && !isCancelled && (
               <Badge 
                 variant="outline"
                 className="bg-warning/10 text-warning border-warning/20"
