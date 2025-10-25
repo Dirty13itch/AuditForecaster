@@ -327,7 +327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+  app.delete("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const contact = await storage.getBuilderContact(req.params.id);
       if (!contact) {
