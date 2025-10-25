@@ -24,8 +24,15 @@ import {
   ClipboardList,
   FileText,
   Users,
+  Award,
+  Building2,
+  MessageSquare,
 } from "lucide-react";
 import { BuilderContactsDialog } from "@/components/BuilderContactsDialog";
+import { BuilderAgreementsDialog } from "@/components/BuilderAgreementsDialog";
+import { BuilderProgramsDialog } from "@/components/BuilderProgramsDialog";
+import { BuilderInteractionsDialog } from "@/components/BuilderInteractionsDialog";
+import { DevelopmentsDialog } from "@/components/DevelopmentsDialog";
 import type { Builder, Job } from "@shared/schema";
 
 interface BuilderDetailDialogProps {
@@ -44,6 +51,10 @@ export function BuilderDetailDialog({
   onDelete,
 }: BuilderDetailDialogProps) {
   const [isContactsDialogOpen, setIsContactsDialogOpen] = useState(false);
+  const [isAgreementsDialogOpen, setIsAgreementsDialogOpen] = useState(false);
+  const [isProgramsDialogOpen, setIsProgramsDialogOpen] = useState(false);
+  const [isInteractionsDialogOpen, setIsInteractionsDialogOpen] = useState(false);
+  const [isDevelopmentsDialogOpen, setIsDevelopmentsDialogOpen] = useState(false);
 
   const { data: jobs = [] } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -243,17 +254,51 @@ export function BuilderDetailDialog({
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
-          <div className="flex gap-2 flex-1 flex-wrap">
+        <DialogFooter className="gap-2 sm:gap-0 flex-col">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <Button
               variant="outline"
               onClick={() => setIsContactsDialogOpen(true)}
-              className="flex-1 sm:flex-none"
               data-testid="button-manage-contacts"
             >
               <Users className="h-4 w-4 mr-2" />
-              Manage Contacts
+              Contacts
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsAgreementsDialogOpen(true)}
+              data-testid="button-manage-agreements"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Agreements
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsProgramsDialogOpen(true)}
+              data-testid="button-manage-programs"
+            >
+              <Award className="h-4 w-4 mr-2" />
+              Programs
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsInteractionsDialogOpen(true)}
+              data-testid="button-manage-interactions"
+            >
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Interactions
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsDevelopmentsDialogOpen(true)}
+              data-testid="button-manage-developments"
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              Developments
+            </Button>
+          </div>
+          <Separator className="my-2" />
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant="outline"
               onClick={() => onEdit(builder)}
@@ -275,20 +320,45 @@ export function BuilderDetailDialog({
               <Trash2 className="h-4 w-4 mr-2" />
               Delete
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() => onOpenChange(false)}
+              className="flex-1 sm:flex-none"
+              data-testid="button-detail-close"
+            >
+              Close
+            </Button>
           </div>
-          <Button
-            variant="secondary"
-            onClick={() => onOpenChange(false)}
-            data-testid="button-detail-close"
-          >
-            Close
-          </Button>
         </DialogFooter>
       </DialogContent>
 
       <BuilderContactsDialog
         open={isContactsDialogOpen}
         onOpenChange={setIsContactsDialogOpen}
+        builder={builder}
+      />
+      
+      <BuilderAgreementsDialog
+        open={isAgreementsDialogOpen}
+        onOpenChange={setIsAgreementsDialogOpen}
+        builder={builder}
+      />
+      
+      <BuilderProgramsDialog
+        open={isProgramsDialogOpen}
+        onOpenChange={setIsProgramsDialogOpen}
+        builder={builder}
+      />
+      
+      <BuilderInteractionsDialog
+        open={isInteractionsDialogOpen}
+        onOpenChange={setIsInteractionsDialogOpen}
+        builder={builder}
+      />
+      
+      <DevelopmentsDialog
+        open={isDevelopmentsDialogOpen}
+        onOpenChange={setIsDevelopmentsDialogOpen}
         builder={builder}
       />
     </Dialog>

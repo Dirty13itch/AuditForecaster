@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index, desc } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -78,6 +78,107 @@ export const builderContacts = pgTable("builder_contacts", {
   index("idx_builder_contacts_is_primary").on(table.isPrimary),
 ]);
 
+export const builderAgreements = pgTable("builder_agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  agreementName: text("agreement_name").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  status: text("status", { enum: ["active", "expired", "terminated", "pending"] }).notNull(),
+  defaultInspectionPrice: decimal("default_inspection_price", { precision: 10, scale: 2 }),
+  paymentTerms: text("payment_terms"),
+  inspectionTypesIncluded: text("inspection_types_included").array(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_builder_agreements_builder_id").on(table.builderId),
+  index("idx_builder_agreements_status").on(table.status),
+  index("idx_builder_agreements_builder_status").on(table.builderId, table.status),
+]);
+
+export const builderPrograms = pgTable("builder_programs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  programName: text("program_name").notNull(),
+  programType: text("program_type", { 
+    enum: ["tax_credit", "energy_star", "utility_rebate", "certification", "other"] 
+  }).notNull(),
+  enrollmentDate: timestamp("enrollment_date").notNull(),
+  expirationDate: timestamp("expiration_date"),
+  status: text("status", { enum: ["active", "inactive", "suspended"] }).notNull(),
+  certificationNumber: text("certification_number"),
+  rebateAmount: decimal("rebate_amount", { precision: 10, scale: 2 }),
+  requiresDocumentation: boolean("requires_documentation").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_builder_programs_builder_id").on(table.builderId),
+  index("idx_builder_programs_builder_status").on(table.builderId, table.status),
+  index("idx_builder_programs_program_type").on(table.programType),
+]);
+
+export const builderInteractions = pgTable("builder_interactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  interactionType: text("interaction_type", { 
+    enum: ["call", "email", "meeting", "text", "site_visit", "other"] 
+  }).notNull(),
+  subject: text("subject").notNull(),
+  description: text("description").notNull(),
+  interactionDate: timestamp("interaction_date").notNull(),
+  contactId: varchar("contact_id").references(() => builderContacts.id, { onDelete: 'set null' }),
+  outcome: text("outcome"),
+  followUpRequired: boolean("follow_up_required").default(false),
+  followUpDate: timestamp("follow_up_date"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_builder_interactions_builder_id").on(table.builderId),
+  index("idx_builder_interactions_builder_date").on(table.builderId, table.interactionDate),
+  index("idx_builder_interactions_created_by").on(table.createdBy),
+  index("idx_builder_interactions_contact_id").on(table.contactId),
+]);
+
+export const developments = pgTable("developments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  region: text("region"),
+  municipality: text("municipality"),
+  address: text("address"),
+  status: text("status", { enum: ["planning", "active", "completed", "on_hold"] }).notNull(),
+  totalLots: integer("total_lots").default(0),
+  completedLots: integer("completed_lots").default(0),
+  startDate: timestamp("start_date"),
+  targetCompletionDate: timestamp("target_completion_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_developments_builder_id").on(table.builderId),
+  index("idx_developments_builder_status").on(table.builderId, table.status),
+  index("idx_developments_municipality").on(table.municipality),
+]);
+
+export const lots = pgTable("lots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  developmentId: varchar("development_id").notNull().references(() => developments.id, { onDelete: 'cascade' }),
+  lotNumber: text("lot_number").notNull(),
+  phase: text("phase"),
+  block: text("block"),
+  streetAddress: text("street_address"),
+  planId: varchar("plan_id").references(() => plans.id, { onDelete: 'set null' }),
+  status: text("status", { enum: ["available", "under_construction", "completed", "sold", "on_hold"] }).notNull(),
+  squareFootage: decimal("square_footage", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_lots_development_id").on(table.developmentId),
+  index("idx_lots_development_lot_number").on(table.developmentId, table.lotNumber),
+  index("idx_lots_plan_id").on(table.planId),
+  index("idx_lots_status").on(table.status),
+]);
+
 export const plans = pgTable("plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
@@ -99,6 +200,7 @@ export const jobs = pgTable("jobs", {
   address: text("address").notNull(),
   builderId: varchar("builder_id").references(() => builders.id, { onDelete: 'cascade' }),
   planId: varchar("plan_id").references(() => plans.id, { onDelete: 'set null' }),
+  lotId: varchar("lot_id").references(() => lots.id, { onDelete: 'set null' }),
   contractor: text("contractor").notNull(),
   status: text("status").notNull(),
   inspectionType: text("inspection_type").notNull(),
@@ -128,6 +230,7 @@ export const jobs = pgTable("jobs", {
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
   index("idx_jobs_plan_id").on(table.planId),
+  index("idx_jobs_lot_id").on(table.lotId),
   index("idx_jobs_scheduled_date").on(table.scheduledDate),
   index("idx_jobs_status_scheduled_date").on(table.status, table.scheduledDate),
   index("idx_jobs_created_by").on(table.createdBy),
@@ -414,6 +517,30 @@ export const upsertUserSchema = createInsertSchema(users).pick({
 export const insertBuilderSchema = createInsertSchema(builders).omit({ id: true, totalJobs: true });
 export const insertBuilderContactSchema = createInsertSchema(builderContacts).omit({ id: true, createdAt: true, isPrimary: true });
 export const updateBuilderContactSchema = insertBuilderContactSchema.omit({ builderId: true }).partial();
+export const insertBuilderAgreementSchema = createInsertSchema(builderAgreements).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date().nullable().optional(),
+});
+export const updateBuilderAgreementSchema = insertBuilderAgreementSchema.omit({ builderId: true }).partial();
+export const insertBuilderProgramSchema = createInsertSchema(builderPrograms).omit({ id: true, createdAt: true }).extend({
+  enrollmentDate: z.coerce.date(),
+  expirationDate: z.coerce.date().nullable().optional(),
+});
+export const updateBuilderProgramSchema = insertBuilderProgramSchema.omit({ builderId: true }).partial();
+export const insertBuilderInteractionSchema = createInsertSchema(builderInteractions).omit({ id: true, createdAt: true }).extend({
+  interactionDate: z.coerce.date(),
+  followUpDate: z.coerce.date().nullable().optional(),
+});
+export const updateBuilderInteractionSchema = insertBuilderInteractionSchema.omit({ builderId: true, createdBy: true }).partial();
+export const insertDevelopmentSchema = createInsertSchema(developments).omit({ id: true, createdAt: true }).extend({
+  startDate: z.coerce.date().nullable().optional(),
+  targetCompletionDate: z.coerce.date().nullable().optional(),
+});
+export const updateDevelopmentSchema = insertDevelopmentSchema.omit({ builderId: true }).partial();
+export const insertLotSchema = createInsertSchema(lots).omit({ id: true, createdAt: true }).extend({
+  squareFootage: z.coerce.number().nullable().optional(),
+});
+export const updateLotSchema = insertLotSchema.omit({ developmentId: true }).partial();
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true }).extend({
   floorArea: z.coerce.number().nullable().optional(),
   surfaceArea: z.coerce.number().nullable().optional(),
@@ -516,6 +643,11 @@ export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Builder = typeof builders.$inferSelect;
 export type BuilderContact = typeof builderContacts.$inferSelect;
+export type BuilderAgreement = typeof builderAgreements.$inferSelect;
+export type BuilderProgram = typeof builderPrograms.$inferSelect;
+export type BuilderInteraction = typeof builderInteractions.$inferSelect;
+export type Development = typeof developments.$inferSelect;
+export type Lot = typeof lots.$inferSelect;
 export type Plan = typeof plans.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type ScheduleEvent = typeof scheduleEvents.$inferSelect;
@@ -530,6 +662,16 @@ export type ComplianceRule = typeof complianceRules.$inferSelect;
 export type ComplianceHistory = typeof complianceHistory.$inferSelect;
 export type InsertBuilder = z.infer<typeof insertBuilderSchema>;
 export type InsertBuilderContact = z.infer<typeof insertBuilderContactSchema>;
+export type InsertBuilderAgreement = z.infer<typeof insertBuilderAgreementSchema>;
+export type UpdateBuilderAgreement = z.infer<typeof updateBuilderAgreementSchema>;
+export type InsertBuilderProgram = z.infer<typeof insertBuilderProgramSchema>;
+export type UpdateBuilderProgram = z.infer<typeof updateBuilderProgramSchema>;
+export type InsertBuilderInteraction = z.infer<typeof insertBuilderInteractionSchema>;
+export type UpdateBuilderInteraction = z.infer<typeof updateBuilderInteractionSchema>;
+export type InsertDevelopment = z.infer<typeof insertDevelopmentSchema>;
+export type UpdateDevelopment = z.infer<typeof updateDevelopmentSchema>;
+export type InsertLot = z.infer<typeof insertLotSchema>;
+export type UpdateLot = z.infer<typeof updateLotSchema>;
 export type InsertPlan = z.infer<typeof insertPlanSchema>;
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type InsertScheduleEvent = z.infer<typeof insertScheduleEventSchema>;

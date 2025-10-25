@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import { generateJobName } from "@shared/jobNameGenerator";
-import type { Job, Builder, Plan } from "@shared/schema";
+import type { Job, Builder, Plan, Development, Lot } from "@shared/schema";
 
 const JOB_TYPES = [
   'Pre-Drywall Inspection',
@@ -46,6 +46,7 @@ const jobFormSchema = z.object({
   address: z.string().min(1, "Address is required"),
   builderId: z.string().optional(),
   planId: z.string().optional(),
+  lotId: z.string().optional(),
   contractor: z.string().min(1, "Contractor is required"),
   inspectionType: z.string().min(1, "Inspection type is required"),
   pricing: z.number().optional(),
@@ -81,6 +82,7 @@ export default function JobDialog({
   isPending = false
 }: JobDialogProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [selectedDevelopmentId, setSelectedDevelopmentId] = useState<string>("");
 
   const form = useForm<JobFormValues>({
     resolver: zodResolver(jobFormSchema),
@@ -89,6 +91,7 @@ export default function JobDialog({
       address: job?.address || "",
       builderId: job?.builderId || "",
       planId: job?.planId || "",
+      lotId: job?.lotId || "",
       contractor: job?.contractor || "",
       inspectionType: job?.inspectionType || "",
       pricing: job?.pricing ? parseFloat(job.pricing as any) : undefined,
@@ -123,6 +126,7 @@ export default function JobDialog({
   const address = form.watch('address');
   const builderId = form.watch('builderId');
   const planId = form.watch('planId');
+  const lotId = form.watch('lotId');
 
   useEffect(() => {
     // Only auto-generate for new jobs (not editing)
@@ -136,6 +140,31 @@ export default function JobDialog({
   const { data: plans = [], isLoading: plansLoading } = useQuery<Plan[]>({
     queryKey: ['/api/plans/builder', builderId],
     enabled: !!builderId,
+  });
+
+  // Fetch developments for the selected builder
+  const { data: developments = [], isLoading: developmentsLoading } = useQuery<Development[]>({
+    queryKey: ['/api/builders', builderId, 'developments'],
+    enabled: !!builderId,
+  });
+
+  // Fetch the lot directly when form has a lotId (to get developmentId)
+  const { data: currentLot } = useQuery<Lot>({
+    queryKey: ['/api/lots', lotId],
+    enabled: !!lotId,
+  });
+
+  // Initialize selectedDevelopmentId from the lot
+  useEffect(() => {
+    if (currentLot?.developmentId) {
+      setSelectedDevelopmentId(currentLot.developmentId);
+    }
+  }, [currentLot]);
+
+  // Fetch lots for the selected development
+  const { data: lots = [], isLoading: lotsLoading } = useQuery<Lot[]>({
+    queryKey: ['/api/developments', selectedDevelopmentId, 'lots'],
+    enabled: !!selectedDevelopmentId,
   });
 
   // Auto-fill house specifications when a plan is selected
@@ -158,6 +187,16 @@ export default function JobDialog({
       }
     }
   }, [planId, plans, form]);
+
+  // Auto-fill address when a lot is selected
+  useEffect(() => {
+    if (lotId && lots.length > 0) {
+      const selectedLot = lots.find(l => l.id === lotId);
+      if (selectedLot && selectedLot.streetAddress) {
+        form.setValue('address', selectedLot.streetAddress);
+      }
+    }
+  }, [lotId, lots, form]);
 
   const handleSubmit = async (data: JobFormValues) => {
     await onSave(data);
@@ -254,6 +293,8 @@ export default function JobDialog({
                       onValueChange={(value) => {
                         field.onChange(value);
                         form.setValue('planId', '');
+                        form.setValue('lotId', '');
+                        setSelectedDevelopmentId('');
                       }} 
                       value={field.value}
                     >
@@ -306,6 +347,80 @@ export default function JobDialog({
                     </Select>
                     <FormDescription className="text-xs">
                       Optional: Auto-fills house specifications
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormItem>
+                <FormLabel>Development (for Lot Selection)</FormLabel>
+                <Select
+                  value={selectedDevelopmentId}
+                  onValueChange={(value) => {
+                    setSelectedDevelopmentId(value);
+                    form.setValue('lotId', '');
+                  }}
+                  disabled={!builderId || developmentsLoading || developments.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="select-development">
+                      <SelectValue placeholder={
+                        !builderId ? "Select builder first" :
+                        developmentsLoading ? "Loading developments..." :
+                        developments.length === 0 ? "No developments available" :
+                        "Select a development"
+                      } />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {developments.map((dev) => (
+                      <SelectItem key={dev.id} value={dev.id}>
+                        {dev.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription className="text-xs">
+                  Optional: Select to choose a specific lot
+                </FormDescription>
+              </FormItem>
+
+              <FormField
+                control={form.control}
+                name="lotId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Lot (Auto-Fill Address)</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      value={field.value}
+                      disabled={!selectedDevelopmentId || lotsLoading || lots.length === 0}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-lot">
+                          <SelectValue placeholder={
+                            !selectedDevelopmentId ? "Select development first" :
+                            lotsLoading ? "Loading lots..." :
+                            lots.length === 0 ? "No lots available" :
+                            "Select a lot"
+                          } />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {lots.map((lot) => (
+                          <SelectItem key={lot.id} value={lot.id}>
+                            Lot {lot.lotNumber}
+                            {lot.phase && ` - Phase ${lot.phase}`}
+                            {lot.streetAddress && ` - ${lot.streetAddress}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="text-xs">
+                      Optional: Auto-fills address if available
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

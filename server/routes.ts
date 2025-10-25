@@ -15,6 +15,16 @@ import {
   insertBuilderSchema,
   insertBuilderContactSchema,
   updateBuilderContactSchema,
+  insertBuilderAgreementSchema,
+  updateBuilderAgreementSchema,
+  insertBuilderProgramSchema,
+  updateBuilderProgramSchema,
+  insertBuilderInteractionSchema,
+  updateBuilderInteractionSchema,
+  insertDevelopmentSchema,
+  updateDevelopmentSchema,
+  insertLotSchema,
+  updateLotSchema,
   insertPlanSchema,
   insertJobSchema,
   insertScheduleEventSchema,
@@ -390,6 +400,644 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'set primary contact');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Builder Agreements routes
+  app.get("/api/builders/:builderId/agreements", isAuthenticated, async (req, res) => {
+    try {
+      const agreements = await storage.getBuilderAgreements(req.params.builderId);
+      res.json(agreements);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder agreements');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builders/:builderId/agreements", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertBuilderAgreementSchema.parse({ ...req.body, builderId: req.params.builderId });
+      const agreement = await storage.createBuilderAgreement(validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_agreement.create',
+        resourceType: 'builder_agreement',
+        resourceId: agreement.id,
+        metadata: { 
+          builderName: builder?.name,
+          agreementName: agreement.agreementName,
+          status: agreement.status,
+        },
+      }, storage);
+      
+      res.status(201).json(agreement);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create builder agreement');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/builders/:builderId/agreements/:id", isAuthenticated, async (req, res) => {
+    try {
+      const agreement = await storage.getBuilderAgreement(req.params.id);
+      if (!agreement) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+      if (agreement.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Agreement not found for this builder" });
+      }
+      res.json(agreement);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder agreement');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/builders/:builderId/agreements/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const existing = await storage.getBuilderAgreement(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+      if (existing.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Agreement not found for this builder" });
+      }
+
+      const validated = updateBuilderAgreementSchema.parse(req.body);
+      const agreement = await storage.updateBuilderAgreement(req.params.id, validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_agreement.update',
+        resourceType: 'builder_agreement',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { 
+          builderName: builder?.name,
+          agreementName: agreement?.agreementName,
+        },
+      }, storage);
+      
+      res.json(agreement);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update builder agreement');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/builders/:builderId/agreements/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const agreement = await storage.getBuilderAgreement(req.params.id);
+      if (!agreement) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+      if (agreement.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Agreement not found for this builder" });
+      }
+
+      const deleted = await storage.deleteBuilderAgreement(req.params.id);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_agreement.delete',
+        resourceType: 'builder_agreement',
+        resourceId: req.params.id,
+        metadata: { 
+          builderName: builder?.name,
+          agreementName: agreement.agreementName,
+        },
+      }, storage);
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete builder agreement');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Builder Programs routes
+  app.get("/api/builders/:builderId/programs", isAuthenticated, async (req, res) => {
+    try {
+      const programs = await storage.getBuilderPrograms(req.params.builderId);
+      res.json(programs);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder programs');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builders/:builderId/programs", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertBuilderProgramSchema.parse({ ...req.body, builderId: req.params.builderId });
+      const program = await storage.createBuilderProgram(validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_program.create',
+        resourceType: 'builder_program',
+        resourceId: program.id,
+        metadata: { 
+          builderName: builder?.name,
+          programName: program.programName,
+          programType: program.programType,
+        },
+      }, storage);
+      
+      res.status(201).json(program);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create builder program');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/builders/:builderId/programs/:id", isAuthenticated, async (req, res) => {
+    try {
+      const program = await storage.getBuilderProgram(req.params.id);
+      if (!program) {
+        return res.status(404).json({ message: "Program not found" });
+      }
+      if (program.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Program not found for this builder" });
+      }
+      res.json(program);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder program');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/builders/:builderId/programs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const existing = await storage.getBuilderProgram(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Program not found" });
+      }
+      if (existing.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Program not found for this builder" });
+      }
+
+      const validated = updateBuilderProgramSchema.parse(req.body);
+      const program = await storage.updateBuilderProgram(req.params.id, validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_program.update',
+        resourceType: 'builder_program',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { 
+          builderName: builder?.name,
+          programName: program?.programName,
+        },
+      }, storage);
+      
+      res.json(program);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update builder program');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/builders/:builderId/programs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const program = await storage.getBuilderProgram(req.params.id);
+      if (!program) {
+        return res.status(404).json({ message: "Program not found" });
+      }
+      if (program.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Program not found for this builder" });
+      }
+
+      const deleted = await storage.deleteBuilderProgram(req.params.id);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_program.delete',
+        resourceType: 'builder_program',
+        resourceId: req.params.id,
+        metadata: { 
+          builderName: builder?.name,
+          programName: program.programName,
+        },
+      }, storage);
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete builder program');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Builder Interactions routes
+  app.get("/api/builders/:builderId/interactions", isAuthenticated, async (req, res) => {
+    try {
+      const interactions = await storage.getBuilderInteractions(req.params.builderId);
+      res.json(interactions);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder interactions');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builders/:builderId/interactions", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertBuilderInteractionSchema.parse({ 
+        ...req.body, 
+        builderId: req.params.builderId,
+        createdBy: req.user.claims.sub,
+      });
+      const interaction = await storage.createBuilderInteraction(validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_interaction.create',
+        resourceType: 'builder_interaction',
+        resourceId: interaction.id,
+        metadata: { 
+          builderName: builder?.name,
+          interactionType: interaction.interactionType,
+          subject: interaction.subject,
+        },
+      }, storage);
+      
+      res.status(201).json(interaction);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create builder interaction');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/builders/:builderId/interactions/:id", isAuthenticated, async (req, res) => {
+    try {
+      const interaction = await storage.getBuilderInteraction(req.params.id);
+      if (!interaction) {
+        return res.status(404).json({ message: "Interaction not found" });
+      }
+      if (interaction.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Interaction not found for this builder" });
+      }
+      res.json(interaction);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder interaction');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/builders/:builderId/interactions/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const existing = await storage.getBuilderInteraction(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Interaction not found" });
+      }
+      if (existing.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Interaction not found for this builder" });
+      }
+
+      const validated = updateBuilderInteractionSchema.parse(req.body);
+      const interaction = await storage.updateBuilderInteraction(req.params.id, validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_interaction.update',
+        resourceType: 'builder_interaction',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { 
+          builderName: builder?.name,
+          subject: interaction?.subject,
+        },
+      }, storage);
+      
+      res.json(interaction);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update builder interaction');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/builders/:builderId/interactions/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const interaction = await storage.getBuilderInteraction(req.params.id);
+      if (!interaction) {
+        return res.status(404).json({ message: "Interaction not found" });
+      }
+      if (interaction.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Interaction not found for this builder" });
+      }
+
+      const deleted = await storage.deleteBuilderInteraction(req.params.id);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_interaction.delete',
+        resourceType: 'builder_interaction',
+        resourceId: req.params.id,
+        metadata: { 
+          builderName: builder?.name,
+          subject: interaction.subject,
+        },
+      }, storage);
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete builder interaction');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Developments routes
+  app.get("/api/builders/:builderId/developments", isAuthenticated, async (req, res) => {
+    try {
+      const developments = await storage.getDevelopments(req.params.builderId);
+      res.json(developments);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch developments');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builders/:builderId/developments", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertDevelopmentSchema.parse({ ...req.body, builderId: req.params.builderId });
+      const development = await storage.createDevelopment(validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'development.create',
+        resourceType: 'development',
+        resourceId: development.id,
+        metadata: { 
+          builderName: builder?.name,
+          developmentName: development.name,
+          status: development.status,
+        },
+      }, storage);
+      
+      res.status(201).json(development);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create development');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/builders/:builderId/developments/:id", isAuthenticated, async (req, res) => {
+    try {
+      const development = await storage.getDevelopment(req.params.id);
+      if (!development) {
+        return res.status(404).json({ message: "Development not found" });
+      }
+      if (development.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Development not found for this builder" });
+      }
+      res.json(development);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch development');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/builders/:builderId/developments/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const existing = await storage.getDevelopment(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Development not found" });
+      }
+      if (existing.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Development not found for this builder" });
+      }
+
+      const validated = updateDevelopmentSchema.parse(req.body);
+      const development = await storage.updateDevelopment(req.params.id, validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'development.update',
+        resourceType: 'development',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { 
+          builderName: builder?.name,
+          developmentName: development?.name,
+        },
+      }, storage);
+      
+      res.json(development);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update development');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/builders/:builderId/developments/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const development = await storage.getDevelopment(req.params.id);
+      if (!development) {
+        return res.status(404).json({ message: "Development not found" });
+      }
+      if (development.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Development not found for this builder" });
+      }
+
+      const deleted = await storage.deleteDevelopment(req.params.id);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'development.delete',
+        resourceType: 'development',
+        resourceId: req.params.id,
+        metadata: { 
+          builderName: builder?.name,
+          developmentName: development.name,
+        },
+      }, storage);
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete development');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Lots routes
+  app.get("/api/developments/:developmentId/lots", isAuthenticated, async (req, res) => {
+    try {
+      const lots = await storage.getLots(req.params.developmentId);
+      res.json(lots);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch lots');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/developments/:developmentId/lots", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertLotSchema.parse({ ...req.body, developmentId: req.params.developmentId });
+      const lot = await storage.createLot(validated);
+      
+      const development = await storage.getDevelopment(req.params.developmentId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'lot.create',
+        resourceType: 'lot',
+        resourceId: lot.id,
+        metadata: { 
+          developmentName: development?.name,
+          lotNumber: lot.lotNumber,
+          status: lot.status,
+        },
+      }, storage);
+      
+      res.status(201).json(lot);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create lot');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/developments/:developmentId/lots/:id", isAuthenticated, async (req, res) => {
+    try {
+      const lot = await storage.getLot(req.params.id);
+      if (!lot) {
+        return res.status(404).json({ message: "Lot not found" });
+      }
+      if (lot.developmentId !== req.params.developmentId) {
+        return res.status(404).json({ message: "Lot not found for this development" });
+      }
+      res.json(lot);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch lot');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/developments/:developmentId/lots/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const existing = await storage.getLot(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Lot not found" });
+      }
+      if (existing.developmentId !== req.params.developmentId) {
+        return res.status(404).json({ message: "Lot not found for this development" });
+      }
+
+      const validated = updateLotSchema.parse(req.body);
+      const lot = await storage.updateLot(req.params.id, validated);
+      
+      const development = await storage.getDevelopment(req.params.developmentId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'lot.update',
+        resourceType: 'lot',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { 
+          developmentName: development?.name,
+          lotNumber: lot?.lotNumber,
+        },
+      }, storage);
+      
+      res.json(lot);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update lot');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/developments/:developmentId/lots/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const lot = await storage.getLot(req.params.id);
+      if (!lot) {
+        return res.status(404).json({ message: "Lot not found" });
+      }
+      if (lot.developmentId !== req.params.developmentId) {
+        return res.status(404).json({ message: "Lot not found for this development" });
+      }
+
+      const deleted = await storage.deleteLot(req.params.id);
+      
+      const development = await storage.getDevelopment(req.params.developmentId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'lot.delete',
+        resourceType: 'lot',
+        resourceId: req.params.id,
+        metadata: { 
+          developmentName: development?.name,
+          lotNumber: lot.lotNumber,
+        },
+      }, storage);
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete lot');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Direct lot lookup (for fetching lot by ID without knowing development)
+  app.get("/api/lots/:id", isAuthenticated, async (req, res) => {
+    try {
+      const lot = await storage.getLot(req.params.id);
+      if (!lot) {
+        return res.status(404).json({ message: "Lot not found" });
+      }
+      res.json(lot);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch lot');
       res.status(status).json({ message });
     }
   });

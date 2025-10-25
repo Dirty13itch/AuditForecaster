@@ -3,6 +3,18 @@ import {
   type UpsertUser,
   type Builder,
   type InsertBuilder,
+  type BuilderContact,
+  type InsertBuilderContact,
+  type BuilderAgreement,
+  type InsertBuilderAgreement,
+  type BuilderProgram,
+  type InsertBuilderProgram,
+  type BuilderInteraction,
+  type InsertBuilderInteraction,
+  type Development,
+  type InsertDevelopment,
+  type Lot,
+  type InsertLot,
   type Plan,
   type InsertPlan,
   type Job,
@@ -45,6 +57,11 @@ import {
   users,
   builders,
   builderContacts,
+  builderAgreements,
+  builderPrograms,
+  builderInteractions,
+  developments,
+  lots,
   plans,
   jobs,
   scheduleEvents,
@@ -88,6 +105,41 @@ export interface IStorage {
   updateBuilderContact(id: string, contact: Partial<InsertBuilderContact>): Promise<BuilderContact | undefined>;
   deleteBuilderContact(id: string): Promise<boolean>;
   setPrimaryContact(builderId: string, contactId: string): Promise<void>;
+
+  createBuilderAgreement(agreement: InsertBuilderAgreement): Promise<BuilderAgreement>;
+  getBuilderAgreement(id: string): Promise<BuilderAgreement | undefined>;
+  getBuilderAgreements(builderId: string): Promise<BuilderAgreement[]>;
+  getActiveAgreement(builderId: string): Promise<BuilderAgreement | undefined>;
+  updateBuilderAgreement(id: string, agreement: Partial<InsertBuilderAgreement>): Promise<BuilderAgreement | undefined>;
+  deleteBuilderAgreement(id: string): Promise<boolean>;
+
+  createBuilderProgram(program: InsertBuilderProgram): Promise<BuilderProgram>;
+  getBuilderProgram(id: string): Promise<BuilderProgram | undefined>;
+  getBuilderPrograms(builderId: string): Promise<BuilderProgram[]>;
+  getActivePrograms(builderId: string): Promise<BuilderProgram[]>;
+  updateBuilderProgram(id: string, program: Partial<InsertBuilderProgram>): Promise<BuilderProgram | undefined>;
+  deleteBuilderProgram(id: string): Promise<boolean>;
+
+  createBuilderInteraction(interaction: InsertBuilderInteraction): Promise<BuilderInteraction>;
+  getBuilderInteraction(id: string): Promise<BuilderInteraction | undefined>;
+  getBuilderInteractions(builderId: string): Promise<BuilderInteraction[]>;
+  getInteractionsByContact(contactId: string): Promise<BuilderInteraction[]>;
+  updateBuilderInteraction(id: string, interaction: Partial<InsertBuilderInteraction>): Promise<BuilderInteraction | undefined>;
+  deleteBuilderInteraction(id: string): Promise<boolean>;
+
+  createDevelopment(development: InsertDevelopment): Promise<Development>;
+  getDevelopment(id: string): Promise<Development | undefined>;
+  getDevelopments(builderId: string): Promise<Development[]>;
+  getDevelopmentsByStatus(status: string): Promise<Development[]>;
+  updateDevelopment(id: string, development: Partial<InsertDevelopment>): Promise<Development | undefined>;
+  deleteDevelopment(id: string): Promise<boolean>;
+
+  createLot(lot: InsertLot): Promise<Lot>;
+  getLot(id: string): Promise<Lot | undefined>;
+  getLots(developmentId: string): Promise<Lot[]>;
+  getLotsByPlan(planId: string): Promise<Lot[]>;
+  updateLot(id: string, lot: Partial<InsertLot>): Promise<Lot | undefined>;
+  deleteLot(id: string): Promise<boolean>;
 
   createPlan(plan: InsertPlan): Promise<Plan>;
   getPlan(id: string): Promise<Plan | undefined>;
@@ -383,6 +435,189 @@ export class DatabaseStorage implements IStorage {
         .set({ isPrimary: true })
         .where(eq(builderContacts.id, contactId));
     });
+  }
+
+  async createBuilderAgreement(insertAgreement: InsertBuilderAgreement): Promise<BuilderAgreement> {
+    const result = await db.insert(builderAgreements).values(insertAgreement).returning();
+    return result[0];
+  }
+
+  async getBuilderAgreement(id: string): Promise<BuilderAgreement | undefined> {
+    const result = await db.select().from(builderAgreements).where(eq(builderAgreements.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getBuilderAgreements(builderId: string): Promise<BuilderAgreement[]> {
+    return await db.select().from(builderAgreements)
+      .where(eq(builderAgreements.builderId, builderId))
+      .orderBy(desc(builderAgreements.startDate));
+  }
+
+  async getActiveAgreement(builderId: string): Promise<BuilderAgreement | undefined> {
+    const result = await db.select().from(builderAgreements)
+      .where(and(
+        eq(builderAgreements.builderId, builderId),
+        eq(builderAgreements.status, 'active')
+      ))
+      .orderBy(desc(builderAgreements.startDate))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateBuilderAgreement(id: string, updates: Partial<InsertBuilderAgreement>): Promise<BuilderAgreement | undefined> {
+    const result = await db.update(builderAgreements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(builderAgreements.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBuilderAgreement(id: string): Promise<boolean> {
+    const result = await db.delete(builderAgreements).where(eq(builderAgreements.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createBuilderProgram(insertProgram: InsertBuilderProgram): Promise<BuilderProgram> {
+    const result = await db.insert(builderPrograms).values(insertProgram).returning();
+    return result[0];
+  }
+
+  async getBuilderProgram(id: string): Promise<BuilderProgram | undefined> {
+    const result = await db.select().from(builderPrograms).where(eq(builderPrograms.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getBuilderPrograms(builderId: string): Promise<BuilderProgram[]> {
+    return await db.select().from(builderPrograms)
+      .where(eq(builderPrograms.builderId, builderId))
+      .orderBy(desc(builderPrograms.enrollmentDate));
+  }
+
+  async getActivePrograms(builderId: string): Promise<BuilderProgram[]> {
+    return await db.select().from(builderPrograms)
+      .where(and(
+        eq(builderPrograms.builderId, builderId),
+        eq(builderPrograms.status, 'active')
+      ))
+      .orderBy(desc(builderPrograms.enrollmentDate));
+  }
+
+  async updateBuilderProgram(id: string, updates: Partial<InsertBuilderProgram>): Promise<BuilderProgram | undefined> {
+    const result = await db.update(builderPrograms)
+      .set(updates)
+      .where(eq(builderPrograms.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBuilderProgram(id: string): Promise<boolean> {
+    const result = await db.delete(builderPrograms).where(eq(builderPrograms.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createBuilderInteraction(insertInteraction: InsertBuilderInteraction): Promise<BuilderInteraction> {
+    const result = await db.insert(builderInteractions).values(insertInteraction).returning();
+    return result[0];
+  }
+
+  async getBuilderInteraction(id: string): Promise<BuilderInteraction | undefined> {
+    const result = await db.select().from(builderInteractions).where(eq(builderInteractions.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getBuilderInteractions(builderId: string): Promise<BuilderInteraction[]> {
+    return await db.select().from(builderInteractions)
+      .where(eq(builderInteractions.builderId, builderId))
+      .orderBy(desc(builderInteractions.interactionDate));
+  }
+
+  async getInteractionsByContact(contactId: string): Promise<BuilderInteraction[]> {
+    return await db.select().from(builderInteractions)
+      .where(eq(builderInteractions.contactId, contactId))
+      .orderBy(desc(builderInteractions.interactionDate));
+  }
+
+  async updateBuilderInteraction(id: string, updates: Partial<InsertBuilderInteraction>): Promise<BuilderInteraction | undefined> {
+    const result = await db.update(builderInteractions)
+      .set(updates)
+      .where(eq(builderInteractions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBuilderInteraction(id: string): Promise<boolean> {
+    const result = await db.delete(builderInteractions).where(eq(builderInteractions.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createDevelopment(insertDevelopment: InsertDevelopment): Promise<Development> {
+    const result = await db.insert(developments).values(insertDevelopment).returning();
+    return result[0];
+  }
+
+  async getDevelopment(id: string): Promise<Development | undefined> {
+    const result = await db.select().from(developments).where(eq(developments.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getDevelopments(builderId: string): Promise<Development[]> {
+    return await db.select().from(developments)
+      .where(eq(developments.builderId, builderId))
+      .orderBy(desc(developments.createdAt));
+  }
+
+  async getDevelopmentsByStatus(status: string): Promise<Development[]> {
+    return await db.select().from(developments)
+      .where(eq(developments.status, status))
+      .orderBy(desc(developments.createdAt));
+  }
+
+  async updateDevelopment(id: string, updates: Partial<InsertDevelopment>): Promise<Development | undefined> {
+    const result = await db.update(developments)
+      .set(updates)
+      .where(eq(developments.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteDevelopment(id: string): Promise<boolean> {
+    const result = await db.delete(developments).where(eq(developments.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createLot(insertLot: InsertLot): Promise<Lot> {
+    const result = await db.insert(lots).values(insertLot).returning();
+    return result[0];
+  }
+
+  async getLot(id: string): Promise<Lot | undefined> {
+    const result = await db.select().from(lots).where(eq(lots.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getLots(developmentId: string): Promise<Lot[]> {
+    return await db.select().from(lots)
+      .where(eq(lots.developmentId, developmentId))
+      .orderBy(asc(lots.lotNumber));
+  }
+
+  async getLotsByPlan(planId: string): Promise<Lot[]> {
+    return await db.select().from(lots)
+      .where(eq(lots.planId, planId))
+      .orderBy(asc(lots.lotNumber));
+  }
+
+  async updateLot(id: string, updates: Partial<InsertLot>): Promise<Lot | undefined> {
+    const result = await db.update(lots)
+      .set(updates)
+      .where(eq(lots.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteLot(id: string): Promise<boolean> {
+    const result = await db.delete(lots).where(eq(lots.id, id)).returning();
+    return result.length > 0;
   }
 
   async createPlan(insertPlan: InsertPlan): Promise<Plan> {
