@@ -3028,6 +3028,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Achievement API Routes
+  app.get("/api/achievements", isAuthenticated, async (req, res) => {
+    try {
+      const achievements = await storage.getAllAchievements();
+      res.json(achievements);
+    } catch (error) {
+      logError('Achievements/GetAll', error);
+      res.status(500).json({ message: 'Failed to fetch achievements' });
+    }
+  });
+
+  app.get("/api/achievements/user", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+      
+      const userAchievements = await storage.getUserAchievementWithDetails(req.user.id);
+      res.json(userAchievements);
+    } catch (error) {
+      logError('Achievements/GetUserAchievements', error);
+      res.status(500).json({ message: 'Failed to fetch user achievements' });
+    }
+  });
+
+  app.post("/api/achievements/check", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+      
+      const { checkAndAwardAchievements } = await import('./achievementService');
+      const awardedIds = await checkAndAwardAchievements(storage, req.user.id);
+      
+      res.json({ 
+        message: awardedIds.length > 0 
+          ? `Awarded ${awardedIds.length} new achievement(s)!` 
+          : 'No new achievements earned',
+        awardedAchievementIds: awardedIds,
+        count: awardedIds.length
+      });
+    } catch (error) {
+      logError('Achievements/Check', error);
+      res.status(500).json({ message: 'Failed to check achievements' });
+    }
+  });
+
+  app.post("/api/achievements/seed", isAuthenticated, requireRole('admin'), async (req, res) => {
+    try {
+      const { ACHIEVEMENT_DEFINITIONS } = await import("@shared/achievementDefinitions");
+      
+      // Convert achievement definitions to insert format
+      const achievementInserts = ACHIEVEMENT_DEFINITIONS.map(def => ({
+        id: def.id,
+        name: def.name,
+        description: def.description,
+        type: def.type,
+        iconName: def.iconName,
+        criteria: def.criteria as any,
+        tier: def.tier || null,
+      }));
+      
+      await storage.seedAchievements(achievementInserts);
+      res.json({ message: 'Achievements seeded successfully', count: achievementInserts.length });
+    } catch (error) {
+      logError('Achievements/Seed', error);
+      res.status(500).json({ message: 'Failed to seed achievements' });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

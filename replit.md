@@ -30,6 +30,7 @@ Key technical implementations include:
 - **Offline-First Functionality**: Achieved through service workers, IndexedDB, and a custom sync queue.
 - **Google Calendar Integration**: Multi-calendar integration with OAuth2 via Replit Connectors, featuring two-way sync, event-to-job conversion, all-day event support, and a self-healing authentication system for token refresh.
 - **Conditional Logic**: Dynamic inspection forms driven by a conditional logic engine.
+- **Gamification & Achievements System**: Comprehensive achievement tracking with 10 predefined achievements (Elite Performer, Perfect Week, Century Club, Builder Champion, streak achievements, etc.). Features automated criteria evaluation based on ACH50 performance, job completion counts, consecutive streaks, and builder relationships. Achievement engine automatically checks user progress against defined criteria (tier achievements, job milestones, daily/weekly streaks, perfect completion rates). UI displays earned vs locked achievements with tier badges (bronze/silver/gold/platinum), manual "Check Achievements" trigger, and toast notifications for newly earned achievements. Achievements auto-seed on development server startup.
 
 Enterprise hardening includes **24 strategic database indexes** optimized for query performance:
 - **Jobs table**: builder_id, scheduled_date, (status, scheduled_date), created_by, address, (status, created_by) for RBAC filtering

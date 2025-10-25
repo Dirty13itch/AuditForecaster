@@ -259,6 +259,24 @@ async function startServer() {
           } catch (error) {
             serverLogger.error('Failed to evaluate compliance on startup:', error);
           }
+          
+          // Seed achievements on startup
+          try {
+            const { ACHIEVEMENT_DEFINITIONS } = await import('@shared/achievementDefinitions');
+            const achievementInserts = ACHIEVEMENT_DEFINITIONS.map(def => ({
+              id: def.id,
+              name: def.name,
+              description: def.description,
+              type: def.type,
+              iconName: def.iconName,
+              criteria: def.criteria as any,
+              tier: def.tier || null,
+            }));
+            await storage.seedAchievements(achievementInserts);
+            log(`Seeded ${achievementInserts.length} achievement definitions`);
+          } catch (error) {
+            serverLogger.error('Failed to seed achievements on startup:', error);
+          }
         }
         
         // Initialize scheduled email jobs

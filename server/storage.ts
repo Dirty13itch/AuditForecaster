@@ -166,6 +166,7 @@ export interface IStorage {
   createChecklistItem(item: InsertChecklistItem): Promise<ChecklistItem>;
   getChecklistItem(id: string): Promise<ChecklistItem | undefined>;
   getChecklistItemsByJob(jobId: string): Promise<ChecklistItem[]>;
+  getChecklistItemsByJobs(jobIds: string[]): Promise<Map<string, ChecklistItem[]>>;
   updateChecklistItem(id: string, item: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined>;
   deleteChecklistItem(id: string): Promise<boolean>;
   generateChecklistFromTemplate(jobId: string, inspectionType: string): Promise<ChecklistItem[]>;
@@ -1131,6 +1132,26 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(checklistItems)
       .where(eq(checklistItems.jobId, jobId))
       .orderBy(asc(checklistItems.itemNumber));
+  }
+
+  async getChecklistItemsByJobs(jobIds: string[]): Promise<Map<string, ChecklistItem[]>> {
+    if (jobIds.length === 0) {
+      return new Map();
+    }
+    
+    const items = await db.select().from(checklistItems)
+      .where(inArray(checklistItems.jobId, jobIds))
+      .orderBy(asc(checklistItems.itemNumber));
+    
+    const itemsByJob = new Map<string, ChecklistItem[]>();
+    for (const item of items) {
+      if (!itemsByJob.has(item.jobId)) {
+        itemsByJob.set(item.jobId, []);
+      }
+      itemsByJob.get(item.jobId)!.push(item);
+    }
+    
+    return itemsByJob;
   }
 
   async updateChecklistItem(id: string, updates: Partial<InsertChecklistItem>): Promise<ChecklistItem | undefined> {

@@ -7,6 +7,7 @@ import { LeaderboardTable } from "@/components/dashboard/LeaderboardTable";
 import { TrendChart } from "@/components/dashboard/TrendChart";
 import { TaxCreditPanel } from "@/components/dashboard/TaxCreditPanel";
 import { MonthlyHighlights } from "@/components/dashboard/MonthlyHighlights";
+import { AchievementsPanel } from "@/components/AchievementsPanel";
 import type { DashboardSummary, BuilderLeaderboardEntry } from "@shared/dashboardTypes";
 import type { Forecast, Job } from "@shared/schema";
 import { Button } from "@/components/ui/button";
@@ -263,7 +264,7 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-3">
           <TierSummaryCard 
             tierDistribution={summary?.tierDistribution || []} 
             isLoading={summaryLoading}
@@ -273,6 +274,8 @@ export default function Dashboard() {
             highlights={summary?.monthlyHighlights || []} 
             isLoading={summaryLoading}
           />
+
+          <AchievementsPanel />
         </div>
 
         <LeaderboardTable 
