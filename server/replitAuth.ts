@@ -13,10 +13,20 @@ import { getConfig } from "./config";
 const getOidcConfig = memoize(
   async () => {
     const config = getConfig();
-    return await client.discovery(
+    serverLogger.info(`[ReplitAuth] Discovering OIDC configuration from ${config.issuerUrl}`);
+    
+    // Use the openid-client v6 pattern: discovery with issuer URL and client_id
+    const configuration = await client.discovery(
       new URL(config.issuerUrl),
       config.replId
     );
+    
+    const metadata = configuration.serverMetadata();
+    serverLogger.info(`[ReplitAuth] OIDC configuration discovered successfully`);
+    serverLogger.info(`[ReplitAuth] Server issuer: ${metadata.issuer}`);
+    serverLogger.info(`[ReplitAuth] RFC 9207 support: ${metadata.authorization_response_iss_parameter_supported ? 'enabled' : 'disabled'}`);
+    
+    return configuration;
   },
   { maxAge: 3600 * 1000 }
 );
@@ -211,12 +221,111 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/callback", (req, res, next) => {
     serverLogger.info(`[ReplitAuth] OAuth callback received from ${req.hostname}`);
+    serverLogger.debug(`[ReplitAuth] Callback query params:`, req.query);
     
     try {
       const strategy = getStrategyForHostname(req.hostname);
-      passport.authenticate(`replitauth:${strategy}`, {
-        successReturnToOrRedirect: "/",
-        failureRedirect: "/api/login",
+      serverLogger.info(`[ReplitAuth] Using strategy: replitauth:${strategy}`);
+      
+      passport.authenticate(`replitauth:${strategy}`, (err, user, info) => {
+        if (err) {
+          serverLogger.error(`[ReplitAuth] Authentication error:`, {
+            error: err.message,
+            stack: err.stack,
+            hostname: req.hostname,
+            strategy,
+          });
+          
+          return res.status(500).send(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Authentication Error</title>
+                <style>
+                  body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    max-width: 700px;
+                    margin: 50px auto;
+                    padding: 20px;
+                    background: #f8f9fa;
+                  }
+                  .container {
+                    background: white;
+                    border-radius: 8px;
+                    padding: 30px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                  }
+                  h1 { color: #dc3545; margin-top: 0; }
+                  p { color: #6c757d; line-height: 1.6; }
+                  .error-details {
+                    background: #f8d7da;
+                    border: 1px solid #f5c2c7;
+                    border-radius: 4px;
+                    padding: 15px;
+                    margin: 20px 0;
+                    font-family: monospace;
+                    font-size: 13px;
+                    word-break: break-word;
+                    color: #842029;
+                  }
+                  .btn {
+                    display: inline-block;
+                    background: #0969da;
+                    color: white;
+                    padding: 10px 20px;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    margin-top: 20px;
+                  }
+                  .btn:hover { background: #0860ca; }
+                  code {
+                    background: #e9ecef;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-family: monospace;
+                  }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h1>🔐 Authentication Failed</h1>
+                  <p>We encountered an error while trying to sign you in to the Energy Auditing application.</p>
+                  
+                  <div class="error-details">
+                    <strong>Error:</strong> ${err.message || 'Unknown authentication error'}
+                  </div>
+                  
+                  <p><strong>Domain:</strong> <code>${req.hostname}</code></p>
+                  <p><strong>Strategy:</strong> <code>replitauth:${strategy}</code></p>
+                  
+                  <h3>Troubleshooting Steps:</h3>
+                  <ol>
+                    <li>Clear your browser cookies and try again</li>
+                    <li>Ensure you're accessing the app from the correct Replit domain</li>
+                    <li>Check that the <code>REPLIT_DOMAINS</code> environment variable includes <code>${req.hostname}</code></li>
+                    <li>Verify the Replit Auth connector is properly configured</li>
+                  </ol>
+                  
+                  <a href="/api/login" class="btn" data-testid="button-retry-login">Try Again</a>
+                </div>
+              </body>
+            </html>
+          `);
+        }
+        
+        if (!user) {
+          serverLogger.warn(`[ReplitAuth] No user returned from authentication`, { info });
+          return res.redirect('/api/login');
+        }
+        
+        req.logIn(user, (loginErr) => {
+          if (loginErr) {
+            serverLogger.error(`[ReplitAuth] Login failed:`, loginErr);
+            return next(loginErr);
+          }
+          serverLogger.info(`[ReplitAuth] User logged in successfully`);
+          return res.redirect('/');
+        });
       })(req, res, next);
     } catch (error) {
       serverLogger.error(`[ReplitAuth] Callback failed for domain ${req.hostname}:`, error);
