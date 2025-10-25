@@ -57,7 +57,7 @@ import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
 import { getOidcConfig, getRegisteredStrategies } from "./replitAuth";
-import { getConfig } from "./config";
+import { getConfig, isDevelopment } from "./config";
 import { getTroubleshootingGuide, getAllTroubleshootingGuides, suggestTroubleshootingGuide } from "./auth/troubleshooting";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
@@ -127,6 +127,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
       logError('Auth/GetUser', error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
+  });
+
+  // DEV MODE: Instant login endpoint (development only)
+  // SECURITY: Returns 404 in production to ensure this endpoint is completely inaccessible
+  app.get("/api/dev-login/:userId", async (req: any, res) => {
+    // CRITICAL: Check development mode first - return 404 in production
+    if (!isDevelopment()) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    try {
+      const { userId } = req.params;
+      
+      // Get user from database
+      const user = await storage.getUser(userId);
+      if (!user) {
+        serverLogger.warn(`[DevLogin] Attempt to login as non-existent user: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Create passport user object that mimics OAuth flow
+      const passportUser = {
+        claims: {
+          sub: userId,
+          email: user.email || '',
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          first_name: user.firstName || '',
+          last_name: user.lastName || '',
+        },
+        // Set far future expiry for dev sessions (1 week)
+        expires_at: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60),
+      };
+
+      // Use passport's login mechanism to establish session
+      req.login(passportUser, async (err) => {
+        if (err) {
+          serverLogger.error(`[DevLogin] Failed to establish passport session: ${err}`);
+          return res.status(500).json({ message: "Failed to establish session" });
+        }
+
+        // Log the dev login for audit trail
+        serverLogger.warn(`[DevLogin] ⚠️  DEV MODE LOGIN: User ${userId} (${user.email}) logged in via dev endpoint`);
+        
+        // Create audit log entry
+        await createAuditLog(req, {
+          userId,
+          action: 'dev_login',
+          resourceType: 'user',
+          resourceId: userId,
+          metadata: { 
+            message: 'Development mode authentication bypass used',
+            userAgent: req.headers['user-agent'],
+            ip: req.ip
+          },
+        }, storage);
+
+        // Redirect to dashboard
+        res.redirect('/');
+      });
+    } catch (error) {
+      logError('DevLogin', error);
+      res.status(500).json({ message: "Dev login failed" });
+    }
+  });
+
+  // DEV MODE: Status endpoint to check if dev mode is active
+  // SECURITY: Returns 404 in production
+  app.get("/api/dev/status", (req, res) => {
+    if (!isDevelopment()) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    res.json({
+      enabled: true,
+      activeSession: !!(req as any).user?.claims?.sub,
+    });
   });
 
   // Health endpoint - unauthenticated, production-safe

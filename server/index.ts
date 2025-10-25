@@ -338,6 +338,51 @@ async function startServer() {
           } catch (error) {
             serverLogger.error('Failed to seed achievements on startup:', error);
           }
+          
+          // DEV MODE: Seed test users for development authentication bypass
+          try {
+            serverLogger.warn('╔════════════════════════════════════════════════════════════════╗');
+            serverLogger.warn('║  ⚠️  DEV MODE ACTIVE - Test Authentication Enabled            ║');
+            serverLogger.warn('╚════════════════════════════════════════════════════════════════╝');
+            
+            const testUsers = [
+              {
+                id: 'test-admin',
+                email: 'admin@test.com',
+                firstName: 'Admin',
+                lastName: 'User',
+                role: 'admin' as const,
+              },
+              {
+                id: 'test-inspector1',
+                email: 'inspector1@test.com',
+                firstName: 'Inspector',
+                lastName: 'One',
+                role: 'inspector' as const,
+              },
+              {
+                id: 'test-inspector2',
+                email: 'inspector2@test.com',
+                firstName: 'Inspector',
+                lastName: 'Two',
+                role: 'inspector' as const,
+              },
+            ];
+            
+            let seededCount = 0;
+            for (const testUser of testUsers) {
+              await storage.upsertUser(testUser);
+              seededCount++;
+            }
+            
+            serverLogger.warn(`[DevMode] Seeded ${seededCount} test users for development authentication`);
+            serverLogger.warn('[DevMode] Quick login URLs:');
+            serverLogger.warn(`[DevMode]   Admin:      /api/dev-login/test-admin`);
+            serverLogger.warn(`[DevMode]   Inspector1: /api/dev-login/test-inspector1`);
+            serverLogger.warn(`[DevMode]   Inspector2: /api/dev-login/test-inspector2`);
+          } catch (error) {
+            serverLogger.error('Failed to seed test users:', error);
+          }
         }
         
         // Initialize scheduled email jobs

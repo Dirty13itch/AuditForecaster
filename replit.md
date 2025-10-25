@@ -19,6 +19,15 @@ Core data entities include Users, Builders, Builder Contacts, Jobs, Schedule Eve
 Key technical implementations include:
 - **Comprehensive Error Prevention**: Centralized logging, extensive type safety, loading states, null/undefined guards, API error handling, and a two-layer Error Boundary system.
 - **Input Validation**: Zod schemas for API and form validation.
+- **Development Mode Authentication**: Production-safe authentication bypass system for rapid development testing:
+  - **Test Users**: Three pre-configured test accounts (test-admin, test-inspector1, test-inspector2) with different role permissions for comprehensive workflow testing
+  - **Quick Login Methods**: 
+    - Banner buttons displayed when dev mode is active (visible at top of development environment)
+    - Direct URL access: `/api/dev-login/test-admin`, `/api/dev-login/test-inspector1`, `/api/dev-login/test-inspector2`
+  - **Production Safety**: All dev login endpoints return 404 in production (`NODE_ENV=production`), making them completely inaccessible outside development
+  - **Audit Logging**: All dev mode logins are logged to audit trail with `dev_login` action type, including user agent and IP address for security tracking
+  - **Session Management**: Dev logins establish full passport sessions with 1-week expiry, identical to OAuth flow for realistic testing
+  - **Status Endpoint**: `/api/dev/status` provides dev mode state and active session information (also returns 404 in production)
 - **Comprehensive Builder Hierarchy System**: Full hierarchical organization of builder relationships:
   - **Builder Contact Management**: Multiple contacts per builder (3-5 typical) with role designations (Superintendent, Project Manager, Owner, Estimator, Office Manager, Other), primary contact designation, communication preferences (phone/email/text), and detailed notes. Backend enforces single-primary-per-builder invariants through dedicated schemas and transactional updates.
   - **Builder Agreements**: Contract management with agreement terms, start/end dates, default pricing, payment terms, and inspection types covered. Supports active/expired status tracking.

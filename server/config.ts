@@ -111,3 +111,11 @@ export function getConfig(): ServerConfig {
   }
   return configInstance;
 }
+
+/**
+ * Helper function to check if running in development mode
+ * Used by dev-only endpoints to ensure they're not accessible in production
+ */
+export function isDevelopment(): boolean {
+  return getConfig().isDevelopment;
+}
