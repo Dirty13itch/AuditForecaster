@@ -354,6 +354,32 @@ export const auditLogs = pgTable("audit_logs", {
   index("idx_audit_logs_action").on(table.action),
 ]);
 
+export const achievements = pgTable("achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull(),
+  iconName: text("icon_name").notNull(),
+  criteria: jsonb("criteria").notNull(),
+  tier: text("tier"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_achievements_type").on(table.type),
+]);
+
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  achievementId: varchar("achievement_id").notNull().references(() => achievements.id, { onDelete: 'cascade' }),
+  earnedAt: timestamp("earned_at").notNull().defaultNow(),
+  progress: integer("progress").default(0),
+  metadata: jsonb("metadata"),
+}, (table) => [
+  index("idx_user_achievements_user_id").on(table.userId),
+  index("idx_user_achievements_achievement_id").on(table.achievementId),
+  index("idx_user_achievements_earned_at").on(table.earnedAt),
+]);
+
 // For Replit Auth upsert operations
 export const upsertUserSchema = createInsertSchema(users).pick({
   id: true,
@@ -457,6 +483,10 @@ export const insertUploadSessionSchema = createInsertSchema(uploadSessions).omit
 });
 export const insertEmailPreferenceSchema = createInsertSchema(emailPreferences).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, timestamp: true });
+export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
+export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true }).extend({
+  earnedAt: z.coerce.date().optional(),
+});
 
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -497,3 +527,7 @@ export type EmailPreference = typeof emailPreferences.$inferSelect;
 export type InsertEmailPreference = z.infer<typeof insertEmailPreferenceSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type Achievement = typeof achievements.$inferSelect;
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;

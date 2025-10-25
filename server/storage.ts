@@ -37,6 +37,10 @@ import {
   type InsertEmailPreference,
   type AuditLog,
   type InsertAuditLog,
+  type Achievement,
+  type InsertAchievement,
+  type UserAchievement,
+  type InsertUserAchievement,
   type ScoreSummary,
   users,
   builders,
@@ -57,6 +61,8 @@ import {
   uploadSessions,
   emailPreferences,
   auditLogs,
+  achievements,
+  userAchievements,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -219,6 +225,16 @@ export interface IStorage {
     startDate?: Date;
     endDate?: Date;
   }): Promise<{ logs: AuditLog[], total: number }>;
+
+  // Achievements
+  getAllAchievements(): Promise<Achievement[]>;
+  getAchievement(id: string): Promise<Achievement | undefined>;
+  getUserAchievements(userId: string): Promise<UserAchievement[]>;
+  getUserAchievementWithDetails(userId: string): Promise<Array<UserAchievement & { achievement: Achievement }>>;
+  awardAchievement(userId: string, achievementId: string, metadata?: any): Promise<UserAchievement>;
+  updateUserAchievementProgress(userId: string, achievementId: string, progress: number): Promise<UserAchievement | undefined>;
+  checkUserHasAchievement(userId: string, achievementId: string): Promise<boolean>;
+  seedAchievements(achievementDefs: InsertAchievement[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1676,6 +1692,114 @@ export class DatabaseStorage implements IStorage {
       .where(whereClause);
     
     return { logs, total: Number(totalCount) };
+  }
+
+  async getAllAchievements(): Promise<Achievement[]> {
+    return await db.select().from(achievements).orderBy(achievements.name);
+  }
+
+  async getAchievement(id: string): Promise<Achievement | undefined> {
+    const result = await db.select().from(achievements).where(eq(achievements.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getUserAchievements(userId: string): Promise<UserAchievement[]> {
+    return await db
+      .select()
+      .from(userAchievements)
+      .where(eq(userAchievements.userId, userId))
+      .orderBy(desc(userAchievements.earnedAt));
+  }
+
+  async getUserAchievementWithDetails(userId: string): Promise<Array<UserAchievement & { achievement: Achievement }>> {
+    const result = await db
+      .select({
+        id: userAchievements.id,
+        userId: userAchievements.userId,
+        achievementId: userAchievements.achievementId,
+        earnedAt: userAchievements.earnedAt,
+        progress: userAchievements.progress,
+        metadata: userAchievements.metadata,
+        achievement: achievements,
+      })
+      .from(userAchievements)
+      .leftJoin(achievements, eq(userAchievements.achievementId, achievements.id))
+      .where(eq(userAchievements.userId, userId))
+      .orderBy(desc(userAchievements.earnedAt));
+    
+    return result.map(row => ({
+      ...row,
+      achievement: row.achievement!,
+    }));
+  }
+
+  async awardAchievement(userId: string, achievementId: string, metadata?: any): Promise<UserAchievement> {
+    // Check if already awarded
+    const existing = await db
+      .select()
+      .from(userAchievements)
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.achievementId, achievementId)
+      ))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    const [userAchievement] = await db
+      .insert(userAchievements)
+      .values({
+        userId,
+        achievementId,
+        progress: 100,
+        metadata,
+      })
+      .returning();
+    
+    return userAchievement;
+  }
+
+  async updateUserAchievementProgress(userId: string, achievementId: string, progress: number): Promise<UserAchievement | undefined> {
+    const [userAchievement] = await db
+      .update(userAchievements)
+      .set({ progress })
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.achievementId, achievementId)
+      ))
+      .returning();
+    
+    return userAchievement;
+  }
+
+  async checkUserHasAchievement(userId: string, achievementId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(userAchievements)
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.achievementId, achievementId)
+      ))
+      .limit(1);
+    
+    return result.length > 0;
+  }
+
+  async seedAchievements(achievementDefs: InsertAchievement[]): Promise<void> {
+    // Insert achievements if they don't exist
+    for (const def of achievementDefs) {
+      const existing = await db
+        .select()
+        .from(achievements)
+        .where(eq(achievements.id, def.id!))
+        .limit(1);
+      
+      if (existing.length === 0) {
+        await db.insert(achievements).values(def);
+      }
+    }
   }
 }
 
