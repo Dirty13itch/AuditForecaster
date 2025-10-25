@@ -14,11 +14,12 @@ The application features a **React** and **TypeScript** frontend, built with **V
 
 The backend uses **Express.js** with **Node.js** and **TypeScript**. **PostgreSQL** (Neon serverless) is the primary database, accessed via **Drizzle ORM** for type-safe queries. The API is RESTful, with **Zod** schemas for validation. **Replit Auth** (OpenID Connect) handles authentication, with sessions stored in PostgreSQL.
 
-Core data entities include Users, Builders, Jobs, Schedule Events, Expenses, Mileage Logs, Photos, Report Templates, and Report Instances, with relationships linking them for comprehensive data management.
+Core data entities include Users, Builders, Builder Contacts, Jobs, Schedule Events, Expenses, Mileage Logs, Photos, Report Templates, and Report Instances, with relationships linking them for comprehensive data management.
 
 Key technical implementations include:
 - **Comprehensive Error Prevention**: Centralized logging, extensive type safety, loading states, null/undefined guards, API error handling, and a two-layer Error Boundary system.
 - **Input Validation**: Zod schemas for API and form validation.
+- **Builder Contact Management**: Hierarchical builder organization with dedicated contact management UI. Each builder supports multiple contacts (3-5 typical) with role designations (Superintendent, Project Manager, Owner, Estimator, Office Manager, Other), primary contact designation, communication preferences (phone/email/text), and detailed notes. Backend enforces single-primary-per-builder invariants through dedicated schemas and transactional updates, preventing ownership tampering and ensuring data integrity. Features full CRUD operations with proper RBAC (admin/inspector roles), audit logging, and optimistic UI updates.
 - **Bulk Operations**: Multi-select functionality for Photos, Jobs, and Expenses with bulk delete, export, and tag management.
 - **Search & Filtering**: Advanced search across Jobs, Builders, and Photos with real-time filtering and pagination.
 - **Analytics Dashboard**: Metrics on inspection volume, photo tag analysis, and builder performance with date range filtering.
@@ -37,9 +38,10 @@ Key technical implementations include:
   - **Data Integrity**: Achievement awards protected by unique constraints, null-safe date handling, and calendar-aware streak calculations
   - **Auto-Seeding**: Achievements automatically seed on development server startup for immediate availability
 
-Enterprise hardening includes **24 strategic database indexes** optimized for query performance:
+Enterprise hardening includes **26 strategic database indexes** optimized for query performance:
 - **Jobs table**: builder_id, scheduled_date, (status, scheduled_date), created_by, address, (status, created_by) for RBAC filtering
 - **Builders table**: company_name, (name, company_name) for search prefix matching
+- **Builder Contacts table**: (builder_id, name), (builder_id, is_primary) for contact lookups and primary contact queries
 - **Photos table**: (job_id, uploaded_at), hash, tags (GIN array index), checklist_item_id (partial index WHERE NOT NULL)
 - **Schedule Events table**: (job_id, start_time), google_event_id, (start_time, end_time) for calendar range queries
 - **Audit Logs table**: user_id, (resource_type, resource_id), timestamp, action
