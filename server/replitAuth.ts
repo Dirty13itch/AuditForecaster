@@ -146,7 +146,7 @@ export async function setupAuth(app: Express) {
     serverLogger.info(`[ReplitAuth] Login attempt from ${req.hostname}`);
     
     passport.authenticate(`replitauth:${req.hostname}`, {
-      prompt: "select_account consent", // Show account picker + consent screen
+      prompt: "login consent", // Blueprint standard - Replit OIDC doesn't support select_account
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
