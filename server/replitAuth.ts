@@ -112,16 +112,19 @@ export async function setupAuth(app: Express) {
   };
 
   for (const domain of serverConfig.replitDomains) {
+    serverLogger.info(`[ReplitAuth] Registering strategy for domain: ${domain}`);
+    
     const strategy = new Strategy(
       {
         name: `replitauth:${domain}`,
         config: oidcConfig,
         scope: "openid email profile offline_access",
-        callbackURL: `https://${domain}/api/callback`,
+        callbackURL: new URL(`https://${domain}/api/callback`),
       },
       verify,
     );
     passport.use(strategy);
+    serverLogger.info(`[ReplitAuth] Strategy registered: replitauth:${domain}`);
   }
 
   passport.serializeUser((user: Express.User, cb) => {
