@@ -138,6 +138,13 @@ export function LotsDialog({
         queryKey: ["/api/developments", development?.id, "lots"],
       });
       queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey.length === 3 &&
+          query.queryKey[0] === "/api/developments" &&
+          query.queryKey[2] === "lots",
+      });
+      queryClient.invalidateQueries({
         queryKey: ["/api/builders", builder?.id, "developments"],
       });
       setIsAddDialogOpen(false);
@@ -177,6 +184,13 @@ export function LotsDialog({
         queryKey: ["/api/developments", development?.id, "lots"],
       });
       queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey.length === 3 &&
+          query.queryKey[0] === "/api/developments" &&
+          query.queryKey[2] === "lots",
+      });
+      queryClient.invalidateQueries({
         queryKey: ["/api/builders", builder?.id, "developments"],
       });
       setIsAddDialogOpen(false);
@@ -203,6 +217,13 @@ export function LotsDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["/api/developments", development?.id, "lots"],
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey.length === 3 &&
+          query.queryKey[0] === "/api/developments" &&
+          query.queryKey[2] === "lots",
       });
       queryClient.invalidateQueries({
         queryKey: ["/api/builders", builder?.id, "developments"],

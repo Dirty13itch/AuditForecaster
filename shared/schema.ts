@@ -548,6 +548,14 @@ export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, creat
   stories: z.coerce.number().nullable().optional(),
 });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
+  planId: z.preprocess(
+    (val) => (val === "" || val === undefined ? null : val),
+    z.string().nullable().optional()
+  ),
+  lotId: z.preprocess(
+    (val) => (val === "" || val === undefined ? null : val),
+    z.string().nullable().optional()
+  ),
   builderSignatureUrl: z.string().nullable().optional(),
   builderSignedAt: z.coerce.date().nullable().optional(),
   builderSignerName: z.string().nullable().optional(),

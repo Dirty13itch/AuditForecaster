@@ -19,7 +19,16 @@ Core data entities include Users, Builders, Builder Contacts, Jobs, Schedule Eve
 Key technical implementations include:
 - **Comprehensive Error Prevention**: Centralized logging, extensive type safety, loading states, null/undefined guards, API error handling, and a two-layer Error Boundary system.
 - **Input Validation**: Zod schemas for API and form validation.
-- **Builder Contact Management**: Hierarchical builder organization with dedicated contact management UI. Each builder supports multiple contacts (3-5 typical) with role designations (Superintendent, Project Manager, Owner, Estimator, Office Manager, Other), primary contact designation, communication preferences (phone/email/text), and detailed notes. Backend enforces single-primary-per-builder invariants through dedicated schemas and transactional updates, preventing ownership tampering and ensuring data integrity. Features full CRUD operations with proper RBAC (admin/inspector roles), audit logging, and optimistic UI updates.
+- **Comprehensive Builder Hierarchy System**: Full hierarchical organization of builder relationships:
+  - **Builder Contact Management**: Multiple contacts per builder (3-5 typical) with role designations (Superintendent, Project Manager, Owner, Estimator, Office Manager, Other), primary contact designation, communication preferences (phone/email/text), and detailed notes. Backend enforces single-primary-per-builder invariants through dedicated schemas and transactional updates.
+  - **Builder Agreements**: Contract management with agreement terms, start/end dates, default pricing, payment terms, and inspection types covered. Supports active/expired status tracking.
+  - **Builder Programs**: Program enrollment tracking for 45L tax credit, ENERGY STAR, and local utility programs, with program-specific settings and active status management.
+  - **Builder Interactions**: Comprehensive communication log capturing calls, emails, meetings, and notes in chronological timeline view with contact references.
+  - **Geographic Hierarchy**: Complete address structure from Development → Lot → Job:
+    - **Developments**: Builder-specific developments with region, municipality, address, and status tracking
+    - **Lots**: Individual lots within developments with lot number, phase, block, street address, and plan references
+    - **Jobs**: Link to lots for automatic address population while maintaining address override capability
+  - All components feature full CRUD operations with proper RBAC (admin/inspector roles), audit logging, CSRF protection, and optimistic UI updates.
 - **Bulk Operations**: Multi-select functionality for Photos, Jobs, and Expenses with bulk delete, export, and tag management.
 - **Search & Filtering**: Advanced search across Jobs, Builders, and Photos with real-time filtering and pagination.
 - **Analytics Dashboard**: Metrics on inspection volume, photo tag analysis, and builder performance with date range filtering.
@@ -38,10 +47,15 @@ Key technical implementations include:
   - **Data Integrity**: Achievement awards protected by unique constraints, null-safe date handling, and calendar-aware streak calculations
   - **Auto-Seeding**: Achievements automatically seed on development server startup for immediate availability
 
-Enterprise hardening includes **26 strategic database indexes** optimized for query performance:
-- **Jobs table**: builder_id, scheduled_date, (status, scheduled_date), created_by, address, (status, created_by) for RBAC filtering
+Enterprise hardening includes **35+ strategic database indexes** optimized for query performance:
+- **Jobs table**: builder_id, scheduled_date, (status, scheduled_date), created_by, address, (status, created_by), lot_id for RBAC filtering and geographic hierarchy lookups
 - **Builders table**: company_name, (name, company_name) for search prefix matching
 - **Builder Contacts table**: (builder_id, name), (builder_id, is_primary) for contact lookups and primary contact queries
+- **Builder Agreements table**: (builder_id, start_date), (builder_id, status), end_date for active agreement queries
+- **Builder Programs table**: (builder_id, program_type), (builder_id, is_active) for program enrollment lookups
+- **Builder Interactions table**: (builder_id, interaction_date), builder_contact_id for timeline queries
+- **Developments table**: (builder_id, name), region, municipality for geographic searches
+- **Lots table**: (development_id, lot_number), (development_id, phase, block) for hierarchical lot queries
 - **Photos table**: (job_id, uploaded_at), hash, tags (GIN array index), checklist_item_id (partial index WHERE NOT NULL)
 - **Schedule Events table**: (job_id, start_time), google_event_id, (start_time, end_time) for calendar range queries
 - **Audit Logs table**: user_id, (resource_type, resource_id), timestamp, action
