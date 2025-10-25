@@ -55,6 +55,12 @@ import {
 } from "./complianceService";
 import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
+import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
+import { getOidcConfig, getRegisteredStrategies } from "./replitAuth";
+import { getConfig } from "./config";
+import { getTroubleshootingGuide, getAllTroubleshootingGuides, suggestTroubleshootingGuide } from "./auth/troubleshooting";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
@@ -120,6 +126,302 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logError('Auth/GetUser', error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Health endpoint - unauthenticated, production-safe
+  app.get("/api/health", async (req, res) => {
+    try {
+      const config = getConfig();
+      const report = await validateAuthConfig({ 
+        skipOIDC: false,
+        skipDatabase: false 
+      });
+
+      const oidcResult = report.results.find(r => r.component === 'OIDC Discovery');
+      const dbResult = report.results.find(r => r.component === 'Database Connectivity');
+      const domainsResult = report.results.find(r => r.component === 'Registered Domains');
+      
+      const health = {
+        status: report.overall === 'pass' ? 'healthy' : report.overall === 'degraded' ? 'degraded' : 'unhealthy',
+        timestamp: report.timestamp,
+        version: process.env.npm_package_version || '1.0.0',
+        environment: config.nodeEnv,
+        components: {
+          oidc: {
+            status: oidcResult?.status === 'pass' ? 'working' : 'failed',
+            message: oidcResult?.message,
+            error: oidcResult?.error,
+          },
+          database: {
+            status: dbResult?.status === 'pass' ? 'connected' : dbResult?.status === 'warning' ? 'not_configured' : 'disconnected',
+            message: dbResult?.message,
+            error: dbResult?.error,
+          },
+          sessionStore: {
+            status: config.databaseUrl ? 'postgresql' : 'in_memory',
+            message: config.databaseUrl 
+              ? 'Using PostgreSQL session store' 
+              : 'Using in-memory session store (development only)',
+          },
+          domains: {
+            registered: config.replitDomains,
+            status: domainsResult?.status === 'pass' ? 'valid' : 'invalid',
+            message: domainsResult?.message,
+          },
+          currentDomain: {
+            hostname: req.hostname,
+            status: config.replitDomains.some(d => req.hostname.endsWith(d) || req.hostname === d) 
+              ? 'recognized' 
+              : 'unknown',
+          },
+        },
+      };
+
+      const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
+      res.status(statusCode).json(health);
+    } catch (error) {
+      logError('Health/Check', error);
+      res.status(503).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: 'Health check failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Diagnostics endpoint - authenticated admin only
+  // SECURITY WARNING: This endpoint is production-safe because it uses sanitizeEnvironmentForClient()
+  // to ensure NO secrets (SESSION_SECRET, DATABASE_URL credentials, full REPL_ID) are exposed
+  app.get("/api/auth/diagnostics", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const config = getConfig();
+      const oidcConfig = await getOidcConfig();
+      const metadata = oidcConfig.serverMetadata();
+      const strategies = getRegisteredStrategies();
+      const recentErrors = getRecentAuthErrors();
+      
+      const report = await validateAuthConfig({ 
+        skipOIDC: false,
+        skipDatabase: false 
+      });
+
+      let sessionStats: any = null;
+      if (config.databaseUrl) {
+        try {
+          const sessionCountResult = await db.execute(sql`
+            SELECT COUNT(*) as total,
+                   COUNT(CASE WHEN expire > NOW() THEN 1 END) as active,
+                   COUNT(CASE WHEN expire <= NOW() THEN 1 END) as expired
+            FROM sessions
+          `);
+          sessionStats = {
+            total: parseInt(sessionCountResult.rows[0]?.total as string || '0'),
+            active: parseInt(sessionCountResult.rows[0]?.active as string || '0'),
+            expired: parseInt(sessionCountResult.rows[0]?.expired as string || '0'),
+          };
+        } catch (error) {
+          sessionStats = { error: 'Failed to fetch session statistics' };
+        }
+      }
+
+      const domainMappingTests = config.replitDomains.map(domain => {
+        const testHostnames = [
+          domain,
+          `www.${domain}`,
+          `subdomain.${domain}`,
+        ];
+        
+        return {
+          domain,
+          tests: testHostnames.map(hostname => ({
+            hostname,
+            wouldMatch: hostname === domain || hostname.endsWith(domain),
+          })),
+        };
+      });
+
+      // SECURITY: Use sanitized environment data to prevent secret exposure
+      const sanitizedEnv = sanitizeEnvironmentForClient();
+
+      const diagnostics = {
+        timestamp: new Date().toISOString(),
+        validationReport: report,
+        oidcConfiguration: {
+          issuer: metadata.issuer,
+          authorizationEndpoint: metadata.authorization_endpoint,
+          tokenEndpoint: metadata.token_endpoint,
+          userinfoEndpoint: metadata.userinfo_endpoint,
+          endSessionEndpoint: metadata.end_session_endpoint,
+          jwksUri: metadata.jwks_uri,
+          rfc9207Support: metadata.authorization_response_iss_parameter_supported || false,
+          scopesSupported: metadata.scopes_supported,
+          responseTypesSupported: metadata.response_types_supported,
+        },
+        registeredStrategies: strategies.map(name => ({
+          name,
+          domain: name.replace('replitauth:', ''),
+        })),
+        domainMappingTests,
+        sessionStore: {
+          type: config.databaseUrl ? 'postgresql' : 'in_memory',
+          statistics: sessionStats,
+        },
+        recentAuthErrors: recentErrors.slice(0, 100),
+        // SECURITY: Only use sanitized environment data
+        environment: sanitizedEnv,
+      };
+
+      res.json(diagnostics);
+    } catch (error) {
+      logError('Auth/Diagnostics', error);
+      res.status(500).json({ 
+        message: "Failed to generate diagnostics",
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Auth metrics endpoint - authenticated admin only
+  app.get("/api/auth/metrics", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const { authMonitoring } = await import("./auth/monitoring");
+      const metrics = authMonitoring.getMetrics();
+      res.json(metrics);
+    } catch (error) {
+      logError('Auth/Metrics', error);
+      res.status(500).json({ 
+        message: "Failed to fetch auth metrics",
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Troubleshooting guide endpoint - public (no auth required)
+  app.get("/api/auth/troubleshooting/:code?", async (req, res) => {
+    try {
+      const { code } = req.params;
+      
+      if (code) {
+        const guide = getTroubleshootingGuide(code);
+        
+        if (guide) {
+          res.json(guide);
+        } else {
+          const generalGuide = getTroubleshootingGuide('GENERAL_AUTH_ERROR');
+          res.status(404).json({
+            message: `No troubleshooting guide found for code: ${code}`,
+            fallbackGuide: generalGuide,
+          });
+        }
+      } else {
+        const allGuides = getAllTroubleshootingGuides();
+        res.json({
+          guides: allGuides,
+          total: allGuides.length,
+          categories: {
+            configuration: allGuides.filter(g => g.category === 'configuration').length,
+            network: allGuides.filter(g => g.category === 'network').length,
+            environment: allGuides.filter(g => g.category === 'environment').length,
+            infrastructure: allGuides.filter(g => g.category === 'infrastructure').length,
+          },
+        });
+      }
+    } catch (error) {
+      logError('Auth/Troubleshooting', error);
+      res.status(500).json({ 
+        message: "Failed to fetch troubleshooting guide",
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Dev mode login bypass - development only
+  app.get("/api/dev/login-as", async (req: any, res) => {
+    const { devModeLogin } = await import("./auth/devMode");
+    await devModeLogin(req, res);
+  });
+
+  // Dev mode status endpoint - check if dev mode is enabled
+  app.get("/api/dev/status", async (req: any, res) => {
+    try {
+      const { getDevModeStatus } = await import("./auth/devMode");
+      const status = getDevModeStatus(req);
+      res.json(status);
+    } catch (error) {
+      logError('DevMode/Status', error);
+      res.status(500).json({ 
+        message: "Failed to check dev mode status",
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Domain testing endpoint - authenticated admin only
+  app.post("/api/auth/test-domain", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const { domain } = req.body;
+      
+      if (!domain || typeof domain !== 'string') {
+        return res.status(400).json({ 
+          message: "Domain is required and must be a string",
+        });
+      }
+
+      const config = getConfig();
+      const registeredDomains = config.replitDomains;
+      
+      // Test if domain would be recognized
+      const exactMatch = registeredDomains.find(d => d === domain);
+      const endsWithMatch = registeredDomains.find(d => domain.endsWith(d));
+      const localhostFallback = domain === 'localhost' && registeredDomains.length > 0;
+      
+      let recognized = false;
+      let strategy: string | null = null;
+      let matchType: 'exact' | 'subdomain' | 'localhost_fallback' | 'none' = 'none';
+      let matchedDomain: string | null = null;
+      
+      if (exactMatch) {
+        recognized = true;
+        strategy = `replitauth:${exactMatch}`;
+        matchType = 'exact';
+        matchedDomain = exactMatch;
+      } else if (endsWithMatch) {
+        recognized = true;
+        strategy = `replitauth:${endsWithMatch}`;
+        matchType = 'subdomain';
+        matchedDomain = endsWithMatch;
+      } else if (localhostFallback) {
+        recognized = true;
+        strategy = `replitauth:${registeredDomains[0]}`;
+        matchType = 'localhost_fallback';
+        matchedDomain = registeredDomains[0];
+      }
+      
+      const result = {
+        domain,
+        recognized,
+        strategy,
+        matchType,
+        matchedDomain,
+        registeredDomains,
+        explanation: recognized 
+          ? matchType === 'exact'
+            ? `Domain matches exactly with registered domain: ${matchedDomain}`
+            : matchType === 'subdomain'
+            ? `Domain is a subdomain of registered domain: ${matchedDomain}`
+            : `Localhost development mode: falls back to first registered domain: ${matchedDomain}`
+          : `Domain does not match any registered domains. Available: ${registeredDomains.join(', ')}`,
+      };
+      
+      res.json(result);
+    } catch (error) {
+      logError('Auth/TestDomain', error);
+      res.status(500).json({ 
+        message: "Failed to test domain",
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   });
 

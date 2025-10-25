@@ -2,31 +2,50 @@ import * as client from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 import passport from "passport";
 import session from "express-session";
-import type { Express, RequestHandler } from "express";
+import type { Express, RequestHandler, Request } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import createMemoryStore from "memorystore";
 import { storage } from "./storage";
 import { serverLogger } from "./logger";
 import { getConfig } from "./config";
+import { CircuitBreaker } from "./auth/circuitBreaker";
+import { authMonitoring } from "./auth/monitoring";
+import { getCorrelationId, logAuthEvent, logAuthError } from "./middleware/requestLogging";
 
-const getOidcConfig = memoize(
+// Circuit breaker for OIDC discovery
+const oidcCircuitBreaker = new CircuitBreaker<client.Configuration>();
+
+export const getOidcConfig = memoize(
   async () => {
     const config = getConfig();
     serverLogger.info(`[ReplitAuth] Discovering OIDC configuration from ${config.issuerUrl}`);
     
-    // Use the openid-client v6 pattern: discovery with issuer URL and client_id
-    const configuration = await client.discovery(
-      new URL(config.issuerUrl),
-      config.replId
+    return oidcCircuitBreaker.execute(
+      async () => {
+        // Use the openid-client v6 pattern: discovery with issuer URL and client_id
+        const configuration = await client.discovery(
+          new URL(config.issuerUrl),
+          config.replId
+        );
+        
+        const metadata = configuration.serverMetadata();
+        serverLogger.info(`[ReplitAuth] OIDC configuration discovered successfully`);
+        serverLogger.info(`[ReplitAuth] Server issuer: ${metadata.issuer}`);
+        serverLogger.info(`[ReplitAuth] RFC 9207 support: ${metadata.authorization_response_iss_parameter_supported ? 'enabled' : 'disabled'}`);
+        
+        return configuration;
+      },
+      async () => {
+        // Fallback: return cached result if available
+        const cached = oidcCircuitBreaker.getCachedResult();
+        if (cached) {
+          serverLogger.warn('[ReplitAuth] Using cached OIDC configuration (circuit breaker fallback)');
+          return cached;
+        }
+        throw new Error('OIDC discovery failed and no cached configuration available');
+      }
     );
-    
-    const metadata = configuration.serverMetadata();
-    serverLogger.info(`[ReplitAuth] OIDC configuration discovered successfully`);
-    serverLogger.info(`[ReplitAuth] Server issuer: ${metadata.issuer}`);
-    serverLogger.info(`[ReplitAuth] RFC 9207 support: ${metadata.authorization_response_iss_parameter_supported ? 'enabled' : 'disabled'}`);
-    
-    return configuration;
   },
   { maxAge: 3600 * 1000 }
 );
@@ -81,8 +100,10 @@ function updateUserSession(
 
 async function upsertUser(
   claims: any,
+  req?: Request
 ) {
-  serverLogger.info(`[ReplitAuth] Upserting user: ${claims["sub"]}`);
+  const correlationId = req ? getCorrelationId(req) : undefined;
+  serverLogger.info(`[ReplitAuth] Upserting user: ${claims["sub"]}`, { correlationId });
   await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
@@ -90,6 +111,214 @@ async function upsertUser(
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
   });
+}
+
+function generateErrorPage(options: {
+  title: string;
+  heading: string;
+  message: string;
+  errorDetails?: string;
+  correlationId?: string;
+  timestamp?: string;
+  domain?: string;
+  strategy?: string;
+  troubleshootingSteps?: string[];
+  showCopyDebugInfo?: boolean;
+  showDiagnosticsLink?: boolean;
+  showHealthLink?: boolean;
+  ctaButtons?: Array<{ href: string; text: string; testId?: string }>;
+}) {
+  const {
+    title,
+    heading,
+    message,
+    errorDetails,
+    correlationId,
+    timestamp = new Date().toISOString(),
+    domain,
+    strategy,
+    troubleshootingSteps = [],
+    showCopyDebugInfo = false,
+    showDiagnosticsLink = false,
+    showHealthLink = false,
+    ctaButtons = [{ href: '/api/login', text: 'Try Again', testId: 'button-retry-login' }],
+  } = options;
+
+  const debugInfo = JSON.stringify({
+    error: errorDetails || 'Unknown error',
+    correlationId: correlationId || 'N/A',
+    timestamp,
+    domain: domain || 'N/A',
+    strategy: strategy || 'N/A',
+  }, null, 2);
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f8f9fa;
+          }
+          .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          h1 { color: #dc3545; margin-top: 0; }
+          p { color: #6c757d; line-height: 1.6; }
+          .error-details {
+            background: #f8d7da;
+            border: 1px solid #f5c2c7;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 13px;
+            word-break: break-word;
+            color: #842029;
+          }
+          .meta-info {
+            background: #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            font-size: 14px;
+          }
+          .meta-info div {
+            margin: 5px 0;
+          }
+          .meta-info strong {
+            color: #495057;
+          }
+          .btn {
+            display: inline-block;
+            background: #0969da;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 10px 10px 0 0;
+            cursor: pointer;
+            border: none;
+            font-size: 14px;
+          }
+          .btn:hover { background: #0860ca; }
+          .btn-secondary {
+            background: #6c757d;
+          }
+          .btn-secondary:hover { background: #5c636a; }
+          code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+          }
+          ol {
+            padding-left: 20px;
+          }
+          li {
+            margin: 8px 0;
+            color: #495057;
+          }
+          .links {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+          }
+          .links a {
+            color: #0969da;
+            text-decoration: none;
+            margin-right: 15px;
+          }
+          .links a:hover {
+            text-decoration: underline;
+          }
+          .success-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: none;
+            z-index: 1000;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="success-toast" id="toast">✓ Debug info copied to clipboard!</div>
+        <div class="container">
+          <h1>${heading}</h1>
+          <p>${message}</p>
+          
+          ${errorDetails ? `
+            <div class="error-details">
+              <strong>Error:</strong> ${errorDetails}
+            </div>
+          ` : ''}
+          
+          ${correlationId || domain || strategy ? `
+            <div class="meta-info">
+              ${correlationId ? `<div><strong>Correlation ID:</strong> <code>${correlationId}</code></div>` : ''}
+              ${timestamp ? `<div><strong>Timestamp:</strong> ${timestamp}</div>` : ''}
+              ${domain ? `<div><strong>Domain:</strong> <code>${domain}</code></div>` : ''}
+              ${strategy ? `<div><strong>Strategy:</strong> <code>${strategy}</code></div>` : ''}
+            </div>
+          ` : ''}
+          
+          ${troubleshootingSteps.length > 0 ? `
+            <h3>Troubleshooting Steps:</h3>
+            <ol>
+              ${troubleshootingSteps.map(step => `<li>${step}</li>`).join('')}
+            </ol>
+          ` : ''}
+          
+          <div>
+            ${ctaButtons.map(btn => `
+              <a href="${btn.href}" class="btn" ${btn.testId ? `data-testid="${btn.testId}"` : ''}>${btn.text}</a>
+            `).join('')}
+            ${showCopyDebugInfo ? `
+              <button onclick="copyDebugInfo()" class="btn btn-secondary" data-testid="button-copy-debug">
+                📋 Copy Debug Info
+              </button>
+            ` : ''}
+          </div>
+          
+          ${showDiagnosticsLink || showHealthLink ? `
+            <div class="links">
+              ${showHealthLink ? '<a href="/api/health" target="_blank">Health Status</a>' : ''}
+              ${showDiagnosticsLink ? '<a href="/api/auth/diagnostics" target="_blank">Admin Diagnostics</a>' : ''}
+            </div>
+          ` : ''}
+        </div>
+        
+        ${showCopyDebugInfo ? `
+          <script>
+            const debugInfo = ${JSON.stringify(debugInfo)};
+            
+            function copyDebugInfo() {
+              navigator.clipboard.writeText(debugInfo).then(() => {
+                const toast = document.getElementById('toast');
+                toast.style.display = 'block';
+                setTimeout(() => {
+                  toast.style.display = 'none';
+                }, 3000);
+              });
+            }
+          </script>
+        ` : ''}
+      </body>
+    </html>
+  `;
 }
 
 export async function setupAuth(app: Express) {
@@ -178,7 +407,14 @@ export async function setupAuth(app: Express) {
   }
 
   app.get("/api/login", (req, res, next) => {
-    serverLogger.info(`[ReplitAuth] Login request received from ${req.hostname}`);
+    const startTime = Date.now();
+    const correlationId = getCorrelationId(req);
+    
+    logAuthEvent(req, 'Login attempt started', { hostname: req.hostname });
+    authMonitoring.recordEvent('login_attempt', {
+      correlationId,
+      domain: req.hostname,
+    });
     
     try {
       const strategy = getStrategyForHostname(req.hostname);
@@ -186,188 +422,184 @@ export async function setupAuth(app: Express) {
         prompt: "select_account consent",
         scope: ["openid", "email", "profile", "offline_access"],
       })(req, res, next);
+      
+      const latency = Date.now() - startTime;
+      authMonitoring.recordEvent('login_success', {
+        correlationId,
+        domain: req.hostname,
+        latency,
+      });
     } catch (error) {
-      serverLogger.error(`[ReplitAuth] Login failed for domain ${req.hostname}:`, error);
-      return res.status(400).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Domain Not Registered</title>
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                max-width: 600px;
-                margin: 100px auto;
-                padding: 20px;
-                text-align: center;
-              }
-              h1 { color: #dc3545; }
-              p { color: #6c757d; line-height: 1.6; }
-              code {
-                background: #f8f9fa;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-family: monospace;
-              }
-            </style>
-          </head>
-          <body>
-            <h1>⚠️ Domain Not Registered</h1>
-            <p>The domain <code>${req.hostname}</code> is not registered for authentication.</p>
-            <p>To use this domain, please add it to the Replit Auth connector configuration and ensure it's included in the <code>REPLIT_DOMAINS</code> environment variable.</p>
-            <p><small>Error: ${error instanceof Error ? error.message : 'Unknown error'}</small></p>
-          </body>
-        </html>
-      `);
+      const latency = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      logAuthError(req, 'Login failed', {
+        hostname: req.hostname,
+        error: errorMessage,
+      });
+      
+      authMonitoring.recordEvent('login_failure', {
+        correlationId,
+        domain: req.hostname,
+        error: errorMessage,
+        latency,
+      });
+      
+      return res.status(400).send(generateErrorPage({
+        title: 'Domain Not Registered',
+        heading: '⚠️ Domain Not Registered',
+        message: `The domain <code>${req.hostname}</code> is not registered for authentication.`,
+        errorDetails: errorMessage,
+        correlationId,
+        domain: req.hostname,
+        troubleshootingSteps: [
+          'Add this domain to the Replit Auth connector configuration',
+          `Ensure <code>REPLIT_DOMAINS</code> environment variable includes <code>${req.hostname}</code>`,
+          'Restart the application after updating environment variables',
+          'Check the Replit Auth connector is properly configured',
+        ],
+        showCopyDebugInfo: true,
+        showHealthLink: true,
+        showDiagnosticsLink: true,
+      }));
     }
   });
 
   app.get("/api/callback", (req, res, next) => {
-    serverLogger.info(`[ReplitAuth] OAuth callback received from ${req.hostname}`);
-    serverLogger.debug(`[ReplitAuth] Callback query params:`, req.query);
+    const startTime = Date.now();
+    const correlationId = getCorrelationId(req);
+    
+    logAuthEvent(req, 'OAuth callback received', { hostname: req.hostname });
+    authMonitoring.recordEvent('callback_attempt', {
+      correlationId,
+      domain: req.hostname,
+    });
     
     try {
       const strategy = getStrategyForHostname(req.hostname);
-      serverLogger.info(`[ReplitAuth] Using strategy: replitauth:${strategy}`);
+      logAuthEvent(req, `Using strategy: replitauth:${strategy}`);
       
       passport.authenticate(`replitauth:${strategy}`, (err, user, info) => {
+        const latency = Date.now() - startTime;
+        
         if (err) {
-          serverLogger.error(`[ReplitAuth] Authentication error:`, {
-            error: err.message,
+          const errorMessage = err.message || 'Unknown authentication error';
+          
+          logAuthError(req, 'Authentication error', {
+            error: errorMessage,
             stack: err.stack,
             hostname: req.hostname,
             strategy,
           });
           
-          return res.status(500).send(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>Authentication Error</title>
-                <style>
-                  body {
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                    max-width: 700px;
-                    margin: 50px auto;
-                    padding: 20px;
-                    background: #f8f9fa;
-                  }
-                  .container {
-                    background: white;
-                    border-radius: 8px;
-                    padding: 30px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                  }
-                  h1 { color: #dc3545; margin-top: 0; }
-                  p { color: #6c757d; line-height: 1.6; }
-                  .error-details {
-                    background: #f8d7da;
-                    border: 1px solid #f5c2c7;
-                    border-radius: 4px;
-                    padding: 15px;
-                    margin: 20px 0;
-                    font-family: monospace;
-                    font-size: 13px;
-                    word-break: break-word;
-                    color: #842029;
-                  }
-                  .btn {
-                    display: inline-block;
-                    background: #0969da;
-                    color: white;
-                    padding: 10px 20px;
-                    text-decoration: none;
-                    border-radius: 6px;
-                    margin-top: 20px;
-                  }
-                  .btn:hover { background: #0860ca; }
-                  code {
-                    background: #e9ecef;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    font-family: monospace;
-                  }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <h1>🔐 Authentication Failed</h1>
-                  <p>We encountered an error while trying to sign you in to the Energy Auditing application.</p>
-                  
-                  <div class="error-details">
-                    <strong>Error:</strong> ${err.message || 'Unknown authentication error'}
-                  </div>
-                  
-                  <p><strong>Domain:</strong> <code>${req.hostname}</code></p>
-                  <p><strong>Strategy:</strong> <code>replitauth:${strategy}</code></p>
-                  
-                  <h3>Troubleshooting Steps:</h3>
-                  <ol>
-                    <li>Clear your browser cookies and try again</li>
-                    <li>Ensure you're accessing the app from the correct Replit domain</li>
-                    <li>Check that the <code>REPLIT_DOMAINS</code> environment variable includes <code>${req.hostname}</code></li>
-                    <li>Verify the Replit Auth connector is properly configured</li>
-                  </ol>
-                  
-                  <a href="/api/login" class="btn" data-testid="button-retry-login">Try Again</a>
-                </div>
-              </body>
-            </html>
-          `);
+          authMonitoring.recordEvent('callback_failure', {
+            correlationId,
+            domain: req.hostname,
+            error: errorMessage,
+            latency,
+          });
+          
+          return res.status(500).send(generateErrorPage({
+            title: 'Authentication Error',
+            heading: '🔐 Authentication Failed',
+            message: 'We encountered an error while trying to sign you in to the Energy Auditing application.',
+            errorDetails: errorMessage,
+            correlationId,
+            domain: req.hostname,
+            strategy: `replitauth:${strategy}`,
+            troubleshootingSteps: [
+              'Clear your browser cookies and try again',
+              'Ensure you\'re accessing the app from the correct Replit domain',
+              `Check that the <code>REPLIT_DOMAINS</code> environment variable includes <code>${req.hostname}</code>`,
+              'Verify the Replit Auth connector is properly configured',
+              'Check the circuit breaker status in admin diagnostics',
+            ],
+            showCopyDebugInfo: true,
+            showHealthLink: true,
+            showDiagnosticsLink: true,
+          }));
         }
         
         if (!user) {
-          serverLogger.warn(`[ReplitAuth] No user returned from authentication`, { info });
+          logAuthEvent(req, 'No user returned from authentication', { info });
+          authMonitoring.recordEvent('callback_failure', {
+            correlationId,
+            domain: req.hostname,
+            error: 'No user returned',
+            latency,
+          });
           return res.redirect('/api/login');
         }
         
         req.logIn(user, (loginErr) => {
           if (loginErr) {
-            serverLogger.error(`[ReplitAuth] Login failed:`, loginErr);
+            logAuthError(req, 'Login failed', loginErr);
+            authMonitoring.recordEvent('callback_failure', {
+              correlationId,
+              domain: req.hostname,
+              error: loginErr.message,
+              latency,
+            });
             return next(loginErr);
           }
-          serverLogger.info(`[ReplitAuth] User logged in successfully`);
+          
+          logAuthEvent(req, 'User logged in successfully');
+          authMonitoring.recordEvent('callback_success', {
+            correlationId,
+            userId: (user as any).claims?.sub,
+            domain: req.hostname,
+            latency,
+          });
+          
           return res.redirect('/');
         });
       })(req, res, next);
     } catch (error) {
-      serverLogger.error(`[ReplitAuth] Callback failed for domain ${req.hostname}:`, error);
-      return res.status(400).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Domain Not Registered</title>
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                max-width: 600px;
-                margin: 100px auto;
-                padding: 20px;
-                text-align: center;
-              }
-              h1 { color: #dc3545; }
-              p { color: #6c757d; line-height: 1.6; }
-              code {
-                background: #f8f9fa;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-family: monospace;
-              }
-            </style>
-          </head>
-          <body>
-            <h1>⚠️ Domain Not Registered</h1>
-            <p>The domain <code>${req.hostname}</code> is not registered for authentication.</p>
-            <p>To use this domain, please add it to the Replit Auth connector configuration and ensure it's included in the <code>REPLIT_DOMAINS</code> environment variable.</p>
-            <p><small>Error: ${error instanceof Error ? error.message : 'Unknown error'}</small></p>
-          </body>
-        </html>
-      `);
+      const latency = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      logAuthError(req, 'Callback failed', {
+        hostname: req.hostname,
+        error: errorMessage,
+      });
+      
+      authMonitoring.recordEvent('callback_failure', {
+        correlationId,
+        domain: req.hostname,
+        error: errorMessage,
+        latency,
+      });
+      
+      return res.status(400).send(generateErrorPage({
+        title: 'Domain Not Registered',
+        heading: '⚠️ Domain Not Registered',
+        message: `The domain <code>${req.hostname}</code> is not registered for authentication.`,
+        errorDetails: errorMessage,
+        correlationId,
+        domain: req.hostname,
+        troubleshootingSteps: [
+          'Add this domain to the Replit Auth connector configuration',
+          `Ensure <code>REPLIT_DOMAINS</code> environment variable includes <code>${req.hostname}</code>`,
+          'Restart the application after updating environment variables',
+        ],
+        showCopyDebugInfo: true,
+        showHealthLink: true,
+        showDiagnosticsLink: true,
+      }));
     }
   });
 
   app.get("/api/logout", (req, res) => {
-    serverLogger.info('[ReplitAuth] Logout request received');
+    const correlationId = getCorrelationId(req);
+    const userId = (req as any).user?.claims?.sub;
+    
+    logAuthEvent(req, 'Logout request received');
+    authMonitoring.recordEvent('logout', {
+      correlationId,
+      userId,
+      domain: req.hostname,
+    });
+    
     req.logout(() => {
       res.redirect(
         client.buildEndSessionUrl(oidcConfig, {
@@ -384,13 +616,15 @@ const TOKEN_REFRESH_BUFFER_SECONDS = 5 * 60;
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
+  const correlationId = getCorrelationId(req);
 
   if (!req.isAuthenticated() || !user?.expires_at) {
-    serverLogger.warn(`[ReplitAuth] Unauthorized request to ${req.path}`);
+    logAuthEvent(req, 'Unauthorized request', { path: req.path });
     return res.status(401).json({ 
       message: "Unauthorized",
       error: "authentication_required",
-      redirect: "/api/login"
+      redirect: "/api/login",
+      correlationId,
     });
   }
 
@@ -399,46 +633,63 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   
   // Token is still valid and not close to expiring
   if (timeUntilExpiry > TOKEN_REFRESH_BUFFER_SECONDS) {
-    serverLogger.debug(`[ReplitAuth] ✓ Token valid for ${Math.floor(timeUntilExpiry / 60)}m - ${req.path}`);
     return next();
   }
 
   // Token expired or expiring soon - refresh it
   const refreshToken = user.refresh_token;
   if (!refreshToken) {
-    serverLogger.warn(`[ReplitAuth] No refresh token available for ${req.path}`);
+    logAuthEvent(req, 'No refresh token available', { path: req.path });
     return res.status(401).json({ 
       message: "Unauthorized - Session expired",
       error: "session_expired",
-      redirect: "/api/login"
+      redirect: "/api/login",
+      correlationId,
     });
   }
 
+  const startTime = Date.now();
+  authMonitoring.recordEvent('token_refresh_attempt', {
+    correlationId,
+    userId: user.claims?.sub,
+  });
+
   try {
     if (timeUntilExpiry <= 0) {
-      serverLogger.info(`[ReplitAuth] Token expired ${Math.abs(timeUntilExpiry)}s ago - refreshing`);
+      logAuthEvent(req, `Token expired ${Math.abs(timeUntilExpiry)}s ago - refreshing`);
     } else {
-      serverLogger.info(`[ReplitAuth] Token expires in ${timeUntilExpiry}s - proactively refreshing`);
+      logAuthEvent(req, `Token expires in ${timeUntilExpiry}s - proactively refreshing`);
     }
     
     const config = await getOidcConfig();
     const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
     updateUserSession(user, tokenResponse);
     
+    const latency = Date.now() - startTime;
     const newExpiry = user.claims?.exp;
-    if (newExpiry) {
-      const newTimeUntilExpiry = newExpiry - Math.floor(Date.now() / 1000);
-      serverLogger.info(`[ReplitAuth] ✓ Token refreshed successfully - valid for ${Math.floor(newTimeUntilExpiry / 60)}m`);
-    } else {
-      serverLogger.info('[ReplitAuth] ✓ Token refreshed successfully');
-    }
+    const newTimeUntilExpiry = newExpiry ? newExpiry - Math.floor(Date.now() / 1000) : 0;
+    
+    logAuthEvent(req, `Token refreshed successfully - valid for ${Math.floor(newTimeUntilExpiry / 60)}m`);
+    authMonitoring.recordEvent('token_refresh_success', {
+      correlationId,
+      userId: user.claims?.sub,
+      latency,
+    });
     
     return next();
   } catch (error) {
-    serverLogger.error('[ReplitAuth] Token refresh failed:', error);
+    const latency = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    logAuthError(req, 'Token refresh failed', { error: errorMessage });
+    authMonitoring.recordEvent('token_refresh_failure', {
+      correlationId,
+      userId: user.claims?.sub,
+      error: errorMessage,
+      latency,
+    });
     
     // Provide helpful error message based on error type
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network');
     
     return res.status(401).json({ 
@@ -447,7 +698,13 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
         : "Session expired - Please log in again",
       error: isNetworkError ? "service_unavailable" : "token_refresh_failed",
       redirect: "/api/login",
+      correlationId,
       details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
     });
   }
 };
+
+export function getRegisteredStrategies(): string[] {
+  const config = getConfig();
+  return config.replitDomains.map(domain => `replitauth:${domain}`);
+}

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut } from "lucide-react";
+import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -76,6 +76,12 @@ const menuItems = [
     url: "/settings",
     icon: Settings,
   },
+  {
+    title: "Diagnostics",
+    url: "/admin/diagnostics",
+    icon: Activity,
+    adminOnly: true,
+  },
 ];
 
 export function AppSidebar() {
@@ -91,6 +97,10 @@ export function AppSidebar() {
     // Audit Logs only for admin and manager
     if (item.url === '/audit-logs') {
       return userRole === 'admin' || userRole === 'manager';
+    }
+    // Diagnostics only for admin
+    if ('adminOnly' in item && item.adminOnly) {
+      return userRole === 'admin';
     }
     // All other items accessible to all roles
     return true;

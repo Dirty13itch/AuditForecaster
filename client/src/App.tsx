@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { DevModeIndicator } from "@/components/DevModeIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
@@ -27,6 +28,7 @@ import ReportInstancePage from "@/pages/ReportInstance";
 import Analytics from "@/pages/Analytics";
 import AuditLogs from "@/pages/AuditLogs";
 import SettingsPage from "@/pages/SettingsPage";
+import AdminDiagnostics from "@/pages/AdminDiagnostics";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
@@ -100,6 +102,11 @@ function Router() {
       <Route path="/settings" component={() => (
         <RouteErrorBoundary>
           <SettingsPage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/admin/diagnostics" component={() => (
+        <RouteErrorBoundary>
+          <AdminDiagnostics />
         </RouteErrorBoundary>
       )} />
       <Route path="/inspection/:id" component={() => (
@@ -178,6 +185,7 @@ function App() {
           <AppContent />
           <Toaster />
           <InstallPrompt />
+          <DevModeIndicator />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>

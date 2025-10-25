@@ -9,6 +9,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { serverLogger } from "./logger";
 import { storage } from "./storage";
 import { getConfig } from "./config";
+import { validateAuthConfig } from "./auth/validation";
 import type { Server } from "http";
 
 const app = express();
@@ -70,6 +71,10 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+// Request logging middleware with correlation IDs
+import { requestLoggingMiddleware } from "./middleware/requestLogging";
+app.use(requestLoggingMiddleware);
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -155,6 +160,55 @@ async function startServer() {
   try {
     // Validate configuration first - will throw if missing required env vars
     const config = getConfig();
+    
+    // Run authentication validation before starting server
+    const skipAuthValidation = process.env.SKIP_AUTH_VALIDATION === 'true';
+    
+    if (skipAuthValidation) {
+      serverLogger.warn('╔════════════════════════════════════════════════════════════════╗');
+      serverLogger.warn('║  WARNING: Authentication validation bypassed!                 ║');
+      serverLogger.warn('║  SKIP_AUTH_VALIDATION=true is set                              ║');
+      serverLogger.warn('║  Authentication may not work correctly                         ║');
+      serverLogger.warn('╚════════════════════════════════════════════════════════════════╝');
+    } else {
+      serverLogger.info('╔════════════════════════════════════════════════════════════════╗');
+      serverLogger.info('║  Starting Authentication Configuration Validation             ║');
+      serverLogger.info('╚════════════════════════════════════════════════════════════════╝');
+      
+      try {
+        const validationReport = await validateAuthConfig({
+          skipOIDC: false,
+          skipDatabase: false,
+        });
+        
+        if (validationReport.overall === 'pass') {
+          serverLogger.info('╔════════════════════════════════════════════════════════════════╗');
+          serverLogger.info('║  ✓ Authentication Configuration Valid                          ║');
+          serverLogger.info('╚════════════════════════════════════════════════════════════════╝');
+        } else if (validationReport.overall === 'degraded') {
+          serverLogger.warn('╔════════════════════════════════════════════════════════════════╗');
+          serverLogger.warn('║  ⚠ Authentication Configuration Degraded                       ║');
+          serverLogger.warn('║  Server will start but some features may not work correctly   ║');
+          serverLogger.warn('╚════════════════════════════════════════════════════════════════╝');
+          
+          const warnings = validationReport.results.filter(r => r.status === 'warning');
+          warnings.forEach(w => {
+            serverLogger.warn(`  ⚠ ${w.component}: ${w.message}`);
+            if (w.fix) {
+              serverLogger.warn(`    Fix: ${w.fix}`);
+            }
+          });
+        }
+      } catch (validationError) {
+        serverLogger.error('[Server] Authentication validation failed');
+        serverLogger.error(validationError instanceof Error ? validationError.message : String(validationError));
+        serverLogger.error('');
+        serverLogger.error('To bypass validation in emergency, set:');
+        serverLogger.error('  SKIP_AUTH_VALIDATION=true');
+        serverLogger.error('');
+        throw validationError;
+      }
+    }
     
     const server = await registerRoutes(app);
     
