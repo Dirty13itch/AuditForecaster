@@ -3,6 +3,8 @@ import {
   type UpsertUser,
   type Builder,
   type InsertBuilder,
+  type Plan,
+  type InsertPlan,
   type Job,
   type InsertJob,
   type ScheduleEvent,
@@ -38,6 +40,7 @@ import {
   type ScoreSummary,
   users,
   builders,
+  plans,
   jobs,
   scheduleEvents,
   expenses,
@@ -71,6 +74,13 @@ export interface IStorage {
   getBuildersPaginated(params: PaginationParams): Promise<PaginatedResult<Builder>>;
   updateBuilder(id: string, builder: Partial<InsertBuilder>): Promise<Builder | undefined>;
   deleteBuilder(id: string): Promise<boolean>;
+
+  createPlan(plan: InsertPlan): Promise<Plan>;
+  getPlan(id: string): Promise<Plan | undefined>;
+  getPlansByBuilder(builderId: string): Promise<Plan[]>;
+  getAllPlans(): Promise<Plan[]>;
+  updatePlan(id: string, plan: Partial<InsertPlan>): Promise<Plan | undefined>;
+  deletePlan(id: string): Promise<boolean>;
 
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
@@ -277,6 +287,37 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBuilder(id: string): Promise<boolean> {
     const result = await db.delete(builders).where(eq(builders.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createPlan(insertPlan: InsertPlan): Promise<Plan> {
+    const result = await db.insert(plans).values(insertPlan).returning();
+    return result[0];
+  }
+
+  async getPlan(id: string): Promise<Plan | undefined> {
+    const result = await db.select().from(plans).where(eq(plans.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getPlansByBuilder(builderId: string): Promise<Plan[]> {
+    return await db.select().from(plans).where(eq(plans.builderId, builderId)).orderBy(asc(plans.planName));
+  }
+
+  async getAllPlans(): Promise<Plan[]> {
+    return await db.select().from(plans).orderBy(asc(plans.planName));
+  }
+
+  async updatePlan(id: string, updates: Partial<InsertPlan>): Promise<Plan | undefined> {
+    const result = await db.update(plans)
+      .set(updates)
+      .where(eq(plans.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deletePlan(id: string): Promise<boolean> {
+    const result = await db.delete(plans).where(eq(plans.id, id)).returning();
     return result.length > 0;
   }
 

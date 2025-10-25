@@ -56,11 +56,27 @@ export const builders = pgTable("builders", {
   index("idx_builders_name_company").on(table.name, table.companyName),
 ]);
 
+export const plans = pgTable("plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  planName: text("plan_name").notNull(),
+  floorArea: decimal("floor_area", { precision: 10, scale: 2 }),
+  surfaceArea: decimal("surface_area", { precision: 10, scale: 2 }),
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }),
+  stories: decimal("stories", { precision: 3, scale: 1 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_plans_builder_id").on(table.builderId),
+  index("idx_plans_plan_name").on(table.planName),
+]);
+
 export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   address: text("address").notNull(),
   builderId: varchar("builder_id").references(() => builders.id, { onDelete: 'cascade' }),
+  planId: varchar("plan_id").references(() => plans.id, { onDelete: 'set null' }),
   contractor: text("contractor").notNull(),
   status: text("status").notNull(),
   inspectionType: text("inspection_type").notNull(),
@@ -72,6 +88,10 @@ export const jobs = pgTable("jobs", {
   priority: text("priority").default('medium'),
   latitude: real("latitude"),
   longitude: real("longitude"),
+  floorArea: decimal("floor_area", { precision: 10, scale: 2 }),
+  surfaceArea: decimal("surface_area", { precision: 10, scale: 2 }),
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }),
+  stories: decimal("stories", { precision: 3, scale: 1 }),
   notes: text("notes"),
   builderSignatureUrl: text("builder_signature_url"),
   builderSignedAt: timestamp("builder_signed_at"),
@@ -85,6 +105,7 @@ export const jobs = pgTable("jobs", {
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
+  index("idx_jobs_plan_id").on(table.planId),
   index("idx_jobs_scheduled_date").on(table.scheduledDate),
   index("idx_jobs_status_scheduled_date").on(table.status, table.scheduledDate),
   index("idx_jobs_created_by").on(table.createdBy),
@@ -334,6 +355,12 @@ export const upsertUserSchema = createInsertSchema(users).pick({
 });
 
 export const insertBuilderSchema = createInsertSchema(builders).omit({ id: true, totalJobs: true });
+export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true }).extend({
+  floorArea: z.coerce.number().nullable().optional(),
+  surfaceArea: z.coerce.number().nullable().optional(),
+  houseVolume: z.coerce.number().nullable().optional(),
+  stories: z.coerce.number().nullable().optional(),
+});
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
   builderSignatureUrl: z.string().nullable().optional(),
   builderSignedAt: z.coerce.date().nullable().optional(),
@@ -345,6 +372,10 @@ export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).exten
   pricing: z.union([z.number(), z.string()]).transform(val => 
     typeof val === 'number' ? val.toString() : val
   ).optional(),
+  floorArea: z.coerce.number().nullable().optional(),
+  surfaceArea: z.coerce.number().nullable().optional(),
+  houseVolume: z.coerce.number().nullable().optional(),
+  stories: z.coerce.number().nullable().optional(),
 });
 export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit({ id: true }).extend({
   startTime: z.coerce.date(),
@@ -413,6 +444,7 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: tru
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Builder = typeof builders.$inferSelect;
+export type Plan = typeof plans.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type ScheduleEvent = typeof scheduleEvents.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
@@ -425,6 +457,7 @@ export type Photo = typeof photos.$inferSelect;
 export type ComplianceRule = typeof complianceRules.$inferSelect;
 export type ComplianceHistory = typeof complianceHistory.$inferSelect;
 export type InsertBuilder = z.infer<typeof insertBuilderSchema>;
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type InsertScheduleEvent = z.infer<typeof insertScheduleEventSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;

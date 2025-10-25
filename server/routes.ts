@@ -13,6 +13,7 @@ import { createAuditLog } from "./auditLogger";
 import { requireRole, checkResourceOwnership, canEdit, canCreate, canDelete, type UserRole } from "./permissions";
 import {
   insertBuilderSchema,
+  insertPlanSchema,
   insertJobSchema,
   insertScheduleEventSchema,
   insertExpenseSchema,
