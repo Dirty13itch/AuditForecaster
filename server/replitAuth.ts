@@ -62,8 +62,8 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: config.isProduction,
-      sameSite: 'strict',
+      secure: true, // Always use secure cookies (Replit uses HTTPS)
+      sameSite: 'lax', // 'lax' allows cookies to be sent on OAuth redirects
       maxAge: sessionTtl,
     },
   });
