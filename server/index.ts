@@ -25,23 +25,30 @@ app.use(helmet({
 }));
 
 // Rate limiting for authentication endpoints
+// In development: very lenient to allow testing/debugging
+// In production: strict limits to prevent abuse
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per window
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // 100 in dev, 5 in prod
   message: 'Too many login attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development for easier testing
+    return process.env.NODE_ENV === 'development';
+  },
 });
 
 // Rate limiting for API endpoints
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 1000 in dev, 100 in prod
   message: 'Too many requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks
+    // Skip rate limiting for health checks and in development
+    if (process.env.NODE_ENV === 'development') return true;
     return req.path === '/healthz' || req.path === '/readyz' || req.path === '/api/status';
   },
 });
