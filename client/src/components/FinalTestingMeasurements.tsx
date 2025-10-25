@@ -3,11 +3,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Save, Loader2, Calculator, ThermometerSun, Wind, Ruler } from "lucide-react";
+import { Save, Loader2, Calculator, ThermometerSun, Wind, Ruler, Lightbulb, Network } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -23,6 +24,15 @@ const measurementSchema = z.object({
   actualTDL: z.coerce.number().min(0, "TDL must be positive").optional(),
   actualDLO: z.coerce.number().min(0, "DLO must be positive").optional(),
   houseSurfaceArea: z.coerce.number().min(0, "Surface area must be positive").optional(),
+  totalDuctLeakageCfm25: z.coerce.number().min(0).optional(),
+  ductLeakageToOutsideCfm25: z.coerce.number().min(0).optional(),
+  totalLedCount: z.coerce.number().int().min(0).optional(),
+  stripLedCount: z.coerce.number().int().min(0).optional(),
+  suppliesInsideConditioned: z.coerce.number().int().min(0).optional(),
+  suppliesOutsideConditioned: z.coerce.number().int().min(0).optional(),
+  returnRegistersCount: z.coerce.number().int().min(0).optional(),
+  centralReturnsCount: z.coerce.number().int().min(0).optional(),
+  aerosealed: z.boolean().optional(),
   outdoorTemp: z.coerce.number().optional(),
   indoorTemp: z.coerce.number().optional(),
   windSpeed: z.coerce.number().min(0, "Wind speed must be positive").optional(),
@@ -63,6 +73,15 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
       actualTDL: undefined,
       actualDLO: undefined,
       houseSurfaceArea: undefined,
+      totalDuctLeakageCfm25: undefined,
+      ductLeakageToOutsideCfm25: undefined,
+      totalLedCount: undefined,
+      stripLedCount: undefined,
+      suppliesInsideConditioned: undefined,
+      suppliesOutsideConditioned: undefined,
+      returnRegistersCount: undefined,
+      centralReturnsCount: undefined,
+      aerosealed: false,
       outdoorTemp: undefined,
       indoorTemp: undefined,
       windSpeed: undefined,
@@ -76,18 +95,27 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
   useEffect(() => {
     if (existingForecast) {
       form.reset({
-        cfm50: existingForecast.cfm50 ? parseFloat(existingForecast.cfm50) : undefined,
-        houseVolume: existingForecast.houseVolume ? parseFloat(existingForecast.houseVolume) : undefined,
-        actualACH50: existingForecast.actualAch50 ? parseFloat(existingForecast.actualAch50) : undefined,
-        actualTDL: existingForecast.actualTdl ? parseFloat(existingForecast.actualTdl) : undefined,
-        actualDLO: existingForecast.actualDlo ? parseFloat(existingForecast.actualDlo) : undefined,
-        houseSurfaceArea: existingForecast.houseSurfaceArea ? parseFloat(existingForecast.houseSurfaceArea) : undefined,
-        outdoorTemp: existingForecast.outdoorTemp ? parseFloat(existingForecast.outdoorTemp) : undefined,
-        indoorTemp: existingForecast.indoorTemp ? parseFloat(existingForecast.indoorTemp) : undefined,
-        windSpeed: existingForecast.windSpeed ? parseFloat(existingForecast.windSpeed) : undefined,
-        weatherConditions: existingForecast.weatherConditions || "",
-        testConditions: existingForecast.testConditions || "",
-        equipmentNotes: existingForecast.equipmentNotes || "",
+        cfm50: existingForecast.cfm50 != null ? parseFloat(existingForecast.cfm50) : undefined,
+        houseVolume: existingForecast.houseVolume != null ? parseFloat(existingForecast.houseVolume) : undefined,
+        actualACH50: existingForecast.actualAch50 != null ? parseFloat(existingForecast.actualAch50) : undefined,
+        actualTDL: existingForecast.actualTdl != null ? parseFloat(existingForecast.actualTdl) : undefined,
+        actualDLO: existingForecast.actualDlo != null ? parseFloat(existingForecast.actualDlo) : undefined,
+        houseSurfaceArea: existingForecast.houseSurfaceArea != null ? parseFloat(existingForecast.houseSurfaceArea) : undefined,
+        totalDuctLeakageCfm25: existingForecast.totalDuctLeakageCfm25 != null ? parseFloat(existingForecast.totalDuctLeakageCfm25) : undefined,
+        ductLeakageToOutsideCfm25: existingForecast.ductLeakageToOutsideCfm25 != null ? parseFloat(existingForecast.ductLeakageToOutsideCfm25) : undefined,
+        totalLedCount: existingForecast.totalLedCount ?? undefined,
+        stripLedCount: existingForecast.stripLedCount ?? undefined,
+        suppliesInsideConditioned: existingForecast.suppliesInsideConditioned ?? undefined,
+        suppliesOutsideConditioned: existingForecast.suppliesOutsideConditioned ?? undefined,
+        returnRegistersCount: existingForecast.returnRegistersCount ?? undefined,
+        centralReturnsCount: existingForecast.centralReturnsCount ?? undefined,
+        aerosealed: existingForecast.aerosealed ?? false,
+        outdoorTemp: existingForecast.outdoorTemp != null ? parseFloat(existingForecast.outdoorTemp) : undefined,
+        indoorTemp: existingForecast.indoorTemp != null ? parseFloat(existingForecast.indoorTemp) : undefined,
+        windSpeed: existingForecast.windSpeed != null ? parseFloat(existingForecast.windSpeed) : undefined,
+        weatherConditions: existingForecast.weatherConditions ?? "",
+        testConditions: existingForecast.testConditions ?? "",
+        equipmentNotes: existingForecast.equipmentNotes ?? "",
       });
     }
   }, [existingForecast, form]);
@@ -347,6 +375,247 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
                         />
                       </FormControl>
                       <FormDescription>CFM25 - Leakage to unconditioned space</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Detailed Duct Leakage Measurements */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Ruler className="h-4 w-4" />
+                Detailed Duct Leakage (CFM25)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="totalDuctLeakageCfm25"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Total Duct Leakage CFM25</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          placeholder="0.0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          data-testid="input-total-duct-leakage"
+                        />
+                      </FormControl>
+                      <FormDescription>All leaks in duct system at 25 Pa</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="ductLeakageToOutsideCfm25"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Duct Leakage to Outside CFM25</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          placeholder="0.0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          data-testid="input-duct-leakage-outside"
+                        />
+                      </FormControl>
+                      <FormDescription>Leaks to unconditioned space at 25 Pa</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="aerosealed"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="checkbox-aerosealed"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>
+                          Aerosealed Duct System
+                        </FormLabel>
+                        <FormDescription>
+                          Check if ducts have been professionally sealed with Aeroseal
+                        </FormDescription>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* LED Lighting */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Lightbulb className="h-4 w-4" />
+                LED Lighting Count
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="totalLedCount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Total LED Fixtures</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                          data-testid="input-total-led-count"
+                        />
+                      </FormControl>
+                      <FormDescription>Total number of LED light fixtures</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="stripLedCount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>LED Strip Lights</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                          data-testid="input-strip-led-count"
+                        />
+                      </FormControl>
+                      <FormDescription>Number of under-cabinet LED strips</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Supply and Return Registers */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Network className="h-4 w-4" />
+                Supply & Return Registers
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="suppliesInsideConditioned"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Supply Registers (Inside Conditioned)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                          data-testid="input-supplies-inside"
+                        />
+                      </FormControl>
+                      <FormDescription>Supply registers in conditioned space</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="suppliesOutsideConditioned"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Supply Registers (Outside Conditioned)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                          data-testid="input-supplies-outside"
+                        />
+                      </FormControl>
+                      <FormDescription>Supply registers outside conditioned space</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="returnRegistersCount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Return Registers</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                          data-testid="input-return-registers"
+                        />
+                      </FormControl>
+                      <FormDescription>Total number of return registers</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="centralReturnsCount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Central Returns</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="0"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                          data-testid="input-central-returns"
+                        />
+                      </FormControl>
+                      <FormDescription>Number of central return registers</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

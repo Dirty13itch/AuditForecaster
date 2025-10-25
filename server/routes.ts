@@ -223,6 +223,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Plans routes
+  app.get("/api/plans", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req, res) => {
+    try {
+      const plans = await storage.getAllPlans();
+      res.json(plans);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch plans');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/plans/builder/:builderId", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req, res) => {
+    try {
+      const plans = await storage.getPlansByBuilder(req.params.builderId);
+      res.json(plans);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder plans');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/plans", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertPlanSchema.parse(req.body);
+      const plan = await storage.createPlan(validated);
+      
+      // Audit log: Plan creation
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'plan.create',
+        resourceType: 'plan',
+        resourceId: plan.id,
+        metadata: { planName: plan.planName, builderId: plan.builderId },
+      }, storage);
+      
+      res.status(201).json(plan);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create plan');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/plans/:id", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req, res) => {
+    try {
+      const plan = await storage.getPlan(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+      res.json(plan);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch plan');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/plans/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertPlanSchema.partial().parse(req.body);
+      const plan = await storage.updatePlan(req.params.id, validated);
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+      
+      // Audit log: Plan update
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'plan.update',
+        resourceType: 'plan',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { planName: plan.planName },
+      }, storage);
+      
+      res.json(plan);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update plan');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/plans/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const plan = await storage.getPlan(req.params.id);
+      const deleted = await storage.deletePlan(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Plan not found. It may have already been deleted." });
+      }
+      
+      // Audit log: Plan deletion
+      if (plan) {
+        await createAuditLog(req, {
+          userId: req.user.claims.sub,
+          action: 'plan.delete',
+          resourceType: 'plan',
+          resourceId: req.params.id,
+          metadata: { planName: plan.planName },
+        }, storage);
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete plan');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/jobs", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
       const userRole = (req.user.role as UserRole) || 'inspector';

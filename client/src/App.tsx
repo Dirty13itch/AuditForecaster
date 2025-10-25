@@ -20,6 +20,7 @@ import Jobs from "@/pages/Jobs";
 import Schedule from "@/pages/Schedule";
 import RouteView from "@/pages/RouteView";
 import Builders from "@/pages/Builders";
+import Plans from "@/pages/Plans";
 import Financials from "@/pages/Financials";
 import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
@@ -64,6 +65,11 @@ function Router() {
       <Route path="/builders" component={() => (
         <RouteErrorBoundary>
           <Builders />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/plans" component={() => (
+        <RouteErrorBoundary>
+          <Plans />
         </RouteErrorBoundary>
       )} />
       <Route path="/financials" component={() => (

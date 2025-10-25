@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import { generateJobName } from "@shared/jobNameGenerator";
-import type { Job, Builder } from "@shared/schema";
+import type { Job, Builder, Plan } from "@shared/schema";
 
 const JOB_TYPES = [
   'Pre-Drywall Inspection',
@@ -44,6 +45,7 @@ const jobFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   address: z.string().min(1, "Address is required"),
   builderId: z.string().optional(),
+  planId: z.string().optional(),
   contractor: z.string().min(1, "Contractor is required"),
   inspectionType: z.string().min(1, "Inspection type is required"),
   pricing: z.number().optional(),
@@ -52,6 +54,10 @@ const jobFormSchema = z.object({
   status: z.string().default("pending"),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  floorArea: z.number().optional(),
+  surfaceArea: z.number().optional(),
+  houseVolume: z.number().optional(),
+  stories: z.number().optional(),
   notes: z.string().optional(),
 });
 
@@ -82,6 +88,7 @@ export default function JobDialog({
       name: job?.name || "",
       address: job?.address || "",
       builderId: job?.builderId || "",
+      planId: job?.planId || "",
       contractor: job?.contractor || "",
       inspectionType: job?.inspectionType || "",
       pricing: job?.pricing ? parseFloat(job.pricing as any) : undefined,
@@ -90,6 +97,10 @@ export default function JobDialog({
       status: job?.status || "pending",
       latitude: job?.latitude || undefined,
       longitude: job?.longitude || undefined,
+      floorArea: job?.floorArea ? parseFloat(job.floorArea as any) : undefined,
+      surfaceArea: job?.surfaceArea ? parseFloat(job.surfaceArea as any) : undefined,
+      houseVolume: job?.houseVolume ? parseFloat(job.houseVolume as any) : undefined,
+      stories: job?.stories ? parseFloat(job.stories as any) : undefined,
       notes: job?.notes || "",
     },
   });
@@ -110,6 +121,8 @@ export default function JobDialog({
   const inspectionType = form.watch('inspectionType');
   const scheduledDate = form.watch('scheduledDate');
   const address = form.watch('address');
+  const builderId = form.watch('builderId');
+  const planId = form.watch('planId');
 
   useEffect(() => {
     // Only auto-generate for new jobs (not editing)
@@ -118,6 +131,33 @@ export default function JobDialog({
       form.setValue('name', autoName);
     }
   }, [inspectionType, scheduledDate, address, job, form]);
+
+  // Fetch plans for the selected builder
+  const { data: plans = [], isLoading: plansLoading } = useQuery<Plan[]>({
+    queryKey: ['/api/plans/builder', builderId],
+    enabled: !!builderId,
+  });
+
+  // Auto-fill house specifications when a plan is selected
+  useEffect(() => {
+    if (planId && plans.length > 0) {
+      const selectedPlan = plans.find(p => p.id === planId);
+      if (selectedPlan) {
+        if (selectedPlan.floorArea) {
+          form.setValue('floorArea', parseFloat(selectedPlan.floorArea as any));
+        }
+        if (selectedPlan.surfaceArea) {
+          form.setValue('surfaceArea', parseFloat(selectedPlan.surfaceArea as any));
+        }
+        if (selectedPlan.houseVolume) {
+          form.setValue('houseVolume', parseFloat(selectedPlan.houseVolume as any));
+        }
+        if (selectedPlan.stories) {
+          form.setValue('stories', parseFloat(selectedPlan.stories as any));
+        }
+      }
+    }
+  }, [planId, plans, form]);
 
   const handleSubmit = async (data: JobFormValues) => {
     await onSave(data);
@@ -210,7 +250,13 @@ export default function JobDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Builder</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        form.setValue('planId', '');
+                      }} 
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger data-testid="select-builder">
                           <SelectValue placeholder="Select a builder" />
@@ -229,6 +275,45 @@ export default function JobDialog({
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="planId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Builder Plan (Auto-Fill Specs)</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      value={field.value}
+                      disabled={!builderId || plansLoading || plans.length === 0}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-plan">
+                          <SelectValue placeholder={
+                            !builderId ? "Select builder first" :
+                            plansLoading ? "Loading plans..." :
+                            plans.length === 0 ? "No plans available" :
+                            "Select a plan"
+                          } />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {plans.map((plan) => (
+                          <SelectItem key={plan.id} value={plan.id}>
+                            {plan.planName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="text-xs">
+                      Optional: Auto-fills house specifications
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="inspectionType"
@@ -376,6 +461,98 @@ export default function JobDialog({
                         onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
                         value={field.value || ""}
                         data-testid="input-pricing"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="floorArea"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Floor Area (sq ft)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g., 2500"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        value={field.value || ""}
+                        data-testid="input-floor-area"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="surfaceArea"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Surface Area (sq ft)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g., 4500"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        value={field.value || ""}
+                        data-testid="input-surface-area"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="houseVolume"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>House Volume (cu ft)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g., 20000"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        value={field.value || ""}
+                        data-testid="input-house-volume"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="stories"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Stories</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="e.g., 2"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        value={field.value || ""}
+                        data-testid="input-stories"
                       />
                     </FormControl>
                     <FormMessage />
