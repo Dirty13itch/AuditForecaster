@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -22,7 +23,9 @@ import {
   Trash2,
   ClipboardList,
   FileText,
+  Users,
 } from "lucide-react";
+import { BuilderContactsDialog } from "@/components/BuilderContactsDialog";
 import type { Builder, Job } from "@shared/schema";
 
 interface BuilderDetailDialogProps {
@@ -40,6 +43,8 @@ export function BuilderDetailDialog({
   onEdit,
   onDelete,
 }: BuilderDetailDialogProps) {
+  const [isContactsDialogOpen, setIsContactsDialogOpen] = useState(false);
+
   const { data: jobs = [] } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
     enabled: open && !!builder,
@@ -239,7 +244,16 @@ export function BuilderDetailDialog({
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
-          <div className="flex gap-2 flex-1">
+          <div className="flex gap-2 flex-1 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setIsContactsDialogOpen(true)}
+              className="flex-1 sm:flex-none"
+              data-testid="button-manage-contacts"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Manage Contacts
+            </Button>
             <Button
               variant="outline"
               onClick={() => onEdit(builder)}
@@ -271,6 +285,12 @@ export function BuilderDetailDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <BuilderContactsDialog
+        open={isContactsDialogOpen}
+        onOpenChange={setIsContactsDialogOpen}
+        builder={builder}
+      />
     </Dialog>
   );
 }

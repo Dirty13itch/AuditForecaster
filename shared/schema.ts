@@ -51,9 +51,31 @@ export const builders = pgTable("builders", {
   rating: integer("rating"),
   totalJobs: integer("total_jobs").default(0),
   notes: text("notes"),
+  volumeTier: text("volume_tier", { enum: ["low", "medium", "high", "premium"] }),
+  billingTerms: text("billing_terms"),
+  preferredLeadTime: integer("preferred_lead_time"),
 }, (table) => [
   index("idx_builders_company_name").on(table.companyName),
   index("idx_builders_name_company").on(table.name, table.companyName),
+]);
+
+export const builderContacts = pgTable("builder_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  role: text("role", { 
+    enum: ["superintendent", "project_manager", "owner", "estimator", "office_manager", "other"] 
+  }).notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  mobilePhone: text("mobile_phone"),
+  isPrimary: boolean("is_primary").default(false),
+  preferredContact: text("preferred_contact", { enum: ["phone", "email", "text"] }).default("phone"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_builder_contacts_builder_id").on(table.builderId),
+  index("idx_builder_contacts_is_primary").on(table.isPrimary),
 ]);
 
 export const plans = pgTable("plans", {
@@ -390,6 +412,8 @@ export const upsertUserSchema = createInsertSchema(users).pick({
 });
 
 export const insertBuilderSchema = createInsertSchema(builders).omit({ id: true, totalJobs: true });
+export const insertBuilderContactSchema = createInsertSchema(builderContacts).omit({ id: true, createdAt: true, isPrimary: true });
+export const updateBuilderContactSchema = insertBuilderContactSchema.omit({ builderId: true }).partial();
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true }).extend({
   floorArea: z.coerce.number().nullable().optional(),
   surfaceArea: z.coerce.number().nullable().optional(),
@@ -491,6 +515,7 @@ export const insertUserAchievementSchema = createInsertSchema(userAchievements).
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Builder = typeof builders.$inferSelect;
+export type BuilderContact = typeof builderContacts.$inferSelect;
 export type Plan = typeof plans.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type ScheduleEvent = typeof scheduleEvents.$inferSelect;
@@ -504,6 +529,7 @@ export type Photo = typeof photos.$inferSelect;
 export type ComplianceRule = typeof complianceRules.$inferSelect;
 export type ComplianceHistory = typeof complianceHistory.$inferSelect;
 export type InsertBuilder = z.infer<typeof insertBuilderSchema>;
+export type InsertBuilderContact = z.infer<typeof insertBuilderContactSchema>;
 export type InsertPlan = z.infer<typeof insertPlanSchema>;
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type InsertScheduleEvent = z.infer<typeof insertScheduleEventSchema>;

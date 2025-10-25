@@ -13,6 +13,8 @@ import { createAuditLog } from "./auditLogger";
 import { requireRole, checkResourceOwnership, canEdit, canCreate, canDelete, type UserRole } from "./permissions";
 import {
   insertBuilderSchema,
+  insertBuilderContactSchema,
+  updateBuilderContactSchema,
   insertPlanSchema,
   insertJobSchema,
   insertScheduleEventSchema,
@@ -219,6 +221,175 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete builder');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Builder Contacts routes
+  app.get("/api/builders/:builderId/contacts", isAuthenticated, async (req, res) => {
+    try {
+      const contacts = await storage.getBuilderContacts(req.params.builderId);
+      res.json(contacts);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder contacts');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builders/:builderId/contacts", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertBuilderContactSchema.parse({
+        ...req.body,
+        builderId: req.params.builderId,
+      });
+      const contact = await storage.createBuilderContact(validated);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_contact.create',
+        resourceType: 'builder_contact',
+        resourceId: contact.id,
+        changes: validated,
+        metadata: { 
+          builderName: builder?.name,
+          contactName: contact.name,
+          contactRole: contact.role,
+        },
+      }, storage);
+      
+      res.status(201).json(contact);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create builder contact');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/builders/:builderId/contacts/:id", isAuthenticated, async (req, res) => {
+    try {
+      const contact = await storage.getBuilderContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      if (contact.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Contact not found for this builder" });
+      }
+      res.json(contact);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder contact');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const existing = await storage.getBuilderContact(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      if (existing.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Contact not found for this builder" });
+      }
+
+      const validated = updateBuilderContactSchema.parse(req.body);
+      const contact = await storage.updateBuilderContact(req.params.id, validated);
+      
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_contact.update',
+        resourceType: 'builder_contact',
+        resourceId: req.params.id,
+        changes: validated,
+        metadata: { 
+          builderName: builder?.name,
+          contactName: contact.name,
+          contactRole: contact.role,
+        },
+      }, storage);
+      
+      res.json(contact);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update builder contact');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const contact = await storage.getBuilderContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      if (contact.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Contact not found for this builder" });
+      }
+
+      const deleted = await storage.deleteBuilderContact(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_contact.delete',
+        resourceType: 'builder_contact',
+        resourceId: req.params.id,
+        metadata: { 
+          builderName: builder?.name,
+          contactName: contact.name,
+          contactRole: contact.role,
+        },
+      }, storage);
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete builder contact');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/builders/:builderId/contacts/:id/primary", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const contact = await storage.getBuilderContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      if (contact.builderId !== req.params.builderId) {
+        return res.status(404).json({ message: "Contact not found for this builder" });
+      }
+
+      await storage.setPrimaryContact(req.params.builderId, req.params.id);
+      
+      const builder = await storage.getBuilder(req.params.builderId);
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_contact.set_primary',
+        resourceType: 'builder_contact',
+        resourceId: req.params.id,
+        metadata: { 
+          builderName: builder?.name,
+          contactName: contact.name,
+          contactRole: contact.role,
+        },
+      }, storage);
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'set primary contact');
       res.status(status).json({ message });
     }
   });

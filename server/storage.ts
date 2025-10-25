@@ -44,6 +44,7 @@ import {
   type ScoreSummary,
   users,
   builders,
+  builderContacts,
   plans,
   jobs,
   scheduleEvents,
@@ -80,6 +81,13 @@ export interface IStorage {
   getBuildersPaginated(params: PaginationParams): Promise<PaginatedResult<Builder>>;
   updateBuilder(id: string, builder: Partial<InsertBuilder>): Promise<Builder | undefined>;
   deleteBuilder(id: string): Promise<boolean>;
+
+  createBuilderContact(contact: InsertBuilderContact): Promise<BuilderContact>;
+  getBuilderContact(id: string): Promise<BuilderContact | undefined>;
+  getBuilderContacts(builderId: string): Promise<BuilderContact[]>;
+  updateBuilderContact(id: string, contact: Partial<InsertBuilderContact>): Promise<BuilderContact | undefined>;
+  deleteBuilderContact(id: string): Promise<boolean>;
+  setPrimaryContact(builderId: string, contactId: string): Promise<void>;
 
   createPlan(plan: InsertPlan): Promise<Plan>;
   getPlan(id: string): Promise<Plan | undefined>;
@@ -305,6 +313,76 @@ export class DatabaseStorage implements IStorage {
   async deleteBuilder(id: string): Promise<boolean> {
     const result = await db.delete(builders).where(eq(builders.id, id)).returning();
     return result.length > 0;
+  }
+
+  async createBuilderContact(insertContact: InsertBuilderContact): Promise<BuilderContact> {
+    // Strip isPrimary to prevent clients from creating multiple primaries
+    // Use setPrimaryContact instead to manage primary designation
+    const { isPrimary, ...safeData } = insertContact;
+    const result = await db.insert(builderContacts).values({ ...safeData, isPrimary: false }).returning();
+    return result[0];
+  }
+
+  async getBuilderContact(id: string): Promise<BuilderContact | undefined> {
+    const result = await db.select().from(builderContacts).where(eq(builderContacts.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getBuilderContacts(builderId: string): Promise<BuilderContact[]> {
+    return await db.select().from(builderContacts)
+      .where(eq(builderContacts.builderId, builderId))
+      .orderBy(desc(builderContacts.isPrimary), asc(builderContacts.name));
+  }
+
+  async updateBuilderContact(id: string, updates: Partial<InsertBuilderContact>): Promise<BuilderContact | undefined> {
+    // Verify the contact exists and get its builderId before update
+    const existing = await this.getBuilderContact(id);
+    if (!existing) {
+      return undefined;
+    }
+    
+    // Prevent changing builderId or isPrimary via regular update
+    const { builderId, isPrimary, ...safeUpdates } = updates;
+    
+    const result = await db.update(builderContacts)
+      .set(safeUpdates)
+      .where(eq(builderContacts.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBuilderContact(id: string): Promise<boolean> {
+    // Verify the contact exists before deletion
+    const existing = await this.getBuilderContact(id);
+    if (!existing) {
+      return false;
+    }
+    
+    const result = await db.delete(builderContacts).where(eq(builderContacts.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async setPrimaryContact(builderId: string, contactId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Verify the contact exists and belongs to the specified builder
+      const contact = await tx.select().from(builderContacts)
+        .where(eq(builderContacts.id, contactId))
+        .limit(1);
+      
+      if (contact.length === 0 || contact[0].builderId !== builderId) {
+        throw new Error('Contact not found for this builder');
+      }
+      
+      // First, unset all primary contacts for this builder
+      await tx.update(builderContacts)
+        .set({ isPrimary: false })
+        .where(eq(builderContacts.builderId, builderId));
+      
+      // Then, set the new primary contact
+      await tx.update(builderContacts)
+        .set({ isPrimary: true })
+        .where(eq(builderContacts.id, contactId));
+    });
   }
 
   async createPlan(insertPlan: InsertPlan): Promise<Plan> {
