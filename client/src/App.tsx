@@ -57,6 +57,8 @@ import QAPerformance from "@/pages/QAPerformance";
 import QAReview from "@/components/QAReview";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
+import ConflictResolution from "@/pages/ConflictResolution";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 
 function Router() {
   return (
@@ -305,6 +307,11 @@ function Router() {
           <PhotoCleanup />
         </RouteErrorBoundary>
       )} />
+      <Route path="/conflicts" component={() => (
+        <RouteErrorBoundary>
+          <ConflictResolution />
+        </RouteErrorBoundary>
+      )} />
       <Route path="/forecast/:id" component={() => (
         <RouteErrorBoundary>
           <Forecast />
@@ -355,6 +362,9 @@ function AppContent() {
           <div className="flex flex-col flex-1">
             <header className="flex items-center justify-between p-2 border-b">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <div className="flex items-center gap-2">
+                <OfflineIndicator />
+              </div>
             </header>
             <main className="flex-1 overflow-auto">
               <Router />

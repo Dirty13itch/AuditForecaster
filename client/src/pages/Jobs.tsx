@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,16 +14,75 @@ import type { Job, Builder, GoogleEvent } from "@shared/schema";
 import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
+import { indexedDB } from "@/utils/indexedDB";
+import { syncQueue } from "@/utils/syncQueue";
 
 export default function Jobs() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingSyncJobs, setPendingSyncJobs] = useState<Set<number>>(new Set());
   
   const userRole = (user?.role as UserRole) || 'inspector';
   const canCreateJobs = userRole === 'admin' || userRole === 'inspector';
 
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
+  
+  // Monitor online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast({
+        title: "Back online",
+        description: "Syncing pending changes...",
+      });
+      // Trigger background sync
+      syncQueue.processQueue();
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast({
+        title: "Working offline",
+        description: "Your changes will be synced when you're back online",
+        variant: "default",
+      });
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [toast]);
+  
+  // Check pending sync status for jobs
+  useEffect(() => {
+    const checkPendingSync = async () => {
+      const queue = await syncQueue.getQueue();
+      const pendingJobIds = new Set<number>();
+      
+      for (const item of queue) {
+        if (item.url.includes('/api/jobs/')) {
+          const match = item.url.match(/\/api\/jobs\/(\d+)/);
+          if (match) {
+            pendingJobIds.add(parseInt(match[1]));
+          }
+        }
+      }
+      
+      setPendingSyncJobs(pendingJobIds);
+    };
+    
+    checkPendingSync();
+    // Refresh every 5 seconds
+    const interval = setInterval(checkPendingSync, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch planned events (today's unconverted Google calendar events)
   const { data: plannedEvents = [], isLoading: isLoadingPlanned } = useQuery<GoogleEvent[]>({

@@ -1,36 +1,50 @@
-const CACHE_NAME = 'field-inspection-v4';
-const API_CACHE_NAME = 'field-inspection-api-v4';
-const STATIC_CACHE_NAME = 'field-inspection-static-v4';
-const AUTH_CACHE_NAME = 'field-inspection-auth-v4';
+// Enhanced Service Worker with comprehensive offline capabilities
+const VERSION = 'v5';
+const CACHE_NAME = `field-inspection-${VERSION}`;
+const API_CACHE_NAME = `field-inspection-api-${VERSION}`;
+const STATIC_CACHE_NAME = `field-inspection-static-${VERSION}`;
+const PHOTO_CACHE_NAME = `field-inspection-photos-${VERSION}`;
+const OFFLINE_PAGE_CACHE = `field-inspection-offline-${VERSION}`;
 
+// Cache size limits
+const CACHE_LIMITS = {
+  api: 100,        // Max 100 API responses
+  photos: 50,      // Max 50 photos cached
+  static: 200,     // Max 200 static assets
+};
+
+// Static assets to cache on install
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/favicon.png',
+  '/manifest.json',
+  '/icons/icon-96x96.png',
+  '/icons/icon-144x144.png',
+  '/icons/icon-192x192.png',
+  '/icons/icon-256x256.png',
+  '/icons/icon-512x512.png',
 ];
 
-const API_ROUTES = [
+// Critical API routes to pre-cache
+const CRITICAL_API_ROUTES = [
+  '/api/auth/user',
   '/api/jobs',
   '/api/builders',
-  '/api/schedule-events',
-  '/api/expenses',
-  '/api/mileage-logs',
-  '/api/forecasts',
-  '/api/report-instances',
+  '/api/report-templates',
 ];
 
 // Logger that integrates with centralized logger via postMessage
-// All logs are sent to main thread which uses centralized logger
 const logger = {
   _postLog: async (level, message, ...args) => {
-    // Post log to all clients (main thread) which will use centralized logger
     const clients = await self.clients.matchAll();
     clients.forEach(client => {
       client.postMessage({
         type: 'SW_LOG',
         level,
         message,
-        args
+        args,
+        timestamp: new Date().toISOString()
       });
     });
   },
@@ -41,223 +55,508 @@ const logger = {
   debug: (message, ...args) => logger._postLog('debug', message, ...args),
 };
 
-self.addEventListener('install', (event) => {
-  logger.info('Installing...');
+// Utility to clean old caches
+async function deleteOldCaches() {
+  const cacheNames = await caches.keys();
+  const currentCaches = [
+    CACHE_NAME,
+    API_CACHE_NAME,
+    STATIC_CACHE_NAME,
+    PHOTO_CACHE_NAME,
+    OFFLINE_PAGE_CACHE
+  ];
+  
+  const promises = cacheNames
+    .filter(cacheName => !currentCaches.includes(cacheName))
+    .map(cacheName => {
+      logger.info('Deleting old cache:', cacheName);
+      return caches.delete(cacheName);
+    });
+  
+  return Promise.all(promises);
+}
+
+// LRU cache eviction
+async function evictLRUCache(cacheName, maxItems) {
+  const cache = await caches.open(cacheName);
+  const requests = await cache.keys();
+  
+  if (requests.length > maxItems) {
+    const toDelete = requests.slice(0, requests.length - maxItems);
+    await Promise.all(toDelete.map(req => cache.delete(req)));
+    logger.debug(`Evicted ${toDelete.length} items from ${cacheName}`);
+  }
+}
+
+// Install event - cache static assets and setup offline page
+self.addEventListener('install', event => {
+  logger.info('Service Worker installing...');
   
   event.waitUntil(
-    caches.open(STATIC_CACHE_NAME).then((cache) => {
-      logger.info('Caching static assets');
-      return cache.addAll(STATIC_ASSETS);
-    }).then(() => {
+    Promise.all([
+      // Cache static assets
+      caches.open(STATIC_CACHE_NAME).then(cache => {
+        logger.info('Caching static assets');
+        return cache.addAll(STATIC_ASSETS);
+      }),
+      
+      // Create offline page
+      caches.open(OFFLINE_PAGE_CACHE).then(cache => {
+        const offlineHTML = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Offline - Field Inspection</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <style>
+                body {
+                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background: #f8f9fa;
+                  color: #212529;
+                }
+                .container {
+                  text-align: center;
+                  padding: 2rem;
+                  max-width: 400px;
+                }
+                h1 { color: #2E5BBA; margin-bottom: 1rem; }
+                p { color: #6c757d; line-height: 1.5; }
+                .status {
+                  display: inline-block;
+                  padding: 0.5rem 1rem;
+                  background: #FD7E14;
+                  color: white;
+                  border-radius: 8px;
+                  margin-top: 1rem;
+                  font-weight: 500;
+                }
+                .btn {
+                  display: inline-block;
+                  margin-top: 1.5rem;
+                  padding: 0.75rem 1.5rem;
+                  background: #2E5BBA;
+                  color: white;
+                  text-decoration: none;
+                  border-radius: 8px;
+                  font-weight: 500;
+                  cursor: pointer;
+                  border: none;
+                  font-size: 16px;
+                }
+                .btn:hover { background: #1e4ba8; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <h1>You're Offline</h1>
+                <p>Don't worry! Your work has been saved locally and will sync when you're back online.</p>
+                <div class="status">Offline Mode Active</div>
+                <button class="btn" onclick="window.location.reload()">Try Again</button>
+              </div>
+              <script>
+                // Check for connection periodically
+                setInterval(() => {
+                  if (navigator.onLine) {
+                    window.location.reload();
+                  }
+                }, 5000);
+              </script>
+            </body>
+          </html>
+        `;
+        
+        return cache.put('/offline.html', new Response(offlineHTML, {
+          headers: { 'Content-Type': 'text/html' }
+        }));
+      }),
+      
+      // Pre-cache critical API data
+      caches.open(API_CACHE_NAME).then(async cache => {
+        const promises = CRITICAL_API_ROUTES.map(async route => {
+          try {
+            const response = await fetch(route, { credentials: 'include' });
+            if (response.ok) {
+              await cache.put(route, response);
+              logger.debug(`Pre-cached: ${route}`);
+            }
+          } catch (error) {
+            logger.warn(`Failed to pre-cache ${route}:`, error);
+          }
+        });
+        return Promise.all(promises);
+      })
+    ]).then(() => {
+      // Skip waiting to activate immediately
       return self.skipWaiting();
     })
   );
 });
 
-self.addEventListener('activate', (event) => {
-  logger.info('Activating...');
+// Activate event - clean old caches and take control
+self.addEventListener('activate', event => {
+  logger.info('Service Worker activating...');
   
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME && 
-              cacheName !== API_CACHE_NAME && 
-              cacheName !== STATIC_CACHE_NAME &&
-              cacheName !== AUTH_CACHE_NAME) {
-            logger.info('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => {
+    deleteOldCaches().then(() => {
+      // Take control of all clients immediately
       return self.clients.claim();
+    }).then(() => {
+      // Notify clients about update
+      return self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'SW_ACTIVATED',
+            version: VERSION
+          });
+        });
+      });
     })
   );
 });
 
-self.addEventListener('fetch', (event) => {
+// Fetch event - implement cache strategies
+self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // NEVER intercept OAuth routes - let browser handle redirects naturally
-  // But DO cache /api/auth/user for offline auth state
+  // Skip OAuth routes
   if (url.pathname === '/api/login' || 
       url.pathname === '/api/callback' ||
       url.pathname === '/api/logout') {
-    // Let the browser handle OAuth flows naturally (no service worker interception)
     return;
   }
 
+  // Handle different request types
   if (request.method === 'GET') {
-    // Special handling for auth state endpoint - use stale-while-revalidate
-    if (url.pathname === '/api/auth/user') {
-      event.respondWith(staleWhileRevalidateStrategy(request));
-    } else if (url.pathname.startsWith('/api/')) {
-      event.respondWith(networkFirstStrategy(request));
-    } else if (
-      url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|gif|woff|woff2)$/) ||
-      STATIC_ASSETS.includes(url.pathname)
-    ) {
-      event.respondWith(cacheFirstStrategy(request));
-    } else {
-      event.respondWith(networkFirstStrategy(request));
+    // Static assets - cache first
+    if (url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|gif|woff|woff2|ico)$/) ||
+        STATIC_ASSETS.includes(url.pathname)) {
+      event.respondWith(cacheFirst(request));
     }
+    // API calls - network first with cache fallback
+    else if (url.pathname.startsWith('/api/')) {
+      event.respondWith(networkFirstWithCache(request));
+    }
+    // Photos - special handling with size limits
+    else if (url.pathname.includes('/photos/') || url.pathname.includes('/attached_assets/')) {
+      event.respondWith(photoCacheStrategy(request));
+    }
+    // HTML pages - network first with offline fallback
+    else {
+      event.respondWith(networkFirstWithOfflineFallback(request));
+    }
+  }
+  // Handle POST/PUT/PATCH/DELETE with background sync
+  else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+    event.respondWith(handleMutationWithSync(request));
   }
 });
 
-async function networkFirstStrategy(request) {
-  const cache = await caches.open(
-    request.url.includes('/api/') ? API_CACHE_NAME : CACHE_NAME
-  );
-
-  try {
-    const networkResponse = await fetch(request);
-    
-    if (networkResponse.ok && request.url.includes('/api/')) {
-      cache.put(request, networkResponse.clone());
-    }
-    
-    return networkResponse;
-  } catch (error) {
-    logger.warn('Network request failed, trying cache:', request.url);
-    
-    const cachedResponse = await cache.match(request);
-    
-    if (cachedResponse) {
-      return cachedResponse;
-    }
-    
-    if (request.url.includes('/api/')) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Offline', 
-          message: 'No cached data available',
-          offline: true 
-        }),
-        {
-          status: 503,
-          statusText: 'Service Unavailable',
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    }
-    
-    throw error;
-  }
-}
-
-async function cacheFirstStrategy(request) {
+// Cache strategies
+async function cacheFirst(request) {
   const cache = await caches.open(STATIC_CACHE_NAME);
-  const cachedResponse = await cache.match(request);
-
-  if (cachedResponse) {
-    return cachedResponse;
+  const cached = await cache.match(request);
+  
+  if (cached) {
+    // Update cache in background
+    fetch(request).then(response => {
+      if (response && response.ok) {
+        cache.put(request, response.clone());
+      }
+    });
+    return cached;
   }
-
+  
   try {
-    const networkResponse = await fetch(request);
-    
-    if (networkResponse.ok) {
-      cache.put(request, networkResponse.clone());
+    const response = await fetch(request);
+    if (response && response.ok) {
+      cache.put(request, response.clone());
+      await evictLRUCache(STATIC_CACHE_NAME, CACHE_LIMITS.static);
     }
-    
-    return networkResponse;
+    return response;
   } catch (error) {
-    logger.error('Failed to fetch:', request.url);
+    logger.error('Cache first strategy failed:', error);
     throw error;
   }
 }
 
-async function staleWhileRevalidateStrategy(request) {
-  const cache = await caches.open(AUTH_CACHE_NAME);
+async function networkFirstWithCache(request) {
+  const cache = await caches.open(API_CACHE_NAME);
   
-  // Always try network first for auth state
   try {
-    const networkResponse = await fetch(request);
+    const response = await fetch(request);
     
-    if (networkResponse.ok) {
-      // Cache successful auth response
-      cache.put(request, networkResponse.clone());
-      logger.debug('Updated auth cache with fresh data');
-      return networkResponse;
-    } else if (networkResponse.status === 401) {
-      // Clear cache on 401 - user logged out or session expired
-      await cache.delete(request);
-      logger.info('Cleared auth cache due to 401 response');
-      return networkResponse;
-    } else {
-      // Other error - return it but don't cache
-      logger.warn('Auth request returned', networkResponse.status);
-      return networkResponse;
+    if (response.ok) {
+      // Cache successful responses
+      await cache.put(request, response.clone());
+      await evictLRUCache(API_CACHE_NAME, CACHE_LIMITS.api);
+      
+      // Add metadata for sync tracking
+      const clients = await self.clients.matchAll();
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'API_SYNCED',
+          url: request.url,
+          timestamp: new Date().toISOString()
+        });
+      });
     }
+    
+    return response;
   } catch (error) {
-    // Network failed - try cache as fallback for offline use only
-    logger.warn('Network unavailable, checking cache for offline auth');
-    const cachedResponse = await cache.match(request);
+    // Network failed, try cache
+    const cached = await cache.match(request);
     
-    if (cachedResponse) {
-      logger.info('Serving cached auth state (offline mode)');
-      return cachedResponse;
+    if (cached) {
+      logger.info('Serving from cache (offline):', request.url);
+      
+      // Clone and modify response to indicate it's from cache
+      const cachedData = await cached.json();
+      return new Response(JSON.stringify({
+        ...cachedData,
+        _offline: true,
+        _cachedAt: cached.headers.get('date')
+      }), {
+        status: 200,
+        statusText: 'OK (from cache)',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-From-Cache': 'true'
+        }
+      });
     }
-
-    // Completely offline with no cache - return 401
-    logger.warn('No cached auth state available while offline');
-    return new Response(
-      JSON.stringify({ 
-        message: 'Unauthorized',
-        error: 'authentication_required',
-        offline: true
-      }),
-      {
-        status: 401,
-        statusText: 'Unauthorized',
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+    
+    // No cache available
+    return new Response(JSON.stringify({
+      error: 'Offline',
+      message: 'Network unavailable and no cached data',
+      offline: true
+    }), {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
 
-self.addEventListener('sync', (event) => {
+async function photoCacheStrategy(request) {
+  const cache = await caches.open(PHOTO_CACHE_NAME);
+  
+  // Try network first
+  try {
+    const response = await fetch(request);
+    
+    if (response.ok) {
+      // Only cache if under size limit (e.g., 5MB)
+      const contentLength = response.headers.get('content-length');
+      if (!contentLength || parseInt(contentLength) < 5 * 1024 * 1024) {
+        await cache.put(request, response.clone());
+        await evictLRUCache(PHOTO_CACHE_NAME, CACHE_LIMITS.photos);
+      }
+    }
+    
+    return response;
+  } catch (error) {
+    // Try cache on network failure
+    const cached = await cache.match(request);
+    if (cached) {
+      return cached;
+    }
+    
+    // Return placeholder image
+    return new Response('', {
+      status: 404,
+      statusText: 'Not Found (Offline)'
+    });
+  }
+}
+
+async function networkFirstWithOfflineFallback(request) {
+  try {
+    const response = await fetch(request);
+    return response;
+  } catch (error) {
+    // Serve offline page for navigation requests
+    if (request.mode === 'navigate') {
+      const cache = await caches.open(OFFLINE_PAGE_CACHE);
+      const offlinePage = await cache.match('/offline.html');
+      if (offlinePage) {
+        return offlinePage;
+      }
+    }
+    
+    throw error;
+  }
+}
+
+async function handleMutationWithSync(request) {
+  try {
+    const response = await fetch(request.clone());
+    return response;
+  } catch (error) {
+    // Queue for background sync
+    logger.info('Queueing request for sync:', request.url);
+    
+    // Store request in IndexedDB through client
+    const clients = await self.clients.matchAll();
+    const requestData = {
+      url: request.url,
+      method: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      body: await request.text(),
+      timestamp: new Date().toISOString()
+    };
+    
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'QUEUE_REQUEST',
+        request: requestData
+      });
+    });
+    
+    // Register background sync
+    await self.registration.sync.register('sync-queue');
+    
+    // Return optimistic response
+    return new Response(JSON.stringify({
+      queued: true,
+      message: 'Request queued for sync when online',
+      queuedAt: new Date().toISOString()
+    }), {
+      status: 202,
+      statusText: 'Accepted (Queued)',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// Background sync event
+self.addEventListener('sync', event => {
   logger.debug('Background sync triggered:', event.tag);
   
   if (event.tag === 'sync-queue') {
     event.waitUntil(
-      self.clients.matchAll().then((clients) => {
-        clients.forEach((client) => {
-          client.postMessage({
-            type: 'BACKGROUND_SYNC',
-            action: 'process-queue'
-          });
-        });
-      })
+      processSyncQueue()
     );
   }
 });
 
-self.addEventListener('message', (event) => {
-  logger.debug('Message received:', event.data);
+async function processSyncQueue() {
+  logger.info('Processing sync queue...');
   
-  if (event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  // Notify clients to process their queues
+  const clients = await self.clients.matchAll();
   
-  if (event.data.type === 'CLEAR_CACHE') {
-    event.waitUntil(
-      caches.keys().then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => caches.delete(cacheName))
+  await Promise.all(clients.map(client => {
+    return new Promise(resolve => {
+      const messageChannel = new MessageChannel();
+      
+      messageChannel.port1.onmessage = event => {
+        if (event.data.type === 'SYNC_COMPLETE') {
+          logger.info('Sync completed for client');
+          resolve();
+        }
+      };
+      
+      client.postMessage({
+        type: 'PROCESS_SYNC_QUEUE'
+      }, [messageChannel.port2]);
+      
+      // Timeout after 30 seconds
+      setTimeout(resolve, 30000);
+    });
+  }));
+}
+
+// Message event handler
+self.addEventListener('message', event => {
+  const { type, data } = event.data;
+  
+  switch (type) {
+    case 'SKIP_WAITING':
+      self.skipWaiting();
+      break;
+      
+    case 'CLEAR_ALL_CACHES':
+      event.waitUntil(
+        caches.keys().then(names => {
+          return Promise.all(names.map(name => caches.delete(name)));
+        }).then(() => {
+          logger.info('All caches cleared');
+        })
+      );
+      break;
+      
+    case 'CLEAR_CACHE':
+      if (data && data.cacheName) {
+        event.waitUntil(
+          caches.delete(data.cacheName).then(() => {
+            logger.info(`Cache cleared: ${data.cacheName}`);
+          })
         );
-      })
-    );
-  }
-  
-  if (event.data.type === 'CLEAR_AUTH_CACHE') {
-    logger.info('Clearing auth cache (logout)');
-    event.waitUntil(
-      caches.open(AUTH_CACHE_NAME).then((cache) => {
-        return cache.delete('/api/auth/user');
-      })
-    );
+      }
+      break;
+      
+    case 'CACHE_STATUS':
+      event.waitUntil(
+        getCacheStatus().then(status => {
+          event.ports[0].postMessage({
+            type: 'CACHE_STATUS_RESPONSE',
+            status
+          });
+        })
+      );
+      break;
+      
+    case 'FORCE_UPDATE':
+      event.waitUntil(
+        self.registration.update().then(() => {
+          logger.info('Forced update check');
+        })
+      );
+      break;
   }
 });
+
+// Get cache statistics
+async function getCacheStatus() {
+  const cacheNames = await caches.keys();
+  const status = {};
+  
+  for (const name of cacheNames) {
+    const cache = await caches.open(name);
+    const keys = await cache.keys();
+    status[name] = {
+      count: keys.length,
+      urls: keys.map(req => req.url)
+    };
+  }
+  
+  // Estimate storage usage if available
+  if ('storage' in navigator && 'estimate' in navigator.storage) {
+    const estimate = await navigator.storage.estimate();
+    status.storage = {
+      usage: estimate.usage,
+      quota: estimate.quota,
+      percentage: ((estimate.usage / estimate.quota) * 100).toFixed(2)
+    };
+  }
+  
+  return status;
+}
+
+// Periodic cache cleanup (every hour)
+setInterval(async () => {
+  logger.debug('Running periodic cache cleanup');
+  await evictLRUCache(API_CACHE_NAME, CACHE_LIMITS.api);
+  await evictLRUCache(PHOTO_CACHE_NAME, CACHE_LIMITS.photos);
+  await evictLRUCache(STATIC_CACHE_NAME, CACHE_LIMITS.static);
+}, 60 * 60 * 1000);
+
+logger.info('Service Worker script loaded', { version: VERSION });

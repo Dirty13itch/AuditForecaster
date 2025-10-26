@@ -1,7 +1,9 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { addToSyncQueue } from "./syncQueue";
 import { queryClientLogger } from "./logger";
 import { fetchCsrfToken, getCsrfToken, clearCsrfToken } from "./csrfToken";
+import { syncQueue } from "@/utils/syncQueue";
+import { indexedDB } from "@/utils/indexedDB";
+import { cacheManager } from "@/utils/cacheManager";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -77,10 +79,10 @@ export async function apiRequest(
           headers['X-CSRF-Token'] = csrfToken;
         }
 
-        await addToSyncQueue({
-          method,
+        await syncQueue.queueRequest({
           url,
-          data,
+          method,
+          body: data,
           headers,
         });
         

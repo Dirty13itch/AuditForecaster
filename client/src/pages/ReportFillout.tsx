@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -16,7 +16,9 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Camera, Save, Send, ChevronDown, ChevronRight, Signature, FileText, CheckCircle, Clock, AlertCircle, Calculator, Eye, EyeOff } from "lucide-react";
+import { CalendarIcon, Camera, Save, Send, ChevronDown, ChevronRight, Signature, FileText, CheckCircle, Clock, AlertCircle, Calculator, Eye, EyeOff, WifiOff, Cloud, CloudOff } from "lucide-react";
+import { indexedDB } from "@/utils/indexedDB";
+import { syncQueue } from "@/utils/syncQueue";
 import { format } from "date-fns";
 import { ConditionalLogicEngine } from "@/utils/conditionalLogic";
 import type { 
@@ -374,6 +376,9 @@ export default function ReportFilloutPage() {
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   const [fieldStates, setFieldStates] = useState<Record<string, { visible: boolean; required: boolean; enabled: boolean; value: any }>>({});
   const [conditionalEngine, setConditionalEngine] = useState<ConditionalLogicEngine | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
 
   // Fetch report instance
   const { data: reportInstance, isLoading: isLoadingInstance } = useQuery<ReportInstance>({
@@ -478,6 +483,81 @@ export default function ReportFilloutPage() {
     },
   });
 
+  // Monitor online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (unsavedChanges) {
+        toast({
+          title: "Back online",
+          description: "Syncing your changes...",
+        });
+        syncQueue.processQueue();
+      }
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast({
+        title: "Working offline",
+        description: "Your changes will be saved locally and synced when online",
+        variant: "default",
+      });
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [toast, unsavedChanges]);
+  
+  // Auto-save to IndexedDB
+  const saveToIndexedDB = useCallback(async () => {
+    if (id && reportInstance) {
+      await indexedDB.saveReportInstance({
+        id,
+        templateId: reportInstance.templateId,
+        fieldValues,
+        status: reportInstance.status,
+        lastSaved: new Date().toISOString(),
+      });
+      setLastSaved(new Date());
+    }
+  }, [id, reportInstance, fieldValues]);
+  
+  // Auto-save every 30 seconds if there are unsaved changes
+  useEffect(() => {
+    if (unsavedChanges) {
+      const timer = setTimeout(() => {
+        saveToIndexedDB();
+        setUnsavedChanges(false);
+      }, 30000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [unsavedChanges, saveToIndexedDB]);
+  
+  // Load from IndexedDB on mount if offline
+  useEffect(() => {
+    const loadOfflineData = async () => {
+      if (!isOnline && id) {
+        const offlineData = await indexedDB.getReportInstance(id);
+        if (offlineData) {
+          setFieldValues(offlineData.fieldValues || {});
+          toast({
+            title: "Loaded offline data",
+            description: `Last saved: ${format(new Date(offlineData.lastSaved), 'PPp')}`,
+          });
+        }
+      }
+    };
+    
+    loadOfflineData();
+  }, [id, isOnline, toast]);
+
   const handleFieldChange = (sectionId: string, instanceIndex: number, fieldId: string, value: any) => {
     // Update local state
     const newFieldValues = {
@@ -485,6 +565,7 @@ export default function ReportFilloutPage() {
       [fieldId]: value
     };
     setFieldValues(newFieldValues);
+    setUnsavedChanges(true);
     
     // Update conditional logic engine and evaluate conditions
     if (conditionalEngine) {
@@ -497,7 +578,7 @@ export default function ReportFilloutPage() {
       setFieldStates(stateMap);
     }
     
-    // Save to backend
+    // Save to backend (will be queued if offline)
     const fieldData: any = {
       reportInstanceId: id,
       templateFieldId: fieldId,

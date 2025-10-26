@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useInfiniteQuery, useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Camera, Filter, X, FilterX, CheckSquare, Square } from "lucide-react";
+import { ArrowLeft, Camera, Filter, X, FilterX, CheckSquare, Square, WifiOff, CloudUpload } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import TopBar from "@/components/TopBar";
@@ -17,6 +17,8 @@ import { Label } from "@/components/ui/label";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { SelectionToolbar, commonBulkActions } from "@/components/SelectionToolbar";
 import { BulkDeleteDialog, BulkTagDialog, BulkExportDialog, type TagOperationMode, type ExportFormat } from "@/components/BulkActionDialogs";
+import { indexedDB } from "@/utils/indexedDB";
+import { syncQueue } from "@/utils/syncQueue";
 import {
   Select,
   SelectContent,
@@ -38,6 +40,9 @@ import type { Job } from "@shared/schema";
 
 export default function Photos() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "inspection" | "photos" | "forecast">("photos");
+  const { toast } = useToast();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingUploads, setPendingUploads] = useState<number>(0);
   
   // Filter states
   const [selectedTags, setSelectedTags] = useState<PhotoTag[]>([]);
@@ -56,6 +61,51 @@ export default function Photos() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  
+  // Monitor online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast({
+        title: "Back online",
+        description: "Uploading pending photos...",
+      });
+      syncQueue.processQueue();
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast({
+        title: "Working offline",
+        description: "Photos will be uploaded when back online",
+        variant: "default",
+      });
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [toast]);
+  
+  // Track pending uploads
+  useEffect(() => {
+    const checkPendingUploads = async () => {
+      const queue = await syncQueue.getQueue();
+      const photoUploads = queue.filter(item => 
+        item.url.includes('/api/photos') && item.method === 'POST'
+      );
+      setPendingUploads(photoUploads.length);
+    };
+    
+    checkPendingUploads();
+    const interval = setInterval(checkPendingUploads, 3000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Query for jobs to populate job filter (paginated with reasonable limit for dropdown)
   const { data: jobsData } = useQuery({
@@ -181,8 +231,6 @@ export default function Photos() {
   };
 
   const hasActiveFilters = selectedTags.length > 0 || jobFilter !== "all" || dateFrom || dateTo || filterItem !== "all";
-
-  const { toast } = useToast();
 
   // Bulk delete mutation
   const deleteMutation = useMutation({
