@@ -43,6 +43,9 @@ import {
   insertBuilderAbbreviationSchema,
   insertBlowerDoorTestSchema,
   insertDuctLeakageTestSchema,
+  insertInvoiceSchema,
+  insertPaymentSchema,
+  insertFinancialSettingsSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -2863,6 +2866,296 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Financial Management Endpoints
+  // Invoices
+  app.get("/api/invoices", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { status, builderId, jobId, limit, offset } = req.query;
+
+      if (limit !== undefined || offset !== undefined) {
+        const params = paginationParamsSchema.parse({ limit, offset });
+        const result = await storage.getInvoicesPaginated(params);
+        return res.json(result);
+      }
+
+      let invoices;
+      if (status && typeof status === "string") {
+        invoices = await storage.getInvoicesByStatus(status);
+      } else if (builderId && typeof builderId === "string") {
+        invoices = await storage.getInvoicesByBuilder(builderId);
+      } else if (jobId && typeof jobId === "string") {
+        invoices = await storage.getInvoicesByJob(jobId);
+      } else {
+        invoices = await storage.getInvoicesByUser(userId);
+      }
+
+      res.json(invoices);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch invoices');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/invoices", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Generate invoice number if not provided
+      let invoiceData = req.body;
+      if (!invoiceData.invoiceNumber) {
+        invoiceData.invoiceNumber = await storage.getNextInvoiceNumber(userId);
+      }
+      
+      invoiceData.userId = userId;
+      const validated = insertInvoiceSchema.parse(invoiceData);
+      const invoice = await storage.createInvoice(validated);
+      res.status(201).json(invoice);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create invoice');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/invoices/:id", isAuthenticated, async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(invoice);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch invoice');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/invoices/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertInvoiceSchema.partial().parse(req.body);
+      const invoice = await storage.updateInvoice(req.params.id, validated);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(invoice);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update invoice');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/invoices/:id/mark-paid", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const paymentDetails = insertPaymentSchema.partial().parse(req.body);
+      const invoice = await storage.markInvoiceAsPaid(req.params.id, paymentDetails);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(invoice);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'mark invoice as paid');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/invoices/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const deleted = await storage.deleteInvoice(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete invoice');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Payments
+  app.get("/api/payments", isAuthenticated, async (req, res) => {
+    try {
+      const { invoiceId, limit, offset } = req.query;
+
+      if (limit !== undefined || offset !== undefined) {
+        const params = paginationParamsSchema.parse({ limit, offset });
+        const result = await storage.getPaymentsPaginated(params);
+        return res.json(result);
+      }
+
+      if (invoiceId && typeof invoiceId === "string") {
+        const payments = await storage.getPaymentsByInvoice(invoiceId);
+        return res.json(payments);
+      }
+
+      res.status(400).json({ message: "Invoice ID required" });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch payments');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/payments", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertPaymentSchema.parse(req.body);
+      const payment = await storage.createPayment(validated);
+      res.status(201).json(payment);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create payment');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Financial Settings
+  app.get("/api/financial-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let settings = await storage.getFinancialSettings(userId);
+      
+      // Create default settings if none exist
+      if (!settings) {
+        settings = await storage.createFinancialSettings({
+          userId,
+          taxRate: 0,
+          invoicePrefix: 'INV',
+          nextInvoiceNumber: 1000,
+          paymentTermsDays: 30,
+        });
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch financial settings');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/financial-settings", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = insertFinancialSettingsSchema.partial().parse(req.body);
+      
+      let settings = await storage.getFinancialSettings(userId);
+      if (!settings) {
+        // Create if doesn't exist
+        settings = await storage.createFinancialSettings({
+          ...validated,
+          userId,
+        });
+      } else {
+        settings = await storage.updateFinancialSettings(userId, validated);
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update financial settings');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Financial Reports
+  app.get("/api/financial-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { startDate, endDate } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const summary = await storage.getFinancialSummary(userId, start, end);
+      res.json(summary);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch financial summary');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/revenue-by-period", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { period = 'month' } = req.query;
+      
+      if (!['day', 'week', 'month', 'quarter', 'year'].includes(period as string)) {
+        return res.status(400).json({ message: "Invalid period. Use day, week, month, quarter, or year" });
+      }
+      
+      const revenue = await storage.getRevenueByPeriod(userId, period as any);
+      res.json(revenue);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch revenue by period');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/expenses-by-category", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { startDate, endDate } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const expenses = await storage.getExpensesByCategory(userId, start, end);
+      res.json(expenses);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch expenses by category');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/mileage-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { startDate, endDate } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const summary = await storage.getMileageSummary(userId, start, end);
+      res.json(summary);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch mileage summary');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/job-profitability/:jobId", isAuthenticated, async (req, res) => {
+    try {
+      const profitability = await storage.getJobProfitability(req.params.jobId);
+      res.json(profitability);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch job profitability');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/report-templates", isAuthenticated, async (_req, res) => {
     try {
       const templates = await storage.getAllReportTemplates();
@@ -3205,22 +3498,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { pdf } = await import('@react-pdf/renderer');
       const { ReportPDF } = await import('../client/src/components/pdf/ReportPDF.tsx');
       
-      const pdfDoc = (
-        <ReportPDF
-          reportInstance={reportInstance}
-          reportTemplate={template}
-          sections={sections}
-          fields={allFields}
-          fieldValues={fieldValues}
-          job={job}
-          builder={builder}
-          inspector={inspector}
-          photos={photos}
-          blowerDoorTest={blowerDoorTest}
-          ductLeakageTest={ductLeakageTest}
-          checklistItems={checklistItems}
-        />
-      );
+      const React = await import('react');
+      const pdfDoc = React.createElement(ReportPDF, {
+        reportInstance: reportInstance,
+        reportTemplate: template,
+        sections: sections,
+        fields: allFields,
+        fieldValues: fieldValues,
+        job: job,
+        builder: builder,
+        inspector: inspector,
+        photos: photos,
+        blowerDoorTest: blowerDoorTest,
+        ductLeakageTest: ductLeakageTest,
+        checklistItems: checklistItems,
+      });
 
       const pdfBuffer = await pdf(pdfDoc).toBuffer();
 
@@ -3274,22 +3566,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { pdf } = await import('@react-pdf/renderer');
       const { ReportPDF } = await import('../client/src/components/pdf/ReportPDF.tsx');
       
-      const pdfDoc = (
-        <ReportPDF
-          reportInstance={latestReport}
-          reportTemplate={template}
-          sections={sections || []}
-          fields={fields || []}
-          fieldValues={fieldValues || []}
-          job={job}
-          builder={builder}
-          inspector={inspector}
-          photos={photos}
-          blowerDoorTest={blowerDoorTest}
-          ductLeakageTest={ductLeakageTest}
-          checklistItems={checklistItems}
-        />
-      );
+      const React = await import('react');
+      const pdfDoc = React.createElement(ReportPDF, {
+        reportInstance: latestReport,
+        reportTemplate: template,
+        sections: sections || [],
+        fields: fields || [],
+        fieldValues: fieldValues || [],
+        job: job,
+        builder: builder,
+        inspector: inspector,
+        photos: photos,
+        blowerDoorTest: blowerDoorTest,
+        ductLeakageTest: ductLeakageTest,
+        checklistItems: checklistItems,
+      });
 
       const pdfBuffer = await pdf(pdfDoc).toBuffer();
 
@@ -3324,17 +3615,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { pdf } = await import('@react-pdf/renderer');
       const { ReportPDF } = await import('../client/src/components/pdf/ReportPDF.tsx');
       
-      const pdfDoc = (
-        <ReportPDF
-          job={job}
-          builder={builder}
-          inspector={inspector}
-          photos={photos || []}
-          blowerDoorTest={blowerDoorTest}
-          ductLeakageTest={ductLeakageTest}
-          checklistItems={checklistItems || []}
-        />
-      );
+      const React = await import('react');
+      const pdfDoc = React.createElement(ReportPDF, {
+        job: job,
+        builder: builder,
+        inspector: inspector,
+        photos: photos || [],
+        blowerDoorTest: blowerDoorTest,
+        ductLeakageTest: ductLeakageTest,
+        checklistItems: checklistItems || [],
+      });
 
       const pdfBuffer = await pdf(pdfDoc).toBuffer();
 

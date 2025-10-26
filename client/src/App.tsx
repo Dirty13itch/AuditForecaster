@@ -24,6 +24,10 @@ import RouteView from "@/pages/RouteView";
 import Builders from "@/pages/Builders";
 import Plans from "@/pages/Plans";
 import Financials from "@/pages/Financials";
+import FinancialDashboard from "@/pages/FinancialDashboard";
+import Invoices from "@/pages/Invoices";
+import Expenses from "@/pages/Expenses";
+import Mileage from "@/pages/Mileage";
 import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
 import ReportTemplates from "@/pages/ReportTemplates";
@@ -85,6 +89,46 @@ function Router() {
       <Route path="/financials" component={() => (
         <RouteErrorBoundary>
           <Financials />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/financial-dashboard" component={() => (
+        <RouteErrorBoundary>
+          <FinancialDashboard />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/invoices" component={() => (
+        <RouteErrorBoundary>
+          <Invoices />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/invoices/new" component={() => (
+        <RouteErrorBoundary>
+          <Invoices />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/invoices/:id" component={() => (
+        <RouteErrorBoundary>
+          <Invoices />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/expenses" component={() => (
+        <RouteErrorBoundary>
+          <Expenses />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/expenses/new" component={() => (
+        <RouteErrorBoundary>
+          <Expenses />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/mileage" component={() => (
+        <RouteErrorBoundary>
+          <Mileage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/mileage/new" component={() => (
+        <RouteErrorBoundary>
+          <Mileage />
         </RouteErrorBoundary>
       )} />
       <Route path="/reports" component={() => (

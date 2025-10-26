@@ -71,6 +71,12 @@ import {
   type InsertBlowerDoorTest,
   type DuctLeakageTest,
   type InsertDuctLeakageTest,
+  type Invoice,
+  type InsertInvoice,
+  type Payment,
+  type InsertPayment,
+  type FinancialSettings,
+  type InsertFinancialSettings,
   type ScoreSummary,
   users,
   builders,
@@ -108,6 +114,9 @@ import {
   builderAbbreviations,
   blowerDoorTests,
   ductLeakageTests,
+  invoices,
+  payments,
+  financialSettings,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -401,6 +410,41 @@ export interface IStorage {
     calendarId?: string;
     hasErrors?: boolean;
   }): Promise<{ logs: CalendarImportLog[]; total: number }>;
+
+  // Financial operations
+  // Invoices
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  getAllInvoices(): Promise<Invoice[]>;
+  getInvoicesByUser(userId: string): Promise<Invoice[]>;
+  getInvoicesByBuilder(builderId: string): Promise<Invoice[]>;
+  getInvoicesByJob(jobId: string): Promise<Invoice[]>;
+  getInvoicesByStatus(status: string): Promise<Invoice[]>;
+  getInvoicesPaginated(params: PaginationParams): Promise<PaginatedResult<Invoice>>;
+  updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+  deleteInvoice(id: string): Promise<boolean>;
+  getNextInvoiceNumber(userId: string): Promise<string>;
+  markInvoiceAsPaid(id: string, paymentDetails: Partial<InsertPayment>): Promise<Invoice | undefined>;
+  
+  // Payments
+  createPayment(payment: InsertPayment): Promise<Payment>;
+  getPayment(id: string): Promise<Payment | undefined>;
+  getPaymentsByInvoice(invoiceId: string): Promise<Payment[]>;
+  getPaymentsPaginated(params: PaginationParams): Promise<PaginatedResult<Payment>>;
+  updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment | undefined>;
+  deletePayment(id: string): Promise<boolean>;
+  
+  // Financial Settings
+  getFinancialSettings(userId: string): Promise<FinancialSettings | undefined>;
+  createFinancialSettings(settings: InsertFinancialSettings): Promise<FinancialSettings>;
+  updateFinancialSettings(userId: string, settings: Partial<InsertFinancialSettings>): Promise<FinancialSettings | undefined>;
+  
+  // Financial Reports
+  getFinancialSummary(userId: string, startDate?: Date, endDate?: Date): Promise<any>;
+  getRevenueByPeriod(userId: string, period: 'day' | 'week' | 'month' | 'quarter' | 'year'): Promise<any>;
+  getExpensesByCategory(userId: string, startDate?: Date, endDate?: Date): Promise<any>;
+  getMileageSummary(userId: string, startDate?: Date, endDate?: Date): Promise<any>;
+  getJobProfitability(jobId: string): Promise<any>;
 
   // Blower Door Tests
   createBlowerDoorTest(test: InsertBlowerDoorTest): Promise<BlowerDoorTest>;
@@ -2844,6 +2888,371 @@ export class DatabaseStorage implements IStorage {
       .where(eq(blowerDoorTests.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  // Financial Operations Implementation
+  // Invoices
+  async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
+    const result = await db.insert(invoices)
+      .values(invoice)
+      .returning();
+    return result[0];
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    const result = await db.select()
+      .from(invoices)
+      .where(eq(invoices.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAllInvoices(): Promise<Invoice[]> {
+    return await db.select()
+      .from(invoices)
+      .orderBy(desc(invoices.issueDate));
+  }
+
+  async getInvoicesByUser(userId: string): Promise<Invoice[]> {
+    return await db.select()
+      .from(invoices)
+      .where(eq(invoices.userId, userId))
+      .orderBy(desc(invoices.issueDate));
+  }
+
+  async getInvoicesByBuilder(builderId: string): Promise<Invoice[]> {
+    return await db.select()
+      .from(invoices)
+      .where(eq(invoices.builderId, builderId))
+      .orderBy(desc(invoices.issueDate));
+  }
+
+  async getInvoicesByJob(jobId: string): Promise<Invoice[]> {
+    return await db.select()
+      .from(invoices)
+      .where(eq(invoices.jobId, jobId))
+      .orderBy(desc(invoices.issueDate));
+  }
+
+  async getInvoicesByStatus(status: string): Promise<Invoice[]> {
+    return await db.select()
+      .from(invoices)
+      .where(eq(invoices.status, status as any))
+      .orderBy(desc(invoices.issueDate));
+  }
+
+  async getInvoicesPaginated(params: PaginationParams): Promise<PaginatedResult<Invoice>> {
+    const { limit = 10, offset = 0, sortBy = 'issueDate', sortOrder = 'desc' } = params;
+    
+    const orderByColumn = invoices[sortBy as keyof typeof invoices] || invoices.issueDate;
+    const orderByDirection = sortOrder === 'asc' ? asc : desc;
+    
+    const [totalResult, itemsResult] = await Promise.all([
+      db.select({ count: count() }).from(invoices),
+      db.select()
+        .from(invoices)
+        .orderBy(orderByDirection(orderByColumn))
+        .limit(limit)
+        .offset(offset)
+    ]);
+
+    return {
+      items: itemsResult,
+      total: totalResult[0]?.count ?? 0,
+      page: Math.floor(offset / limit) + 1,
+      pageSize: limit,
+      totalPages: Math.ceil((totalResult[0]?.count ?? 0) / limit),
+    };
+  }
+
+  async updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | undefined> {
+    const result = await db.update(invoices)
+      .set({
+        ...invoice,
+        updatedAt: new Date(),
+      })
+      .where(eq(invoices.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteInvoice(id: string): Promise<boolean> {
+    const result = await db.delete(invoices)
+      .where(eq(invoices.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getNextInvoiceNumber(userId: string): Promise<string> {
+    const settings = await this.getFinancialSettings(userId);
+    const prefix = settings?.invoicePrefix || 'INV';
+    const nextNumber = settings?.nextInvoiceNumber || 1000;
+    
+    // Update the next invoice number
+    if (settings) {
+      await this.updateFinancialSettings(userId, {
+        nextInvoiceNumber: nextNumber + 1,
+      });
+    }
+    
+    return `${prefix}-${nextNumber.toString().padStart(5, '0')}`;
+  }
+
+  async markInvoiceAsPaid(id: string, paymentDetails: Partial<InsertPayment>): Promise<Invoice | undefined> {
+    // Start a transaction
+    const invoice = await this.getInvoice(id);
+    if (!invoice) return undefined;
+
+    // Create payment record
+    await this.createPayment({
+      invoiceId: id,
+      amount: paymentDetails.amount || parseFloat(invoice.total),
+      paymentDate: paymentDetails.paymentDate || new Date(),
+      method: paymentDetails.method || 'cash',
+      reference: paymentDetails.reference,
+      notes: paymentDetails.notes,
+    } as InsertPayment);
+
+    // Update invoice status
+    return await this.updateInvoice(id, {
+      status: 'paid',
+      paidDate: paymentDetails.paymentDate || new Date(),
+      paymentMethod: paymentDetails.method,
+      paymentReference: paymentDetails.reference,
+    });
+  }
+
+  // Payments
+  async createPayment(payment: InsertPayment): Promise<Payment> {
+    const result = await db.insert(payments)
+      .values(payment)
+      .returning();
+    return result[0];
+  }
+
+  async getPayment(id: string): Promise<Payment | undefined> {
+    const result = await db.select()
+      .from(payments)
+      .where(eq(payments.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getPaymentsByInvoice(invoiceId: string): Promise<Payment[]> {
+    return await db.select()
+      .from(payments)
+      .where(eq(payments.invoiceId, invoiceId))
+      .orderBy(desc(payments.paymentDate));
+  }
+
+  async getPaymentsPaginated(params: PaginationParams): Promise<PaginatedResult<Payment>> {
+    const { limit = 10, offset = 0 } = params;
+    
+    const [totalResult, itemsResult] = await Promise.all([
+      db.select({ count: count() }).from(payments),
+      db.select()
+        .from(payments)
+        .orderBy(desc(payments.paymentDate))
+        .limit(limit)
+        .offset(offset)
+    ]);
+
+    return {
+      items: itemsResult,
+      total: totalResult[0]?.count ?? 0,
+      page: Math.floor(offset / limit) + 1,
+      pageSize: limit,
+      totalPages: Math.ceil((totalResult[0]?.count ?? 0) / limit),
+    };
+  }
+
+  async updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment | undefined> {
+    const result = await db.update(payments)
+      .set(payment)
+      .where(eq(payments.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deletePayment(id: string): Promise<boolean> {
+    const result = await db.delete(payments)
+      .where(eq(payments.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Financial Settings
+  async getFinancialSettings(userId: string): Promise<FinancialSettings | undefined> {
+    const result = await db.select()
+      .from(financialSettings)
+      .where(eq(financialSettings.userId, userId))
+      .limit(1);
+    return result[0];
+  }
+
+  async createFinancialSettings(settings: InsertFinancialSettings): Promise<FinancialSettings> {
+    const result = await db.insert(financialSettings)
+      .values(settings)
+      .returning();
+    return result[0];
+  }
+
+  async updateFinancialSettings(userId: string, settings: Partial<InsertFinancialSettings>): Promise<FinancialSettings | undefined> {
+    const result = await db.update(financialSettings)
+      .set({
+        ...settings,
+        updatedAt: new Date(),
+      })
+      .where(eq(financialSettings.userId, userId))
+      .returning();
+    return result[0];
+  }
+
+  // Financial Reports
+  async getFinancialSummary(userId: string, startDate?: Date, endDate?: Date): Promise<any> {
+    const invoiceConditions = [eq(invoices.userId, userId)];
+    const expenseConditions = [eq(expenses.userId, userId)];
+    const mileageConditions = [eq(mileageLogs.userId, userId)];
+    
+    if (startDate) {
+      invoiceConditions.push(gte(invoices.issueDate, startDate));
+      expenseConditions.push(gte(expenses.date, startDate));
+      mileageConditions.push(gte(mileageLogs.date, startDate));
+    }
+    if (endDate) {
+      invoiceConditions.push(lte(invoices.issueDate, endDate));
+      expenseConditions.push(lte(expenses.date, endDate));
+      mileageConditions.push(lte(mileageLogs.date, endDate));
+    }
+
+    const [totalRevenue, totalExpenses, totalMileage, outstandingInvoices, overdueInvoices] = await Promise.all([
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(...invoiceConditions, eq(invoices.status, 'paid'))),
+      
+      db.select({ total: sql<number>`COALESCE(SUM(${expenses.amount}), 0)` })
+        .from(expenses)
+        .where(and(...expenseConditions)),
+      
+      db.select({ 
+        totalMiles: sql<number>`COALESCE(SUM(${mileageLogs.distance}), 0)`,
+        totalDeduction: sql<number>`COALESCE(SUM(${mileageLogs.deductionAmount}), 0)` 
+      })
+        .from(mileageLogs)
+        .where(and(...mileageConditions, eq(mileageLogs.purpose, 'business'))),
+      
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(...invoiceConditions, inArray(invoices.status, ['sent', 'overdue']))),
+      
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(...invoiceConditions, eq(invoices.status, 'overdue'))),
+    ]);
+
+    return {
+      totalRevenue: totalRevenue[0]?.total || 0,
+      totalExpenses: totalExpenses[0]?.total || 0,
+      totalMileage: totalMileage[0]?.totalMiles || 0,
+      mileageDeduction: totalMileage[0]?.totalDeduction || 0,
+      netProfit: (totalRevenue[0]?.total || 0) - (totalExpenses[0]?.total || 0) - (totalMileage[0]?.totalDeduction || 0),
+      outstandingInvoices: outstandingInvoices[0]?.total || 0,
+      overdueInvoices: overdueInvoices[0]?.total || 0,
+    };
+  }
+
+  async getRevenueByPeriod(userId: string, period: 'day' | 'week' | 'month' | 'quarter' | 'year'): Promise<any> {
+    const dateFormat = {
+      day: '%Y-%m-%d',
+      week: '%Y-%W',
+      month: '%Y-%m',
+      quarter: '%Y-Q',
+      year: '%Y',
+    }[period];
+
+    const result = await db.select({
+      period: sql<string>`TO_CHAR(${invoices.issueDate}, '${sql.raw(dateFormat)}')`,
+      revenue: sql<number>`COALESCE(SUM(${invoices.total}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    })
+      .from(invoices)
+      .where(and(
+        eq(invoices.userId, userId),
+        eq(invoices.status, 'paid')
+      ))
+      .groupBy(sql`TO_CHAR(${invoices.issueDate}, '${sql.raw(dateFormat)}')`)
+      .orderBy(sql`TO_CHAR(${invoices.issueDate}, '${sql.raw(dateFormat)}')`);
+
+    return result;
+  }
+
+  async getExpensesByCategory(userId: string, startDate?: Date, endDate?: Date): Promise<any> {
+    const conditions = [eq(expenses.userId, userId)];
+    if (startDate) conditions.push(gte(expenses.date, startDate));
+    if (endDate) conditions.push(lte(expenses.date, endDate));
+
+    const result = await db.select({
+      category: expenses.category,
+      total: sql<number>`COALESCE(SUM(${expenses.amount}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    })
+      .from(expenses)
+      .where(and(...conditions))
+      .groupBy(expenses.category)
+      .orderBy(desc(sql`COALESCE(SUM(${expenses.amount}), 0)`));
+
+    return result;
+  }
+
+  async getMileageSummary(userId: string, startDate?: Date, endDate?: Date): Promise<any> {
+    const conditions = [eq(mileageLogs.userId, userId)];
+    if (startDate) conditions.push(gte(mileageLogs.date, startDate));
+    if (endDate) conditions.push(lte(mileageLogs.date, endDate));
+
+    const result = await db.select({
+      purpose: mileageLogs.purpose,
+      totalMiles: sql<number>`COALESCE(SUM(${mileageLogs.distance}), 0)`,
+      totalDeduction: sql<number>`COALESCE(SUM(${mileageLogs.deductionAmount}), 0)`,
+      tripCount: sql<number>`COUNT(*)`,
+    })
+      .from(mileageLogs)
+      .where(and(...conditions))
+      .groupBy(mileageLogs.purpose);
+
+    return result;
+  }
+
+  async getJobProfitability(jobId: string): Promise<any> {
+    const [invoice, jobExpenses, jobMileage] = await Promise.all([
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(eq(invoices.jobId, jobId), eq(invoices.status, 'paid'))),
+      
+      db.select({ total: sql<number>`COALESCE(SUM(${expenses.amount}), 0)` })
+        .from(expenses)
+        .where(eq(expenses.jobId, jobId)),
+      
+      db.select({ 
+        totalMiles: sql<number>`COALESCE(SUM(${mileageLogs.distance}), 0)`,
+        totalDeduction: sql<number>`COALESCE(SUM(${mileageLogs.deductionAmount}), 0)` 
+      })
+        .from(mileageLogs)
+        .where(and(eq(mileageLogs.jobId, jobId), eq(mileageLogs.purpose, 'business'))),
+    ]);
+
+    const revenue = invoice[0]?.total || 0;
+    const expenses = jobExpenses[0]?.total || 0;
+    const mileageDeduction = jobMileage[0]?.totalDeduction || 0;
+    const profit = revenue - expenses - mileageDeduction;
+    const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+    return {
+      revenue,
+      expenses,
+      mileageDeduction,
+      profit,
+      margin,
+    };
   }
 
   // Duct Leakage Tests Implementation

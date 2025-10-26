@@ -797,6 +797,80 @@ export const ductLeakageTests = pgTable("duct_leakage_tests", {
   index("idx_duct_leakage_tests_meets_code_dlo").on(table.meetsCodeDLO),
 ]);
 
+// Financial Management Tables
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceNumber: varchar("invoice_number").notNull().unique(),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
+  builderId: varchar("builder_id").references(() => builders.id, { onDelete: 'set null' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  
+  // Amount fields
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  tax: decimal("tax", { precision: 10, scale: 2 }).default("0"),
+  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+  
+  // Status and dates
+  status: text("status", { 
+    enum: ["draft", "sent", "paid", "overdue", "cancelled"] 
+  }).notNull().default("draft"),
+  issueDate: timestamp("issue_date").notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  paidDate: timestamp("paid_date"),
+  
+  // Payment details
+  paymentMethod: text("payment_method", { 
+    enum: ["check", "credit", "ach", "cash", "other"] 
+  }),
+  paymentReference: text("payment_reference"),
+  
+  // Additional fields
+  notes: text("notes"),
+  terms: text("terms"),
+  items: jsonb("items"), // Array of line items: {description, quantity, rate, amount}
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_invoices_invoice_number").on(table.invoiceNumber),
+  index("idx_invoices_job_id").on(table.jobId),
+  index("idx_invoices_builder_id").on(table.builderId),
+  index("idx_invoices_user_id").on(table.userId),
+  index("idx_invoices_status").on(table.status),
+  index("idx_invoices_due_date").on(table.dueDate),
+]);
+
+export const payments = pgTable("payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: 'cascade' }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentDate: timestamp("payment_date").notNull(),
+  method: text("method", { 
+    enum: ["check", "credit", "ach", "cash", "other"] 
+  }).notNull(),
+  reference: text("reference"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_payments_invoice_id").on(table.invoiceId),
+  index("idx_payments_payment_date").on(table.paymentDate),
+]);
+
+export const financialSettings = pgTable("financial_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
+  invoicePrefix: varchar("invoice_prefix").default("INV"),
+  nextInvoiceNumber: integer("next_invoice_number").default(1000),
+  paymentTermsDays: integer("payment_terms_days").default(30),
+  invoiceFooterText: text("invoice_footer_text"),
+  companyDetails: jsonb("company_details"), // {name, address, phone, email, taxId}
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_financial_settings_user_id").on(table.userId),
+]);
+
 // For Replit Auth upsert operations
 export const upsertUserSchema = createInsertSchema(users).pick({
   id: true,
@@ -985,6 +1059,27 @@ export const insertBlowerDoorTestSchema = createInsertSchema(blowerDoorTests).om
   altitudeCorrectionFactor: z.coerce.number().nullable().optional(),
 });
 
+// Financial table schemas
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  issueDate: z.coerce.date(),
+  dueDate: z.coerce.date(),
+  paidDate: z.coerce.date().nullable().optional(),
+  amount: z.coerce.number(),
+  tax: z.coerce.number().nullable().optional(),
+  total: z.coerce.number(),
+});
+
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true }).extend({
+  paymentDate: z.coerce.date(),
+  amount: z.coerce.number(),
+});
+
+export const insertFinancialSettingsSchema = createInsertSchema(financialSettings).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  taxRate: z.coerce.number().nullable().optional(),
+  nextInvoiceNumber: z.coerce.number().nullable().optional(),
+  paymentTermsDays: z.coerce.number().nullable().optional(),
+});
+
 export const insertDuctLeakageTestSchema = createInsertSchema(ductLeakageTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   testDate: z.coerce.date(),
   equipmentCalibrationDate: z.coerce.date().nullable().optional(),
@@ -1101,6 +1196,14 @@ export type BlowerDoorTest = typeof blowerDoorTests.$inferSelect;
 export type InsertBlowerDoorTest = z.infer<typeof insertBlowerDoorTestSchema>;
 export type DuctLeakageTest = typeof ductLeakageTests.$inferSelect;
 export type InsertDuctLeakageTest = z.infer<typeof insertDuctLeakageTestSchema>;
+
+// Financial types
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type FinancialSettings = typeof financialSettings.$inferSelect;
+export type InsertFinancialSettings = z.infer<typeof insertFinancialSettingsSchema>;
 
 export interface CalendarImportLogsResponse {
   logs: CalendarImportLog[];
