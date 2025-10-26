@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Copy, Edit, Trash2, Eye, GripVertical, Settings, ChevronDown, ChevronRight, Save, X } from "lucide-react";
+import { Plus, Copy, Edit, Trash2, Eye, GripVertical, Settings, ChevronDown, ChevronRight, Save, X, Wand2 } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
@@ -287,6 +288,7 @@ function TemplateSection({
 
 export default function ReportTemplatesPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newTemplate, setNewTemplate] = useState<Partial<InsertReportTemplate>>({
@@ -501,10 +503,20 @@ export default function ReportTemplatesPage() {
             Create and manage inspection report templates
           </p>
         </div>
-        <Button onClick={() => setIsCreating(true)} data-testid="button-create-template">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Template
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => navigate("/report-template-designer")}
+            data-testid="button-visual-designer"
+          >
+            <Wand2 className="h-4 w-4 mr-2" />
+            Visual Designer
+          </Button>
+          <Button onClick={() => setIsCreating(true)} data-testid="button-create-template">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Template
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-6">
@@ -558,6 +570,14 @@ export default function ReportTemplatesPage() {
                     <CardDescription>{selectedTemplate.description}</CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate(`/report-template-designer/${selectedTemplate.id}`)}
+                      data-testid="button-edit-designer"
+                    >
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      Edit in Designer
+                    </Button>
                     <Button
                       variant="outline"
                       onClick={handleSaveChanges}

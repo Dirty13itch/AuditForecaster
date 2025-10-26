@@ -286,16 +286,21 @@ export interface IStorage {
   updateMileageLog(id: string, log: Partial<InsertMileageLog>): Promise<MileageLog | undefined>;
   deleteMileageLog(id: string): Promise<boolean>;
 
-  // Report Templates
+  // Report Templates - Enhanced for visual designer
   createReportTemplate(template: InsertReportTemplate): Promise<ReportTemplate>;
   getReportTemplate(id: string): Promise<ReportTemplate | undefined>;
   getAllReportTemplates(): Promise<ReportTemplate[]>;
+  getReportTemplates(): Promise<ReportTemplate[]>;
+  getActiveReportTemplates(): Promise<ReportTemplate[]>;
   getReportTemplatesByCategory(category: string): Promise<ReportTemplate[]>;
   getPublishedReportTemplates(): Promise<ReportTemplate[]>;
   updateReportTemplate(id: string, template: Partial<InsertReportTemplate>): Promise<ReportTemplate | undefined>;
   deleteReportTemplate(id: string): Promise<boolean>;
   publishReportTemplate(id: string): Promise<ReportTemplate | undefined>;
   duplicateReportTemplate(id: string, newName: string): Promise<ReportTemplate>;
+  cloneReportTemplate(id: string, newName?: string): Promise<ReportTemplate>;
+  archiveReportTemplate(id: string): Promise<ReportTemplate | undefined>;
+  getTemplateVersions(parentTemplateId: string): Promise<ReportTemplate[]>;
 
   // Template Sections
   createTemplateSection(section: InsertTemplateSection): Promise<TemplateSection>;
@@ -1490,6 +1495,12 @@ export class DatabaseStorage implements IStorage {
         category: original.category,
         status: 'draft',
         isDefault: false,
+        isActive: true,
+        components: original.components,
+        layout: original.layout,
+        conditionalRules: original.conditionalRules,
+        calculations: original.calculations,
+        metadata: original.metadata,
         createdBy: original.createdBy,
       })
       .returning();
@@ -1528,6 +1539,77 @@ export class DatabaseStorage implements IStorage {
     }
     
     return duplicate[0];
+  }
+
+  async getReportTemplates(): Promise<ReportTemplate[]> {
+    return await db.select()
+      .from(reportTemplates)
+      .where(eq(reportTemplates.isActive, true))
+      .orderBy(desc(reportTemplates.createdAt));
+  }
+
+  async getActiveReportTemplates(): Promise<ReportTemplate[]> {
+    return await db.select()
+      .from(reportTemplates)
+      .where(and(
+        eq(reportTemplates.isActive, true),
+        eq(reportTemplates.status, 'published')
+      ))
+      .orderBy(desc(reportTemplates.createdAt));
+  }
+
+  async cloneReportTemplate(id: string, newName?: string): Promise<ReportTemplate> {
+    const original = await this.getReportTemplate(id);
+    if (!original) {
+      throw new Error('Template not found');
+    }
+    
+    const clonedName = newName || `${original.name} (Copy)`;
+    
+    // Create a new version linked to the parent
+    const cloned = await db.insert(reportTemplates)
+      .values({
+        name: clonedName,
+        description: original.description,
+        category: original.category,
+        version: (original.version || 1) + 1,
+        status: 'draft',
+        isDefault: false,
+        isActive: true,
+        components: original.components,
+        layout: original.layout,
+        conditionalRules: original.conditionalRules,
+        calculations: original.calculations,
+        metadata: original.metadata,
+        parentTemplateId: original.parentTemplateId || id,
+        versionNotes: `Cloned from "${original.name}" version ${original.version || 1}`,
+        createdBy: original.createdBy,
+      })
+      .returning();
+    
+    return cloned[0];
+  }
+
+  async archiveReportTemplate(id: string): Promise<ReportTemplate | undefined> {
+    const result = await db.update(reportTemplates)
+      .set({ 
+        status: 'archived' as const,
+        isActive: false,
+        updatedAt: new Date()
+      })
+      .where(eq(reportTemplates.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getTemplateVersions(parentTemplateId: string): Promise<ReportTemplate[]> {
+    return await db.select()
+      .from(reportTemplates)
+      .where(or(
+        eq(reportTemplates.id, parentTemplateId),
+        eq(reportTemplates.parentTemplateId, parentTemplateId)
+      ))
+      .orderBy(desc(reportTemplates.version));
   }
 
   // Template Sections

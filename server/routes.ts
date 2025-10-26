@@ -3798,6 +3798,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clone report template
+  app.post("/api/report-templates/:id/clone", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { name } = req.body;
+      const cloned = await storage.cloneReportTemplate(req.params.id, name);
+      
+      await createAuditLog({
+        userId: (req as any).user?.claims?.sub || 'unknown',
+        action: 'template.cloned',
+        entityType: 'reportTemplate',
+        entityId: cloned.id,
+        metadata: { 
+          originalId: req.params.id,
+          newName: cloned.name,
+          version: cloned.version
+        }
+      });
+      
+      res.status(201).json(cloned);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Template not found') {
+        return res.status(404).json({ message: "Report template not found" });
+      }
+      const { status, message } = handleDatabaseError(error, 'clone report template');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Archive report template
+  app.post("/api/report-templates/:id/archive", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const archived = await storage.archiveReportTemplate(req.params.id);
+      if (!archived) {
+        return res.status(404).json({ message: "Report template not found" });
+      }
+      
+      await createAuditLog({
+        userId: (req as any).user?.claims?.sub || 'unknown',
+        action: 'template.archived',
+        entityType: 'reportTemplate',
+        entityId: req.params.id,
+        metadata: { 
+          templateName: archived.name,
+          archivedAt: new Date().toISOString()
+        }
+      });
+      
+      res.json(archived);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'archive report template');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get template version history
+  app.get("/api/report-templates/:id/versions", isAuthenticated, async (req, res) => {
+    try {
+      const versions = await storage.getTemplateVersions(req.params.id);
+      res.json(versions);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch template versions');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/report-instances", isAuthenticated, async (req, res) => {
     try {
       const { jobId, limit, offset } = req.query;

@@ -430,17 +430,27 @@ export const mileageLogs = pgTable("mileage_logs", {
   endLongitude: real("end_longitude"),
 });
 
-// Report Templates - Enhanced for iAuditor-style inspection system
+// Report Templates - Enhanced for iAuditor-style inspection system with visual designer
 export const reportTemplates = pgTable("report_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
   category: text("category", { 
-    enum: ["pre_drywall", "final", "duct_testing", "blower_door", "pre_insulation", "post_insulation", "rough_in", "custom"] 
+    enum: ["pre_drywall", "final", "duct_testing", "blower_door", "pre_insulation", "post_insulation", "rough_in", "energy_audit", "custom"] 
   }).notNull(),
   version: integer("version").notNull().default(1),
   status: text("status", { enum: ["draft", "published", "archived"] }).notNull().default("draft"),
   isDefault: boolean("is_default").default(false),
+  isActive: boolean("is_active").default(true),
+  // Visual designer specific fields
+  components: jsonb("components"), // Array of component definitions with types, properties, and IDs
+  layout: jsonb("layout"), // Grid layout configuration for visual positioning
+  conditionalRules: jsonb("conditional_rules"), // Array of if-then-else logic rules
+  calculations: jsonb("calculations"), // Array of calculation formulas and dependencies
+  metadata: jsonb("metadata"), // Additional settings (grid size, theme, etc.)
+  // Version control
+  parentTemplateId: varchar("parent_template_id"), // Reference to parent template for version history
+  versionNotes: text("version_notes"), // Notes about what changed in this version
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -449,6 +459,8 @@ export const reportTemplates = pgTable("report_templates", {
   index("idx_report_templates_category").on(table.category),
   index("idx_report_templates_status").on(table.status),
   index("idx_report_templates_created_by").on(table.createdBy),
+  index("idx_report_templates_is_active").on(table.isActive),
+  index("idx_report_templates_parent_id").on(table.parentTemplateId),
 ]);
 
 // Template Sections - Hierarchical sections within templates
