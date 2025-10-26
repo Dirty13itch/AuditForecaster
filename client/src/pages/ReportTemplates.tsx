@@ -471,7 +471,7 @@ export default function ReportTemplatesPage() {
         publishedAt: null
       };
       
-      return apiRequest("/api/report-templates", "POST", templateData);
+      return apiRequest("POST", "/api/report-templates", templateData);
     },
     onSuccess: (newTemplate) => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
@@ -496,7 +496,7 @@ export default function ReportTemplatesPage() {
   // Update template mutation
   const updateTemplate = useMutation({
     mutationFn: ({ id, ...data }: ReportTemplate) => 
-      apiRequest(`/api/report-templates/${id}`, "PATCH", data),
+      apiRequest("PATCH", `/api/report-templates/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
       toast({
@@ -509,7 +509,7 @@ export default function ReportTemplatesPage() {
   // Delete template mutation
   const deleteTemplate = useMutation({
     mutationFn: (id: string) => 
-      apiRequest(`/api/report-templates/${id}`, "DELETE"),
+      apiRequest("DELETE", `/api/report-templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
       setSelectedTemplate(null);
@@ -579,10 +579,10 @@ export default function ReportTemplatesPage() {
         if (section.id.startsWith("temp-")) {
           // Create new section
           const { id, ...data } = section;
-          await apiRequest("/api/report-templates/sections", "POST", data);
+          await apiRequest("POST", "/api/report-templates/sections", data);
         } else {
           // Update existing section
-          await apiRequest(`/api/report-templates/sections/${section.id}`, "PATCH", section);
+          await apiRequest("PATCH", `/api/report-templates/sections/${section.id}`, section);
         }
       }
 
@@ -592,10 +592,10 @@ export default function ReportTemplatesPage() {
           if (field.id.startsWith("temp-")) {
             // Create new field
             const { id, ...data } = field;
-            await apiRequest("/api/report-templates/fields", "POST", data);
+            await apiRequest("POST", "/api/report-templates/fields", data);
           } else {
             // Update existing field
-            await apiRequest(`/api/report-templates/fields/${field.id}`, "PATCH", field);
+            await apiRequest("PATCH", `/api/report-templates/fields/${field.id}`, field);
           }
         }
       }
