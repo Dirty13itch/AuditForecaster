@@ -1385,6 +1385,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/builders/:builderId/abbreviations/:id/set-primary', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { builderId, id } = req.params;
+
+      // Verify the abbreviation belongs to this builder
+      const abbreviations = await storage.getBuilderAbbreviationsByBuilder(builderId);
+      const targetAbbreviation = abbreviations.find(a => a.id === id);
+
+      if (!targetAbbreviation) {
+        return res.status(404).json({ message: 'Abbreviation not found for this builder' });
+      }
+
+      // Set as primary (unsets all others atomically)
+      await storage.setPrimaryBuilderAbbreviation(builderId, id);
+
+      // Audit log
+      const userId = req.user.claims.sub;
+      if (userId) {
+        await createAuditLog(req, {
+          userId,
+          action: 'set_primary_builder_abbreviation',
+          resourceType: 'builder_abbreviation',
+          resourceId: id,
+          metadata: {
+            builderId,
+            abbreviation: targetAbbreviation.abbreviation,
+          },
+        }, storage);
+      }
+
+      res.json({ success: true, message: 'Primary abbreviation updated' });
+    } catch (error) {
+      serverLogger.error('[API] Failed to set primary builder abbreviation:', error);
+      const { status, message } = handleDatabaseError(error, 'set primary builder abbreviation');
+      res.status(status).json({ message });
+    }
+  });
+
   // Lots routes
   app.get("/api/developments/:developmentId/lots", isAuthenticated, async (req, res) => {
     try {
