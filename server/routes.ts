@@ -3172,6 +3172,182 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // NEW: Direct PDF generation endpoint for reports
+  app.get("/api/reports/:reportId/pdf", isAuthenticated, async (req, res) => {
+    try {
+      const reportInstance = await storage.getReportInstance(req.params.reportId);
+      if (!reportInstance) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      // Fetch all related data for comprehensive PDF
+      const job = reportInstance.jobId ? await storage.getJob(reportInstance.jobId) : undefined;
+      const builder = job?.builderId ? await storage.getBuilder(job.builderId) : undefined;
+      const checklistItems = job ? await storage.getChecklistItemsByJob(job.id) : [];
+      const photos = job ? await storage.getPhotosByJob(job.id) : [];
+      const blowerDoorTest = job ? await storage.getLatestBlowerDoorTest(job.id) : undefined;
+      const ductLeakageTest = job ? await storage.getLatestDuctLeakageTest(job.id) : undefined;
+      
+      // Get template data
+      const template = await storage.getReportTemplate(reportInstance.templateId);
+      const sections = template ? await storage.getTemplateSections(template.id) : [];
+      const fields = await Promise.all(
+        sections.map(section => storage.getTemplateFields(section.id))
+      );
+      const allFields = fields.flat();
+      const fieldValues = await storage.getReportFieldValues(reportInstance.id);
+
+      // Get current user as inspector
+      const userId = getUserId(req);
+      const inspector = userId ? await storage.getUser(userId) : undefined;
+
+      // Generate PDF buffer using enhanced PDF components
+      const { pdf } = await import('@react-pdf/renderer');
+      const { ReportPDF } = await import('../client/src/components/pdf/ReportPDF.tsx');
+      
+      const pdfDoc = (
+        <ReportPDF
+          reportInstance={reportInstance}
+          reportTemplate={template}
+          sections={sections}
+          fields={allFields}
+          fieldValues={fieldValues}
+          job={job}
+          builder={builder}
+          inspector={inspector}
+          photos={photos}
+          blowerDoorTest={blowerDoorTest}
+          ductLeakageTest={ductLeakageTest}
+          checklistItems={checklistItems}
+        />
+      );
+
+      const pdfBuffer = await pdf(pdfDoc).toBuffer();
+
+      // Set headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="report-${reportInstance.id}-${Date.now()}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      logError('Reports/GeneratePDF', error, { reportId: req.params.reportId });
+      res.status(500).json({ message: "Failed to generate PDF report" });
+    }
+  });
+
+  // NEW: Comprehensive job report PDF endpoint
+  app.get("/api/jobs/:jobId/full-report/pdf", isAuthenticated, async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Fetch all job-related data
+      const builder = job.builderId ? await storage.getBuilder(job.builderId) : undefined;
+      const checklistItems = await storage.getChecklistItemsByJob(job.id);
+      const photos = await storage.getPhotosByJob(job.id);
+      const blowerDoorTest = await storage.getLatestBlowerDoorTest(job.id);
+      const ductLeakageTest = await storage.getLatestDuctLeakageTest(job.id);
+      
+      // Get most recent report instance if available
+      const reportInstances = await storage.getReportInstancesByJob(job.id);
+      const latestReport = reportInstances.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0];
+
+      let template, sections, fields, fieldValues;
+      if (latestReport) {
+        template = await storage.getReportTemplate(latestReport.templateId);
+        sections = template ? await storage.getTemplateSections(template.id) : [];
+        const fieldArrays = await Promise.all(
+          sections.map(section => storage.getTemplateFields(section.id))
+        );
+        fields = fieldArrays.flat();
+        fieldValues = await storage.getReportFieldValues(latestReport.id);
+      }
+
+      // Get current user as inspector
+      const userId = getUserId(req);
+      const inspector = userId ? await storage.getUser(userId) : undefined;
+
+      // Generate comprehensive PDF
+      const { pdf } = await import('@react-pdf/renderer');
+      const { ReportPDF } = await import('../client/src/components/pdf/ReportPDF.tsx');
+      
+      const pdfDoc = (
+        <ReportPDF
+          reportInstance={latestReport}
+          reportTemplate={template}
+          sections={sections || []}
+          fields={fields || []}
+          fieldValues={fieldValues || []}
+          job={job}
+          builder={builder}
+          inspector={inspector}
+          photos={photos}
+          blowerDoorTest={blowerDoorTest}
+          ductLeakageTest={ductLeakageTest}
+          checklistItems={checklistItems}
+        />
+      );
+
+      const pdfBuffer = await pdf(pdfDoc).toBuffer();
+
+      // Set headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="job-${job.name}-full-report-${Date.now()}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      logError('Jobs/GenerateFullReportPDF', error, { jobId: req.params.jobId });
+      res.status(500).json({ message: "Failed to generate comprehensive job report PDF" });
+    }
+  });
+
+  // NEW: Preview PDF endpoint for custom data
+  app.post("/api/reports/preview-pdf", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { 
+        reportData,
+        job,
+        builder,
+        photos,
+        blowerDoorTest,
+        ductLeakageTest,
+        checklistItems
+      } = req.body;
+
+      // Get current user as inspector
+      const userId = getUserId(req);
+      const inspector = userId ? await storage.getUser(userId) : undefined;
+
+      // Generate preview PDF
+      const { pdf } = await import('@react-pdf/renderer');
+      const { ReportPDF } = await import('../client/src/components/pdf/ReportPDF.tsx');
+      
+      const pdfDoc = (
+        <ReportPDF
+          job={job}
+          builder={builder}
+          inspector={inspector}
+          photos={photos || []}
+          blowerDoorTest={blowerDoorTest}
+          ductLeakageTest={ductLeakageTest}
+          checklistItems={checklistItems || []}
+        />
+      );
+
+      const pdfBuffer = await pdf(pdfDoc).toBuffer();
+
+      // Set headers for PDF preview
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="preview.pdf"');
+      res.send(pdfBuffer);
+    } catch (error) {
+      logError('Reports/PreviewPDF', error);
+      res.status(500).json({ message: "Failed to generate preview PDF" });
+    }
+  });
+
   // Object Storage Routes
   app.post("/api/objects/upload", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {

@@ -36,6 +36,31 @@ export default function ReportInstancePage() {
     enabled: !!reportInstance?.jobId,
   });
 
+  const handleDownloadPDF = async () => {
+    try {
+      const response = await fetch(`/api/reports/${id}/pdf`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report-${id}-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      clientLogger.error('Failed to download PDF:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
@@ -105,7 +130,12 @@ export default function ReportInstancePage() {
           <Badge variant={status === 'Sent' ? 'default' : status === 'Finalized' ? 'secondary' : 'outline'} data-testid="badge-status">
             {status}
           </Badge>
-          <Button variant="outline" size="sm" data-testid="button-download">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleDownloadPDF}
+            data-testid="button-download"
+          >
             <Download className="w-4 h-4 mr-2" />
             Download PDF
           </Button>

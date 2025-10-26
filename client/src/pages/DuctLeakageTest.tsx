@@ -28,7 +28,8 @@ import {
   Network,
   Clock,
   Plus,
-  Trash2
+  Trash2,
+  Download
 } from "lucide-react";
 
 interface PressurePanReading {
@@ -362,6 +363,40 @@ function DuctLeakageTestPage() {
     saveTestMutation.mutate(testData);
   };
 
+  const handleDownloadPDF = async () => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/full-report/pdf`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `duct-leakage-test-${jobId}-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "PDF Downloaded",
+        description: "The test report has been downloaded successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Failed to download the PDF report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
@@ -395,6 +430,14 @@ function DuctLeakageTestPage() {
             >
               <Save className="h-4 w-4 mr-2" />
               {existingTest ? 'Update' : 'Save'} Test
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadPDF}
+              data-testid="button-download-pdf"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download PDF
             </Button>
             {existingTest && (
               <Button
