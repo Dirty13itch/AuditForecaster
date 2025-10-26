@@ -455,8 +455,24 @@ export default function ReportTemplatesPage() {
 
   // Create template mutation
   const createTemplate = useMutation({
-    mutationFn: (data: InsertReportTemplate) => 
-      apiRequest("/api/report-templates", "POST", data),
+    mutationFn: async (data: Partial<InsertReportTemplate>) => {
+      // Get the current user to set the userId
+      const userResponse = await fetch("/api/auth/user");
+      const userData = userResponse.ok ? await userResponse.json() : null;
+      
+      const templateData: InsertReportTemplate = {
+        name: data.name || "",
+        description: data.description || null,
+        category: data.category || "custom",
+        status: data.status || "draft",
+        isDefault: data.isDefault || false,
+        userId: userData?.id || null,
+        sections: [],
+        publishedAt: null
+      };
+      
+      return apiRequest("/api/report-templates", "POST", templateData);
+    },
     onSuccess: (newTemplate) => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
       setSelectedTemplate(newTemplate as unknown as ReportTemplate);
@@ -467,7 +483,8 @@ export default function ReportTemplatesPage() {
         description: "Your report template has been created successfully.",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Failed to create template:", error);
       toast({
         title: "Error",
         description: "Failed to create template. Please try again.",
