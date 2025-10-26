@@ -3,6 +3,10 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { serverLogger } from "./logger";
 import type { InsertNotification } from "@shared/schema";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
+import * as cookie from "cookie";
+import * as signature from "cookie-signature";
 
 interface WebSocketClient {
   ws: WebSocket;
@@ -32,9 +36,9 @@ export function setupWebSocket(server: Server) {
     });
   }, 30000); // Ping every 30 seconds
 
-  wss.on("connection", (ws, req) => {
-    // Extract user ID from request (you might need to implement proper auth here)
-    const userId = extractUserIdFromRequest(req);
+  wss.on("connection", async (ws, req) => {
+    // Extract user ID from request with proper session validation
+    const userId = await extractUserIdFromRequest(req);
     
     if (!userId) {
       ws.close(1008, "User not authenticated");
@@ -93,32 +97,60 @@ export function setupWebSocket(server: Server) {
 }
 
 // Helper function to extract user ID from request using session authentication
-function extractUserIdFromRequest(req: any): string | null {
+async function extractUserIdFromRequest(req: any): Promise<string | null> {
   // Extract session cookie and validate authentication
   // This uses the same session store as the Express app
   try {
-    // Get the session cookie from the request
-    const cookies = parseCookies(req.headers.cookie || '');
-    const sessionId = cookies['connect.sid'];
+    // Parse cookies from the request
+    const cookies = cookie.parse(req.headers.cookie || '');
+    const sessionCookie = cookies['connect.sid'];
     
-    if (!sessionId) {
-      serverLogger.warn('WebSocket connection attempt without session cookie');
+    if (!sessionCookie) {
+      serverLogger.debug('WebSocket connection attempt without session cookie');
       return null;
     }
     
-    // Note: In a production system, you would validate the session
-    // against your session store here. For now, we'll extract from
-    // the session cookie if available.
+    // The connect.sid cookie is signed with the SESSION_SECRET
+    // Extract the actual session ID by removing the signature
+    let sessionId = sessionCookie;
     
-    // Extract user from session if available (development mode)
-    // In production, this should validate against the session store
-    if (req.headers.authorization) {
-      // Extract from authorization header if provided (for testing)
+    // If the cookie starts with "s:", it's signed and we need to verify it
+    if (sessionId.startsWith('s:')) {
+      const unsigned = signature.unsign(sessionId.slice(2), process.env.SESSION_SECRET!);
+      if (!unsigned) {
+        serverLogger.warn('WebSocket connection attempt with invalid session signature');
+        return null;
+      }
+      sessionId = unsigned;
+    }
+    
+    // Query the sessions table to get the session data
+    const sessionResult = await db.execute(
+      sql`SELECT sess FROM sessions WHERE sid = ${sessionId} AND expire > NOW()`
+    );
+    
+    if (!sessionResult.rows || sessionResult.rows.length === 0) {
+      serverLogger.debug('WebSocket connection attempt with expired or invalid session');
+      return null;
+    }
+    
+    // Parse the session data (it's stored as JSON)
+    const sessionData = sessionResult.rows[0].sess as any;
+    
+    // Extract the user ID from the passport session
+    if (sessionData?.passport?.user?.claims?.sub) {
+      const userId = sessionData.passport.user.claims.sub;
+      serverLogger.debug(`WebSocket authentication successful for user: ${userId}`);
+      return userId;
+    }
+    
+    // Fallback for development mode testing with authorization header
+    if (process.env.NODE_ENV === 'development' && req.headers.authorization) {
       const auth = req.headers.authorization.split(' ')[1];
       if (auth) {
         try {
-          // Decode base64 user ID (development only)
           const decoded = Buffer.from(auth, 'base64').toString('utf-8');
+          serverLogger.debug(`WebSocket auth via header (dev mode): ${decoded}`);
           return decoded;
         } catch {
           return null;
@@ -126,29 +158,12 @@ function extractUserIdFromRequest(req: any): string | null {
       }
     }
     
-    // In development mode, allow authenticated WebSocket connections
-    // with proper session validation
-    serverLogger.warn('WebSocket authentication requires proper session validation');
+    serverLogger.debug('WebSocket authentication failed: No user data in session');
     return null;
   } catch (error) {
     serverLogger.error('Error extracting user from WebSocket request:', error);
     return null;
   }
-}
-
-// Helper function to parse cookies from header string
-function parseCookies(cookieHeader: string): Record<string, string> {
-  const cookies: Record<string, string> = {};
-  if (!cookieHeader) return cookies;
-  
-  cookieHeader.split(';').forEach(cookie => {
-    const parts = cookie.trim().split('=');
-    if (parts.length === 2) {
-      cookies[parts[0]] = parts[1];
-    }
-  });
-  
-  return cookies;
 }
 
 // Function to send notification to a specific user
