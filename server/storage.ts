@@ -116,8 +116,17 @@ import {
   type InsertNotification,
   type NotificationPreference,
   type InsertNotificationPreference,
+  type InspectorWorkload,
+  type InsertInspectorWorkload,
+  type AssignmentHistory,
+  type InsertAssignmentHistory,
+  type InspectorPreferences,
+  type InsertInspectorPreferences,
   notifications,
   notificationPreferences,
+  inspectorWorkload,
+  assignmentHistory,
+  inspectorPreferences,
   users,
   builders,
   builderContacts,
@@ -713,6 +722,31 @@ export interface IStorage {
   updateNotificationPreference(id: string, preference: Partial<InsertNotificationPreference>): Promise<NotificationPreference | undefined>;
   upsertNotificationPreference(userId: string, notificationType: string, preference: Partial<InsertNotificationPreference>): Promise<NotificationPreference>;
   deleteNotificationPreference(id: string): Promise<boolean>;
+  
+  // Inspector Assignment Operations
+  getInspectorWorkload(inspectorId: string, date: Date): Promise<InspectorWorkload | undefined>;
+  getInspectorWorkloadRange(inspectorId: string, startDate: Date, endDate: Date): Promise<InspectorWorkload[]>;
+  getAllInspectorsWorkload(date: Date): Promise<InspectorWorkload[]>;
+  upsertInspectorWorkload(workload: InsertInspectorWorkload): Promise<InspectorWorkload>;
+  updateInspectorWorkloadFromJobs(inspectorId: string, date: Date): Promise<InspectorWorkload>;
+  
+  // Assignment History
+  createAssignmentHistory(history: InsertAssignmentHistory): Promise<AssignmentHistory>;
+  getAssignmentHistoryByJob(jobId: string): Promise<AssignmentHistory[]>;
+  getAssignmentHistoryByInspector(inspectorId: string, params?: PaginationParams): Promise<PaginatedResult<AssignmentHistory>>;
+  
+  // Inspector Preferences
+  getInspectorPreferences(inspectorId: string): Promise<InspectorPreferences | undefined>;
+  upsertInspectorPreferences(preferences: InsertInspectorPreferences): Promise<InspectorPreferences>;
+  getAllInspectorPreferences(): Promise<InspectorPreferences[]>;
+  getInspectorsByTerritory(territory: string): Promise<InspectorPreferences[]>;
+  
+  // Enhanced Job Assignment Operations
+  assignJobToInspector(jobId: string, inspectorId: string | null, assignedBy: string, reason?: string): Promise<Job>;
+  getInspectorJobs(inspectorId: string, params?: PaginationParams): Promise<PaginatedResult<Job>>;
+  getInspectorJobsByDateRange(inspectorId: string, startDate: Date, endDate: Date): Promise<Job[]>;
+  suggestOptimalInspector(jobId: string, date: Date): Promise<{ inspectorId: string; score: number; reasons: string[] }[]>;
+  bulkAssignJobs(jobIds: string[], inspectorId: string | null, assignedBy: string): Promise<Job[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4904,6 +4938,387 @@ export class DatabaseStorage implements IStorage {
   async deleteNotificationPreference(id: string): Promise<boolean> {
     const result = await db.delete(notificationPreferences).where(eq(notificationPreferences.id, id));
     return result.length > 0;
+  }
+
+  // Inspector Assignment Operations
+  async getInspectorWorkload(inspectorId: string, date: Date): Promise<InspectorWorkload | undefined> {
+    const [result] = await db
+      .select()
+      .from(inspectorWorkload)
+      .where(and(
+        eq(inspectorWorkload.inspectorId, inspectorId),
+        eq(inspectorWorkload.date, date)
+      ))
+      .limit(1);
+    return result;
+  }
+
+  async getInspectorWorkloadRange(inspectorId: string, startDate: Date, endDate: Date): Promise<InspectorWorkload[]> {
+    return await db
+      .select()
+      .from(inspectorWorkload)
+      .where(and(
+        eq(inspectorWorkload.inspectorId, inspectorId),
+        gte(inspectorWorkload.date, startDate),
+        lte(inspectorWorkload.date, endDate)
+      ))
+      .orderBy(asc(inspectorWorkload.date));
+  }
+
+  async getAllInspectorsWorkload(date: Date): Promise<InspectorWorkload[]> {
+    return await db
+      .select()
+      .from(inspectorWorkload)
+      .where(eq(inspectorWorkload.date, date))
+      .orderBy(asc(inspectorWorkload.workloadLevel), asc(inspectorWorkload.jobCount));
+  }
+
+  async upsertInspectorWorkload(workload: InsertInspectorWorkload): Promise<InspectorWorkload> {
+    const existing = await this.getInspectorWorkload(workload.inspectorId, workload.date);
+    
+    if (existing) {
+      const [result] = await db
+        .update(inspectorWorkload)
+        .set({
+          ...workload,
+          updatedAt: new Date()
+        })
+        .where(eq(inspectorWorkload.id, existing.id))
+        .returning();
+      return result;
+    } else {
+      const [result] = await db
+        .insert(inspectorWorkload)
+        .values(workload)
+        .returning();
+      return result;
+    }
+  }
+
+  async updateInspectorWorkloadFromJobs(inspectorId: string, date: Date): Promise<InspectorWorkload> {
+    // Get all jobs for this inspector on the given date
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const jobsList = await db
+      .select()
+      .from(jobs)
+      .where(and(
+        eq(jobs.assignedTo, inspectorId),
+        gte(jobs.scheduledDate, startOfDay),
+        lte(jobs.scheduledDate, endOfDay)
+      ));
+
+    // Calculate workload metrics
+    const jobCount = jobsList.length;
+    const scheduledMinutes = jobsList.reduce((total, job) => {
+      // Estimate time based on inspection type
+      const baseTime = job.inspectionType === 'final' ? 120 : 90;
+      const travelTime = 30; // Average travel time between jobs
+      return total + baseTime + travelTime;
+    }, 0);
+
+    // Determine workload level
+    let workloadLevel: 'light' | 'moderate' | 'heavy' | 'overbooked' = 'light';
+    if (jobCount === 0) {
+      workloadLevel = 'light';
+    } else if (jobCount <= 3) {
+      workloadLevel = 'moderate';
+    } else if (jobCount <= 5) {
+      workloadLevel = 'heavy';
+    } else {
+      workloadLevel = 'overbooked';
+    }
+
+    // Get last job location
+    const lastJob = jobsList[jobsList.length - 1];
+    
+    return await this.upsertInspectorWorkload({
+      inspectorId,
+      date,
+      jobCount,
+      scheduledMinutes,
+      workloadLevel,
+      lastJobLocation: lastJob?.address,
+      lastJobLatitude: null, // Would need geocoding to get actual coordinates
+      lastJobLongitude: null,
+    });
+  }
+
+  // Assignment History
+  async createAssignmentHistory(history: InsertAssignmentHistory): Promise<AssignmentHistory> {
+    const [result] = await db.insert(assignmentHistory).values(history).returning();
+    return result;
+  }
+
+  async getAssignmentHistory(jobId: string): Promise<AssignmentHistory[]> {
+    return await db
+      .select()
+      .from(assignmentHistory)
+      .where(eq(assignmentHistory.jobId, jobId))
+      .orderBy(desc(assignmentHistory.assignedAt));
+  }
+
+  async getInspectorAssignmentHistory(inspectorId: string, startDate?: Date, endDate?: Date): Promise<AssignmentHistory[]> {
+    let query = db
+      .select()
+      .from(assignmentHistory)
+      .where(eq(assignmentHistory.assignedTo, inspectorId));
+    
+    if (startDate && endDate) {
+      query = query.where(and(
+        eq(assignmentHistory.assignedTo, inspectorId),
+        gte(assignmentHistory.assignedAt, startDate),
+        lte(assignmentHistory.assignedAt, endDate)
+      ));
+    }
+    
+    return await query.orderBy(desc(assignmentHistory.assignedAt));
+  }
+
+  // Inspector Preferences
+  async getInspectorPreferences(inspectorId: string): Promise<InspectorPreferences | undefined> {
+    const [result] = await db
+      .select()
+      .from(inspectorPreferences)
+      .where(eq(inspectorPreferences.inspectorId, inspectorId))
+      .limit(1);
+    return result;
+  }
+
+  async getAllInspectorPreferences(): Promise<InspectorPreferences[]> {
+    return await db.select().from(inspectorPreferences);
+  }
+
+  async upsertInspectorPreferences(preferences: InsertInspectorPreferences): Promise<InspectorPreferences> {
+    const existing = await this.getInspectorPreferences(preferences.inspectorId);
+    
+    if (existing) {
+      const [result] = await db
+        .update(inspectorPreferences)
+        .set({
+          ...preferences,
+          updatedAt: new Date()
+        })
+        .where(eq(inspectorPreferences.id, existing.id))
+        .returning();
+      return result;
+    } else {
+      const [result] = await db
+        .insert(inspectorPreferences)
+        .values(preferences)
+        .returning();
+      return result;
+    }
+  }
+
+  async deleteInspectorPreferences(inspectorId: string): Promise<boolean> {
+    const result = await db
+      .delete(inspectorPreferences)
+      .where(eq(inspectorPreferences.inspectorId, inspectorId))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Workload Calculation and Assignment
+  async suggestOptimalInspector(jobId: string, date: Date): Promise<{ inspectorId: string; score: number; reasons: string[] } | null> {
+    // Get the job details
+    const job = await this.getJob(jobId);
+    if (!job) return null;
+
+    // Get all inspectors
+    const inspectorsList = await db
+      .select()
+      .from(users)
+      .where(or(eq(users.role, 'inspector'), eq(users.role, 'admin')));
+
+    // Get workloads for all inspectors on the target date
+    const workloads = await this.getAllInspectorsWorkload(date);
+    const preferences = await this.getAllInspectorPreferences();
+
+    let bestInspector: { inspectorId: string; score: number; reasons: string[] } | null = null;
+    let bestScore = -Infinity;
+
+    for (const inspector of inspectorsList) {
+      const workload = workloads.find(w => w.inspectorId === inspector.id);
+      const preference = preferences.find(p => p.inspectorId === inspector.id);
+      
+      let score = 100; // Start with perfect score
+      const reasons: string[] = [];
+
+      // Check workload level
+      if (!workload || workload.workloadLevel === 'light') {
+        score += 30;
+        reasons.push('Light workload');
+      } else if (workload.workloadLevel === 'moderate') {
+        score += 10;
+        reasons.push('Moderate workload');
+      } else if (workload.workloadLevel === 'heavy') {
+        score -= 20;
+        reasons.push('Heavy workload');
+      } else if (workload.workloadLevel === 'overbooked') {
+        score -= 50;
+        reasons.push('Overbooked');
+      }
+
+      // Check job count
+      const jobCount = workload?.jobCount || 0;
+      if (jobCount < (preference?.maxDailyJobs || 5)) {
+        score += 20;
+        reasons.push(`${(preference?.maxDailyJobs || 5) - jobCount} slots available`);
+      } else {
+        score -= 40;
+        reasons.push('At daily capacity');
+      }
+
+      // Check territory preferences
+      if (preference?.preferredTerritories?.length) {
+        // Simple territory matching based on address
+        const jobTerritory = job.address?.split(',')[1]?.trim(); // Get city from address
+        if (jobTerritory && preference.preferredTerritories.includes(jobTerritory)) {
+          score += 25;
+          reasons.push('Preferred territory');
+        }
+      }
+
+      // Check availability
+      if (preference?.unavailableDates) {
+        const isUnavailable = preference.unavailableDates.some(d => {
+          const unavailDate = new Date(d);
+          return unavailDate.toDateString() === date.toDateString();
+        });
+        if (isUnavailable) {
+          score -= 100;
+          reasons.push('Not available on this date');
+        }
+      }
+
+      // Check specializations
+      if (preference?.specializations?.includes(job.inspectionType)) {
+        score += 15;
+        reasons.push(`Specializes in ${job.inspectionType}`);
+      }
+
+      // Update best inspector if this one has a better score
+      if (score > bestScore) {
+        bestScore = score;
+        bestInspector = {
+          inspectorId: inspector.id,
+          score,
+          reasons
+        };
+      }
+    }
+
+    return bestInspector;
+  }
+
+  async assignJobToInspector(jobId: string, inspectorId: string, assignedBy: string, reason?: string): Promise<Job> {
+    // Get current job to check previous assignment
+    const job = await this.getJob(jobId);
+    if (!job) {
+      throw new Error('Job not found');
+    }
+
+    const previousAssignee = job.assignedTo;
+
+    // Update the job with the new assignment
+    const updatedJob = await this.updateJob(jobId, { assignedTo: inspectorId });
+    if (!updatedJob) {
+      throw new Error('Failed to update job assignment');
+    }
+
+    // Create assignment history record
+    await this.createAssignmentHistory({
+      jobId,
+      assignedTo: inspectorId,
+      assignedBy,
+      action: previousAssignee ? 'reassigned' : 'assigned',
+      previousAssignee,
+      reason,
+      metadata: {
+        jobName: job.name,
+        inspectionType: job.inspectionType,
+        scheduledDate: job.scheduledDate
+      }
+    });
+
+    // Update workload for the new inspector
+    if (job.scheduledDate) {
+      await this.updateInspectorWorkloadFromJobs(inspectorId, job.scheduledDate);
+    }
+
+    // Update workload for previous inspector if there was one
+    if (previousAssignee && job.scheduledDate) {
+      await this.updateInspectorWorkloadFromJobs(previousAssignee, job.scheduledDate);
+    }
+
+    return updatedJob;
+  }
+
+  async bulkAssignJobs(assignments: Array<{ jobId: string; inspectorId: string }>, assignedBy: string): Promise<Job[]> {
+    const results: Job[] = [];
+    
+    for (const { jobId, inspectorId } of assignments) {
+      try {
+        const assignedJob = await this.assignJobToInspector(
+          jobId,
+          inspectorId,
+          assignedBy,
+          'Bulk assignment'
+        );
+        results.push(assignedJob);
+      } catch (error) {
+        console.error(`Failed to assign job ${jobId} to inspector ${inspectorId}:`, error);
+      }
+    }
+    
+    return results;
+  }
+
+  async getAllInspectorWorkloads(date: Date): Promise<Array<{ inspector: User; workload: InspectorWorkload | null }>> {
+    // Get all inspectors
+    const inspectorsList = await db
+      .select()
+      .from(users)
+      .where(or(eq(users.role, 'inspector'), eq(users.role, 'admin')));
+
+    // Get workloads for the date
+    const workloads = await this.getAllInspectorsWorkload(date);
+
+    // Combine inspector data with workloads
+    return inspectorsList.map(inspector => ({
+      inspector,
+      workload: workloads.find(w => w.inspectorId === inspector.id) || null
+    }));
+  }
+
+  async updateInspectorPreferences(inspectorId: string, preferences: Partial<InsertInspectorPreferences>): Promise<InspectorPreferences> {
+    return await this.upsertInspectorPreferences({
+      ...preferences,
+      inspectorId
+    });
+  }
+
+  // Additional Helper Methods for Inspector Assignment
+  async getJobsByDateRange(startDate: Date, endDate: Date): Promise<Job[]> {
+    return await db
+      .select()
+      .from(jobs)
+      .where(and(
+        gte(jobs.scheduledDate, startDate),
+        lte(jobs.scheduledDate, endDate)
+      ))
+      .orderBy(asc(jobs.scheduledDate));
+  }
+
+  async getUsersByRoles(roles: string[]): Promise<User[]> {
+    return await db
+      .select()
+      .from(users)
+      .where(inArray(users.role, roles));
   }
 }
 

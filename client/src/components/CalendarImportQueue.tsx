@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Calendar, Check, X, Edit, ChevronRight, AlertCircle, Clock, MapPin, User, FileText } from "lucide-react";
+import { Calendar, Check, X, Edit, ChevronRight, AlertCircle, Clock, MapPin, User, FileText, Users, CheckSquare, Filter, ArrowUpDown, Search } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,11 +15,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import InspectorAssignmentDialog from "./InspectorAssignmentDialog";
 import type { GoogleEvent, Builder, InsertJob } from "@shared/schema";
 
 interface CalendarEventWithConfidence extends GoogleEvent {
@@ -217,12 +219,16 @@ function EventEditDialog({ event, open, onClose, onConfirm, builders }: EventEdi
 
 interface EventCardProps {
   event: CalendarEventWithConfidence;
+  isSelected: boolean;
+  onSelectChange: (selected: boolean) => void;
   onApprove: () => void;
   onReject: () => void;
   onEdit: () => void;
+  onAssign: () => void;
+  assignedInspector?: string;
 }
 
-function EventCard({ event, onApprove, onReject, onEdit }: EventCardProps) {
+function EventCard({ event, isSelected, onSelectChange, onApprove, onReject, onEdit, onAssign, assignedInspector }: EventCardProps) {
   const confidenceColor = event.confidence 
     ? event.confidence >= 80 ? "text-green-600 dark:text-green-400"
     : event.confidence >= 60 ? "text-yellow-600 dark:text-yellow-400"
@@ -243,17 +249,30 @@ function EventCard({ event, onApprove, onReject, onEdit }: EventCardProps) {
   return (
     <Card className="hover-elevate" data-testid={`card-calendar-event-${event.id}`}>
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <CardTitle className="text-base line-clamp-2">{event.summary}</CardTitle>
-            <CardDescription className="mt-1">
-              <span className={confidenceColor}>{confidenceLabel}</span>
-              {event.suggestedBuilderName && (
-                <span className="ml-2">• {event.suggestedBuilderName}</span>
-              )}
-            </CardDescription>
+        <div className="flex items-start gap-3">
+          <Checkbox 
+            checked={isSelected}
+            onCheckedChange={onSelectChange}
+            className="mt-1"
+            data-testid={`checkbox-event-${event.id}`}
+          />
+          <div className="flex-1 flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <CardTitle className="text-base line-clamp-2">{event.summary}</CardTitle>
+              <CardDescription className="mt-1">
+                <span className={confidenceColor}>{confidenceLabel}</span>
+                {event.suggestedBuilderName && (
+                  <span className="ml-2">• {event.suggestedBuilderName}</span>
+                )}
+                {assignedInspector && (
+                  <span className="ml-2 text-blue-600 dark:text-blue-400">
+                    • Assigned to {assignedInspector}
+                  </span>
+                )}
+              </CardDescription>
+            </div>
+            <div className={`w-2 h-2 rounded-full ${eventTypeColor} mt-1`} />
           </div>
-          <div className={`w-2 h-2 rounded-full ${eventTypeColor} mt-1`} />
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -295,12 +314,12 @@ function EventCard({ event, onApprove, onReject, onEdit }: EventCardProps) {
 
         <Separator />
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
             variant="ghost"
             onClick={onApprove}
-            className="flex-1"
+            className="flex-1 min-w-0"
             data-testid={`button-approve-${event.id}`}
           >
             <Check className="h-4 w-4 mr-1" />
@@ -309,8 +328,18 @@ function EventCard({ event, onApprove, onReject, onEdit }: EventCardProps) {
           <Button
             size="sm"
             variant="ghost"
+            onClick={onAssign}
+            className="flex-1 min-w-0"
+            data-testid={`button-assign-${event.id}`}
+          >
+            <Users className="h-4 w-4 mr-1" />
+            Assign
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
             onClick={onEdit}
-            className="flex-1"
+            className="flex-1 min-w-0"
             data-testid={`button-edit-${event.id}`}
           >
             <Edit className="h-4 w-4 mr-1" />
@@ -320,7 +349,7 @@ function EventCard({ event, onApprove, onReject, onEdit }: EventCardProps) {
             size="sm"
             variant="ghost"
             onClick={onReject}
-            className="flex-1"
+            className="flex-1 min-w-0"
             data-testid={`button-reject-${event.id}`}
           >
             <X className="h-4 w-4 mr-1" />
@@ -336,6 +365,13 @@ export function CalendarImportQueue() {
   const { toast } = useToast();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEventWithConfidence | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [selectedEventForAssignment, setSelectedEventForAssignment] = useState<CalendarEventWithConfidence | null>(null);
+  const [filterBy, setFilterBy] = useState<"all" | "date" | "urgency" | "builder">("all");
+  const [sortBy, setSortBy] = useState<"date" | "urgency" | "confidence">("date");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [eventAssignments, setEventAssignments] = useState<Map<string, string>>(new Map());
 
   // Fetch unconverted Google events
   const { data: events = [], isLoading: eventsLoading } = useQuery<CalendarEventWithConfidence[]>({
@@ -497,6 +533,90 @@ export function CalendarImportQueue() {
     }
   };
 
+  const handleSelectEvent = (eventId: string, selected: boolean) => {
+    setSelectedEvents(prev => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(eventId);
+      } else {
+        newSet.delete(eventId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    const allEventIds = events.map(e => e.id);
+    setSelectedEvents(new Set(allEventIds));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedEvents(new Set());
+  };
+
+  const handleAssignInspector = (event: CalendarEventWithConfidence) => {
+    setSelectedEventForAssignment(event);
+    setAssignmentDialogOpen(true);
+  };
+
+  const handleBulkApprove = async () => {
+    const selectedEventsList = Array.from(selectedEvents);
+    for (const eventId of selectedEventsList) {
+      const event = events.find(e => e.id === eventId);
+      if (event) {
+        await handleApprove(event);
+      }
+    }
+    setSelectedEvents(new Set());
+  };
+
+  const handleBulkAssign = () => {
+    if (selectedEvents.size === 0) return;
+    
+    // For bulk assignment, we'll use the first selected event as context
+    const firstEventId = Array.from(selectedEvents)[0];
+    const firstEvent = events.find(e => e.id === firstEventId);
+    if (firstEvent) {
+      setSelectedEventForAssignment(firstEvent);
+      setAssignmentDialogOpen(true);
+    }
+  };
+
+  const handleBulkReject = async () => {
+    const selectedEventsList = Array.from(selectedEvents);
+    for (const eventId of selectedEventsList) {
+      await rejectEventMutation.mutate(eventId);
+    }
+    setSelectedEvents(new Set());
+  };
+
+  const handleAssignmentComplete = (inspectorId: string) => {
+    if (selectedEventForAssignment) {
+      // Store the assignment locally
+      setEventAssignments(prev => {
+        const newMap = new Map(prev);
+        if (selectedEvents.size > 1) {
+          // Bulk assignment
+          selectedEvents.forEach(eventId => {
+            newMap.set(eventId, inspectorId);
+          });
+        } else {
+          // Single assignment
+          newMap.set(selectedEventForAssignment.id, inspectorId);
+        }
+        return newMap;
+      });
+      
+      toast({
+        title: "Inspector Assigned",
+        description: selectedEvents.size > 1 
+          ? `Assigned ${selectedEvents.size} events to inspector`
+          : "Event assigned to inspector successfully",
+      });
+    }
+    setAssignmentDialogOpen(false);
+  };
+
   if (eventsLoading) {
     return (
       <div className="space-y-4">
@@ -533,6 +653,55 @@ export function CalendarImportQueue() {
           </Badge>
         </div>
       </div>
+
+      {selectedEvents.size > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                {selectedEvents.size} events selected
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleClearSelection}
+              >
+                Clear selection
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBulkApprove}
+                data-testid="button-bulk-approve"
+              >
+                <Check className="h-4 w-4 mr-1" />
+                Approve Selected
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBulkAssign}
+                data-testid="button-bulk-assign"
+              >
+                <Users className="h-4 w-4 mr-1" />
+                Assign Selected
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBulkReject}
+                data-testid="button-bulk-reject"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Reject Selected
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {!hasEvents ? (
         <Alert>
@@ -574,9 +743,13 @@ export function CalendarImportQueue() {
                       <EventCard
                         key={event.id}
                         event={event}
+                        isSelected={selectedEvents.has(event.id)}
+                        onSelectChange={(selected) => handleSelectEvent(event.id, selected)}
                         onApprove={() => handleApprove(event)}
                         onEdit={() => handleEdit(event)}
                         onReject={() => handleReject(event)}
+                        onAssign={() => handleAssignInspector(event)}
+                        assignedInspector={eventAssignments.get(event.id)}
                       />
                     ))}
                     {groupedEvents.high.length === 0 && (
@@ -602,9 +775,13 @@ export function CalendarImportQueue() {
                       <EventCard
                         key={event.id}
                         event={event}
+                        isSelected={selectedEvents.has(event.id)}
+                        onSelectChange={(selected) => handleSelectEvent(event.id, selected)}
                         onApprove={() => handleApprove(event)}
                         onEdit={() => handleEdit(event)}
                         onReject={() => handleReject(event)}
+                        onAssign={() => handleAssignInspector(event)}
+                        assignedInspector={eventAssignments.get(event.id)}
                       />
                     ))}
                     {groupedEvents.medium.length === 0 && (
@@ -630,9 +807,13 @@ export function CalendarImportQueue() {
                       <EventCard
                         key={event.id}
                         event={event}
+                        isSelected={selectedEvents.has(event.id)}
+                        onSelectChange={(selected) => handleSelectEvent(event.id, selected)}
                         onApprove={() => handleApprove(event)}
                         onEdit={() => handleEdit(event)}
                         onReject={() => handleReject(event)}
+                        onAssign={() => handleAssignInspector(event)}
+                        assignedInspector={eventAssignments.get(event.id)}
                       />
                     ))}
                     {groupedEvents.low.length === 0 && (
@@ -700,6 +881,27 @@ export function CalendarImportQueue() {
           }}
           onConfirm={handleConfirmEdit}
           builders={builders}
+        />
+      )}
+      
+      {assignmentDialogOpen && selectedEventForAssignment && (
+        <InspectorAssignmentDialog
+          open={assignmentDialogOpen}
+          onClose={() => {
+            setAssignmentDialogOpen(false);
+            setSelectedEventForAssignment(null);
+          }}
+          jobId={selectedEventForAssignment.id}
+          jobDetails={{
+            name: selectedEventForAssignment.summary,
+            address: selectedEventForAssignment.location || "TBD",
+            scheduledDate: new Date(selectedEventForAssignment.startTime),
+            inspectionType: selectedEventForAssignment.suggestedInspectionType || "standard",
+            estimatedDuration: 120,
+          }}
+          onAssign={async (inspectorId) => {
+            handleAssignmentComplete(inspectorId);
+          }}
         />
       )}
     </div>

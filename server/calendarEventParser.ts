@@ -12,18 +12,32 @@ export interface ParsedEvent {
   rawTitle: string;
   parsedBuilderAbbreviation: string | null;
   parsedInspectionKeyword: string | null;
+  parsedAddress: string | null;
+  urgencyLevel: "low" | "medium" | "high" | "urgent";
+  suggestedInspectorId?: string | null;
+  estimatedDuration?: number; // in minutes
 }
 
 /**
  * Inspection type keywords and their variations
  */
 const INSPECTION_TYPE_PATTERNS = [
-  { type: 'Full Test', patterns: ['test', 'test - spec', 'full test'], confidence: 100 },
-  { type: 'SV2', patterns: ['sv2', 's.v.2', 's v 2'], confidence: 100 },
-  { type: 'Pre-Drywall', patterns: ['pre-drywall', 'predrywall', 'pre drywall'], confidence: 90 },
-  { type: 'Final', patterns: ['final', 'final inspection'], confidence: 95 },
-  { type: 'Rough', patterns: ['rough', 'rough-in'], confidence: 90 },
+  { type: 'Full Test', patterns: ['test', 'test - spec', 'full test', 'blower door'], confidence: 100, duration: 120 },
+  { type: 'SV2', patterns: ['sv2', 's.v.2', 's v 2', 'stage 2'], confidence: 100, duration: 90 },
+  { type: 'Pre-Drywall', patterns: ['pre-drywall', 'predrywall', 'pre drywall', 'insulation'], confidence: 90, duration: 60 },
+  { type: 'Final', patterns: ['final', 'final inspection', 'walk-through'], confidence: 95, duration: 90 },
+  { type: 'Rough', patterns: ['rough', 'rough-in', 'rough inspection'], confidence: 90, duration: 60 },
+  { type: 'Frame', patterns: ['frame', 'framing', 'structural'], confidence: 85, duration: 60 },
+  { type: 'Foundation', patterns: ['foundation', 'footer', 'footing'], confidence: 85, duration: 45 },
 ];
+
+// Urgency keywords
+const URGENCY_KEYWORDS = {
+  urgent: ['urgent', 'asap', 'rush', 'emergency', 'critical', 'immediate'],
+  high: ['priority', 'important', 'expedite', 'fast track'],
+  medium: ['soon', 'next week', 'scheduled'],
+  low: ['when available', 'flexible', 'anytime']
+};
 
 /**
  * Maximum title length for logging (to prevent log bloat)

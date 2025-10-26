@@ -2702,6 +2702,337 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Inspector Assignment API Endpoints
+  
+  // Get all inspector workloads for a specific date
+  app.get("/api/inspectors/workload", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const dateParam = req.query.date ? new Date(req.query.date) : new Date();
+      const results = await storage.getAllInspectorWorkloads(dateParam);
+      res.json(results);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get all inspector workloads');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get workload for a specific inspector
+  app.get("/api/inspectors/:id/workload", isAuthenticated, async (req: any, res) => {
+    try {
+      const inspectorId = req.params.id;
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+
+      // Inspectors can only see their own workload
+      if (userRole === 'inspector' && inspectorId !== userId) {
+        return res.status(403).json({ message: 'You can only view your own workload' });
+      }
+
+      const date = req.query.date ? new Date(req.query.date) : new Date();
+      const workload = await storage.getInspectorWorkload(inspectorId, date);
+      
+      if (!workload) {
+        // Return an empty workload if none exists
+        res.json({
+          inspectorId,
+          date,
+          jobCount: 0,
+          scheduledMinutes: 0,
+          workloadLevel: 'light'
+        });
+      } else {
+        res.json(workload);
+      }
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get inspector workload');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get workload range for an inspector
+  app.get("/api/inspectors/:id/workload-range", isAuthenticated, async (req: any, res) => {
+    try {
+      const inspectorId = req.params.id;
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+
+      // Inspectors can only see their own workload
+      if (userRole === 'inspector' && inspectorId !== userId) {
+        return res.status(403).json({ message: 'You can only view your own workload' });
+      }
+
+      const startDate = req.query.startDate ? new Date(req.query.startDate) : new Date();
+      const endDate = req.query.endDate ? new Date(req.query.endDate) : new Date();
+      
+      const workloads = await storage.getInspectorWorkloadRange(inspectorId, startDate, endDate);
+      res.json(workloads);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get inspector workload range');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get all inspectors workload for a specific date (for assignment dialog)
+  app.get("/api/inspector-workload/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const date = new Date(req.params.date);
+      const workloads = await storage.getAllInspectorsWorkload(date);
+      res.json(workloads);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get all inspectors workload for date');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get all inspector preferences
+  app.get("/api/inspector-preferences", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const preferences = await storage.getAllInspectorPreferences();
+      res.json(preferences);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get all inspector preferences');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get inspector preferences
+  app.get("/api/inspectors/:id/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const inspectorId = req.params.id;
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+
+      // Inspectors can only see their own preferences
+      if (userRole === 'inspector' && inspectorId !== userId) {
+        return res.status(403).json({ message: 'You can only view your own preferences' });
+      }
+
+      const preferences = await storage.getInspectorPreferences(inspectorId);
+      
+      if (!preferences) {
+        // Return default preferences if none exist
+        res.json({
+          inspectorId,
+          preferredTerritories: [],
+          maxDailyJobs: 5,
+          maxWeeklyJobs: 25,
+          specializations: [],
+          unavailableDates: [],
+          workStartTime: '08:00',
+          workEndTime: '17:00'
+        });
+      } else {
+        res.json(preferences);
+      }
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get inspector preferences');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Update inspector preferences
+  app.put("/api/inspectors/:id/preferences", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const inspectorId = req.params.id;
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+
+      // Inspectors can only update their own preferences, admin can update anyone's
+      if (userRole === 'inspector' && inspectorId !== userId) {
+        return res.status(403).json({ message: 'You can only update your own preferences' });
+      }
+
+      const preferencesSchema = z.object({
+        preferredTerritories: z.array(z.string()).optional(),
+        maxDailyJobs: z.number().min(1).max(20).optional(),
+        maxWeeklyJobs: z.number().min(1).max(100).optional(),
+        specializations: z.array(z.string()).optional(),
+        unavailableDates: z.array(z.string()).optional(),
+        workStartTime: z.string().optional(),
+        workEndTime: z.string().optional(),
+      });
+
+      const validated = preferencesSchema.parse(req.body);
+      const preferences = await storage.updateInspectorPreferences(inspectorId, validated);
+      
+      res.json(preferences);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update inspector preferences');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Suggest optimal inspector for a job
+  app.post("/api/jobs/suggest-inspector/:jobId/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const jobId = req.params.jobId;
+      const date = new Date(req.params.date);
+      
+      const suggestion = await storage.suggestOptimalInspector(jobId, date);
+      
+      if (!suggestion) {
+        return res.status(404).json({ message: 'No suitable inspector found' });
+      }
+      
+      res.json([suggestion]); // Return as array for consistency with frontend
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'suggest optimal inspector');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Assign job to inspector
+  app.post("/api/jobs/:id/assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const jobId = req.params.id;
+      const assignedBy = req.user.claims.sub;
+      
+      const assignmentSchema = z.object({
+        inspectorId: z.string().min(1, "Inspector ID is required"),
+        reason: z.string().optional(),
+      });
+
+      const { inspectorId, reason } = assignmentSchema.parse(req.body);
+      
+      const job = await storage.assignJobToInspector(jobId, inspectorId, assignedBy, reason);
+      
+      // Send notification to assigned inspector
+      const { createNotification } = await import('./notificationService');
+      try {
+        await createNotification({
+          userId: inspectorId,
+          type: 'job_assigned',
+          priority: 'medium',
+          title: `New Job Assigned: ${job.name}`,
+          message: `You've been assigned to ${job.name} scheduled for ${job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : 'TBD'}`,
+          metadata: { jobId: job.id }
+        });
+        
+        // Also send email notification
+        const inspector = await storage.getUser(inspectorId);
+        if (inspector?.email) {
+          await emailService.sendJobAssigned(
+            inspector.email,
+            job.name,
+            job.address || '',
+            job.scheduledDate ? new Date(job.scheduledDate) : new Date(),
+            assignedBy
+          );
+        }
+      } catch (notificationError) {
+        console.error('Failed to send assignment notification:', notificationError);
+        // Don't fail the request if notification fails
+      }
+      
+      res.json(job);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'assign job to inspector');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Bulk assign jobs
+  app.post("/api/jobs/bulk-assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const assignedBy = req.user.claims.sub;
+      
+      const bulkAssignSchema = z.object({
+        assignments: z.array(z.object({
+          jobId: z.string(),
+          inspectorId: z.string(),
+        })).min(1, "At least one assignment is required"),
+      });
+
+      const { assignments } = bulkAssignSchema.parse(req.body);
+      
+      // Limit bulk operations
+      if (assignments.length > 50) {
+        return res.status(400).json({ message: "Cannot assign more than 50 jobs at once" });
+      }
+      
+      const results = await storage.bulkAssignJobs(assignments, assignedBy);
+      
+      // Send notifications for successful assignments
+      const { createNotification } = await import('./notificationService');
+      for (const job of results) {
+        if (job.assignedTo) {
+          try {
+            await createNotification({
+              userId: job.assignedTo,
+              type: 'job_assigned',
+              priority: 'medium',
+              title: `New Job Assigned: ${job.name}`,
+              message: `You've been assigned to ${job.name} (bulk assignment)`,
+              metadata: { jobId: job.id }
+            });
+          } catch (error) {
+            console.error(`Failed to send notification for job ${job.id}:`, error);
+          }
+        }
+      }
+      
+      res.json({
+        message: `Successfully assigned ${results.length} jobs`,
+        results
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'bulk assign jobs');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get assignment history for a job
+  app.get("/api/jobs/:id/assignment-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const jobId = req.params.id;
+      const history = await storage.getAssignmentHistory(jobId);
+      res.json(history);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get assignment history');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get jobs by date for conflict checking
+  app.get("/api/jobs/by-date/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const date = new Date(req.params.date);
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const jobs = await storage.getJobsByDateRange(startOfDay, endOfDay);
+      res.json(jobs);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get jobs by date');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get all inspectors (admin and inspector roles)
+  app.get("/api/users/inspectors", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const inspectors = await storage.getUsersByRoles(['admin', 'inspector']);
+      res.json(inspectors);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get inspectors');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const { jobId, limit, offset } = req.query;

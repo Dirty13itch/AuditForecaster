@@ -228,6 +228,11 @@ export const jobs = pgTable("jobs", {
   originalScheduledDate: timestamp("original_scheduled_date"),
   isCancelled: boolean("is_cancelled").default(false),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: 'set null' }),
+  assignedAt: timestamp("assigned_at"),
+  assignedBy: varchar("assigned_by").references(() => users.id, { onDelete: 'set null' }),
+  estimatedDuration: integer("estimated_duration"), // Duration in minutes
+  territory: text("territory"), // Geographic zone/territory
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
   index("idx_jobs_plan_id").on(table.planId),
@@ -238,6 +243,9 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_address").on(table.address),
   index("idx_jobs_status_created_by").on(table.status, table.createdBy),
   index("google_event_id_idx").on(table.googleEventId),
+  index("idx_jobs_assigned_to").on(table.assignedTo),
+  index("idx_jobs_assigned_to_scheduled_date").on(table.assignedTo, table.scheduledDate),
+  index("idx_jobs_territory").on(table.territory),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -321,6 +329,11 @@ export const unmatchedCalendarEvents = pgTable("unmatched_calendar_events", {
   reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: 'set null' }),
   reviewedAt: timestamp("reviewed_at"),
   createdJobId: varchar("created_job_id").references(() => jobs.id, { onDelete: 'set null' }),
+  suggestedInspectorId: varchar("suggested_inspector_id").references(() => users.id, { onDelete: 'set null' }),
+  suggestedBuilderId: varchar("suggested_builder_id").references(() => builders.id, { onDelete: 'set null' }),
+  suggestedInspectionType: text("suggested_inspection_type"),
+  parsedAddress: text("parsed_address"),
+  urgencyLevel: text("urgency_level", { enum: ["low", "medium", "high", "urgent"] }).default("medium"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("unmatched_events_google_event_id_idx").on(table.googleEventId),
@@ -328,6 +341,64 @@ export const unmatchedCalendarEvents = pgTable("unmatched_calendar_events", {
   index("unmatched_events_confidence_score_idx").on(table.confidenceScore),
   index("unmatched_events_created_at_idx").on(table.createdAt),
   index("unmatched_events_status_confidence_idx").on(table.status, table.confidenceScore),
+]);
+
+// Inspector Workload Tracking table
+export const inspectorWorkload = pgTable("inspector_workload", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  inspectorId: varchar("inspector_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  date: timestamp("date").notNull(),
+  jobCount: integer("job_count").default(0),
+  scheduledMinutes: integer("scheduled_minutes").default(0),
+  territory: text("territory"),
+  workloadLevel: text("workload_level", { enum: ["light", "moderate", "heavy", "overbooked"] }).default("light"),
+  lastJobLocation: text("last_job_location"),
+  lastJobLatitude: real("last_job_latitude"),
+  lastJobLongitude: real("last_job_longitude"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_inspector_workload_inspector_date").on(table.inspectorId, table.date),
+  index("idx_inspector_workload_level").on(table.workloadLevel),
+  index("idx_inspector_workload_territory").on(table.territory),
+]);
+
+// Assignment History table for tracking who assigned jobs to whom
+export const assignmentHistory = pgTable("assignment_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: 'set null' }),
+  assignedBy: varchar("assigned_by").references(() => users.id, { onDelete: 'set null' }),
+  assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+  action: text("action", { enum: ["assigned", "reassigned", "unassigned", "auto_assigned"] }).notNull(),
+  previousAssignee: varchar("previous_assignee").references(() => users.id, { onDelete: 'set null' }),
+  reason: text("reason"),
+  metadata: jsonb("metadata"), // Additional assignment data (e.g., workload score, distance, priority)
+}, (table) => [
+  index("idx_assignment_history_job_id").on(table.jobId),
+  index("idx_assignment_history_assigned_to").on(table.assignedTo),
+  index("idx_assignment_history_assigned_by").on(table.assignedBy),
+  index("idx_assignment_history_assigned_at").on(table.assignedAt),
+]);
+
+// Inspector Preferences table for territory and availability preferences
+export const inspectorPreferences = pgTable("inspector_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  inspectorId: varchar("inspector_id").notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  preferredTerritories: text("preferred_territories").array(),
+  maxDailyJobs: integer("max_daily_jobs").default(5),
+  maxWeeklyJobs: integer("max_weekly_jobs").default(25),
+  availabilityHours: jsonb("availability_hours"), // e.g., { "monday": { "start": "08:00", "end": "17:00" }, ... }
+  specializations: text("specializations").array(), // Types of inspections they specialize in
+  vehicleRange: integer("vehicle_range"), // Maximum miles willing to travel
+  homeBase: text("home_base"), // Primary location
+  homeBaseLatitude: real("home_base_latitude"),
+  homeBaseLongitude: real("home_base_longitude"),
+  autoAssignEnabled: boolean("auto_assign_enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_inspector_preferences_inspector_id").on(table.inspectorId),
+  index("idx_inspector_preferences_territories").using("gin", table.preferredTerritories),
 ]);
 
 export const expenses = pgTable("expenses", {
@@ -1619,6 +1690,35 @@ export const insertNotificationPreferenceSchema = createInsertSchema(notificatio
   updatedAt: true 
 });
 
+// Inspector Assignment Insert Schemas
+export const insertInspectorWorkloadSchema = createInsertSchema(inspectorWorkload).omit({ 
+  id: true, 
+  updatedAt: true 
+}).extend({
+  date: z.coerce.date(),
+  jobCount: z.coerce.number().default(0),
+  scheduledMinutes: z.coerce.number().default(0),
+  lastJobLatitude: z.coerce.number().nullable().optional(),
+  lastJobLongitude: z.coerce.number().nullable().optional(),
+});
+
+export const insertAssignmentHistorySchema = createInsertSchema(assignmentHistory).omit({ 
+  id: true, 
+  assignedAt: true 
+});
+
+export const insertInspectorPreferencesSchema = createInsertSchema(inspectorPreferences).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true 
+}).extend({
+  maxDailyJobs: z.coerce.number().default(5),
+  maxWeeklyJobs: z.coerce.number().default(25),
+  vehicleRange: z.coerce.number().nullable().optional(),
+  homeBaseLatitude: z.coerce.number().nullable().optional(),
+  homeBaseLongitude: z.coerce.number().nullable().optional(),
+});
+
 export const insertDuctLeakageTestSchema = createInsertSchema(ductLeakageTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   testDate: z.coerce.date(),
   equipmentCalibrationDate: z.coerce.date().nullable().optional(),
@@ -1731,6 +1831,12 @@ export type UploadSession = typeof uploadSessions.$inferSelect;
 export type InsertUploadSession = z.infer<typeof insertUploadSessionSchema>;
 export type PhotoUploadSession = typeof photoUploadSessions.$inferSelect;
 export type InsertPhotoUploadSession = z.infer<typeof insertPhotoUploadSessionSchema>;
+export type InspectorWorkload = typeof inspectorWorkload.$inferSelect;
+export type InsertInspectorWorkload = z.infer<typeof insertInspectorWorkloadSchema>;
+export type AssignmentHistory = typeof assignmentHistory.$inferSelect;
+export type InsertAssignmentHistory = z.infer<typeof insertAssignmentHistorySchema>;
+export type InspectorPreferences = typeof inspectorPreferences.$inferSelect;
+export type InsertInspectorPreferences = z.infer<typeof insertInspectorPreferencesSchema>;
 export type EmailPreference = typeof emailPreferences.$inferSelect;
 export type InsertEmailPreference = z.infer<typeof insertEmailPreferenceSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;

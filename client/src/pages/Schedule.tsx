@@ -4,7 +4,7 @@ import { Calendar as BigCalendar, dateFnsLocalizer, View, Event } from "react-bi
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2 } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2, Users, Activity, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,6 +127,11 @@ export default function Schedule() {
 
   const { data: jobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
     queryKey: ['/api/jobs'],
+  });
+
+  const { data: inspectorWorkloads = [], isLoading: workloadsLoading } = useQuery<any[]>({
+    queryKey: ['/api/inspectors/workload'],
+    enabled: true,
   });
 
   const { data: scheduleEvents = [], isLoading: eventsLoading } = useQuery<ScheduleEvent[]>({
@@ -744,6 +749,64 @@ export default function Schedule() {
         </div>
 
         <div className="flex-1 flex flex-col">
+          {/* Inspector Workload Summary */}
+          {!workloadsLoading && inspectorWorkloads.length > 0 && (
+            <div className="border-b bg-muted/40 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold">Inspector Workload</h3>
+              </div>
+              <div className="flex gap-4 overflow-x-auto">
+                {inspectorWorkloads.map((workload: any) => {
+                  const loadPercentage = Math.min((workload.currentLoad / 8) * 100, 100);
+                  const loadColor = loadPercentage > 80 ? 'text-destructive' : loadPercentage > 60 ? 'text-yellow-600' : 'text-green-600';
+                  
+                  return (
+                    <Card key={workload.inspectorId} className="min-w-[200px] p-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                            loadPercentage > 80 ? 'bg-destructive' : 
+                            loadPercentage > 60 ? 'bg-yellow-600' : 
+                            'bg-green-600'
+                          }`} />
+                          <span className="font-medium text-sm">
+                            {workload.inspectorName}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {workload.todayJobs} today
+                        </Badge>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Load</span>
+                          <span className={loadColor}>
+                            {workload.currentLoad.toFixed(1)} hrs
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Week</span>
+                          <span>{workload.weekJobs} jobs</span>
+                        </div>
+                        <div className="w-full bg-secondary rounded-full h-1.5 mt-2">
+                          <div
+                            className={`h-1.5 rounded-full transition-all ${
+                              loadPercentage > 80 ? 'bg-destructive' : 
+                              loadPercentage > 60 ? 'bg-yellow-600' : 
+                              'bg-green-600'
+                            }`}
+                            style={{ width: `${loadPercentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="border-b bg-background p-4">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
