@@ -41,6 +41,8 @@ import {
   insertUploadSessionSchema,
   insertEmailPreferenceSchema,
   insertBuilderAbbreviationSchema,
+  insertBlowerDoorTestSchema,
+  insertDuctLeakageTestSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -3706,6 +3708,364 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(status).json({ message });
       }
       const { status, message } = handleDatabaseError(error, 'update forecast');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Blower Door Test routes
+  app.get("/api/blower-door-tests", isAuthenticated, async (req, res) => {
+    try {
+      const { jobId } = req.query;
+      
+      if (jobId && typeof jobId === "string") {
+        const tests = await storage.getBlowerDoorTestsByJob(jobId);
+        return res.json(tests);
+      }
+      
+      res.status(400).json({ message: "Job ID is required" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch blower door tests');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/blower-door-tests/:id", isAuthenticated, async (req, res) => {
+    try {
+      const test = await storage.getBlowerDoorTest(req.params.id);
+      if (!test) {
+        return res.status(404).json({ message: "Blower door test not found" });
+      }
+      res.json(test);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch blower door test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/jobs/:jobId/blower-door-tests/latest", isAuthenticated, async (req, res) => {
+    try {
+      const test = await storage.getLatestBlowerDoorTest(req.params.jobId);
+      if (!test) {
+        return res.status(404).json({ message: "No blower door tests found for this job" });
+      }
+      res.json(test);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch latest blower door test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/blower-door-tests", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertBlowerDoorTestSchema.parse({
+        ...req.body,
+        createdBy: req.user?.claims?.sub,
+      });
+      
+      // Calculate ACH50 if not provided: ACH50 = (CFM50 × 60) / Volume
+      if (!validated.ach50 && validated.cfm50 && validated.houseVolume) {
+        validated.ach50 = (validated.cfm50 * 60) / validated.houseVolume;
+      }
+      
+      // Determine Minnesota 2020 Energy Code compliance
+      const codeLimit = validated.codeLimit || 3.0; // Minnesota 2020 Energy Code limit is 3.0 ACH50
+      validated.codeLimit = codeLimit;
+      validated.meetsCode = validated.ach50 <= codeLimit;
+      validated.margin = codeLimit - validated.ach50; // Positive means under limit
+      
+      const test = await storage.createBlowerDoorTest(validated);
+      
+      // Update job compliance status if needed
+      if (test.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('BlowerDoorTest/ComplianceUpdate', error, { testId: test.id });
+        }
+      }
+      
+      res.status(201).json(test);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create blower door test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/blower-door-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertBlowerDoorTestSchema.partial().parse(req.body);
+      
+      // Recalculate ACH50 if CFM50 or volume changed
+      if ((validated.cfm50 !== undefined || validated.houseVolume !== undefined)) {
+        const existing = await storage.getBlowerDoorTest(req.params.id);
+        if (existing) {
+          const cfm50 = validated.cfm50 ?? existing.cfm50;
+          const volume = validated.houseVolume ?? existing.houseVolume;
+          if (cfm50 && volume) {
+            validated.ach50 = (Number(cfm50) * 60) / Number(volume);
+          }
+        }
+      }
+      
+      // Update compliance if ACH50 changed
+      if (validated.ach50 !== undefined) {
+        const codeLimit = validated.codeLimit || 3.0;
+        validated.meetsCode = validated.ach50 <= codeLimit;
+        validated.margin = codeLimit - validated.ach50;
+      }
+      
+      const test = await storage.updateBlowerDoorTest(req.params.id, validated);
+      if (!test) {
+        return res.status(404).json({ message: "Blower door test not found" });
+      }
+      
+      // Update job compliance status if needed
+      if (test.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('BlowerDoorTest/ComplianceUpdate', error, { testId: test.id });
+        }
+      }
+      
+      res.json(test);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update blower door test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/blower-door-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const test = await storage.getBlowerDoorTest(req.params.id);
+      const deleted = await storage.deleteBlowerDoorTest(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Blower door test not found" });
+      }
+      
+      // Update job compliance status if needed
+      if (test?.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('BlowerDoorTest/ComplianceUpdate', error, { testId: req.params.id });
+        }
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete blower door test');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Duct Leakage Test routes
+  app.get("/api/duct-leakage-tests", isAuthenticated, async (req, res) => {
+    try {
+      const { jobId } = req.query;
+      
+      if (jobId && typeof jobId === "string") {
+        const tests = await storage.getDuctLeakageTestsByJob(jobId);
+        return res.json(tests);
+      }
+      
+      res.status(400).json({ message: "Job ID is required" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch duct leakage tests');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/duct-leakage-tests/:id", isAuthenticated, async (req, res) => {
+    try {
+      const test = await storage.getDuctLeakageTest(req.params.id);
+      if (!test) {
+        return res.status(404).json({ message: "Duct leakage test not found" });
+      }
+      res.json(test);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch duct leakage test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/jobs/:jobId/duct-leakage-tests/latest", isAuthenticated, async (req, res) => {
+    try {
+      const test = await storage.getLatestDuctLeakageTest(req.params.jobId);
+      if (!test) {
+        return res.status(404).json({ message: "No duct leakage tests found for this job" });
+      }
+      res.json(test);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch latest duct leakage test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/duct-leakage-tests", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertDuctLeakageTestSchema.parse({
+        ...req.body,
+        createdBy: req.user?.claims?.sub,
+      });
+      
+      // Calculate CFM per 100 sq ft if not provided
+      if (validated.conditionedArea) {
+        if (validated.cfm25Total && !validated.totalCfmPerSqFt) {
+          validated.totalCfmPerSqFt = (validated.cfm25Total / validated.conditionedArea) * 100;
+        }
+        if (validated.cfm25Outside && !validated.outsideCfmPerSqFt) {
+          validated.outsideCfmPerSqFt = (validated.cfm25Outside / validated.conditionedArea) * 100;
+        }
+      }
+      
+      // Calculate percentage of system flow if not provided
+      if (validated.systemAirflow) {
+        if (validated.cfm25Total && !validated.totalPercentOfFlow) {
+          validated.totalPercentOfFlow = (validated.cfm25Total / validated.systemAirflow) * 100;
+        }
+        if (validated.cfm25Outside && !validated.outsidePercentOfFlow) {
+          validated.outsidePercentOfFlow = (validated.cfm25Outside / validated.systemAirflow) * 100;
+        }
+      }
+      
+      // Minnesota 2020 Energy Code limits
+      const totalLimit = validated.totalDuctLeakageLimit || 4.0; // 4 CFM25/100 sq ft
+      const outsideLimit = validated.outsideLeakageLimit || 3.0; // 3 CFM25/100 sq ft
+      validated.totalDuctLeakageLimit = totalLimit;
+      validated.outsideLeakageLimit = outsideLimit;
+      
+      // Check compliance
+      if (validated.totalCfmPerSqFt !== undefined) {
+        validated.meetsCodeTDL = validated.totalCfmPerSqFt <= totalLimit;
+      }
+      if (validated.outsideCfmPerSqFt !== undefined) {
+        validated.meetsCodeDLO = validated.outsideCfmPerSqFt <= outsideLimit;
+      }
+      
+      const test = await storage.createDuctLeakageTest(validated);
+      
+      // Update job compliance status if needed
+      if (test.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('DuctLeakageTest/ComplianceUpdate', error, { testId: test.id });
+        }
+      }
+      
+      res.status(201).json(test);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create duct leakage test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/duct-leakage-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertDuctLeakageTestSchema.partial().parse(req.body);
+      
+      // Recalculate derived values if base values changed
+      const existing = await storage.getDuctLeakageTest(req.params.id);
+      if (existing) {
+        const conditionedArea = validated.conditionedArea ?? existing.conditionedArea;
+        const systemAirflow = validated.systemAirflow ?? existing.systemAirflow;
+        
+        // Recalculate CFM per 100 sq ft
+        if (conditionedArea) {
+          const cfm25Total = validated.cfm25Total ?? existing.cfm25Total;
+          const cfm25Outside = validated.cfm25Outside ?? existing.cfm25Outside;
+          
+          if (cfm25Total) {
+            validated.totalCfmPerSqFt = (Number(cfm25Total) / Number(conditionedArea)) * 100;
+          }
+          if (cfm25Outside) {
+            validated.outsideCfmPerSqFt = (Number(cfm25Outside) / Number(conditionedArea)) * 100;
+          }
+        }
+        
+        // Recalculate percentage of system flow
+        if (systemAirflow) {
+          const cfm25Total = validated.cfm25Total ?? existing.cfm25Total;
+          const cfm25Outside = validated.cfm25Outside ?? existing.cfm25Outside;
+          
+          if (cfm25Total) {
+            validated.totalPercentOfFlow = (Number(cfm25Total) / Number(systemAirflow)) * 100;
+          }
+          if (cfm25Outside) {
+            validated.outsidePercentOfFlow = (Number(cfm25Outside) / Number(systemAirflow)) * 100;
+          }
+        }
+        
+        // Update compliance
+        const totalLimit = validated.totalDuctLeakageLimit || existing.totalDuctLeakageLimit || 4.0;
+        const outsideLimit = validated.outsideLeakageLimit || existing.outsideLeakageLimit || 3.0;
+        
+        if (validated.totalCfmPerSqFt !== undefined) {
+          validated.meetsCodeTDL = validated.totalCfmPerSqFt <= totalLimit;
+        }
+        if (validated.outsideCfmPerSqFt !== undefined) {
+          validated.meetsCodeDLO = validated.outsideCfmPerSqFt <= outsideLimit;
+        }
+      }
+      
+      const test = await storage.updateDuctLeakageTest(req.params.id, validated);
+      if (!test) {
+        return res.status(404).json({ message: "Duct leakage test not found" });
+      }
+      
+      // Update job compliance status if needed
+      if (test.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('DuctLeakageTest/ComplianceUpdate', error, { testId: test.id });
+        }
+      }
+      
+      res.json(test);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update duct leakage test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/duct-leakage-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const test = await storage.getDuctLeakageTest(req.params.id);
+      const deleted = await storage.deleteDuctLeakageTest(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Duct leakage test not found" });
+      }
+      
+      // Update job compliance status if needed
+      if (test?.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('DuctLeakageTest/ComplianceUpdate', error, { testId: req.params.id });
+        }
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete duct leakage test');
       res.status(status).json({ message });
     }
   });

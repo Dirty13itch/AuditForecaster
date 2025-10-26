@@ -67,6 +67,10 @@ import {
   type InsertUserAchievement,
   type BuilderAbbreviation,
   type InsertBuilderAbbreviation,
+  type BlowerDoorTest,
+  type InsertBlowerDoorTest,
+  type DuctLeakageTest,
+  type InsertDuctLeakageTest,
   type ScoreSummary,
   users,
   builders,
@@ -102,6 +106,8 @@ import {
   achievements,
   userAchievements,
   builderAbbreviations,
+  blowerDoorTests,
+  ductLeakageTests,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -395,6 +401,22 @@ export interface IStorage {
     calendarId?: string;
     hasErrors?: boolean;
   }): Promise<{ logs: CalendarImportLog[]; total: number }>;
+
+  // Blower Door Tests
+  createBlowerDoorTest(test: InsertBlowerDoorTest): Promise<BlowerDoorTest>;
+  getBlowerDoorTest(id: string): Promise<BlowerDoorTest | undefined>;
+  getBlowerDoorTestsByJob(jobId: string): Promise<BlowerDoorTest[]>;
+  getLatestBlowerDoorTest(jobId: string): Promise<BlowerDoorTest | undefined>;
+  updateBlowerDoorTest(id: string, test: Partial<InsertBlowerDoorTest>): Promise<BlowerDoorTest | undefined>;
+  deleteBlowerDoorTest(id: string): Promise<boolean>;
+
+  // Duct Leakage Tests
+  createDuctLeakageTest(test: InsertDuctLeakageTest): Promise<DuctLeakageTest>;
+  getDuctLeakageTest(id: string): Promise<DuctLeakageTest | undefined>;
+  getDuctLeakageTestsByJob(jobId: string): Promise<DuctLeakageTest[]>;
+  getLatestDuctLeakageTest(jobId: string): Promise<DuctLeakageTest | undefined>;
+  updateDuctLeakageTest(id: string, test: Partial<InsertDuctLeakageTest>): Promise<DuctLeakageTest | undefined>;
+  deleteDuctLeakageTest(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2772,6 +2794,106 @@ export class DatabaseStorage implements IStorage {
     const total = countResult[0]?.count || 0;
     
     return { logs, total };
+  }
+
+  // Blower Door Tests Implementation
+  async createBlowerDoorTest(test: InsertBlowerDoorTest): Promise<BlowerDoorTest> {
+    const result = await db.insert(blowerDoorTests)
+      .values(test)
+      .returning();
+    return result[0];
+  }
+
+  async getBlowerDoorTest(id: string): Promise<BlowerDoorTest | undefined> {
+    const result = await db.select()
+      .from(blowerDoorTests)
+      .where(eq(blowerDoorTests.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getBlowerDoorTestsByJob(jobId: string): Promise<BlowerDoorTest[]> {
+    return await db.select()
+      .from(blowerDoorTests)
+      .where(eq(blowerDoorTests.jobId, jobId))
+      .orderBy(desc(blowerDoorTests.testDate));
+  }
+
+  async getLatestBlowerDoorTest(jobId: string): Promise<BlowerDoorTest | undefined> {
+    const result = await db.select()
+      .from(blowerDoorTests)
+      .where(eq(blowerDoorTests.jobId, jobId))
+      .orderBy(desc(blowerDoorTests.testDate))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateBlowerDoorTest(id: string, test: Partial<InsertBlowerDoorTest>): Promise<BlowerDoorTest | undefined> {
+    const result = await db.update(blowerDoorTests)
+      .set({
+        ...test,
+        updatedAt: new Date(),
+      })
+      .where(eq(blowerDoorTests.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBlowerDoorTest(id: string): Promise<boolean> {
+    const result = await db.delete(blowerDoorTests)
+      .where(eq(blowerDoorTests.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Duct Leakage Tests Implementation
+  async createDuctLeakageTest(test: InsertDuctLeakageTest): Promise<DuctLeakageTest> {
+    const result = await db.insert(ductLeakageTests)
+      .values(test)
+      .returning();
+    return result[0];
+  }
+
+  async getDuctLeakageTest(id: string): Promise<DuctLeakageTest | undefined> {
+    const result = await db.select()
+      .from(ductLeakageTests)
+      .where(eq(ductLeakageTests.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getDuctLeakageTestsByJob(jobId: string): Promise<DuctLeakageTest[]> {
+    return await db.select()
+      .from(ductLeakageTests)
+      .where(eq(ductLeakageTests.jobId, jobId))
+      .orderBy(desc(ductLeakageTests.testDate));
+  }
+
+  async getLatestDuctLeakageTest(jobId: string): Promise<DuctLeakageTest | undefined> {
+    const result = await db.select()
+      .from(ductLeakageTests)
+      .where(eq(ductLeakageTests.jobId, jobId))
+      .orderBy(desc(ductLeakageTests.testDate))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateDuctLeakageTest(id: string, test: Partial<InsertDuctLeakageTest>): Promise<DuctLeakageTest | undefined> {
+    const result = await db.update(ductLeakageTests)
+      .set({
+        ...test,
+        updatedAt: new Date(),
+      })
+      .where(eq(ductLeakageTests.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteDuctLeakageTest(id: string): Promise<boolean> {
+    const result = await db.delete(ductLeakageTests)
+      .where(eq(ductLeakageTests.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 

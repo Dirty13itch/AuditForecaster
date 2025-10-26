@@ -27,21 +27,24 @@ import type {
   InsertTemplateField 
 } from "@shared/schema";
 
-// Field type definitions with icons and descriptions
+// Field type definitions with icons and descriptions - all 15+ field types
 const FIELD_TYPES = [
   { value: "text", label: "Text", description: "Single line text input" },
   { value: "textarea", label: "Text Area", description: "Multi-line text input" },
-  { value: "number", label: "Number", description: "Numeric input" },
-  { value: "select", label: "Dropdown", description: "Select from options" },
-  { value: "multiselect", label: "Multi-Select", description: "Select multiple options" },
-  { value: "yes_no_na", label: "Yes/No/NA", description: "Three-option choice" },
-  { value: "scale", label: "Scale", description: "Rating scale" },
+  { value: "number", label: "Number", description: "Numeric input with optional min/max/decimals" },
+  { value: "checkbox", label: "Checkbox", description: "Simple true/false checkbox" },
+  { value: "select", label: "Dropdown", description: "Select one option from a list" },
+  { value: "multiselect", label: "Multi-Select", description: "Select multiple options from a list" },
+  { value: "yes_no_na", label: "Yes/No/NA", description: "Three-option radio choice" },
+  { value: "scale", label: "Scale", description: "Rating scale (1-5, 1-10, etc.)" },
   { value: "date", label: "Date", description: "Date picker" },
   { value: "time", label: "Time", description: "Time picker" },
-  { value: "datetime", label: "Date & Time", description: "Date and time picker" },
-  { value: "photo", label: "Photo", description: "Photo capture/upload" },
-  { value: "signature", label: "Signature", description: "Digital signature" },
-  { value: "calculation", label: "Calculation", description: "Calculated field" },
+  { value: "datetime", label: "Date & Time", description: "Combined date and time picker" },
+  { value: "photo", label: "Photo", description: "Single photo capture/upload" },
+  { value: "photo_group", label: "Photo Group", description: "Multiple photos with annotations" },
+  { value: "signature", label: "Signature", description: "Digital signature capture" },
+  { value: "calculation", label: "Calculation", description: "Auto-calculated based on formula" },
+  { value: "conditional_calculation", label: "Conditional Calc", description: "Calculated based on conditions" },
 ];
 
 // Sortable field component

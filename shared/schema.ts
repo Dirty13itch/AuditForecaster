@@ -404,7 +404,7 @@ export const templateFields = pgTable("template_fields", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sectionId: varchar("section_id").notNull().references(() => templateSections.id, { onDelete: 'cascade' }),
   fieldType: text("field_type", {
-    enum: ["text", "textarea", "number", "select", "multiselect", "yes_no_na", "scale", "date", "time", "datetime", "photo", "signature", "calculation"]
+    enum: ["text", "textarea", "number", "checkbox", "select", "multiselect", "yes_no_na", "scale", "date", "time", "datetime", "photo", "photo_group", "signature", "calculation", "conditional_calculation"]
   }).notNull(),
   label: text("label").notNull(),
   description: text("description"),
@@ -678,6 +678,125 @@ export const userAchievements = pgTable("user_achievements", {
   index("idx_user_achievements_earned_at").on(table.earnedAt),
 ]);
 
+// Blower door test data table for Minnesota code compliance
+export const blowerDoorTests = pgTable("blower_door_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  reportInstanceId: varchar("report_instance_id").references(() => reportInstances.id, { onDelete: 'set null' }),
+  
+  // Test Information
+  testDate: timestamp("test_date").notNull(),
+  testTime: text("test_time").notNull(),
+  equipmentSerial: text("equipment_serial"),
+  equipmentCalibrationDate: timestamp("equipment_calibration_date"),
+  
+  // Building Information
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }).notNull(), // cubic feet
+  conditionedArea: decimal("conditioned_area", { precision: 10, scale: 2 }).notNull(), // square feet
+  surfaceArea: decimal("surface_area", { precision: 10, scale: 2 }), // square feet
+  numberOfStories: decimal("number_of_stories", { precision: 3, scale: 1 }).notNull(),
+  basementType: text("basement_type", { enum: ["none", "unconditioned", "conditioned"] }).notNull(),
+  
+  // Weather Conditions for corrections
+  outdoorTemp: decimal("outdoor_temp", { precision: 5, scale: 1 }), // Fahrenheit
+  indoorTemp: decimal("indoor_temp", { precision: 5, scale: 1 }), // Fahrenheit
+  outdoorHumidity: decimal("outdoor_humidity", { precision: 5, scale: 1 }), // percentage
+  indoorHumidity: decimal("indoor_humidity", { precision: 5, scale: 1 }), // percentage
+  windSpeed: decimal("wind_speed", { precision: 5, scale: 1 }), // mph
+  barometricPressure: decimal("barometric_pressure", { precision: 6, scale: 2 }), // inches Hg
+  altitude: decimal("altitude", { precision: 8, scale: 1 }), // feet above sea level
+  
+  // Multi-point test data (stored as JSON array)
+  testPoints: jsonb("test_points"), // Array of {housePressure, fanPressure, cfm, ringConfiguration}
+  
+  // Calculated Results
+  cfm50: decimal("cfm50", { precision: 10, scale: 2 }).notNull(), // CFM at 50 Pa
+  ach50: decimal("ach50", { precision: 6, scale: 2 }).notNull(), // Air changes per hour at 50 Pa
+  ela: decimal("ela", { precision: 8, scale: 2 }), // Effective Leakage Area (sq inches)
+  nFactor: decimal("n_factor", { precision: 4, scale: 3 }), // Flow exponent (typically 0.5-0.7)
+  correlationCoefficient: decimal("correlation_coefficient", { precision: 4, scale: 3 }), // R² value
+  
+  // Minnesota Code Compliance (2020 Energy Code)
+  codeYear: text("code_year").default("2020"),
+  codeLimit: decimal("code_limit", { precision: 6, scale: 2 }), // ACH50 limit per code
+  meetsCode: boolean("meets_code").notNull(),
+  margin: decimal("margin", { precision: 6, scale: 2 }), // How much under/over the limit
+  
+  // Additional fields
+  notes: text("notes"),
+  weatherCorrectionApplied: boolean("weather_correction_applied").default(false),
+  altitudeCorrectionFactor: decimal("altitude_correction_factor", { precision: 4, scale: 3 }),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+}, (table) => [
+  index("idx_blower_door_tests_job_id").on(table.jobId),
+  index("idx_blower_door_tests_report_instance_id").on(table.reportInstanceId),
+  index("idx_blower_door_tests_test_date").on(table.testDate),
+  index("idx_blower_door_tests_meets_code").on(table.meetsCode),
+]);
+
+// Duct leakage test data table for Minnesota code compliance
+export const ductLeakageTests = pgTable("duct_leakage_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  reportInstanceId: varchar("report_instance_id").references(() => reportInstances.id, { onDelete: 'set null' }),
+  
+  // Test Information
+  testDate: timestamp("test_date").notNull(),
+  testTime: text("test_time").notNull(),
+  testType: text("test_type", { enum: ["total", "leakage_to_outside", "both"] }).notNull(),
+  equipmentSerial: text("equipment_serial"),
+  equipmentCalibrationDate: timestamp("equipment_calibration_date"),
+  
+  // System Information
+  systemType: text("system_type", { enum: ["forced_air", "heat_pump", "hydronic", "other"] }).notNull(),
+  numberOfSystems: integer("number_of_systems").default(1),
+  conditionedArea: decimal("conditioned_area", { precision: 10, scale: 2 }).notNull(), // square feet
+  systemAirflow: decimal("system_airflow", { precision: 10, scale: 2 }), // Design CFM
+  
+  // Total Duct Leakage Test (at 25 Pa)
+  totalFanPressure: decimal("total_fan_pressure", { precision: 8, scale: 2 }), // Pa
+  totalRingConfiguration: text("total_ring_configuration"),
+  cfm25Total: decimal("cfm25_total", { precision: 10, scale: 2 }), // Total leakage CFM at 25 Pa
+  totalCfmPerSqFt: decimal("total_cfm_per_sqft", { precision: 8, scale: 3 }), // CFM25/100 sq ft
+  totalPercentOfFlow: decimal("total_percent_of_flow", { precision: 6, scale: 2 }), // As % of system airflow
+  
+  // Duct Leakage to Outside (at 25 Pa)
+  outsideHousePressure: decimal("outside_house_pressure", { precision: 8, scale: 2 }), // Pa
+  outsideFanPressure: decimal("outside_fan_pressure", { precision: 8, scale: 2 }), // Pa
+  outsideRingConfiguration: text("outside_ring_configuration"),
+  cfm25Outside: decimal("cfm25_outside", { precision: 10, scale: 2 }), // Leakage to outside CFM at 25 Pa
+  outsideCfmPerSqFt: decimal("outside_cfm_per_sqft", { precision: 8, scale: 3 }), // CFM25/100 sq ft
+  outsidePercentOfFlow: decimal("outside_percent_of_flow", { precision: 6, scale: 2 }), // As % of system airflow
+  
+  // Pressure Pan Testing
+  pressurePanReadings: jsonb("pressure_pan_readings"), // Array of {location, supplyReturn, reading, passFail}
+  
+  // Minnesota Code Compliance (2020 Energy Code)
+  codeYear: text("code_year").default("2020"),
+  totalDuctLeakageLimit: decimal("total_duct_leakage_limit", { precision: 6, scale: 2 }), // CFM25/100 sq ft
+  outsideLeakageLimit: decimal("outside_leakage_limit", { precision: 6, scale: 2 }), // CFM25/100 sq ft
+  meetsCodeTDL: boolean("meets_code_tdl"), // Total Duct Leakage compliance
+  meetsCodeDLO: boolean("meets_code_dlo"), // Duct Leakage to Outside compliance
+  
+  // Additional Data
+  notes: text("notes"),
+  recommendations: text("recommendations"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+}, (table) => [
+  index("idx_duct_leakage_tests_job_id").on(table.jobId),
+  index("idx_duct_leakage_tests_report_instance_id").on(table.reportInstanceId),
+  index("idx_duct_leakage_tests_test_date").on(table.testDate),
+  index("idx_duct_leakage_tests_test_type").on(table.testType),
+  index("idx_duct_leakage_tests_meets_code_tdl").on(table.meetsCodeTDL),
+  index("idx_duct_leakage_tests_meets_code_dlo").on(table.meetsCodeDLO),
+]);
+
 // For Replit Auth upsert operations
 export const upsertUserSchema = createInsertSchema(users).pick({
   id: true,
@@ -841,6 +960,49 @@ export const insertUserAchievementSchema = createInsertSchema(userAchievements).
   earnedAt: z.coerce.date().optional(),
 });
 
+// Blower Door and Duct Leakage Test schemas
+export const insertBlowerDoorTestSchema = createInsertSchema(blowerDoorTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  testDate: z.coerce.date(),
+  equipmentCalibrationDate: z.coerce.date().nullable().optional(),
+  houseVolume: z.coerce.number(),
+  conditionedArea: z.coerce.number(),
+  surfaceArea: z.coerce.number().nullable().optional(),
+  numberOfStories: z.coerce.number(),
+  outdoorTemp: z.coerce.number().nullable().optional(),
+  indoorTemp: z.coerce.number().nullable().optional(),
+  outdoorHumidity: z.coerce.number().nullable().optional(),
+  indoorHumidity: z.coerce.number().nullable().optional(),
+  windSpeed: z.coerce.number().nullable().optional(),
+  barometricPressure: z.coerce.number().nullable().optional(),
+  altitude: z.coerce.number().nullable().optional(),
+  cfm50: z.coerce.number(),
+  ach50: z.coerce.number(),
+  ela: z.coerce.number().nullable().optional(),
+  nFactor: z.coerce.number().nullable().optional(),
+  correlationCoefficient: z.coerce.number().nullable().optional(),
+  codeLimit: z.coerce.number().nullable().optional(),
+  margin: z.coerce.number().nullable().optional(),
+  altitudeCorrectionFactor: z.coerce.number().nullable().optional(),
+});
+
+export const insertDuctLeakageTestSchema = createInsertSchema(ductLeakageTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  testDate: z.coerce.date(),
+  equipmentCalibrationDate: z.coerce.date().nullable().optional(),
+  conditionedArea: z.coerce.number(),
+  systemAirflow: z.coerce.number().nullable().optional(),
+  totalFanPressure: z.coerce.number().nullable().optional(),
+  cfm25Total: z.coerce.number().nullable().optional(),
+  totalCfmPerSqFt: z.coerce.number().nullable().optional(),
+  totalPercentOfFlow: z.coerce.number().nullable().optional(),
+  outsideHousePressure: z.coerce.number().nullable().optional(),
+  outsideFanPressure: z.coerce.number().nullable().optional(),
+  cfm25Outside: z.coerce.number().nullable().optional(),
+  outsideCfmPerSqFt: z.coerce.number().nullable().optional(),
+  outsidePercentOfFlow: z.coerce.number().nullable().optional(),
+  totalDuctLeakageLimit: z.coerce.number().nullable().optional(),
+  outsideLeakageLimit: z.coerce.number().nullable().optional(),
+});
+
 // Calendar import schemas
 export const approveEventSchema = z.object({
   builderId: z.string().min(1, "Builder is required"),
@@ -935,6 +1097,10 @@ export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
 export type UserAchievement = typeof userAchievements.$inferSelect;
 export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
+export type BlowerDoorTest = typeof blowerDoorTests.$inferSelect;
+export type InsertBlowerDoorTest = z.infer<typeof insertBlowerDoorTestSchema>;
+export type DuctLeakageTest = typeof ductLeakageTests.$inferSelect;
+export type InsertDuctLeakageTest = z.infer<typeof insertDuctLeakageTestSchema>;
 
 export interface CalendarImportLogsResponse {
   logs: CalendarImportLog[];
