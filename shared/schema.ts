@@ -594,7 +594,11 @@ export const photos = pgTable("photos", {
   caption: text("caption"),
   tags: text("tags").array(),
   annotationData: jsonb("annotation_data"),
+  ocrText: text("ocr_text"),
+  ocrConfidence: decimal("ocr_confidence", { precision: 5, scale: 2 }),
+  ocrMetadata: jsonb("ocr_metadata"),
   uploadedAt: timestamp("uploaded_at").notNull().default(sql`now()`),
+  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_photos_job_id_uploaded_at").on(table.jobId, table.uploadedAt),
   index("idx_photos_hash").on(table.hash),
@@ -647,6 +651,24 @@ export const uploadSessions = pgTable("upload_sessions", {
   acknowledged: boolean("acknowledged").default(false),
   acknowledgedAt: timestamp("acknowledged_at"),
 });
+
+export const photoUploadSessions = pgTable("photo_upload_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: varchar("session_id").notNull(),
+  uploadDate: timestamp("upload_date").notNull().defaultNow(),
+  photoCount: integer("photo_count").notNull().default(0),
+  deviceInfo: jsonb("device_info"),
+  reminderSent: boolean("reminder_sent").default(false),
+  cleanupConfirmed: boolean("cleanup_confirmed").default(false),
+  cleanupConfirmedAt: timestamp("cleanup_confirmed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_photo_upload_sessions_user_id").on(table.userId),
+  index("idx_photo_upload_sessions_cleanup_confirmed").on(table.cleanupConfirmed),
+  index("idx_photo_upload_sessions_upload_date").on(table.uploadDate),
+]);
 
 export const emailPreferences = pgTable("email_preferences", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1238,6 +1260,10 @@ export const insertUploadSessionSchema = createInsertSchema(uploadSessions).omit
   timestamp: z.coerce.date(),
   acknowledgedAt: z.coerce.date().nullable().optional(),
 });
+export const insertPhotoUploadSessionSchema = createInsertSchema(photoUploadSessions).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  uploadDate: z.coerce.date().optional(),
+  cleanupConfirmedAt: z.coerce.date().nullable().optional(),
+});
 export const insertEmailPreferenceSchema = createInsertSchema(emailPreferences).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, timestamp: true });
 export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
@@ -1460,6 +1486,8 @@ export type UnmatchedCalendarEvent = typeof unmatchedCalendarEvents.$inferSelect
 export type InsertUnmatchedCalendarEvent = z.infer<typeof insertUnmatchedCalendarEventSchema>;
 export type UploadSession = typeof uploadSessions.$inferSelect;
 export type InsertUploadSession = z.infer<typeof insertUploadSessionSchema>;
+export type PhotoUploadSession = typeof photoUploadSessions.$inferSelect;
+export type InsertPhotoUploadSession = z.infer<typeof insertPhotoUploadSessionSchema>;
 export type EmailPreference = typeof emailPreferences.$inferSelect;
 export type InsertEmailPreference = z.infer<typeof insertEmailPreferenceSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;

@@ -4186,6 +4186,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Photo Annotations endpoint
+  app.post("/api/photos/:id/annotations", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { annotations } = req.body;
+      
+      const photo = await storage.updatePhotoAnnotations(req.params.id, annotations);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      res.json(photo);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update photo annotations');
+      res.status(status).json({ message });
+    }
+  });
+
+  // OCR Processing endpoint
+  app.post("/api/photos/:id/ocr", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { ocrText, ocrConfidence, ocrMetadata } = req.body;
+      
+      const photo = await storage.updatePhotoOCR(
+        req.params.id,
+        ocrText,
+        ocrConfidence,
+        ocrMetadata
+      );
+      
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      res.json(photo);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update photo OCR');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Photo Cleanup Sessions endpoints
+  app.get("/api/photos/cleanup-sessions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessions = await storage.getPendingCleanupSessions(userId);
+      res.json(sessions);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch cleanup sessions');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/photos/cleanup-sessions", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { sessionId, photoCount, deviceInfo } = req.body;
+      
+      const session = await storage.createPhotoUploadSession({
+        userId,
+        sessionId,
+        photoCount,
+        deviceInfo,
+      });
+      
+      res.status(201).json(session);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'create cleanup session');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/photos/cleanup-sessions/:id/confirm", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const session = await storage.confirmPhotoCleanup(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Cleanup session not found" });
+      }
+      
+      res.json(session);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'confirm cleanup');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Photo Comparison endpoint
+  app.get("/api/photos/comparison/:id1/:id2", isAuthenticated, async (req, res) => {
+    try {
+      const [photo1, photo2] = await Promise.all([
+        storage.getPhoto(req.params.id1),
+        storage.getPhoto(req.params.id2),
+      ]);
+      
+      if (!photo1 || !photo2) {
+        return res.status(404).json({ message: "One or both photos not found" });
+      }
+      
+      res.json({ photo1, photo2 });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch photos for comparison');
+      res.status(status).json({ message });
+    }
+  });
+
   // Export photos
   app.post("/api/photos/export", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const exportSchema = z.object({

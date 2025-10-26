@@ -17,6 +17,8 @@ import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
 import Photos from "@/pages/Photos";
+import PhotoAnnotation from "@/pages/PhotoAnnotation";
+import PhotoCleanup from "@/pages/PhotoCleanup";
 import Forecast from "@/pages/Forecast";
 import Jobs from "@/pages/Jobs";
 import Schedule from "@/pages/Schedule";
@@ -256,6 +258,16 @@ function Router() {
       <Route path="/photos/:id" component={() => (
         <RouteErrorBoundary>
           <Photos />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/photos/annotate/:photoId" component={() => (
+        <RouteErrorBoundary>
+          <PhotoAnnotation />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/photos/cleanup" component={() => (
+        <RouteErrorBoundary>
+          <PhotoCleanup />
         </RouteErrorBoundary>
       )} />
       <Route path="/forecast/:id" component={() => (

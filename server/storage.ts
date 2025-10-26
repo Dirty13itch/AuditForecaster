@@ -59,6 +59,8 @@ import {
   type InsertCalendarImportLog,
   type UploadSession,
   type InsertUploadSession,
+  type PhotoUploadSession,
+  type InsertPhotoUploadSession,
   type EmailPreference,
   type InsertEmailPreference,
   type AuditLog,
@@ -126,6 +128,7 @@ import {
   unmatchedCalendarEvents,
   calendarImportLogs,
   uploadSessions,
+  photoUploadSessions,
   emailPreferences,
   auditLogs,
   achievements,
@@ -327,6 +330,18 @@ export interface IStorage {
   // Bulk photo operations
   bulkDeletePhotos(ids: string[]): Promise<number>;
   bulkUpdatePhotoTags(ids: string[], mode: 'add' | 'remove' | 'replace', tags: string[]): Promise<number>;
+  
+  // Photo OCR and annotations
+  updatePhotoOCR(photoId: string, ocrText: string | null, ocrConfidence: number | null, ocrMetadata: any): Promise<Photo | undefined>;
+  updatePhotoAnnotations(photoId: string, annotations: any): Promise<Photo | undefined>;
+  
+  // Photo upload sessions for cleanup reminders
+  createPhotoUploadSession(session: InsertPhotoUploadSession): Promise<PhotoUploadSession>;
+  getPhotoUploadSession(id: string): Promise<PhotoUploadSession | undefined>;
+  getPhotoUploadSessionsByUser(userId: string): Promise<PhotoUploadSession[]>;
+  getPendingCleanupSessions(userId: string): Promise<PhotoUploadSession[]>;
+  confirmPhotoCleanup(sessionId: string): Promise<PhotoUploadSession | undefined>;
+  updatePhotoUploadSession(id: string, session: Partial<InsertPhotoUploadSession>): Promise<PhotoUploadSession | undefined>;
 
   createForecast(forecast: InsertForecast): Promise<Forecast>;
   getForecast(id: string): Promise<Forecast | undefined>;
@@ -1978,6 +1993,86 @@ export class DatabaseStorage implements IStorage {
     if (ids.length === 0) return 0;
     const result = await db.delete(photos).where(inArray(photos.id, ids)).returning();
     return result.length;
+  }
+
+  async updatePhotoOCR(
+    photoId: string,
+    ocrText: string | null,
+    ocrConfidence: number | null,
+    ocrMetadata: any
+  ): Promise<Photo | undefined> {
+    const result = await db.update(photos)
+      .set({
+        ocrText,
+        ocrConfidence: ocrConfidence?.toString(),
+        ocrMetadata
+      })
+      .where(eq(photos.id, photoId))
+      .returning();
+    return result[0];
+  }
+
+  async updatePhotoAnnotations(photoId: string, annotations: any): Promise<Photo | undefined> {
+    const result = await db.update(photos)
+      .set({ annotationData: annotations })
+      .where(eq(photos.id, photoId))
+      .returning();
+    return result[0];
+  }
+
+  async createPhotoUploadSession(session: InsertPhotoUploadSession): Promise<PhotoUploadSession> {
+    const result = await db.insert(photoUploadSessions).values(session).returning();
+    return result[0];
+  }
+
+  async getPhotoUploadSession(id: string): Promise<PhotoUploadSession | undefined> {
+    const result = await db.select()
+      .from(photoUploadSessions)
+      .where(eq(photoUploadSessions.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getPhotoUploadSessionsByUser(userId: string): Promise<PhotoUploadSession[]> {
+    return await db.select()
+      .from(photoUploadSessions)
+      .where(eq(photoUploadSessions.userId, userId))
+      .orderBy(desc(photoUploadSessions.uploadDate));
+  }
+
+  async getPendingCleanupSessions(userId: string): Promise<PhotoUploadSession[]> {
+    return await db.select()
+      .from(photoUploadSessions)
+      .where(and(
+        eq(photoUploadSessions.userId, userId),
+        eq(photoUploadSessions.cleanupConfirmed, false)
+      ))
+      .orderBy(desc(photoUploadSessions.uploadDate));
+  }
+
+  async confirmPhotoCleanup(sessionId: string): Promise<PhotoUploadSession | undefined> {
+    const result = await db.update(photoUploadSessions)
+      .set({ 
+        cleanupConfirmed: true,
+        cleanupConfirmedAt: new Date()
+      })
+      .where(eq(photoUploadSessions.id, sessionId))
+      .returning();
+    return result[0];
+  }
+
+  async updatePhotoUploadSession(
+    id: string,
+    session: Partial<InsertPhotoUploadSession>
+  ): Promise<PhotoUploadSession | undefined> {
+    const result = await db.update(photoUploadSessions)
+      .set({
+        ...session,
+        updatedAt: new Date()
+      })
+      .where(eq(photoUploadSessions.id, id))
+      .returning();
+    return result[0];
   }
 
   async bulkUpdatePhotoTags(
