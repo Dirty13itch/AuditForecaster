@@ -27,6 +27,7 @@ import Financials from "@/pages/Financials";
 import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
 import ReportTemplates from "@/pages/ReportTemplates";
+import ReportFillout from "@/pages/ReportFillout";
 import Analytics from "@/pages/Analytics";
 import AuditLogs from "@/pages/AuditLogs";
 import SettingsPage from "@/pages/SettingsPage";
@@ -97,6 +98,11 @@ function Router() {
       <Route path="/report-templates" component={() => (
         <RouteErrorBoundary>
           <ReportTemplates />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/reports/fillout/:id" component={() => (
+        <RouteErrorBoundary>
+          <ReportFillout />
         </RouteErrorBoundary>
       )} />
       <Route path="/analytics" component={() => (
