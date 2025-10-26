@@ -27,11 +27,13 @@ import {
   Award,
   Building2,
   MessageSquare,
+  Tag,
 } from "lucide-react";
 import { BuilderContactsDialog } from "@/components/BuilderContactsDialog";
 import { BuilderAgreementsDialog } from "@/components/BuilderAgreementsDialog";
 import { BuilderProgramsDialog } from "@/components/BuilderProgramsDialog";
 import { BuilderInteractionsDialog } from "@/components/BuilderInteractionsDialog";
+import { BuilderAbbreviationsDialog } from "@/components/BuilderAbbreviationsDialog";
 import { DevelopmentsDialog } from "@/components/DevelopmentsDialog";
 import type { Builder, Job } from "@shared/schema";
 
@@ -54,6 +56,7 @@ export function BuilderDetailDialog({
   const [isAgreementsDialogOpen, setIsAgreementsDialogOpen] = useState(false);
   const [isProgramsDialogOpen, setIsProgramsDialogOpen] = useState(false);
   const [isInteractionsDialogOpen, setIsInteractionsDialogOpen] = useState(false);
+  const [isAbbreviationsDialogOpen, setIsAbbreviationsDialogOpen] = useState(false);
   const [isDevelopmentsDialogOpen, setIsDevelopmentsDialogOpen] = useState(false);
 
   const { data: jobs = [] } = useQuery<Job[]>({
@@ -290,6 +293,14 @@ export function BuilderDetailDialog({
             </Button>
             <Button
               variant="outline"
+              onClick={() => setIsAbbreviationsDialogOpen(true)}
+              data-testid="button-manage-abbreviations"
+            >
+              <Tag className="h-4 w-4 mr-2" />
+              Abbreviations
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setIsDevelopmentsDialogOpen(true)}
               data-testid="button-manage-developments"
             >
@@ -354,6 +365,12 @@ export function BuilderDetailDialog({
         open={isInteractionsDialogOpen}
         onOpenChange={setIsInteractionsDialogOpen}
         builder={builder}
+      />
+      
+      <BuilderAbbreviationsDialog
+        open={isAbbreviationsDialogOpen}
+        onOpenChange={setIsAbbreviationsDialogOpen}
+        builderId={builder.id}
       />
       
       <DevelopmentsDialog
