@@ -62,6 +62,11 @@ const menuItems = [
     icon: FileText,
   },
   {
+    title: "Report Templates",
+    url: "/report-templates",
+    icon: FileText,
+  },
+  {
     title: "Analytics",
     url: "/analytics",
     icon: BarChart3,
