@@ -6652,6 +6652,296 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==============================================================
+  // Gamification API Endpoints
+  // ==============================================================
+
+  // Get user's achievements
+  app.get("/api/achievements/user/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Check if user can access this data
+      if (userId !== req.user.claims.sub && req.user.role !== 'admin') {
+        return res.status(403).json({ message: "You can only view your own achievements" });
+      }
+
+      const achievements = await storage.getUserAchievements(userId);
+      const stats = await storage.getUserAchievementStats(userId);
+      const xp = await storage.getUserXP(userId);
+      const userStats = await storage.getUserStatistics(userId);
+
+      res.json({
+        userId,
+        totalXP: xp,
+        level: Math.floor(xp / 100) + 1, // Simple level calculation
+        achievements: achievements.map(a => a.achievementType),
+        stats: userStats,
+        recentAchievements: stats.recentUnlocks.slice(0, 5).map(a => ({
+          achievementId: a.achievementType,
+          unlockedAt: a.unlockedAt
+        })),
+        categoryProgress: stats.byCategory
+      });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch user achievements');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get achievement progress for current user
+  app.get("/api/achievements/progress", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const achievements = await storage.getUserAchievements(userId);
+      const stats = await storage.getUserStatistics(userId);
+      
+      // Calculate progress for each achievement type
+      // This is a simplified version - in production you'd have more complex logic
+      const progress = {
+        inspections_completed: stats.inspections_completed || 0,
+        photos_taken: stats.photos_taken || 0,
+        achievements_unlocked: achievements.length,
+        // Add more progress metrics as needed
+      };
+
+      res.json(progress);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch achievement progress');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Unlock an achievement
+  app.post("/api/achievements/unlock", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const schema = z.object({
+        userId: z.string(),
+        achievementId: z.string(),
+        achievementType: z.string(),
+        xpReward: z.number().optional()
+      });
+
+      const { userId, achievementId, achievementType, xpReward } = schema.parse(req.body);
+
+      // Check if user can unlock achievements (only for themselves or admin)
+      if (userId !== req.user.claims.sub && req.user.role !== 'admin') {
+        return res.status(403).json({ message: "Cannot unlock achievements for other users" });
+      }
+
+      // Check if already unlocked
+      const existing = await storage.getAchievementByType(userId, achievementType);
+      if (existing) {
+        return res.status(409).json({ message: "Achievement already unlocked" });
+      }
+
+      // Unlock the achievement
+      const achievement = await storage.unlockAchievement(userId, achievementType, {
+        achievementId,
+        xpReward: xpReward || 0,
+        category: req.body.category || 'general'
+      });
+
+      // Update user XP if provided
+      if (xpReward) {
+        await storage.updateUserXP(userId, xpReward);
+      }
+
+      // Create audit log
+      await createAuditLog(req, 'achievement.unlock', 'success', {
+        achievementType,
+        userId
+      });
+
+      res.status(201).json(achievement);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'unlock achievement');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get leaderboard
+  app.get("/api/leaderboard", isAuthenticated, async (req, res) => {
+    try {
+      const schema = z.object({
+        period: z.enum(['week', 'month', 'year', 'all_time']).optional().default('month'),
+        category: z.enum(['overall', 'inspections', 'quality', 'speed', 'photos']).optional().default('overall'),
+        mode: z.enum(['individual', 'team']).optional().default('individual'),
+        limit: z.string().transform(Number).optional().default('10')
+      });
+
+      const { period, category, mode, limit } = schema.parse(req.query);
+
+      const leaderboard = await storage.getLeaderboard(period, category, limit);
+
+      // Add additional user data
+      const enrichedLeaderboard = await Promise.all(
+        leaderboard.map(async (entry) => {
+          const user = await storage.getUser(entry.userId);
+          return {
+            ...entry,
+            profileImageUrl: user?.profileImageUrl,
+            level: Math.floor(entry.totalXP / 100) + 1,
+            achievementCount: entry.achievementCount
+          };
+        })
+      );
+
+      res.json(enrichedLeaderboard);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch leaderboard');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get user's leaderboard position
+  app.get("/api/leaderboard/position", isAuthenticated, async (req: any, res) => {
+    try {
+      const schema = z.object({
+        period: z.enum(['week', 'month', 'year', 'all_time']).optional().default('month'),
+        category: z.enum(['overall', 'inspections', 'quality', 'speed', 'photos']).optional().default('overall'),
+        mode: z.enum(['individual', 'team']).optional().default('individual'),
+        userId: z.string().optional()
+      });
+
+      const { period, category, mode, userId } = schema.parse(req.query);
+      const targetUserId = userId || req.user.claims.sub;
+
+      const position = await storage.getUserLeaderboardPosition(targetUserId, period);
+      res.json(position);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch user position');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get user's XP and level
+  app.get("/api/stats/xp", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const xp = await storage.getUserXP(userId);
+      const level = Math.floor(xp / 100) + 1;
+      const xpForCurrentLevel = (level - 1) * 100;
+      const xpForNextLevel = level * 100;
+
+      res.json({
+        userId,
+        totalXP: xp,
+        level,
+        currentLevelXP: xp - xpForCurrentLevel,
+        nextLevelXP: xpForNextLevel - xpForCurrentLevel,
+        progress: ((xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100
+      });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch XP stats');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get user's streaks
+  app.get("/api/streaks/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+
+      // Check if user can access this data
+      if (userId !== req.user.claims.sub && req.user.role !== 'admin') {
+        return res.status(403).json({ message: "You can only view your own streaks" });
+      }
+
+      const streaks = await storage.getUserStreaks(userId);
+      res.json(streaks);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch user streaks');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Update a streak
+  app.post("/api/streaks/:userId", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const { type, current, best, lastDate } = req.body;
+
+      // Only the user themselves can update their streaks
+      if (userId !== req.user.claims.sub) {
+        return res.status(403).json({ message: "Cannot update streaks for other users" });
+      }
+
+      await storage.updateStreak(userId, type, true);
+      res.json({ success: true });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update streak');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get active challenges
+  app.get("/api/challenges", isAuthenticated, async (req, res) => {
+    try {
+      const { type } = req.query;
+      let challenges = await storage.getActiveChallenges();
+      
+      if (type && type !== 'all') {
+        challenges = challenges.filter(c => c.type === type);
+      }
+
+      // Add user progress for each challenge
+      const enrichedChallenges = await Promise.all(
+        challenges.map(async (challenge) => {
+          const progress = await storage.getChallengeProgress((req as any).user.claims.sub, challenge.id);
+          return {
+            ...challenge,
+            status: challenge.endDate < new Date() ? 'expired' : 'active',
+            userProgress: progress
+          };
+        })
+      );
+
+      res.json(enrichedChallenges);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch challenges');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Join a challenge
+  app.post("/api/challenges/:challengeId/join", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { challengeId } = req.params;
+      const userId = req.user.claims.sub;
+
+      await storage.joinChallenge(userId, challengeId);
+      
+      res.json({ success: true, message: "Successfully joined challenge" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'join challenge');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get global statistics
+  app.get("/api/stats/global", isAuthenticated, async (req, res) => {
+    try {
+      const stats = await storage.getGlobalStatistics();
+      res.json(stats);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch global stats');
+      res.status(status).json({ message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

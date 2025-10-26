@@ -4182,6 +4182,248 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result.length > 0;
   }
+
+  // Gamification System Implementation
+  
+  // Achievement Methods
+  async getUserAchievements(userId: string): Promise<Achievement[]> {
+    return await db.select()
+      .from(achievements)
+      .where(eq(achievements.userId, userId))
+      .orderBy(desc(achievements.unlockedAt));
+  }
+
+  async getAchievementByType(userId: string, achievementType: string): Promise<Achievement | undefined> {
+    const result = await db.select()
+      .from(achievements)
+      .where(and(
+        eq(achievements.userId, userId),
+        eq(achievements.achievementType, achievementType)
+      ))
+      .limit(1);
+    return result[0];
+  }
+
+  async unlockAchievement(userId: string, achievementType: string, achievementData: any): Promise<Achievement> {
+    const result = await db.insert(achievements).values({
+      userId,
+      achievementType,
+      achievementData,
+      unlockedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getRecentAchievements(limit: number = 10): Promise<Achievement[]> {
+    return await db.select()
+      .from(achievements)
+      .orderBy(desc(achievements.unlockedAt))
+      .limit(limit);
+  }
+
+  async getUserAchievementStats(userId: string): Promise<{
+    total: number;
+    byCategory: Record<string, number>;
+    recentUnlocks: Achievement[];
+  }> {
+    const userAchievements = await this.getUserAchievements(userId);
+    
+    const byCategory: Record<string, number> = {};
+    for (const achievement of userAchievements) {
+      const category = achievement.achievementData?.category || 'other';
+      byCategory[category] = (byCategory[category] || 0) + 1;
+    }
+
+    return {
+      total: userAchievements.length,
+      byCategory,
+      recentUnlocks: userAchievements.slice(0, 5)
+    };
+  }
+
+  // XP and Level Methods
+  async getUserXP(userId: string): Promise<number> {
+    const user = await this.getUser(userId);
+    if (!user) return 0;
+    
+    // Get XP from user profile if stored there
+    // Otherwise calculate from achievements
+    const userAchievements = await this.getUserAchievements(userId);
+    let totalXP = 0;
+    
+    for (const achievement of userAchievements) {
+      totalXP += achievement.achievementData?.xpReward || 0;
+    }
+    
+    return totalXP;
+  }
+
+  async updateUserXP(userId: string, xpToAdd: number): Promise<number> {
+    // This would update the user's XP in a dedicated field
+    // For now, we'll track it through achievements
+    const currentXP = await this.getUserXP(userId);
+    return currentXP + xpToAdd;
+  }
+
+  // Leaderboard Methods
+  async getLeaderboard(
+    period: 'week' | 'month' | 'year' | 'all_time',
+    category: 'overall' | 'inspections' | 'quality' | 'speed' | 'photos',
+    limit: number = 10
+  ): Promise<Array<{
+    userId: string;
+    userName: string;
+    totalXP: number;
+    achievementCount: number;
+    rank: number;
+  }>> {
+    // Get all users
+    const allUsers = await db.select().from(users);
+    
+    // Calculate scores for each user
+    const userScores = await Promise.all(
+      allUsers.map(async (user) => {
+        const xp = await this.getUserXP(user.id);
+        const achievements = await this.getUserAchievements(user.id);
+        
+        return {
+          userId: user.id,
+          userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Unknown',
+          totalXP: xp,
+          achievementCount: achievements.length,
+          rank: 0
+        };
+      })
+    );
+
+    // Sort by XP and assign ranks
+    userScores.sort((a, b) => b.totalXP - a.totalXP);
+    userScores.forEach((score, index) => {
+      score.rank = index + 1;
+    });
+
+    return userScores.slice(0, limit);
+  }
+
+  async getUserLeaderboardPosition(
+    userId: string,
+    period: 'week' | 'month' | 'year' | 'all_time'
+  ): Promise<{ rank: number; nearbyUsers: any[] }> {
+    const leaderboard = await this.getLeaderboard(period, 'overall', 1000);
+    const userIndex = leaderboard.findIndex(entry => entry.userId === userId);
+    
+    if (userIndex === -1) {
+      return { rank: 0, nearbyUsers: [] };
+    }
+
+    const rank = userIndex + 1;
+    const start = Math.max(0, userIndex - 2);
+    const end = Math.min(leaderboard.length, userIndex + 3);
+    const nearbyUsers = leaderboard.slice(start, end);
+
+    return { rank, nearbyUsers };
+  }
+
+  // Streak Methods
+  async getUserStreaks(userId: string): Promise<Array<{
+    type: string;
+    current: number;
+    best: number;
+    lastDate: string;
+  }>> {
+    // This would typically be stored in a dedicated streaks table
+    // For now, return mock data structure
+    return [];
+  }
+
+  async updateStreak(
+    userId: string,
+    streakType: string,
+    increment: boolean = true
+  ): Promise<void> {
+    // Update streak data
+    // This would interact with a dedicated streaks table
+  }
+
+  // Challenge Methods
+  async getActiveChallenges(): Promise<Array<{
+    id: string;
+    name: string;
+    description: string;
+    type: string;
+    requirements: any[];
+    rewards: any;
+    startDate: Date;
+    endDate: Date;
+  }>> {
+    // This would fetch from a challenges table
+    // For now, return static challenges
+    return [
+      {
+        id: 'weekly_inspections',
+        name: 'Weekly Warrior',
+        description: 'Complete 20 inspections this week',
+        type: 'weekly',
+        requirements: [{ type: 'inspections_completed', target: 20, current: 0 }],
+        rewards: { xp: 500, badges: ['weekly_warrior'] },
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      }
+    ];
+  }
+
+  async getChallengeProgress(userId: string, challengeId: string): Promise<any> {
+    // Get user's progress for a specific challenge
+    return {
+      challengeId,
+      userId,
+      progress: 0,
+      completed: false
+    };
+  }
+
+  async joinChallenge(userId: string, challengeId: string): Promise<void> {
+    // Add user to challenge participants
+  }
+
+  async updateChallengeProgress(
+    userId: string,
+    challengeId: string,
+    progress: number
+  ): Promise<void> {
+    // Update user's progress in a challenge
+  }
+
+  // Statistics Methods
+  async getUserStatistics(userId: string): Promise<Record<string, number>> {
+    const jobs = await this.getJobsByUser(userId);
+    const photos = await this.getPhotosByUser(userId);
+    const achievements = await this.getUserAchievements(userId);
+    
+    // Calculate various statistics
+    const stats: Record<string, number> = {
+      inspections_completed: jobs.filter(j => j.status === 'completed').length,
+      photos_taken: photos.length,
+      achievements_unlocked: achievements.length,
+      total_xp: await this.getUserXP(userId),
+      // Add more stats as needed
+    };
+
+    return stats;
+  }
+
+  async getGlobalStatistics(): Promise<Record<string, any>> {
+    const totalUsers = await db.select({ count: count() }).from(users);
+    const totalJobs = await db.select({ count: count() }).from(jobs);
+    const totalAchievements = await db.select({ count: count() }).from(achievements);
+    
+    return {
+      totalUsers: totalUsers[0].count,
+      totalJobs: totalJobs[0].count,
+      totalAchievements: totalAchievements[0].count,
+      // Add more global stats
+    };
+  }
 }
 
 export const storage = new DatabaseStorage();

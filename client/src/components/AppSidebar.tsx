@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History, Receipt, Package, Award } from "lucide-react";
+import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History, Receipt, Package, Award, Trophy, Target } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -60,6 +60,16 @@ const menuItems = [
     title: "Quality Assurance",
     url: "/qa",
     icon: Award,
+  },
+  {
+    title: "Achievements",
+    url: "/gamification",
+    icon: Trophy,
+  },
+  {
+    title: "Challenges",
+    url: "/challenges",
+    icon: Target,
   },
   {
     title: "Financials",

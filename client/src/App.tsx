@@ -21,6 +21,8 @@ import PhotoAnnotation from "@/pages/PhotoAnnotation";
 import PhotoCleanup from "@/pages/PhotoCleanup";
 import Forecast from "@/pages/Forecast";
 import Jobs from "@/pages/Jobs";
+import Gamification from "@/pages/Gamification";
+import Challenges from "@/pages/Challenges";
 import Schedule from "@/pages/Schedule";
 import RouteView from "@/pages/RouteView";
 import Builders from "@/pages/Builders";
@@ -310,6 +312,16 @@ function Router() {
       <Route path="/conflicts" component={() => (
         <RouteErrorBoundary>
           <ConflictResolution />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/gamification" component={() => (
+        <RouteErrorBoundary>
+          <Gamification />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/challenges" component={() => (
+        <RouteErrorBoundary>
+          <Challenges />
         </RouteErrorBoundary>
       )} />
       <Route path="/forecast/:id" component={() => (
