@@ -60,6 +60,8 @@ import QAReview from "@/components/QAReview";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 import ConflictResolution from "@/pages/ConflictResolution";
+import CustomReports from "@/pages/CustomReports";
+import KPISettings from "@/pages/KPISettings";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 
 function Router() {
@@ -192,6 +194,16 @@ function Router() {
       <Route path="/settings" component={() => (
         <RouteErrorBoundary>
           <SettingsPage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/custom-reports" component={() => (
+        <RouteErrorBoundary>
+          <CustomReports />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/kpi-settings" component={() => (
+        <RouteErrorBoundary>
+          <KPISettings />
         </RouteErrorBoundary>
       )} />
       <Route path="/admin/diagnostics" component={() => (

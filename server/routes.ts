@@ -6942,6 +6942,310 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Analytics Dashboard Endpoints
+  app.get("/api/analytics/overview", isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const jobs = await storage.getJobs();
+      const builders = await storage.getBuilders();
+      const checklistItems = await storage.getChecklistItems();
+      
+      // Calculate overview metrics
+      const overview = {
+        totalJobs: jobs.length,
+        completedJobs: jobs.filter((j: Job) => j.status === 'completed').length,
+        activeBuilders: new Set(jobs.map((j: Job) => j.builderId)).size,
+        avgCompletionTime: 125, // Mock average in minutes
+        complianceRate: 0.92,
+        avgQaScore: 0.85,
+        revenue: jobs.length * 850, // Mock calculation
+        expenses: jobs.length * 450, // Mock calculation
+      };
+      
+      res.json(overview);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch analytics overview');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/trends", isAuthenticated, async (req, res) => {
+    try {
+      const { period, metric, groupBy } = req.query;
+      const jobs = await storage.getJobs();
+      
+      // Generate trend data based on period
+      const trends = [];
+      const periods = period === 'daily' ? 7 : period === 'weekly' ? 4 : 6;
+      
+      for (let i = 0; i < periods; i++) {
+        const date = new Date();
+        if (period === 'daily') {
+          date.setDate(date.getDate() - (periods - i - 1));
+        } else if (period === 'weekly') {
+          date.setDate(date.getDate() - (periods - i - 1) * 7);
+        } else {
+          date.setMonth(date.getMonth() - (periods - i - 1));
+        }
+        
+        trends.push({
+          date: date.toISOString(),
+          value: Math.floor(Math.random() * 100) + 50,
+          label: period === 'daily' 
+            ? date.toLocaleDateString('en-US', { weekday: 'short' })
+            : period === 'weekly'
+            ? `Week ${i + 1}`
+            : date.toLocaleDateString('en-US', { month: 'short' }),
+        });
+      }
+      
+      res.json(trends);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch analytics trends');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/kpis", isAuthenticated, async (req, res) => {
+    try {
+      const jobs = await storage.getJobs();
+      const builders = await storage.getBuilders();
+      
+      // Calculate KPIs
+      const kpis = [
+        {
+          id: 'jobs_completed',
+          name: 'Jobs Completed',
+          value: jobs.filter((j: Job) => j.status === 'completed').length,
+          target: 100,
+          unit: 'jobs',
+          trend: 'up',
+          trendValue: 12.5,
+        },
+        {
+          id: 'avg_qa_score',
+          name: 'Average QA Score',
+          value: 85.3,
+          target: 90,
+          unit: '%',
+          trend: 'up',
+          trendValue: 2.1,
+        },
+        {
+          id: 'compliance_rate',
+          name: 'Compliance Rate',
+          value: 92.5,
+          target: 95,
+          unit: '%',
+          trend: 'down',
+          trendValue: -1.3,
+        },
+        {
+          id: 'first_pass_rate',
+          name: 'First Pass Rate',
+          value: 78.2,
+          target: 85,
+          unit: '%',
+          trend: 'up',
+          trendValue: 3.7,
+        },
+      ];
+      
+      res.json(kpis);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch analytics kpis');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/analytics/custom-report", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { 
+        reportType, 
+        filters, 
+        groupBy, 
+        metrics, 
+        dateRange,
+        chartType,
+      } = req.body;
+      
+      // Generate custom report based on parameters
+      const jobs = await storage.getJobs();
+      const builders = await storage.getBuilders();
+      
+      // Filter data based on criteria
+      let filteredData = jobs;
+      if (filters?.status) {
+        filteredData = filteredData.filter((j: Job) => j.status === filters.status);
+      }
+      if (filters?.builderId) {
+        filteredData = filteredData.filter((j: Job) => j.builderId === filters.builderId);
+      }
+      
+      // Generate report data
+      const reportData = {
+        id: `report_${Date.now()}`,
+        name: `${reportType} Report`,
+        type: reportType,
+        generatedAt: new Date().toISOString(),
+        parameters: { filters, groupBy, metrics, dateRange, chartType },
+        data: filteredData.slice(0, 100), // Limit data for demo
+        summary: {
+          totalRecords: filteredData.length,
+          metrics: metrics?.map((m: string) => ({
+            name: m,
+            value: Math.floor(Math.random() * 100),
+          })) || [],
+        },
+      };
+      
+      res.json(reportData);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'generate custom report');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/export", isAuthenticated, async (req, res) => {
+    try {
+      const { format, reportId } = req.query;
+      
+      // For demo, return mock data
+      if (format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=analytics.csv');
+        res.send('Date,Jobs,Revenue,Expenses\n2024-01-01,45,38250,20475\n2024-01-02,52,44200,23660');
+      } else if (format === 'excel') {
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=analytics.xlsx');
+        res.send(Buffer.from('Mock Excel Data'));
+      } else {
+        res.status(400).json({ message: 'Invalid export format' });
+      }
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'export analytics');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Custom Reports Management
+  app.get("/api/custom-reports", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).user.claims.sub;
+      // For demo, return mock saved reports
+      const reports = [
+        {
+          id: 'report_1',
+          name: 'Monthly Performance Report',
+          type: 'performance',
+          createdAt: new Date('2024-01-15').toISOString(),
+          lastRun: new Date('2024-02-01').toISOString(),
+          schedule: 'monthly',
+          chartType: 'line',
+          metrics: ['jobs_completed', 'avg_qa_score'],
+        },
+        {
+          id: 'report_2',
+          name: 'Builder Compliance Analysis',
+          type: 'compliance',
+          createdAt: new Date('2024-01-20').toISOString(),
+          lastRun: new Date('2024-02-05').toISOString(),
+          schedule: 'weekly',
+          chartType: 'bar',
+          metrics: ['compliance_rate', 'first_pass_rate'],
+        },
+      ];
+      
+      res.json(reports);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch custom reports');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/custom-reports", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { name, type, config } = req.body;
+      const userId = req.user.claims.sub;
+      
+      const report = {
+        id: `report_${Date.now()}`,
+        name,
+        type,
+        config,
+        userId,
+        createdAt: new Date().toISOString(),
+        lastRun: null,
+      };
+      
+      res.status(201).json(report);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'save custom report');
+      res.status(status).json({ message });
+    }
+  });
+
+  // KPI Settings
+  app.get("/api/kpi-settings", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).user.claims.sub;
+      
+      // Return mock KPI settings
+      const settings = {
+        userId,
+        selectedKpis: [
+          'jobs_completed',
+          'avg_qa_score', 
+          'compliance_rate',
+          'first_pass_rate',
+          'revenue',
+        ],
+        layout: {
+          dashboard: [
+            { kpi: 'jobs_completed', position: 0, size: 'large' },
+            { kpi: 'avg_qa_score', position: 1, size: 'medium' },
+            { kpi: 'compliance_rate', position: 2, size: 'medium' },
+            { kpi: 'first_pass_rate', position: 3, size: 'small' },
+            { kpi: 'revenue', position: 4, size: 'large' },
+          ],
+        },
+        refreshRate: 30, // seconds
+        thresholds: {
+          jobs_completed: { warning: 80, critical: 60 },
+          avg_qa_score: { warning: 85, critical: 75 },
+          compliance_rate: { warning: 90, critical: 85 },
+        },
+      };
+      
+      res.json(settings);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch KPI settings');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/kpi-settings", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { selectedKpis, layout, refreshRate, thresholds } = req.body;
+      
+      // Save KPI settings (mock for demo)
+      const settings = {
+        userId,
+        selectedKpis,
+        layout,
+        refreshRate,
+        thresholds,
+        updatedAt: new Date().toISOString(),
+      };
+      
+      res.json(settings);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update KPI settings');
+      res.status(status).json({ message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
