@@ -25,6 +25,14 @@ interface CalendarEvent {
   end: any;
   organizer?: any;
   status?: string;
+  parsed?: {
+    builderId: string | null;
+    builderName: string | null;
+    inspectionType: string | null;
+    confidence: number;
+    parsedBuilderAbbreviation: string | null;
+    parsedInspectionKeyword: string | null;
+  };
 }
 
 interface CalendarsResponse {
@@ -239,30 +247,79 @@ export default function CalendarPOC() {
                             )}
                           </div>
 
-                          {/* Parser validation hints */}
-                          <div className="mt-3 p-3 bg-muted rounded-md space-y-1">
-                            <p className="text-xs font-semibold text-muted-foreground">
-                              Parser Preview:
-                            </p>
-                            <div className="font-mono text-xs space-y-1">
-                              <div>Title: <span className="text-primary">{event.title}</span></div>
-                              {(() => {
-                                const title = event.title || '';
-                                // Simple pattern matching preview
-                                const miMatch = title.match(/^MI\s/i);
-                                const testMatch = title.match(/(Test|SV2)/i);
-                                return (
-                                  <>
-                                    {miMatch && <div className="text-green-600">✓ Detected: M/I Homes</div>}
-                                    {testMatch && <div className="text-green-600">✓ Detected: {testMatch[1]}</div>}
-                                    {!miMatch && !testMatch && (
-                                      <div className="text-amber-600">⚠ Unknown pattern - needs review</div>
-                                    )}
-                                  </>
-                                );
-                              })()}
+                          {/* Parser Results */}
+                          {event.parsed && (
+                            <div className="mt-3 p-3 bg-muted rounded-md space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-semibold text-muted-foreground">
+                                  Parser Results:
+                                </p>
+                                <Badge 
+                                  variant={
+                                    event.parsed.confidence >= 80 ? 'default' : 
+                                    event.parsed.confidence >= 60 ? 'secondary' : 
+                                    'destructive'
+                                  }
+                                >
+                                  {event.parsed.confidence}% confidence
+                                </Badge>
+                              </div>
+                              
+                              <div className="font-mono text-xs space-y-1">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-muted-foreground min-w-[100px]">Builder:</span>
+                                  {event.parsed.builderName ? (
+                                    <span className="text-green-600 font-semibold">
+                                      ✓ {event.parsed.builderName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-600">⚠ Not matched</span>
+                                  )}
+                                </div>
+                                
+                                <div className="flex items-start gap-2">
+                                  <span className="text-muted-foreground min-w-[100px]">Inspection:</span>
+                                  {event.parsed.inspectionType ? (
+                                    <span className="text-green-600 font-semibold">
+                                      ✓ {event.parsed.inspectionType}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-600">⚠ Not matched</span>
+                                  )}
+                                </div>
+                                
+                                {event.parsed.parsedBuilderAbbreviation && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-muted-foreground min-w-[100px]">Detected Code:</span>
+                                    <span className="text-primary">{event.parsed.parsedBuilderAbbreviation}</span>
+                                  </div>
+                                )}
+                                
+                                {event.parsed.parsedInspectionKeyword && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-muted-foreground min-w-[100px]">Detected Type:</span>
+                                    <span className="text-primary">{event.parsed.parsedInspectionKeyword}</span>
+                                  </div>
+                                )}
+                                
+                                <div className="mt-2 pt-2 border-t border-border">
+                                  {event.parsed.confidence >= 80 ? (
+                                    <span className="text-green-600 text-xs">
+                                      ✓ Auto-create job (confidence ≥ 80%)
+                                    </span>
+                                  ) : event.parsed.confidence >= 60 ? (
+                                    <span className="text-amber-600 text-xs">
+                                      ⚠ Create + flag for review (60-79%)
+                                    </span>
+                                  ) : (
+                                    <span className="text-red-600 text-xs">
+                                      ✗ Manual review required (&lt;60%)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       </div>
                     ))}

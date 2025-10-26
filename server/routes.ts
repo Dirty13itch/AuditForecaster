@@ -3998,28 +3998,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POC: Calendar Import Research & Testing Endpoints
-  // These endpoints help validate we can access contractor's shared calendar and parse events
+  // These endpoints use mock data for parser validation while Google OAuth is rate-limited
   app.get('/api/calendar/poc/list', isAuthenticated, requireRole(['admin']), async (req, res) => {
     try {
-      serverLogger.info('[POC] Fetching all calendars for validation');
-      const calendars = await googleCalendarService.fetchCalendarList();
+      serverLogger.info('[POC] Returning mock calendars for validation');
       
-      // Return detailed calendar info for validation
+      // Mock calendar data based on user's screenshot and typical Google Calendar structure
+      const mockCalendars = [
+        {
+          id: 'primary',
+          name: 'Shaun Ulrich',
+          description: 'Primary calendar',
+          accessRole: 'owner',
+          isPrimary: true,
+          backgroundColor: '#9fe1e7',
+          foregroundColor: '#000000',
+        },
+        {
+          id: 'contractor-shared-123',
+          name: 'Building Knowledge',
+          description: 'Contractor shared calendar (read-only)',
+          accessRole: 'reader',
+          isPrimary: false,
+          backgroundColor: '#f6bf26',
+          foregroundColor: '#000000',
+        },
+      ];
+      
       res.json({
         success: true,
-        count: calendars.length,
-        calendars: calendars.map(cal => ({
-          id: cal.id,
-          name: cal.summary,
-          description: cal.description,
-          accessRole: cal.accessRole,
-          isPrimary: cal.primary,
-          backgroundColor: cal.backgroundColor,
-          foregroundColor: cal.foregroundColor,
-        })),
+        count: mockCalendars.length,
+        calendars: mockCalendars,
       });
     } catch (error: any) {
-      serverLogger.error('[POC] Error fetching calendar list:', error);
+      serverLogger.error('[POC] Error returning mock calendar list:', error);
       res.status(500).json({ 
         success: false,
         message: 'Failed to fetch calendar list', 
@@ -4039,37 +4051,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      serverLogger.info(`[POC] Fetching events from calendar: ${calendarId}`);
+      serverLogger.info(`[POC] Returning mock events from calendar: ${calendarId}`);
 
-      // Fetch events from next 30 days for validation
-      const startDate = new Date();
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 30);
+      // Mock event data based on user's screenshot showing contractor calendar patterns
+      const today = new Date();
+      const mockEvents = calendarId === 'contractor-shared-123' ? [
+        {
+          id: 'event1',
+          title: 'MI Test - Spec',
+          description: 'Full blower door test with envelope and duct leakage',
+          location: '123 Oak Street, Minneapolis, MN',
+          start: { dateTime: new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString() },
+          end: { dateTime: new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString() },
+          organizer: { email: 'contractor@buildingknowledge.com', displayName: 'Building Knowledge' },
+          status: 'confirmed',
+        },
+        {
+          id: 'event2',
+          title: 'MI SV2',
+          description: 'Pre-drywall inspection',
+          location: '456 Maple Ave, St. Paul, MN',
+          start: { dateTime: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString() },
+          end: { dateTime: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000).toISOString() },
+          organizer: { email: 'contractor@buildingknowledge.com', displayName: 'Building Knowledge' },
+          status: 'confirmed',
+        },
+        {
+          id: 'event3',
+          title: 'M/I Full Test - 789 Pine',
+          description: '',
+          location: '789 Pine Road, Minnetonka, MN',
+          start: { dateTime: new Date(today.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString() },
+          end: { dateTime: new Date(today.getTime() + 5 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString() },
+          organizer: { email: 'contractor@buildingknowledge.com', displayName: 'Building Knowledge' },
+          status: 'confirmed',
+        },
+        {
+          id: 'event4',
+          title: 'MIHomes Test',
+          description: '',
+          location: '321 Elm Street, Eden Prairie, MN',
+          start: { dateTime: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() },
+          end: { dateTime: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString() },
+          organizer: { email: 'contractor@buildingknowledge.com', displayName: 'Building Knowledge' },
+          status: 'confirmed',
+        },
+        {
+          id: 'event5',
+          title: 'Unknown Builder - Test',
+          description: 'This should fail to match any builder',
+          location: '555 Unknown St, Minneapolis, MN',
+          start: { dateTime: new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000).toISOString() },
+          end: { dateTime: new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString() },
+          organizer: { email: 'contractor@buildingknowledge.com', displayName: 'Building Knowledge' },
+          status: 'confirmed',
+        },
+        {
+          id: 'event6',
+          title: 'MI Pre-Drywall Inspection',
+          description: '',
+          location: '888 Cedar Lane, Bloomington, MN',
+          start: { dateTime: new Date(today.getTime() + 12 * 24 * 60 * 60 * 1000).toISOString() },
+          end: { dateTime: new Date(today.getTime() + 12 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000).toISOString() },
+          organizer: { email: 'contractor@buildingknowledge.com', displayName: 'Building Knowledge' },
+          status: 'confirmed',
+        },
+      ] : [];
 
-      const events = await googleCalendarService.fetchEventsFromGoogle(startDate, endDate, [calendarId]);
+      // Parse each event using the calendar event parser
+      const { parseCalendarEvent } = await import('./calendarEventParser');
+      const parsedEvents = await Promise.all(
+        mockEvents.map(async (event) => {
+          const parsed = await parseCalendarEvent(storage, event.title);
+          return {
+            ...event,
+            parsed: {
+              builderId: parsed.builderId,
+              builderName: parsed.builderName,
+              inspectionType: parsed.inspectionType,
+              confidence: parsed.confidence,
+              parsedBuilderAbbreviation: parsed.parsedBuilderAbbreviation,
+              parsedInspectionKeyword: parsed.parsedInspectionKeyword,
+            },
+          };
+        })
+      );
 
-      // Return detailed event info for parser validation
       res.json({
         success: true,
         calendarId,
         dateRange: {
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
+          start: today.toISOString(),
+          end: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         },
-        count: events.length,
-        events: events.map(event => ({
-          id: event.id,
-          title: event.summary,
-          description: event.description,
-          location: event.location,
-          start: event.start,
-          end: event.end,
-          organizer: event.organizer,
-          status: event.status,
-        })),
+        count: parsedEvents.length,
+        events: parsedEvents,
       });
     } catch (error: any) {
-      serverLogger.error('[POC] Error fetching events:', error);
+      serverLogger.error('[POC] Error returning mock events:', error);
       res.status(500).json({ 
         success: false,
         message: 'Failed to fetch events', 
