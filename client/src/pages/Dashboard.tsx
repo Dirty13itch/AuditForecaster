@@ -121,10 +121,108 @@ export default function Dashboard() {
     queryKey: ["/api/checklist-items"],
   });
 
-  const isLoading = summaryLoading || leaderboardLoading || forecastsLoading || jobsLoading || buildersLoading || checklistLoading;
+  // Fetch analytics data from new endpoints
+  const { data: analyticsData, isLoading: analyticsLoading } = useQuery({
+    queryKey: ["/api/analytics/dashboard"],
+    refetchInterval: isLiveMode ? 60000 : false, // 60 seconds refresh
+  });
 
-  // Calculate metrics
+  const { data: metricsData, isLoading: metricsLoading } = useQuery({
+    queryKey: ["/api/analytics/metrics", dateRange.from, dateRange.to],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        startDate: dateRange.from.toISOString(),
+        endDate: dateRange.to.toISOString(),
+      });
+      const response = await fetch(`/api/analytics/metrics?${params}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch metrics");
+      return response.json();
+    },
+    refetchInterval: isLiveMode ? 60000 : false,
+  });
+
+  const { data: trendsData, isLoading: trendsLoading } = useQuery({
+    queryKey: ["/api/analytics/trends", selectedTimeRange, dateRange],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        period: selectedTimeRange === "month" ? "monthly" : selectedTimeRange === "week" ? "weekly" : "daily",
+        startDate: dateRange.from.toISOString(),
+        endDate: dateRange.to.toISOString(),
+      });
+      const response = await fetch(`/api/analytics/trends?${params}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch trends");
+      return response.json();
+    },
+    refetchInterval: isLiveMode ? 60000 : false,
+  });
+
+  const { data: builderPerformance, isLoading: builderPerfLoading } = useQuery({
+    queryKey: ["/api/analytics/builder-performance"],
+    refetchInterval: isLiveMode ? 60000 : false,
+  });
+
+  const { data: financialData, isLoading: financialLoading } = useQuery({
+    queryKey: ["/api/analytics/financial", dateRange],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        startDate: dateRange.from.toISOString(),
+        endDate: dateRange.to.toISOString(),
+      });
+      const response = await fetch(`/api/analytics/financial?${params}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch financial data");
+      return response.json();
+    },
+    refetchInterval: isLiveMode ? 60000 : false,
+  });
+
+  const { data: revenueExpense, isLoading: revenueExpenseLoading } = useQuery({
+    queryKey: ["/api/analytics/revenue-expense", dateRange],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        period: "monthly",
+        startDate: subMonths(new Date(), 6).toISOString(),
+        endDate: new Date().toISOString(),
+      });
+      const response = await fetch(`/api/analytics/revenue-expense?${params}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch revenue/expense data");
+      return response.json();
+    },
+    refetchInterval: isLiveMode ? 60000 : false,
+  });
+
+  const isLoading = summaryLoading || leaderboardLoading || forecastsLoading || jobsLoading || 
+                   buildersLoading || checklistLoading || analyticsLoading || metricsLoading || 
+                   trendsLoading || builderPerfLoading || financialLoading || revenueExpenseLoading;
+
+  // Use real metrics from API
   const metrics: DashboardMetrics = useMemo(() => {
+    if (metricsData) {
+      return {
+        jobsCompleted: metricsData.completedJobs || 0,
+        jobsCompletedTrend: 0, // Will calculate from historical data
+        avgQaScore: 0, // Will get from QA data
+        avgQaScoreTrend: 0,
+        monthlyRevenue: metricsData.totalRevenue || 0,
+        monthlyRevenueTrend: 0, // Will calculate from historical data
+        complianceRate: metricsData.completionRate || 0,
+        complianceRateTrend: 0,
+        activeBuilders: 0, // Will get from builder performance
+        activeBuildersTrend: 0,
+        avgInspectionTime: 0, // Will calculate from job timestamps
+        firstPassRate: 0, // Will calculate from QA data
+        photosUploaded: metricsData.photosUploaded || 0,
+      };
+    }
+
+    // Fallback to calculated metrics if new API not available yet
     const completedJobs = jobs.filter(j => j.status === "completed");
     const thisMonthJobs = jobs.filter(j => {
       const jobDate = new Date(j.completedDate || j.scheduledDate || "");
@@ -201,39 +299,48 @@ export default function Dashboard() {
     };
   }, [jobs, checklistItems, dateRange, builders]);
 
-  // Generate sparkline data for metric cards
-  const generateSparklineData = (baseValue: number, points: number = 7) => {
-    return Array.from({ length: points }, (_, i) => ({
-      value: baseValue + (Math.random() - 0.5) * baseValue * 0.2,
-    }));
-  };
-
-  // Generate chart data
+  // Use real chart data from API
   const inspectionTrendsData = useMemo(() => {
-    const periods = selectedTimeRange === "day" ? 7 : selectedTimeRange === "week" ? 4 : 6;
-    return Array.from({ length: periods }, (_, i) => ({
-      period: selectedTimeRange === "day" 
-        ? format(subDays(new Date(), periods - i - 1), "EEE")
-        : selectedTimeRange === "week"
-        ? `Week ${i + 1}`
-        : format(subMonths(new Date(), periods - i - 1), "MMM"),
-      inspections: Math.floor(Math.random() * 50) + 20,
-      completed: Math.floor(Math.random() * 40) + 15,
-      pending: Math.floor(Math.random() * 10) + 5,
-    }));
-  }, [selectedTimeRange]);
+    if (trendsData && trendsData.length > 0) {
+      return trendsData.map((item: any) => ({
+        period: item.date,
+        inspections: item.total || 0,
+        completed: item.completed || 0,
+        pending: item.pending || 0,
+        scheduled: item.scheduled || 0,
+        inProgress: item.inProgress || 0,
+      }));
+    }
+    
+    // Fallback if API data not available
+    return [];
+  }, [trendsData]);
 
   const builderPerformanceData = useMemo(() => {
+    if (builderPerformance && builderPerformance.length > 0) {
+      return builderPerformance.map((builder: any) => ({
+        name: builder.builderName,
+        completed: builder.completedJobs || 0,
+        pending: builder.totalJobs - builder.completedJobs || 0,
+        compliance: builder.qualityScore || 0,
+        completionRate: builder.completionRate || 0,
+        avgCompletionTime: builder.avgCompletionTime || 0,
+      }));
+    }
+    
+    // Fallback calculation from local data
     return builders.slice(0, 5).map(builder => {
       const builderJobs = jobs.filter(j => j.builderId === builder.id);
       return {
         name: builder.name,
         completed: builderJobs.filter(j => j.status === "completed").length,
         pending: builderJobs.filter(j => j.status === "pending").length,
-        compliance: Math.floor(Math.random() * 30) + 70,
+        compliance: 0,
+        completionRate: 0,
+        avgCompletionTime: 0,
       };
     });
-  }, [builders, jobs]);
+  }, [builderPerformance, builders, jobs]);
 
   const jobStatusData = useMemo(() => [
     { name: "Completed", value: jobs.filter(j => j.status === "completed").length, color: "hsl(var(--success))" },
@@ -243,27 +350,33 @@ export default function Dashboard() {
   ], [jobs]);
 
   const revenueExpenseData = useMemo(() => {
-    const months = 6;
-    return Array.from({ length: months }, (_, i) => ({
-      month: format(subMonths(new Date(), months - i - 1), "MMM"),
-      revenue: Math.floor(Math.random() * 20000) + 30000,
-      expenses: Math.floor(Math.random() * 10000) + 15000,
-      profit: 0,
-    })).map(d => ({
-      ...d,
-      profit: d.revenue - d.expenses,
-    }));
-  }, []);
+    if (revenueExpense && revenueExpense.length > 0) {
+      return revenueExpense.map((item: any) => ({
+        month: item.date,
+        revenue: item.revenue || 0,
+        expenses: item.expenses || 0,
+        profit: item.profit || 0,
+      }));
+    }
+    
+    // Fallback to empty data if API not available
+    return [];
+  }, [revenueExpense]);
 
   const ach50ResultsData = useMemo(() => {
-    const months = 4;
-    return Array.from({ length: months }, (_, i) => ({
-      month: format(subMonths(new Date(), months - i - 1), "MMM"),
-      avgACH50: (Math.random() * 2 + 3).toFixed(1),
-      passRate: Math.floor(Math.random() * 20) + 75,
-      tests: Math.floor(Math.random() * 30) + 20,
-    }));
-  }, []);
+    // Use data from analytics/dashboard endpoint if available
+    if (analyticsData && analyticsData.tierDistribution) {
+      return analyticsData.tierDistribution.map((tier: any) => ({
+        tier: tier.tier,
+        count: tier.count,
+        percentage: tier.percentage,
+        color: tier.color,
+      }));
+    }
+    
+    // Fallback to empty data
+    return [];
+  }, [analyticsData]);
 
   // Generate activity feed items
   const activityItems: ActivityItem[] = useMemo(() => {

@@ -246,6 +246,11 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_assigned_to").on(table.assignedTo),
   index("idx_jobs_assigned_to_scheduled_date").on(table.assignedTo, table.scheduledDate),
   index("idx_jobs_territory").on(table.territory),
+  // Analytics-specific indexes
+  index("idx_jobs_completed_date").on(table.completedDate),
+  index("idx_jobs_status_completed_date").on(table.status, table.completedDate),
+  index("idx_jobs_builder_completed_date").on(table.builderId, table.completedDate),
+  index("idx_jobs_compliance_status").on(table.complianceStatus),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -413,6 +418,8 @@ export const expenses = pgTable("expenses", {
 }, (table) => [
   index("idx_expenses_job_id").on(table.jobId),
   index("idx_expenses_date").on(table.date),
+  // Analytics-specific indexes for expenses
+  index("idx_expenses_date_category").on(table.date, table.category),
 ]);
 
 export const mileageLogs = pgTable("mileage_logs", {
@@ -664,6 +671,9 @@ export const checklistItems = pgTable("checklist_items", {
 }, (table) => [
   index("idx_checklist_items_job_id").on(table.jobId),
   index("idx_checklist_items_status").on(table.status),
+  // Analytics-specific indexes for checklistItems
+  index("idx_checklist_items_job_completed").on(table.jobId, table.completed),
+  index("idx_checklist_items_job_status").on(table.jobId, table.status),
 ]);
 
 export const photoAlbums = pgTable("photo_albums", {

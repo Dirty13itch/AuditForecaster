@@ -752,6 +752,20 @@ export interface IStorage {
   getInspectorJobsByDateRange(inspectorId: string, startDate: Date, endDate: Date): Promise<Job[]>;
   suggestOptimalInspector(jobId: string, date: Date): Promise<{ inspectorId: string; score: number; reasons: string[] }[]>;
   bulkAssignJobs(jobIds: string[], inspectorId: string | null, assignedBy: string): Promise<Job[]>;
+  
+  // Analytics Dashboard Methods
+  getDashboardSummary(): Promise<any>;
+  getBuilderLeaderboard(): Promise<any[]>;
+  getDashboardMetrics(startDate?: Date, endDate?: Date): Promise<any>;
+  getInspectionTrends(period: 'daily' | 'weekly' | 'monthly', startDate?: Date, endDate?: Date): Promise<any[]>;
+  getBuilderPerformance(limit?: number): Promise<any[]>;
+  getFinancialMetrics(startDate?: Date, endDate?: Date): Promise<any>;
+  getPhotoAnalytics(startDate?: Date, endDate?: Date): Promise<any>;
+  getInspectorPerformance(inspectorId?: string, startDate?: Date, endDate?: Date): Promise<any[]>;
+  getComplianceMetrics(startDate?: Date, endDate?: Date): Promise<any>;
+  getRevenueExpenseData(period: 'daily' | 'weekly' | 'monthly', startDate?: Date, endDate?: Date): Promise<any[]>;
+  getKPIMetrics(): Promise<any[]>;
+  getForecastData(metric: string, lookbackDays?: number): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5401,6 +5415,900 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(users)
       .where(inArray(users.role, roles));
+  }
+
+  // Analytics Dashboard Implementation Methods
+  async getDashboardSummary(): Promise<any> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    // Get all blower door tests for ACH50 calculations
+    const blowerTests = await db.select().from(blowerDoorTests);
+    
+    // Calculate total inspections and average ACH50
+    const totalInspections = blowerTests.length;
+    const avgACH50 = totalInspections > 0
+      ? blowerTests.reduce((sum, test) => sum + (test.ach50 || 0), 0) / totalInspections
+      : 0;
+    
+    // Calculate tier distribution
+    const tierDistribution = this.calculateTierDistribution(blowerTests);
+    
+    // Calculate pass/fail rates (ACH50 <= 3.0 is passing)
+    const passedTests = blowerTests.filter(test => test.ach50 && test.ach50 <= 3.0);
+    const passRate = totalInspections > 0 ? (passedTests.length / totalInspections) * 100 : 0;
+    const failRate = 100 - passRate;
+    
+    // Calculate 45L eligible count (ACH50 <= 2.5)
+    const tax45LEligibleCount = blowerTests.filter(test => test.ach50 && test.ach50 <= 2.5).length;
+    
+    // Calculate potential tax credits ($2500 per eligible unit)
+    const totalPotentialTaxCredits = tax45LEligibleCount * 2500;
+    
+    // Get monthly highlights
+    const monthlyHighlights = await this.getMonthlyHighlights(startOfMonth, endOfMonth);
+    
+    return {
+      totalInspections,
+      averageACH50: parseFloat(avgACH50.toFixed(2)),
+      tierDistribution,
+      passRate: parseFloat(passRate.toFixed(1)),
+      failRate: parseFloat(failRate.toFixed(1)),
+      tax45LEligibleCount,
+      totalPotentialTaxCredits,
+      monthlyHighlights
+    };
+  }
+
+  async getBuilderLeaderboard(): Promise<any[]> {
+    // Get all builders with their jobs and test results
+    const buildersData = await db.select().from(builders);
+    const jobsData = await db.select().from(jobs);
+    const blowerTests = await db.select().from(blowerDoorTests);
+    
+    const leaderboard = await Promise.all(buildersData.map(async (builder) => {
+      // Get all jobs for this builder
+      const builderJobs = jobsData.filter(job => job.builderId === builder.id);
+      const builderJobIds = builderJobs.map(j => j.id);
+      
+      // Get all blower door tests for builder's jobs
+      const builderTests = blowerTests.filter(test => 
+        test.jobId && builderJobIds.includes(test.jobId)
+      );
+      
+      const totalJobs = builderJobs.length;
+      const completedJobs = builderJobs.filter(job => job.status === 'completed').length;
+      
+      // Calculate average ACH50
+      const avgACH50 = builderTests.length > 0
+        ? builderTests.reduce((sum, test) => sum + (test.ach50 || 0), 0) / builderTests.length
+        : 0;
+      
+      // Get best and latest ACH50
+      const bestACH50 = builderTests.length > 0
+        ? Math.min(...builderTests.filter(t => t.ach50).map(t => t.ach50!))
+        : 0;
+        
+      const sortedTests = [...builderTests].sort((a, b) => 
+        new Date(b.testDate || 0).getTime() - new Date(a.testDate || 0).getTime()
+      );
+      const latestACH50 = sortedTests[0]?.ach50 || null;
+      
+      // Calculate pass rate
+      const passedTests = builderTests.filter(test => test.ach50 && test.ach50 <= 3.0);
+      const passRate = builderTests.length > 0 
+        ? (passedTests.length / builderTests.length) * 100 
+        : 0;
+      
+      // Calculate tier
+      const tier = this.calculateTier(avgACH50);
+      
+      // Calculate tier distribution for this builder
+      const tierDistribution = this.calculateTierDistribution(builderTests);
+      
+      return {
+        builderId: builder.id,
+        builderName: builder.name,
+        averageACH50: parseFloat(avgACH50.toFixed(2)),
+        tier,
+        totalJobs,
+        passRate: parseFloat(passRate.toFixed(1)),
+        bestACH50: parseFloat(bestACH50.toFixed(2)),
+        latestACH50: latestACH50 ? parseFloat(latestACH50.toFixed(2)) : null,
+        tierDistribution
+      };
+    }));
+    
+    // Sort by average ACH50 (lower is better)
+    return leaderboard
+      .filter(b => b.averageACH50 > 0)
+      .sort((a, b) => a.averageACH50 - b.averageACH50);
+  }
+
+  async getDashboardMetrics(startDate?: Date, endDate?: Date): Promise<any> {
+    const start = startDate || new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const end = endDate || new Date();
+    
+    // Get jobs in date range
+    const jobsInRange = await db
+      .select()
+      .from(jobs)
+      .where(and(
+        gte(jobs.scheduledDate, start),
+        lte(jobs.scheduledDate, end)
+      ));
+    
+    // Get financial data
+    const expensesInRange = await db
+      .select()
+      .from(expenses)
+      .where(and(
+        gte(expenses.date, start),
+        lte(expenses.date, end)
+      ));
+    
+    const invoicesInRange = await db
+      .select()
+      .from(invoices)
+      .where(and(
+        gte(invoices.createdAt, start),
+        lte(invoices.createdAt, end)
+      ));
+    
+    // Calculate metrics
+    const totalJobs = jobsInRange.length;
+    const completedJobs = jobsInRange.filter(j => j.status === 'completed').length;
+    const completionRate = totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0;
+    
+    const totalRevenue = invoicesInRange.reduce((sum, inv) => 
+      sum + parseFloat(inv.totalAmount || '0'), 0
+    );
+    
+    const totalExpenses = expensesInRange.reduce((sum, exp) => 
+      sum + parseFloat(exp.amount || '0'), 0
+    );
+    
+    const profit = totalRevenue - totalExpenses;
+    const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+    
+    // Get photos count
+    const photosInRange = await db
+      .select({ count: count() })
+      .from(photos)
+      .where(and(
+        gte(photos.uploadedAt, start),
+        lte(photos.uploadedAt, end)
+      ));
+    
+    return {
+      totalJobs,
+      completedJobs,
+      completionRate: parseFloat(completionRate.toFixed(1)),
+      totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+      totalExpenses: parseFloat(totalExpenses.toFixed(2)),
+      profit: parseFloat(profit.toFixed(2)),
+      profitMargin: parseFloat(profitMargin.toFixed(1)),
+      photosUploaded: photosInRange[0]?.count || 0,
+      activeJobs: jobsInRange.filter(j => j.status === 'scheduled' || j.status === 'in-progress').length,
+      pendingJobs: jobsInRange.filter(j => j.status === 'pending').length
+    };
+  }
+
+  async getInspectionTrends(period: 'daily' | 'weekly' | 'monthly', startDate?: Date, endDate?: Date): Promise<any[]> {
+    const end = endDate || new Date();
+    const start = startDate || new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000); // Default 30 days
+    
+    const jobsInRange = await db
+      .select()
+      .from(jobs)
+      .where(and(
+        gte(jobs.scheduledDate, start),
+        lte(jobs.scheduledDate, end)
+      ))
+      .orderBy(asc(jobs.scheduledDate));
+    
+    const trends: Map<string, any> = new Map();
+    
+    jobsInRange.forEach(job => {
+      const date = new Date(job.scheduledDate || job.createdAt || new Date());
+      let key: string;
+      
+      if (period === 'daily') {
+        key = date.toISOString().split('T')[0];
+      } else if (period === 'weekly') {
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - date.getDay());
+        key = weekStart.toISOString().split('T')[0];
+      } else {
+        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      }
+      
+      if (!trends.has(key)) {
+        trends.set(key, {
+          date: key,
+          total: 0,
+          completed: 0,
+          scheduled: 0,
+          inProgress: 0,
+          pending: 0
+        });
+      }
+      
+      const trend = trends.get(key);
+      trend.total++;
+      
+      if (job.status === 'completed') trend.completed++;
+      else if (job.status === 'scheduled') trend.scheduled++;
+      else if (job.status === 'in-progress') trend.inProgress++;
+      else if (job.status === 'pending') trend.pending++;
+    });
+    
+    return Array.from(trends.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async getBuilderPerformance(limit: number = 10): Promise<any[]> {
+    const buildersData = await db.select().from(builders);
+    const jobsData = await db.select().from(jobs);
+    const checklistData = await db.select().from(checklistItems);
+    
+    const performance = await Promise.all(buildersData.map(async (builder) => {
+      const builderJobs = jobsData.filter(j => j.builderId === builder.id);
+      const completedJobs = builderJobs.filter(j => j.status === 'completed');
+      
+      // Calculate average completion time
+      const completionTimes = completedJobs
+        .filter(j => j.scheduledDate && j.completedDate)
+        .map(j => {
+          const scheduled = new Date(j.scheduledDate!);
+          const completed = new Date(j.completedDate!);
+          return (completed.getTime() - scheduled.getTime()) / (1000 * 60 * 60); // Hours
+        });
+      
+      const avgCompletionTime = completionTimes.length > 0
+        ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
+        : 0;
+      
+      // Calculate quality score from checklist items
+      const builderJobIds = builderJobs.map(j => j.id);
+      const builderChecklistItems = checklistData.filter(item => 
+        item.jobId && builderJobIds.includes(item.jobId)
+      );
+      
+      const passedItems = builderChecklistItems.filter(item => item.status === 'pass');
+      const qualityScore = builderChecklistItems.length > 0
+        ? (passedItems.length / builderChecklistItems.length) * 100
+        : 0;
+      
+      return {
+        builderId: builder.id,
+        builderName: builder.name,
+        companyName: builder.companyName,
+        totalJobs: builderJobs.length,
+        completedJobs: completedJobs.length,
+        completionRate: builderJobs.length > 0 
+          ? (completedJobs.length / builderJobs.length) * 100 
+          : 0,
+        avgCompletionTime: parseFloat(avgCompletionTime.toFixed(1)),
+        qualityScore: parseFloat(qualityScore.toFixed(1)),
+        rating: builder.rating || 0
+      };
+    }));
+    
+    // Sort by total jobs and limit
+    return performance
+      .sort((a, b) => b.totalJobs - a.totalJobs)
+      .slice(0, limit);
+  }
+
+  async getFinancialMetrics(startDate?: Date, endDate?: Date): Promise<any> {
+    const start = startDate || new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const end = endDate || new Date();
+    
+    // Get invoices
+    const invoicesData = await db
+      .select()
+      .from(invoices)
+      .where(and(
+        gte(invoices.createdAt, start),
+        lte(invoices.createdAt, end)
+      ));
+    
+    // Get expenses
+    const expensesData = await db
+      .select()
+      .from(expenses)
+      .where(and(
+        gte(expenses.date, start),
+        lte(expenses.date, end)
+      ));
+    
+    // Get mileage logs
+    const mileageData = await db
+      .select()
+      .from(mileageLogs)
+      .where(and(
+        gte(mileageLogs.date, start),
+        lte(mileageLogs.date, end)
+      ));
+    
+    // Calculate totals
+    const totalRevenue = invoicesData.reduce((sum, inv) => 
+      sum + parseFloat(inv.totalAmount || '0'), 0
+    );
+    
+    const paidInvoices = invoicesData.filter(inv => inv.status === 'paid');
+    const receivedRevenue = paidInvoices.reduce((sum, inv) => 
+      sum + parseFloat(inv.totalAmount || '0'), 0
+    );
+    
+    const pendingRevenue = totalRevenue - receivedRevenue;
+    
+    const totalExpenses = expensesData.reduce((sum, exp) => 
+      sum + parseFloat(exp.amount || '0'), 0
+    );
+    
+    const expensesByCategory = expensesData.reduce((acc, exp) => {
+      const category = exp.category || 'Other';
+      if (!acc[category]) acc[category] = 0;
+      acc[category] += parseFloat(exp.amount || '0');
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const totalMiles = mileageData.reduce((sum, log) => 
+      sum + (log.endOdometer - log.startOdometer), 0
+    );
+    
+    const mileageDeduction = totalMiles * 0.655; // IRS rate
+    
+    return {
+      totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+      receivedRevenue: parseFloat(receivedRevenue.toFixed(2)),
+      pendingRevenue: parseFloat(pendingRevenue.toFixed(2)),
+      totalExpenses: parseFloat(totalExpenses.toFixed(2)),
+      netProfit: parseFloat((receivedRevenue - totalExpenses).toFixed(2)),
+      projectedProfit: parseFloat((totalRevenue - totalExpenses).toFixed(2)),
+      expensesByCategory: Object.entries(expensesByCategory).map(([category, amount]) => ({
+        category,
+        amount: parseFloat(amount.toFixed(2))
+      })),
+      totalMiles,
+      mileageDeduction: parseFloat(mileageDeduction.toFixed(2)),
+      invoiceCount: invoicesData.length,
+      paidInvoiceCount: paidInvoices.length,
+      overdueInvoices: invoicesData.filter(inv => 
+        inv.status === 'sent' && inv.dueDate && new Date(inv.dueDate) < new Date()
+      ).length
+    };
+  }
+
+  async getPhotoAnalytics(startDate?: Date, endDate?: Date): Promise<any> {
+    const start = startDate || new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const end = endDate || new Date();
+    
+    // Get photos in date range
+    const photosData = await db
+      .select()
+      .from(photos)
+      .where(and(
+        gte(photos.uploadedAt, start),
+        lte(photos.uploadedAt, end)
+      ));
+    
+    // Count photos by type
+    const photosByType = photosData.reduce((acc, photo) => {
+      const type = photo.captureType || 'manual';
+      if (!acc[type]) acc[type] = 0;
+      acc[type]++;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    // Count tags
+    const tagCounts: Record<string, number> = {};
+    photosData.forEach(photo => {
+      if (photo.tags && Array.isArray(photo.tags)) {
+        photo.tags.forEach(tag => {
+          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        });
+      }
+    });
+    
+    // Get photos by job
+    const photosByJob = photosData.reduce((acc, photo) => {
+      if (photo.jobId) {
+        if (!acc[photo.jobId]) acc[photo.jobId] = 0;
+        acc[photo.jobId]++;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const jobsWithPhotos = Object.keys(photosByJob).length;
+    const avgPhotosPerJob = jobsWithPhotos > 0
+      ? Object.values(photosByJob).reduce((a, b) => a + b, 0) / jobsWithPhotos
+      : 0;
+    
+    // Calculate storage size (approximate)
+    const totalSize = photosData.length * 2 * 1024 * 1024; // Assume 2MB average
+    
+    return {
+      totalPhotos: photosData.length,
+      photosByType: Object.entries(photosByType).map(([type, count]) => ({ type, count })),
+      topTags: Object.entries(tagCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([tag, count]) => ({ tag, count })),
+      jobsWithPhotos,
+      avgPhotosPerJob: parseFloat(avgPhotosPerJob.toFixed(1)),
+      totalStorageSize: totalSize,
+      storageUsedGB: parseFloat((totalSize / (1024 * 1024 * 1024)).toFixed(2)),
+      photosWithAnnotations: photosData.filter(p => p.annotations && p.annotations.length > 0).length,
+      photosWithOCR: photosData.filter(p => p.ocrText).length
+    };
+  }
+
+  async getInspectorPerformance(inspectorId?: string, startDate?: Date, endDate?: Date): Promise<any[]> {
+    const start = startDate || new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const end = endDate || new Date();
+    
+    // Get all inspectors
+    const inspectors = inspectorId 
+      ? await db.select().from(users).where(eq(users.id, inspectorId))
+      : await db.select().from(users).where(eq(users.role, 'inspector'));
+    
+    const performance = await Promise.all(inspectors.map(async (inspector) => {
+      // Get jobs assigned to inspector
+      const inspectorJobs = await db
+        .select()
+        .from(jobs)
+        .where(and(
+          eq(jobs.assignedTo, inspector.id),
+          gte(jobs.scheduledDate, start),
+          lte(jobs.scheduledDate, end)
+        ));
+      
+      const completedJobs = inspectorJobs.filter(j => j.status === 'completed');
+      
+      // Calculate metrics
+      const completionRate = inspectorJobs.length > 0
+        ? (completedJobs.length / inspectorJobs.length) * 100
+        : 0;
+      
+      // Calculate average inspection time
+      const inspectionTimes = completedJobs
+        .filter(j => j.scheduledDate && j.completedDate)
+        .map(j => {
+          const scheduled = new Date(j.scheduledDate!);
+          const completed = new Date(j.completedDate!);
+          return (completed.getTime() - scheduled.getTime()) / (1000 * 60); // Minutes
+        });
+      
+      const avgInspectionTime = inspectionTimes.length > 0
+        ? inspectionTimes.reduce((a, b) => a + b, 0) / inspectionTimes.length
+        : 0;
+      
+      // Get checklist performance
+      const jobIds = inspectorJobs.map(j => j.id);
+      const checklistData = jobIds.length > 0
+        ? await db
+            .select()
+            .from(checklistItems)
+            .where(inArray(checklistItems.jobId, jobIds))
+        : [];
+      
+      const passedItems = checklistData.filter(item => item.status === 'pass');
+      const qualityScore = checklistData.length > 0
+        ? (passedItems.length / checklistData.length) * 100
+        : 0;
+      
+      // Get photos uploaded
+      const photosUploaded = jobIds.length > 0
+        ? await db
+            .select({ count: count() })
+            .from(photos)
+            .where(and(
+              inArray(photos.jobId, jobIds),
+              eq(photos.uploadedBy, inspector.id)
+            ))
+        : [{ count: 0 }];
+      
+      return {
+        inspectorId: inspector.id,
+        inspectorName: `${inspector.firstName} ${inspector.lastName}`,
+        totalJobs: inspectorJobs.length,
+        completedJobs: completedJobs.length,
+        completionRate: parseFloat(completionRate.toFixed(1)),
+        avgInspectionTime: parseFloat(avgInspectionTime.toFixed(0)),
+        qualityScore: parseFloat(qualityScore.toFixed(1)),
+        photosUploaded: photosUploaded[0]?.count || 0,
+        scheduledJobs: inspectorJobs.filter(j => j.status === 'scheduled').length,
+        inProgressJobs: inspectorJobs.filter(j => j.status === 'in-progress').length
+      };
+    }));
+    
+    return performance.sort((a, b) => b.completedJobs - a.completedJobs);
+  }
+
+  async getComplianceMetrics(startDate?: Date, endDate?: Date): Promise<any> {
+    const start = startDate || new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const end = endDate || new Date();
+    
+    // Get compliance history
+    const complianceData = await db
+      .select()
+      .from(complianceHistory)
+      .where(and(
+        gte(complianceHistory.evaluatedAt, start),
+        lte(complianceHistory.evaluatedAt, end)
+      ));
+    
+    // Get QA scores
+    const qaScores = await db
+      .select()
+      .from(qaInspectionScores)
+      .where(and(
+        gte(qaInspectionScores.createdAt, start),
+        lte(qaInspectionScores.createdAt, end)
+      ));
+    
+    // Calculate compliance rate
+    const compliantItems = complianceData.filter(item => item.status === 'compliant');
+    const complianceRate = complianceData.length > 0
+      ? (compliantItems.length / complianceData.length) * 100
+      : 0;
+    
+    // Get violations by type
+    const violationsByType = complianceData
+      .filter(item => item.violations && item.violations.length > 0)
+      .reduce((acc, item) => {
+        if (item.violations && Array.isArray(item.violations)) {
+          item.violations.forEach((violation: any) => {
+            const type = violation.type || 'Other';
+            if (!acc[type]) acc[type] = 0;
+            acc[type]++;
+          });
+        }
+        return acc;
+      }, {} as Record<string, number>);
+    
+    // Calculate average QA score
+    const avgQaScore = qaScores.length > 0
+      ? qaScores.reduce((sum, score) => sum + (score.overallScore || 0), 0) / qaScores.length
+      : 0;
+    
+    // Get critical violations
+    const criticalViolations = complianceData
+      .filter(item => item.violations && Array.isArray(item.violations))
+      .reduce((sum, item) => {
+        return sum + (item.violations as any[]).filter(v => v.severity === 'critical').length;
+      }, 0);
+    
+    return {
+      complianceRate: parseFloat(complianceRate.toFixed(1)),
+      totalEvaluations: complianceData.length,
+      compliantCount: compliantItems.length,
+      nonCompliantCount: complianceData.length - compliantItems.length,
+      violationsByType: Object.entries(violationsByType).map(([type, count]) => ({ type, count })),
+      averageQaScore: parseFloat(avgQaScore.toFixed(1)),
+      criticalViolations,
+      recentViolations: complianceData
+        .filter(item => item.violations && item.violations.length > 0)
+        .slice(-5)
+        .map(item => ({
+          date: item.evaluatedAt,
+          entityType: item.entityType,
+          violations: item.violations
+        }))
+    };
+  }
+
+  async getRevenueExpenseData(period: 'daily' | 'weekly' | 'monthly', startDate?: Date, endDate?: Date): Promise<any[]> {
+    const end = endDate || new Date();
+    const start = startDate || new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000); // Default 90 days
+    
+    // Get invoices and expenses
+    const invoicesData = await db
+      .select()
+      .from(invoices)
+      .where(and(
+        gte(invoices.createdAt, start),
+        lte(invoices.createdAt, end)
+      ));
+    
+    const expensesData = await db
+      .select()
+      .from(expenses)
+      .where(and(
+        gte(expenses.date, start),
+        lte(expenses.date, end)
+      ));
+    
+    const dataMap: Map<string, any> = new Map();
+    
+    // Process invoices
+    invoicesData.forEach(invoice => {
+      const date = new Date(invoice.createdAt || new Date());
+      const key = this.getDateKey(date, period);
+      
+      if (!dataMap.has(key)) {
+        dataMap.set(key, {
+          date: key,
+          revenue: 0,
+          expenses: 0,
+          profit: 0
+        });
+      }
+      
+      const data = dataMap.get(key);
+      data.revenue += parseFloat(invoice.totalAmount || '0');
+    });
+    
+    // Process expenses
+    expensesData.forEach(expense => {
+      const date = new Date(expense.date);
+      const key = this.getDateKey(date, period);
+      
+      if (!dataMap.has(key)) {
+        dataMap.set(key, {
+          date: key,
+          revenue: 0,
+          expenses: 0,
+          profit: 0
+        });
+      }
+      
+      const data = dataMap.get(key);
+      data.expenses += parseFloat(expense.amount || '0');
+    });
+    
+    // Calculate profit for each period
+    dataMap.forEach(data => {
+      data.profit = data.revenue - data.expenses;
+      data.revenue = parseFloat(data.revenue.toFixed(2));
+      data.expenses = parseFloat(data.expenses.toFixed(2));
+      data.profit = parseFloat(data.profit.toFixed(2));
+    });
+    
+    return Array.from(dataMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async getKPIMetrics(): Promise<any[]> {
+    const now = new Date();
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    
+    // Get current month data
+    const currentMetrics = await this.getDashboardMetrics(thisMonth, now);
+    const lastMonthMetrics = await this.getDashboardMetrics(lastMonth, lastMonthEnd);
+    
+    // Calculate trends
+    const calculateTrend = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return ((current - previous) / previous) * 100;
+    };
+    
+    return [
+      {
+        id: 'total_inspections',
+        name: 'Total Inspections',
+        value: currentMetrics.totalJobs,
+        trend: calculateTrend(currentMetrics.totalJobs, lastMonthMetrics.totalJobs),
+        unit: 'jobs',
+        icon: 'checklist'
+      },
+      {
+        id: 'completion_rate',
+        name: 'Completion Rate',
+        value: currentMetrics.completionRate,
+        trend: calculateTrend(currentMetrics.completionRate, lastMonthMetrics.completionRate),
+        unit: '%',
+        icon: 'percentage'
+      },
+      {
+        id: 'monthly_revenue',
+        name: 'Monthly Revenue',
+        value: currentMetrics.totalRevenue,
+        trend: calculateTrend(currentMetrics.totalRevenue, lastMonthMetrics.totalRevenue),
+        unit: '$',
+        icon: 'dollar'
+      },
+      {
+        id: 'profit_margin',
+        name: 'Profit Margin',
+        value: currentMetrics.profitMargin,
+        trend: calculateTrend(currentMetrics.profitMargin, lastMonthMetrics.profitMargin),
+        unit: '%',
+        icon: 'trending'
+      },
+      {
+        id: 'active_jobs',
+        name: 'Active Jobs',
+        value: currentMetrics.activeJobs,
+        trend: calculateTrend(currentMetrics.activeJobs, lastMonthMetrics.activeJobs),
+        unit: 'jobs',
+        icon: 'activity'
+      },
+      {
+        id: 'photos_uploaded',
+        name: 'Photos Uploaded',
+        value: currentMetrics.photosUploaded,
+        trend: calculateTrend(currentMetrics.photosUploaded, lastMonthMetrics.photosUploaded),
+        unit: 'photos',
+        icon: 'camera'
+      }
+    ];
+  }
+
+  async getForecastData(metric: string, lookbackDays: number = 30): Promise<any[]> {
+    const now = new Date();
+    const historicalStart = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+    
+    // Get historical data based on metric type
+    let historicalData: any[] = [];
+    
+    if (metric === 'revenue') {
+      historicalData = await this.getRevenueExpenseData('daily', historicalStart, now);
+    } else if (metric === 'jobs') {
+      historicalData = await this.getInspectionTrends('daily', historicalStart, now);
+    }
+    
+    // Simple linear regression for forecasting
+    if (historicalData.length > 0) {
+      const n = historicalData.length;
+      const xValues = historicalData.map((_, i) => i);
+      const yValues = historicalData.map(d => 
+        metric === 'revenue' ? d.revenue : d.total
+      );
+      
+      const xSum = xValues.reduce((a, b) => a + b, 0);
+      const ySum = yValues.reduce((a, b) => a + b, 0);
+      const xySum = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+      const xxSum = xValues.reduce((sum, x) => sum + x * x, 0);
+      
+      const slope = (n * xySum - xSum * ySum) / (n * xxSum - xSum * xSum);
+      const intercept = (ySum - slope * xSum) / n;
+      
+      // Generate forecast for next 7 days
+      const forecast = [];
+      for (let i = 0; i < 7; i++) {
+        const futureDate = new Date(now.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+        const predictedValue = slope * (n + i) + intercept;
+        
+        forecast.push({
+          date: futureDate.toISOString().split('T')[0],
+          predicted: Math.max(0, parseFloat(predictedValue.toFixed(2))),
+          confidence: Math.max(0.6, 0.95 - (i * 0.05)) // Confidence decreases with distance
+        });
+      }
+      
+      return [
+        ...historicalData.map(d => ({
+          date: d.date,
+          actual: metric === 'revenue' ? d.revenue : d.total,
+          predicted: null
+        })),
+        ...forecast
+      ];
+    }
+    
+    return [];
+  }
+
+  // Helper methods for analytics
+  private calculateTier(ach50: number): string {
+    if (ach50 <= 1.0) return 'Elite';
+    if (ach50 <= 1.5) return 'Excellent';
+    if (ach50 <= 2.0) return 'Very Good';
+    if (ach50 <= 2.5) return 'Good';
+    if (ach50 <= 3.0) return 'Passing';
+    return 'Failing';
+  }
+
+  private calculateTierDistribution(tests: BlowerDoorTest[]): any[] {
+    const tiers = {
+      Elite: { min: 0.5, max: 1.0, color: '#0B7285', count: 0 },
+      Excellent: { min: 1.0, max: 1.5, color: '#2E8B57', count: 0 },
+      'Very Good': { min: 1.5, max: 2.0, color: '#3FA34D', count: 0 },
+      Good: { min: 2.0, max: 2.5, color: '#A0C34E', count: 0 },
+      Passing: { min: 2.5, max: 3.0, color: '#FFC107', count: 0 },
+      Failing: { min: 3.0, max: Infinity, color: '#DC3545', count: 0 }
+    };
+    
+    tests.forEach(test => {
+      if (test.ach50) {
+        const tier = this.calculateTier(test.ach50);
+        if (tiers[tier]) {
+          tiers[tier].count++;
+        }
+      }
+    });
+    
+    const total = tests.length || 1;
+    
+    return Object.entries(tiers).map(([tier, data]) => ({
+      tier,
+      count: data.count,
+      percentage: parseFloat(((data.count / total) * 100).toFixed(1)),
+      color: data.color
+    }));
+  }
+
+  private async getMonthlyHighlights(startDate: Date, endDate: Date): Promise<any[]> {
+    const highlights = [];
+    
+    // Get jobs this month
+    const monthlyJobs = await db
+      .select()
+      .from(jobs)
+      .where(and(
+        gte(jobs.scheduledDate, startDate),
+        lte(jobs.scheduledDate, endDate)
+      ));
+    
+    const completedJobs = monthlyJobs.filter(j => j.status === 'completed');
+    
+    highlights.push({
+      label: 'Jobs Completed',
+      value: completedJobs.length,
+      type: 'success'
+    });
+    
+    // Get revenue this month
+    const monthlyInvoices = await db
+      .select()
+      .from(invoices)
+      .where(and(
+        gte(invoices.createdAt, startDate),
+        lte(invoices.createdAt, endDate)
+      ));
+    
+    const monthlyRevenue = monthlyInvoices.reduce((sum, inv) => 
+      sum + parseFloat(inv.totalAmount || '0'), 0
+    );
+    
+    highlights.push({
+      label: 'Monthly Revenue',
+      value: `$${monthlyRevenue.toFixed(0)}`,
+      type: 'info'
+    });
+    
+    // Get new builders this month
+    const newBuilders = await db
+      .select({ count: count() })
+      .from(builders);
+    
+    if (newBuilders[0]?.count) {
+      highlights.push({
+        label: 'Active Builders',
+        value: newBuilders[0].count,
+        type: 'info'
+      });
+    }
+    
+    // Get pending jobs
+    const pendingJobs = monthlyJobs.filter(j => j.status === 'pending' || j.status === 'scheduled');
+    
+    if (pendingJobs.length > 5) {
+      highlights.push({
+        label: 'Pending Jobs',
+        value: pendingJobs.length,
+        type: 'warning'
+      });
+    }
+    
+    return highlights;
+  }
+
+  private getDateKey(date: Date, period: 'daily' | 'weekly' | 'monthly'): string {
+    if (period === 'daily') {
+      return date.toISOString().split('T')[0];
+    } else if (period === 'weekly') {
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay());
+      return weekStart.toISOString().split('T')[0];
+    } else {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    }
   }
 }
 

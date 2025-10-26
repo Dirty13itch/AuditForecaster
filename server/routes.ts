@@ -7907,22 +7907,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/analytics/overview", isAuthenticated, async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
-      const jobs = await storage.getJobs();
-      const builders = await storage.getBuilders();
-      const checklistItems = await storage.getChecklistItems();
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
       
-      // Calculate overview metrics
-      const overview = {
-        totalJobs: jobs.length,
-        completedJobs: jobs.filter((j: Job) => j.status === 'completed').length,
-        activeBuilders: new Set(jobs.map((j: Job) => j.builderId)).size,
-        avgCompletionTime: 125, // Mock average in minutes
-        complianceRate: 0.92,
-        avgQaScore: 0.85,
-        revenue: jobs.length * 850, // Mock calculation
-        expenses: jobs.length * 450, // Mock calculation
-      };
-      
+      const overview = await storage.getDashboardMetrics(start, end);
       res.json(overview);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch analytics overview');
@@ -7932,33 +7920,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/trends", isAuthenticated, async (req, res) => {
     try {
-      const { period, metric, groupBy } = req.query;
-      const jobs = await storage.getJobs();
+      const { period, startDate, endDate } = req.query;
+      const periodStr = (period as string) || 'daily';
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
       
-      // Generate trend data based on period
-      const trends = [];
-      const periods = period === 'daily' ? 7 : period === 'weekly' ? 4 : 6;
-      
-      for (let i = 0; i < periods; i++) {
-        const date = new Date();
-        if (period === 'daily') {
-          date.setDate(date.getDate() - (periods - i - 1));
-        } else if (period === 'weekly') {
-          date.setDate(date.getDate() - (periods - i - 1) * 7);
-        } else {
-          date.setMonth(date.getMonth() - (periods - i - 1));
-        }
-        
-        trends.push({
-          date: date.toISOString(),
-          value: Math.floor(Math.random() * 100) + 50,
-          label: period === 'daily' 
-            ? date.toLocaleDateString('en-US', { weekday: 'short' })
-            : period === 'weekly'
-            ? `Week ${i + 1}`
-            : date.toLocaleDateString('en-US', { month: 'short' }),
-        });
-      }
+      const trends = await storage.getInspectionTrends(
+        periodStr as 'daily' | 'weekly' | 'monthly',
+        start,
+        end
+      );
       
       res.json(trends);
     } catch (error) {
@@ -7969,49 +7940,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/kpis", isAuthenticated, async (req, res) => {
     try {
-      const jobs = await storage.getJobs();
-      const builders = await storage.getBuilders();
-      
-      // Calculate KPIs
-      const kpis = [
-        {
-          id: 'jobs_completed',
-          name: 'Jobs Completed',
-          value: jobs.filter((j: Job) => j.status === 'completed').length,
-          target: 100,
-          unit: 'jobs',
-          trend: 'up',
-          trendValue: 12.5,
-        },
-        {
-          id: 'avg_qa_score',
-          name: 'Average QA Score',
-          value: 85.3,
-          target: 90,
-          unit: '%',
-          trend: 'up',
-          trendValue: 2.1,
-        },
-        {
-          id: 'compliance_rate',
-          name: 'Compliance Rate',
-          value: 92.5,
-          target: 95,
-          unit: '%',
-          trend: 'down',
-          trendValue: -1.3,
-        },
-        {
-          id: 'first_pass_rate',
-          name: 'First Pass Rate',
-          value: 78.2,
-          target: 85,
-          unit: '%',
-          trend: 'up',
-          trendValue: 3.7,
-        },
-      ];
-      
+      const kpis = await storage.getKPIMetrics();
       res.json(kpis);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch analytics kpis');
@@ -8067,21 +7996,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // New Analytics Endpoints for Dashboard
+  app.get("/api/analytics/dashboard", isAuthenticated, async (req, res) => {
+    try {
+      const summary = await storage.getDashboardSummary();
+      res.json(summary);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch dashboard analytics');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/metrics", isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const metrics = await storage.getDashboardMetrics(start, end);
+      res.json(metrics);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch dashboard metrics');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/leaderboard", isAuthenticated, async (req, res) => {
+    try {
+      const leaderboard = await storage.getBuilderLeaderboard();
+      res.json(leaderboard);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch analytics leaderboard');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/forecasts", isAuthenticated, async (req, res) => {
+    try {
+      const { metric, lookbackDays } = req.query;
+      const metricStr = (metric as string) || 'revenue';
+      const days = lookbackDays ? parseInt(lookbackDays as string) : 30;
+      
+      const forecasts = await storage.getForecastData(metricStr, days);
+      res.json(forecasts);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch analytics forecasts');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/builder-performance", isAuthenticated, async (req, res) => {
+    try {
+      const { limit } = req.query;
+      const maxBuilders = limit ? parseInt(limit as string) : 10;
+      
+      const performance = await storage.getBuilderPerformance(maxBuilders);
+      res.json(performance);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder performance');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/financial", isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const financial = await storage.getFinancialMetrics(start, end);
+      res.json(financial);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch financial analytics');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/photos", isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const photoAnalytics = await storage.getPhotoAnalytics(start, end);
+      res.json(photoAnalytics);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch photo analytics');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/inspector-performance", isAuthenticated, async (req, res) => {
+    try {
+      const { inspectorId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const performance = await storage.getInspectorPerformance(
+        inspectorId as string | undefined,
+        start,
+        end
+      );
+      res.json(performance);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch inspector performance');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/compliance", isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const compliance = await storage.getComplianceMetrics(start, end);
+      res.json(compliance);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch compliance analytics');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/analytics/revenue-expense", isAuthenticated, async (req, res) => {
+    try {
+      const { period, startDate, endDate } = req.query;
+      const periodStr = (period as string) || 'monthly';
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const data = await storage.getRevenueExpenseData(
+        periodStr as 'daily' | 'weekly' | 'monthly',
+        start,
+        end
+      );
+      res.json(data);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch revenue expense data');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/analytics/export", isAuthenticated, async (req, res) => {
     try {
-      const { format, reportId } = req.query;
+      const { format, type } = req.query;
+      const typeStr = (type as string) || 'dashboard';
       
-      // For demo, return mock data
+      // Get real data for export
+      const data = await storage.getDashboardSummary();
+      
       if (format === 'csv') {
+        // Convert data to CSV format
+        let csvContent = 'Metric,Value\n';
+        csvContent += `Total Inspections,${data.totalInspections}\n`;
+        csvContent += `Average ACH50,${data.averageACH50}\n`;
+        csvContent += `Pass Rate,${data.passRate}%\n`;
+        csvContent += `Fail Rate,${data.failRate}%\n`;
+        csvContent += `45L Eligible Count,${data.tax45LEligibleCount}\n`;
+        csvContent += `Potential Tax Credits,$${data.totalPotentialTaxCredits}\n`;
+        
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=analytics.csv');
-        res.send('Date,Jobs,Revenue,Expenses\n2024-01-01,45,38250,20475\n2024-01-02,52,44200,23660');
-      } else if (format === 'excel') {
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=analytics.xlsx');
-        res.send(Buffer.from('Mock Excel Data'));
+        res.send(csvContent);
+      } else if (format === 'json') {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', 'attachment; filename=analytics.json');
+        res.send(JSON.stringify(data, null, 2));
       } else {
-        res.status(400).json({ message: 'Invalid export format' });
+        res.status(400).json({ message: 'Invalid export format. Use csv or json' });
       }
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'export analytics');
