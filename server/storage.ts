@@ -27,8 +27,16 @@ import {
   type InsertMileageLog,
   type ReportTemplate,
   type InsertReportTemplate,
+  type TemplateSection,
+  type InsertTemplateSection,
+  type TemplateField,
+  type InsertTemplateField,
   type ReportInstance,
   type InsertReportInstance,
+  type ReportSectionInstance,
+  type InsertReportSectionInstance,
+  type ReportFieldValue,
+  type InsertReportFieldValue,
   type Photo,
   type InsertPhoto,
   type Forecast,
@@ -74,7 +82,11 @@ import {
   expenses,
   mileageLogs,
   reportTemplates,
+  templateSections,
+  templateFields,
   reportInstances,
+  reportSectionInstances,
+  reportFieldValues,
   photos,
   forecasts,
   checklistItems,
@@ -193,18 +205,58 @@ export interface IStorage {
   updateMileageLog(id: string, log: Partial<InsertMileageLog>): Promise<MileageLog | undefined>;
   deleteMileageLog(id: string): Promise<boolean>;
 
+  // Report Templates
   createReportTemplate(template: InsertReportTemplate): Promise<ReportTemplate>;
   getReportTemplate(id: string): Promise<ReportTemplate | undefined>;
   getAllReportTemplates(): Promise<ReportTemplate[]>;
+  getReportTemplatesByCategory(category: string): Promise<ReportTemplate[]>;
+  getPublishedReportTemplates(): Promise<ReportTemplate[]>;
   updateReportTemplate(id: string, template: Partial<InsertReportTemplate>): Promise<ReportTemplate | undefined>;
   deleteReportTemplate(id: string): Promise<boolean>;
+  publishReportTemplate(id: string): Promise<ReportTemplate | undefined>;
+  duplicateReportTemplate(id: string, newName: string): Promise<ReportTemplate>;
 
+  // Template Sections
+  createTemplateSection(section: InsertTemplateSection): Promise<TemplateSection>;
+  getTemplateSection(id: string): Promise<TemplateSection | undefined>;
+  getTemplateSections(templateId: string): Promise<TemplateSection[]>;
+  updateTemplateSection(id: string, section: Partial<InsertTemplateSection>): Promise<TemplateSection | undefined>;
+  deleteTemplateSection(id: string): Promise<boolean>;
+  reorderTemplateSections(templateId: string, sectionIds: string[]): Promise<boolean>;
+
+  // Template Fields
+  createTemplateField(field: InsertTemplateField): Promise<TemplateField>;
+  getTemplateField(id: string): Promise<TemplateField | undefined>;
+  getTemplateFields(sectionId: string): Promise<TemplateField[]>;
+  updateTemplateField(id: string, field: Partial<InsertTemplateField>): Promise<TemplateField | undefined>;
+  deleteTemplateField(id: string): Promise<boolean>;
+  reorderTemplateFields(sectionId: string, fieldIds: string[]): Promise<boolean>;
+
+  // Report Instances
   createReportInstance(instance: InsertReportInstance): Promise<ReportInstance>;
   getReportInstance(id: string): Promise<ReportInstance | undefined>;
   getAllReportInstances(): Promise<ReportInstance[]>;
   getReportInstancesByJob(jobId: string): Promise<ReportInstance[]>;
+  getReportInstancesByStatus(status: string): Promise<ReportInstance[]>;
   getReportInstancesPaginated(params: PaginationParams): Promise<PaginatedResult<ReportInstance>>;
   updateReportInstance(id: string, instance: Partial<InsertReportInstance>): Promise<ReportInstance | undefined>;
+  submitReportInstance(id: string): Promise<ReportInstance | undefined>;
+  approveReportInstance(id: string, approverId: string): Promise<ReportInstance | undefined>;
+
+  // Report Section Instances
+  createReportSectionInstance(instance: InsertReportSectionInstance): Promise<ReportSectionInstance>;
+  getReportSectionInstance(id: string): Promise<ReportSectionInstance | undefined>;
+  getReportSectionInstances(reportId: string): Promise<ReportSectionInstance[]>;
+  deleteReportSectionInstance(id: string): Promise<boolean>;
+
+  // Report Field Values
+  createReportFieldValue(value: InsertReportFieldValue): Promise<ReportFieldValue>;
+  getReportFieldValue(id: string): Promise<ReportFieldValue | undefined>;
+  getReportFieldValues(reportId: string): Promise<ReportFieldValue[]>;
+  getReportFieldValuesBySection(sectionInstanceId: string): Promise<ReportFieldValue[]>;
+  updateReportFieldValue(id: string, value: Partial<InsertReportFieldValue>): Promise<ReportFieldValue | undefined>;
+  deleteReportFieldValue(id: string): Promise<boolean>;
+  bulkSaveFieldValues(reportId: string, values: InsertReportFieldValue[]): Promise<ReportFieldValue[]>;
 
   createPhoto(photo: InsertPhoto): Promise<Photo>;
   getPhoto(id: string): Promise<Photo | undefined>;
@@ -415,10 +467,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBuilderContact(insertContact: InsertBuilderContact): Promise<BuilderContact> {
-    // Strip isPrimary to prevent clients from creating multiple primaries
     // Use setPrimaryContact instead to manage primary designation
-    const { isPrimary, ...safeData } = insertContact;
-    const result = await db.insert(builderContacts).values({ ...safeData, isPrimary: false }).returning();
+    const result = await db.insert(builderContacts).values({ ...insertContact, isPrimary: false }).returning();
     return result[0];
   }
 
@@ -440,8 +490,8 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
     
-    // Prevent changing builderId or isPrimary via regular update
-    const { builderId, isPrimary, ...safeUpdates } = updates;
+    // Prevent changing builderId via regular update
+    const { builderId, ...safeUpdates } = updates;
     
     const result = await db.update(builderContacts)
       .set(safeUpdates)
@@ -615,7 +665,7 @@ export class DatabaseStorage implements IStorage {
 
   async getDevelopmentsByStatus(status: string): Promise<Development[]> {
     return await db.select().from(developments)
-      .where(eq(developments.status, status))
+      .where(eq(developments.status, status as any))
       .orderBy(desc(developments.createdAt));
   }
 
@@ -633,7 +683,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLot(insertLot: InsertLot): Promise<Lot> {
-    const result = await db.insert(lots).values(insertLot).returning();
+    // Convert numeric fields to strings for decimal columns
+    const values = {
+      ...insertLot,
+      squareFootage: insertLot.squareFootage != null ? String(insertLot.squareFootage) : null,
+    };
+    const result = await db.insert(lots).values(values as any).returning();
     return result[0];
   }
 
@@ -655,8 +710,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateLot(id: string, updates: Partial<InsertLot>): Promise<Lot | undefined> {
+    // Convert numeric fields to strings for decimal columns
+    const values = {
+      ...updates,
+      ...(updates.squareFootage != null && { squareFootage: String(updates.squareFootage) }),
+    };
     const result = await db.update(lots)
-      .set(updates)
+      .set(values as any)
       .where(eq(lots.id, id))
       .returning();
     return result[0];
@@ -668,7 +728,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPlan(insertPlan: InsertPlan): Promise<Plan> {
-    const result = await db.insert(plans).values(insertPlan).returning();
+    // Convert numeric fields to strings for decimal columns
+    const values = {
+      ...insertPlan,
+      floorArea: insertPlan.floorArea != null ? String(insertPlan.floorArea) : null,
+      surfaceArea: insertPlan.surfaceArea != null ? String(insertPlan.surfaceArea) : null,
+      houseVolume: insertPlan.houseVolume != null ? String(insertPlan.houseVolume) : null,
+      stories: insertPlan.stories != null ? String(insertPlan.stories) : null,
+    };
+    const result = await db.insert(plans).values(values as any).returning();
     return result[0];
   }
 
@@ -686,8 +754,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePlan(id: string, updates: Partial<InsertPlan>): Promise<Plan | undefined> {
+    // Convert numeric fields to strings for decimal columns
+    const values = {
+      ...updates,
+      ...(updates.floorArea != null && { floorArea: String(updates.floorArea) }),
+      ...(updates.surfaceArea != null && { surfaceArea: String(updates.surfaceArea) }),
+      ...(updates.houseVolume != null && { houseVolume: String(updates.houseVolume) }),
+      ...(updates.stories != null && { stories: String(updates.stories) }),
+    };
     const result = await db.update(plans)
-      .set(updates)
+      .set(values as any)
       .where(eq(plans.id, id))
       .returning();
     return result[0];
@@ -699,7 +775,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createJob(insertJob: InsertJob): Promise<Job> {
-    const result = await db.insert(jobs).values(insertJob).returning();
+    // Convert numeric fields to strings for decimal columns
+    const values = {
+      ...insertJob,
+      pricing: insertJob.pricing != null ? String(insertJob.pricing) : null,
+      floorArea: insertJob.floorArea != null ? String(insertJob.floorArea) : null,
+      surfaceArea: insertJob.surfaceArea != null ? String(insertJob.surfaceArea) : null,
+      houseVolume: insertJob.houseVolume != null ? String(insertJob.houseVolume) : null,
+      stories: insertJob.stories != null ? String(insertJob.stories) : null,
+    };
+    const result = await db.insert(jobs).values(values as any).returning();
     return result[0];
   }
 
@@ -750,23 +835,16 @@ export class DatabaseStorage implements IStorage {
   async getJobsCursorPaginated(params: CursorPaginationParams): Promise<CursorPaginatedResult<Job>> {
     const { cursor, limit, sortBy, sortOrder } = params;
     
-    let query = db.select().from(jobs);
-    
+    let whereCondition = undefined;
     if (cursor) {
-      if (sortOrder === 'desc') {
-        query = query.where(lt(jobs.id, cursor));
-      } else {
-        query = query.where(gt(jobs.id, cursor));
-      }
+      whereCondition = sortOrder === 'desc' ? lt(jobs.id, cursor) : gt(jobs.id, cursor);
     }
     
-    if (sortOrder === 'desc') {
-      query = query.orderBy(desc(jobs.id));
-    } else {
-      query = query.orderBy(asc(jobs.id));
-    }
+    const orderByCondition = sortOrder === 'desc' ? desc(jobs.id) : asc(jobs.id);
     
-    const results = await query.limit(limit + 1);
+    const baseQuery = db.select().from(jobs);
+    const query = whereCondition ? baseQuery.where(whereCondition) : baseQuery;
+    const results = await query.orderBy(orderByCondition).limit(limit + 1);
     
     const hasMore = results.length > limit;
     const data = hasMore ? results.slice(0, limit) : results;
@@ -782,23 +860,20 @@ export class DatabaseStorage implements IStorage {
   async getJobsCursorPaginatedByUser(userId: string, params: CursorPaginationParams): Promise<CursorPaginatedResult<Job>> {
     const { cursor, limit, sortBy, sortOrder } = params;
     
-    let query = db.select().from(jobs).where(eq(jobs.createdBy, userId));
+    const whereCondition = cursor 
+      ? and(
+          eq(jobs.createdBy, userId),
+          sortOrder === 'desc' ? lt(jobs.id, cursor) : gt(jobs.id, cursor)
+        )
+      : eq(jobs.createdBy, userId);
     
-    if (cursor) {
-      if (sortOrder === 'desc') {
-        query = query.where(and(eq(jobs.createdBy, userId), lt(jobs.id, cursor)));
-      } else {
-        query = query.where(and(eq(jobs.createdBy, userId), gt(jobs.id, cursor)));
-      }
-    }
+    const orderByCondition = sortOrder === 'desc' ? desc(jobs.id) : asc(jobs.id);
     
-    if (sortOrder === 'desc') {
-      query = query.orderBy(desc(jobs.id));
-    } else {
-      query = query.orderBy(asc(jobs.id));
-    }
-    
-    const results = await query.limit(limit + 1);
+    const results = await db.select()
+      .from(jobs)
+      .where(whereCondition)
+      .orderBy(orderByCondition)
+      .limit(limit + 1);
     
     const hasMore = results.length > limit;
     const data = hasMore ? results.slice(0, limit) : results;
@@ -812,8 +887,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateJob(id: string, updates: Partial<InsertJob>): Promise<Job | undefined> {
+    // Convert numeric fields to strings for decimal columns
+    const values = {
+      ...updates,
+      ...(updates.pricing != null && { pricing: String(updates.pricing) }),
+      ...(updates.floorArea != null && { floorArea: String(updates.floorArea) }),
+      ...(updates.surfaceArea != null && { surfaceArea: String(updates.surfaceArea) }),
+      ...(updates.houseVolume != null && { houseVolume: String(updates.houseVolume) }),
+      ...(updates.stories != null && { stories: String(updates.stories) }),
+    };
     const result = await db.update(jobs)
-      .set(updates)
+      .set(values as any)
       .where(eq(jobs.id, id))
       .returning();
     return result[0];
@@ -1025,6 +1109,165 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  async getReportTemplatesByCategory(category: string): Promise<ReportTemplate[]> {
+    return await db.select().from(reportTemplates).where(eq(reportTemplates.category, category as any));
+  }
+
+  async getPublishedReportTemplates(): Promise<ReportTemplate[]> {
+    return await db.select().from(reportTemplates).where(eq(reportTemplates.status, 'published'));
+  }
+
+  async publishReportTemplate(id: string): Promise<ReportTemplate | undefined> {
+    const result = await db.update(reportTemplates)
+      .set({ status: 'published', publishedAt: new Date() })
+      .where(eq(reportTemplates.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async duplicateReportTemplate(id: string, newName: string): Promise<ReportTemplate> {
+    const original = await this.getReportTemplate(id);
+    if (!original) {
+      throw new Error('Template not found');
+    }
+    
+    const duplicate = await db.insert(reportTemplates)
+      .values({
+        name: newName,
+        description: original.description,
+        category: original.category,
+        status: 'draft',
+        isDefault: false,
+        createdBy: original.createdBy,
+      })
+      .returning();
+    
+    // Duplicate sections and fields
+    const sections = await this.getTemplateSections(id);
+    for (const section of sections) {
+      const newSection = await this.createTemplateSection({
+        templateId: duplicate[0].id,
+        parentSectionId: section.parentSectionId as string | null,
+        title: section.title,
+        description: section.description,
+        orderIndex: section.orderIndex,
+        isRepeatable: section.isRepeatable,
+        minRepetitions: section.minRepetitions,
+        maxRepetitions: section.maxRepetitions,
+      });
+      
+      const fields = await this.getTemplateFields(section.id);
+      for (const field of fields) {
+        await this.createTemplateField({
+          sectionId: newSection.id,
+          fieldType: field.fieldType,
+          label: field.label,
+          description: field.description,
+          placeholder: field.placeholder,
+          orderIndex: field.orderIndex,
+          isRequired: field.isRequired,
+          isVisible: field.isVisible,
+          defaultValue: field.defaultValue,
+          configuration: field.configuration as any,
+          validationRules: field.validationRules as any,
+          conditionalLogic: field.conditionalLogic as any,
+        });
+      }
+    }
+    
+    return duplicate[0];
+  }
+
+  // Template Sections
+  async createTemplateSection(section: InsertTemplateSection): Promise<TemplateSection> {
+    const result = await db.insert(templateSections).values(section as any).returning();
+    return result[0];
+  }
+
+  async getTemplateSection(id: string): Promise<TemplateSection | undefined> {
+    const result = await db.select().from(templateSections).where(eq(templateSections.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getTemplateSections(templateId: string): Promise<TemplateSection[]> {
+    return await db.select()
+      .from(templateSections)
+      .where(eq(templateSections.templateId, templateId))
+      .orderBy(templateSections.orderIndex);
+  }
+
+  async updateTemplateSection(id: string, updates: Partial<InsertTemplateSection>): Promise<TemplateSection | undefined> {
+    const result = await db.update(templateSections)
+      .set(updates)
+      .where(eq(templateSections.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteTemplateSection(id: string): Promise<boolean> {
+    const result = await db.delete(templateSections).where(eq(templateSections.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderTemplateSections(templateId: string, sectionIds: string[]): Promise<boolean> {
+    const updates = sectionIds.map((sectionId, index) => 
+      db.update(templateSections)
+        .set({ orderIndex: index })
+        .where(and(
+          eq(templateSections.id, sectionId),
+          eq(templateSections.templateId, templateId)
+        ))
+    );
+    
+    await Promise.all(updates);
+    return true;
+  }
+
+  // Template Fields
+  async createTemplateField(field: InsertTemplateField): Promise<TemplateField> {
+    const result = await db.insert(templateFields).values(field).returning();
+    return result[0];
+  }
+
+  async getTemplateField(id: string): Promise<TemplateField | undefined> {
+    const result = await db.select().from(templateFields).where(eq(templateFields.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getTemplateFields(sectionId: string): Promise<TemplateField[]> {
+    return await db.select()
+      .from(templateFields)
+      .where(eq(templateFields.sectionId, sectionId))
+      .orderBy(templateFields.orderIndex);
+  }
+
+  async updateTemplateField(id: string, updates: Partial<InsertTemplateField>): Promise<TemplateField | undefined> {
+    const result = await db.update(templateFields)
+      .set(updates)
+      .where(eq(templateFields.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteTemplateField(id: string): Promise<boolean> {
+    const result = await db.delete(templateFields).where(eq(templateFields.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderTemplateFields(sectionId: string, fieldIds: string[]): Promise<boolean> {
+    const updates = fieldIds.map((fieldId, index) => 
+      db.update(templateFields)
+        .set({ orderIndex: index })
+        .where(and(
+          eq(templateFields.id, fieldId),
+          eq(templateFields.sectionId, sectionId)
+        ))
+    );
+    
+    await Promise.all(updates);
+    return true;
+  }
+
   async createReportInstance(insertInstance: InsertReportInstance): Promise<ReportInstance> {
     const result = await db.insert(reportInstances).values(insertInstance).returning();
     const instance = result[0];
@@ -1074,6 +1317,99 @@ export class DatabaseStorage implements IStorage {
       .where(eq(reportInstances.id, id))
       .returning();
     return result[0];
+  }
+
+  async getReportInstancesByStatus(status: string): Promise<ReportInstance[]> {
+    return await db.select().from(reportInstances).where(eq(reportInstances.status, status as any));
+  }
+
+  async submitReportInstance(id: string): Promise<ReportInstance | undefined> {
+    const result = await db.update(reportInstances)
+      .set({ status: 'submitted', submittedAt: new Date() })
+      .where(eq(reportInstances.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async approveReportInstance(id: string, approverId: string): Promise<ReportInstance | undefined> {
+    const result = await db.update(reportInstances)
+      .set({ 
+        status: 'approved', 
+        approvedAt: new Date(),
+        approvedBy: approverId 
+      })
+      .where(eq(reportInstances.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // Report Section Instances
+  async createReportSectionInstance(instance: InsertReportSectionInstance): Promise<ReportSectionInstance> {
+    const result = await db.insert(reportSectionInstances).values(instance).returning();
+    return result[0];
+  }
+
+  async getReportSectionInstance(id: string): Promise<ReportSectionInstance | undefined> {
+    const result = await db.select().from(reportSectionInstances).where(eq(reportSectionInstances.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getReportSectionInstances(reportId: string): Promise<ReportSectionInstance[]> {
+    return await db.select()
+      .from(reportSectionInstances)
+      .where(eq(reportSectionInstances.reportInstanceId, reportId));
+  }
+
+  async deleteReportSectionInstance(id: string): Promise<boolean> {
+    const result = await db.delete(reportSectionInstances).where(eq(reportSectionInstances.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Report Field Values
+  async createReportFieldValue(value: InsertReportFieldValue): Promise<ReportFieldValue> {
+    const result = await db.insert(reportFieldValues).values(value as any).returning();
+    return result[0];
+  }
+
+  async getReportFieldValue(id: string): Promise<ReportFieldValue | undefined> {
+    const result = await db.select().from(reportFieldValues).where(eq(reportFieldValues.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getReportFieldValues(reportId: string): Promise<ReportFieldValue[]> {
+    return await db.select()
+      .from(reportFieldValues)
+      .where(eq(reportFieldValues.reportInstanceId, reportId));
+  }
+
+  async getReportFieldValuesBySection(sectionInstanceId: string): Promise<ReportFieldValue[]> {
+    return await db.select()
+      .from(reportFieldValues)
+      .where(eq(reportFieldValues.sectionInstanceId, sectionInstanceId));
+  }
+
+  async updateReportFieldValue(id: string, updates: Partial<InsertReportFieldValue>): Promise<ReportFieldValue | undefined> {
+    const result = await db.update(reportFieldValues)
+      .set(updates as any)
+      .where(eq(reportFieldValues.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteReportFieldValue(id: string): Promise<boolean> {
+    const result = await db.delete(reportFieldValues).where(eq(reportFieldValues.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async bulkSaveFieldValues(reportId: string, values: InsertReportFieldValue[]): Promise<ReportFieldValue[]> {
+    if (values.length === 0) return [];
+    
+    // Delete existing values for this report
+    await db.delete(reportFieldValues).where(eq(reportFieldValues.reportInstanceId, reportId));
+    
+    // Insert new values
+    const result = await db.insert(reportFieldValues).values(values as any).returning();
+    return result;
   }
 
   async createPhoto(insertPhoto: InsertPhoto): Promise<Photo> {
@@ -1261,16 +1597,11 @@ export class DatabaseStorage implements IStorage {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
     // Fetch limit + 1 to determine if there are more results
-    let query = db.select().from(photos).where(whereClause);
-    
-    // Apply ordering
-    if (sortOrder === 'desc') {
-      query = query.orderBy(desc(photos.uploadedAt));
-    } else {
-      query = query.orderBy(asc(photos.uploadedAt));
-    }
-    
-    const results = await query.limit(limit + 1);
+    const results = await db.select()
+      .from(photos)
+      .where(whereClause)
+      .orderBy(sortOrder === 'desc' ? desc(photos.uploadedAt) : asc(photos.uploadedAt))
+      .limit(limit + 1);
     
     // Determine if there are more results
     const hasMore = results.length > limit;
@@ -1334,19 +1665,12 @@ export class DatabaseStorage implements IStorage {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
     // Fetch with join to jobs table for ownership filtering
-    let query = db.select({ photo: photos })
+    const results = await db.select({ photo: photos })
       .from(photos)
       .leftJoin(jobs, eq(photos.jobId, jobs.id))
-      .where(whereClause);
-    
-    // Apply ordering
-    if (sortOrder === 'desc') {
-      query = query.orderBy(desc(photos.uploadedAt));
-    } else {
-      query = query.orderBy(asc(photos.uploadedAt));
-    }
-    
-    const results = await query.limit(limit + 1);
+      .where(whereClause)
+      .orderBy(sortOrder === 'desc' ? desc(photos.uploadedAt) : asc(photos.uploadedAt))
+      .limit(limit + 1);
     
     // Extract photos from joined results
     const photoResults = results.map(r => r.photo).filter((p): p is Photo => p !== null);
@@ -1416,7 +1740,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createForecast(insertForecast: InsertForecast): Promise<Forecast> {
-    const result = await db.insert(forecasts).values(insertForecast).returning();
+    const result = await db.insert(forecasts).values(insertForecast as any).returning();
     return result[0];
   }
 
@@ -1435,7 +1759,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateForecast(id: string, updates: Partial<InsertForecast>): Promise<Forecast | undefined> {
     const result = await db.update(forecasts)
-      .set(updates)
+      .set(updates as any)
       .where(eq(forecasts.id, id))
       .returning();
     return result[0];
@@ -2175,7 +2499,7 @@ export class DatabaseStorage implements IStorage {
       const existing = await db
         .select()
         .from(achievements)
-        .where(eq(achievements.id, def.id!))
+        .where(eq(achievements.name, def.name))
         .limit(1);
       
       if (existing.length === 0) {
@@ -2258,7 +2582,7 @@ export class DatabaseStorage implements IStorage {
     const conditions = [];
     
     if (status) {
-      conditions.push(eq(unmatchedCalendarEvents.status, status));
+      conditions.push(eq(unmatchedCalendarEvents.status, status as any));
     }
     if (minConfidence !== undefined) {
       conditions.push(gte(unmatchedCalendarEvents.confidenceScore, minConfidence));
@@ -2343,6 +2667,8 @@ export class DatabaseStorage implements IStorage {
     
     // Create job from approved event
     const jobData: InsertJob = {
+      name: unmatchedEvent.title || 'Imported Inspection',
+      contractor: 'TBD',
       builderId,
       inspectionType,
       address: unmatchedEvent.location || '',

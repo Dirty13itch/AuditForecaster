@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index, desc } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -359,30 +359,148 @@ export const mileageLogs = pgTable("mileage_logs", {
   endLongitude: real("end_longitude"),
 });
 
+// Report Templates - Enhanced for iAuditor-style inspection system
 export const reportTemplates = pgTable("report_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
-  sections: text("sections").notNull(),
+  category: text("category", { 
+    enum: ["pre_drywall", "final", "duct_testing", "blower_door", "pre_insulation", "post_insulation", "rough_in", "custom"] 
+  }).notNull(),
+  version: integer("version").notNull().default(1),
+  status: text("status", { enum: ["draft", "published", "archived"] }).notNull().default("draft"),
   isDefault: boolean("is_default").default(false),
-  createdAt: timestamp("created_at").default(sql`now()`),
-});
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  publishedAt: timestamp("published_at"),
+}, (table) => [
+  index("idx_report_templates_category").on(table.category),
+  index("idx_report_templates_status").on(table.status),
+  index("idx_report_templates_created_by").on(table.createdBy),
+]);
 
+// Template Sections - Hierarchical sections within templates
+export const templateSections = pgTable("template_sections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").notNull().references(() => reportTemplates.id, { onDelete: 'cascade' }),
+  parentSectionId: varchar("parent_section_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  orderIndex: integer("order_index").notNull(),
+  isRepeatable: boolean("is_repeatable").default(false),
+  minRepetitions: integer("min_repetitions").default(1),
+  maxRepetitions: integer("max_repetitions"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_template_sections_template_id").on(table.templateId),
+  index("idx_template_sections_parent_id").on(table.parentSectionId),
+  index("idx_template_sections_order").on(table.templateId, table.orderIndex),
+]);
+
+// Template Fields - Various field types with configuration
+export const templateFields = pgTable("template_fields", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sectionId: varchar("section_id").notNull().references(() => templateSections.id, { onDelete: 'cascade' }),
+  fieldType: text("field_type", {
+    enum: ["text", "textarea", "number", "select", "multiselect", "yes_no_na", "scale", "date", "time", "datetime", "photo", "signature", "calculation"]
+  }).notNull(),
+  label: text("label").notNull(),
+  description: text("description"),
+  placeholder: text("placeholder"),
+  orderIndex: integer("order_index").notNull(),
+  isRequired: boolean("is_required").default(false),
+  isVisible: boolean("is_visible").default(true),
+  defaultValue: text("default_value"),
+  // Field-specific configuration stored as JSONB
+  configuration: jsonb("configuration"),
+  /* Configuration examples:
+   * number: { min: 0, max: 100, decimals: 2, unit: "kg" }
+   * select/multiselect: { options: [{ value: "opt1", label: "Option 1" }] }
+   * scale: { min: 1, max: 5, labels: { 1: "Poor", 5: "Excellent" } }
+   * photo: { minCount: 1, maxCount: 10, allowAnnotations: true }
+   * calculation: { formula: "field1 + field2", dependencies: ["field1", "field2"] }
+   */
+  validationRules: jsonb("validation_rules"),
+  conditionalLogic: jsonb("conditional_logic"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_template_fields_section_id").on(table.sectionId),
+  index("idx_template_fields_field_type").on(table.fieldType),
+  index("idx_template_fields_order").on(table.sectionId, table.orderIndex),
+]);
+
+// Report Instances - Enhanced for storing actual reports created from templates
 export const reportInstances = pgTable("report_instances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
-  templateId: varchar("template_id").notNull().references(() => reportTemplates.id, { onDelete: 'cascade' }),
-  data: text("data").notNull(),
+  templateId: varchar("template_id").notNull().references(() => reportTemplates.id, { onDelete: 'restrict' }),
+  templateVersion: integer("template_version").notNull(),
+  status: text("status", { enum: ["draft", "in_progress", "completed", "submitted", "approved"] }).notNull().default("draft"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  submittedAt: timestamp("submitted_at"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  inspectorId: varchar("inspector_id").references(() => users.id, { onDelete: 'set null' }),
   pdfUrl: text("pdf_url"),
   emailedTo: text("emailed_to"),
   emailedAt: timestamp("emailed_at"),
-  createdAt: timestamp("created_at").default(sql`now()`),
-  scoreSummary: text("score_summary"),
+  scoreSummary: jsonb("score_summary"),
   complianceStatus: text("compliance_status"),
   complianceFlags: jsonb("compliance_flags"),
   lastComplianceCheck: timestamp("last_compliance_check"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_report_instances_job_id").on(table.jobId),
+  index("idx_report_instances_template_id").on(table.templateId),
+  index("idx_report_instances_status").on(table.status),
+  index("idx_report_instances_inspector_id").on(table.inspectorId),
+  index("idx_report_instances_created_at").on(table.createdAt),
+]);
+
+// Report Section Instances - Instances of sections in a report
+export const reportSectionInstances = pgTable("report_section_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportInstanceId: varchar("report_instance_id").notNull().references(() => reportInstances.id, { onDelete: 'cascade' }),
+  templateSectionId: varchar("template_section_id").notNull().references(() => templateSections.id, { onDelete: 'restrict' }),
+  parentInstanceId: varchar("parent_instance_id"),
+  repetitionIndex: integer("repetition_index").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_report_section_instances_report_id").on(table.reportInstanceId),
+  index("idx_report_section_instances_template_section_id").on(table.templateSectionId),
+]);
+
+// Report Field Values - Store values for each field in a report instance
+export const reportFieldValues = pgTable("report_field_values", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportInstanceId: varchar("report_instance_id").notNull().references(() => reportInstances.id, { onDelete: 'cascade' }),
+  sectionInstanceId: varchar("section_instance_id").notNull().references(() => reportSectionInstances.id, { onDelete: 'cascade' }),
+  templateFieldId: varchar("template_field_id").notNull().references(() => templateFields.id, { onDelete: 'restrict' }),
+  fieldType: text("field_type").notNull(),
+  // Store different value types
+  textValue: text("text_value"),
+  numberValue: decimal("number_value", { precision: 20, scale: 5 }),
+  booleanValue: boolean("boolean_value"),
+  dateValue: timestamp("date_value"),
+  jsonValue: jsonb("json_value"), // For complex types like multiselect, photo metadata, signatures
+  // Calculated fields
+  isCalculated: boolean("is_calculated").default(false),
+  calculationError: text("calculation_error"),
+  // Metadata
+  modifiedBy: varchar("modified_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_report_field_values_report_id").on(table.reportInstanceId),
+  index("idx_report_field_values_section_instance_id").on(table.sectionInstanceId),
+  index("idx_report_field_values_template_field_id").on(table.templateFieldId),
+  index("idx_report_field_values_field_type").on(table.fieldType),
 ]);
 
 export const forecasts = pgTable("forecasts", {
@@ -637,10 +755,24 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true 
 export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true }).extend({
   date: z.coerce.date(),
 });
-export const insertReportTemplateSchema = createInsertSchema(reportTemplates).omit({ id: true, createdAt: true });
-export const insertReportInstanceSchema = createInsertSchema(reportInstances).omit({ id: true, createdAt: true }).extend({
+// Report template schemas
+export const insertReportTemplateSchema = createInsertSchema(reportTemplates).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  publishedAt: z.coerce.date().nullable().optional(),
+});
+export const insertTemplateSectionSchema = createInsertSchema(templateSections).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTemplateFieldSchema = createInsertSchema(templateFields).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertReportInstanceSchema = createInsertSchema(reportInstances).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  startedAt: z.coerce.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
+  submittedAt: z.coerce.date().nullable().optional(),
+  approvedAt: z.coerce.date().nullable().optional(),
   emailedAt: z.coerce.date().nullable().optional(),
   lastComplianceCheck: z.coerce.date().nullable().optional(),
+});
+export const insertReportSectionInstanceSchema = createInsertSchema(reportSectionInstances).omit({ id: true, createdAt: true });
+export const insertReportFieldValueSchema = createInsertSchema(reportFieldValues).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  numberValue: z.coerce.number().nullable().optional(),
+  dateValue: z.coerce.date().nullable().optional(),
 });
 export const insertForecastSchema = createInsertSchema(forecasts).omit({ id: true }).extend({
   recordedAt: z.coerce.date().nullable().optional(),
@@ -744,7 +876,11 @@ export type ScheduleEvent = typeof scheduleEvents.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
 export type MileageLog = typeof mileageLogs.$inferSelect;
 export type ReportTemplate = typeof reportTemplates.$inferSelect;
+export type TemplateSection = typeof templateSections.$inferSelect;
+export type TemplateField = typeof templateFields.$inferSelect;
 export type ReportInstance = typeof reportInstances.$inferSelect;
+export type ReportSectionInstance = typeof reportSectionInstances.$inferSelect;
+export type ReportFieldValue = typeof reportFieldValues.$inferSelect;
 export type Forecast = typeof forecasts.$inferSelect;
 export type ChecklistItem = typeof checklistItems.$inferSelect;
 export type Photo = typeof photos.$inferSelect;
@@ -768,7 +904,11 @@ export type InsertScheduleEvent = z.infer<typeof insertScheduleEventSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type InsertMileageLog = z.infer<typeof insertMileageLogSchema>;
 export type InsertReportTemplate = z.infer<typeof insertReportTemplateSchema>;
+export type InsertTemplateSection = z.infer<typeof insertTemplateSectionSchema>;
+export type InsertTemplateField = z.infer<typeof insertTemplateFieldSchema>;
 export type InsertReportInstance = z.infer<typeof insertReportInstanceSchema>;
+export type InsertReportSectionInstance = z.infer<typeof insertReportSectionInstanceSchema>;
+export type InsertReportFieldValue = z.infer<typeof insertReportFieldValueSchema>;
 export type InsertForecast = z.infer<typeof insertForecastSchema>;
 export type InsertChecklistItem = z.infer<typeof insertChecklistItemSchema>;
 export type UpdateChecklistItem = z.infer<typeof updateChecklistItemSchema>;
