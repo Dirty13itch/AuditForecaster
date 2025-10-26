@@ -108,6 +108,12 @@ import {
   type QaPerformanceMetric,
   type InsertQaPerformanceMetric,
   type ScoreSummary,
+  type Notification,
+  type InsertNotification,
+  type NotificationPreference,
+  type InsertNotificationPreference,
+  notifications,
+  notificationPreferences,
   users,
   builders,
   builderContacts,
@@ -659,6 +665,24 @@ export interface IStorage {
   getQaLeaderboard(period: string, limit?: number): Promise<any>;
   getQaTrainingNeeds(): Promise<any>;
   getQaComplianceRate(startDate?: Date, endDate?: Date): Promise<any>;
+
+  // Notification Operations
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotification(id: string): Promise<Notification | undefined>;
+  getNotifications(userId: string): Promise<Notification[]>;
+  getUnreadNotifications(userId: string): Promise<Notification[]>;
+  markNotificationAsRead(id: string): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+  deleteNotification(id: string): Promise<boolean>;
+  deleteExpiredNotifications(): Promise<number>;
+  
+  // Notification Preferences
+  createNotificationPreference(preference: InsertNotificationPreference): Promise<NotificationPreference>;
+  getNotificationPreference(id: string): Promise<NotificationPreference | undefined>;
+  getUserNotificationPreferences(userId: string): Promise<NotificationPreference[]>;
+  updateNotificationPreference(id: string, preference: Partial<InsertNotificationPreference>): Promise<NotificationPreference | undefined>;
+  upsertNotificationPreference(userId: string, notificationType: string, preference: Partial<InsertNotificationPreference>): Promise<NotificationPreference>;
+  deleteNotificationPreference(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4462,6 +4486,161 @@ export class DatabaseStorage implements IStorage {
       totalAchievements: totalAchievements[0].count,
       // Add more global stats
     };
+  }
+
+  // Notification Operations
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [result] = await db.insert(notifications).values(notification).returning();
+    return result;
+  }
+
+  async getNotification(id: string): Promise<Notification | undefined> {
+    const [result] = await db.select().from(notifications).where(eq(notifications.id, id)).limit(1);
+    return result;
+  }
+
+  async getNotifications(userId: string): Promise<Notification[]> {
+    return await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(100);
+  }
+
+  async getUnreadNotifications(userId: string): Promise<Notification[]> {
+    return await db
+      .select()
+      .from(notifications)
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async markNotificationAsRead(id: string): Promise<Notification | undefined> {
+    const [result] = await db
+      .update(notifications)
+      .set({ 
+        isRead: true, 
+        readAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(notifications.id, id))
+      .returning();
+    return result;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ 
+        isRead: true, 
+        readAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ));
+  }
+
+  async deleteNotification(id: string): Promise<boolean> {
+    const result = await db.delete(notifications).where(eq(notifications.id, id));
+    return result.length > 0;
+  }
+
+  async deleteExpiredNotifications(): Promise<number> {
+    const result = await db
+      .delete(notifications)
+      .where(and(
+        lte(notifications.expiresAt, new Date()),
+        eq(notifications.isRead, true)
+      ));
+    return result.length;
+  }
+
+  // Notification Preferences
+  async createNotificationPreference(preference: InsertNotificationPreference): Promise<NotificationPreference> {
+    const [result] = await db.insert(notificationPreferences).values(preference).returning();
+    return result;
+  }
+
+  async getNotificationPreference(id: string): Promise<NotificationPreference | undefined> {
+    const [result] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.id, id))
+      .limit(1);
+    return result;
+  }
+
+  async getUserNotificationPreferences(userId: string): Promise<NotificationPreference[]> {
+    return await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+  }
+
+  async updateNotificationPreference(
+    id: string, 
+    preference: Partial<InsertNotificationPreference>
+  ): Promise<NotificationPreference | undefined> {
+    const [result] = await db
+      .update(notificationPreferences)
+      .set({
+        ...preference,
+        updatedAt: new Date()
+      })
+      .where(eq(notificationPreferences.id, id))
+      .returning();
+    return result;
+  }
+
+  async upsertNotificationPreference(
+    userId: string,
+    notificationType: string,
+    preference: Partial<InsertNotificationPreference>
+  ): Promise<NotificationPreference> {
+    // Check if preference exists
+    const existing = await db
+      .select()
+      .from(notificationPreferences)
+      .where(and(
+        eq(notificationPreferences.userId, userId),
+        eq(notificationPreferences.notificationType, notificationType)
+      ))
+      .limit(1);
+
+    if (existing[0]) {
+      // Update existing preference
+      const [result] = await db
+        .update(notificationPreferences)
+        .set({
+          ...preference,
+          updatedAt: new Date()
+        })
+        .where(eq(notificationPreferences.id, existing[0].id))
+        .returning();
+      return result;
+    } else {
+      // Create new preference
+      const [result] = await db
+        .insert(notificationPreferences)
+        .values({
+          userId,
+          notificationType,
+          ...preference
+        })
+        .returning();
+      return result;
+    }
+  }
+
+  async deleteNotificationPreference(id: string): Promise<boolean> {
+    const result = await db.delete(notificationPreferences).where(eq(notificationPreferences.id, id));
+    return result.length > 0;
   }
 }
 

@@ -10,7 +10,10 @@ import { serverLogger } from "./logger";
 import { storage } from "./storage";
 import { getConfig } from "./config";
 import { validateAuthConfig } from "./auth/validation";
-import type { Server } from "http";
+import { setupWebSocket } from "./websocket";
+import { registerNotificationRoutes } from "./notificationRoutes";
+import testNotificationRoutes from "./testNotifications";
+import { createServer } from "http";
 
 const app = express();
 
@@ -210,7 +213,17 @@ async function startServer() {
       }
     }
     
+    // Register notification routes before other routes
+    registerNotificationRoutes(app);
+    app.use(testNotificationRoutes);
+    serverLogger.info('[Server] Notification routes registered');
+    
+    // Register main API routes (this creates the HTTP server)
     const server = await registerRoutes(app);
+    
+    // Setup WebSocket server for real-time notifications
+    setupWebSocket(server);
+    serverLogger.info('[Server] WebSocket server initialized');
     
     // Store server instance for graceful shutdown
     serverInstance = server;

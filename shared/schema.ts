@@ -1121,6 +1121,53 @@ export const qaPerformanceMetrics = pgTable("qa_performance_metrics", {
   index("idx_qa_performance_metrics_calculated_at").on(table.calculatedAt),
 ]);
 
+// Notification Tables
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: text("type", { 
+    enum: ["calibration_alert", "achievement_unlock", "inspection_milestone", "system", "job_assigned", "report_ready"] 
+  }).notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  data: jsonb("data"),
+  relatedEntityId: varchar("related_entity_id"),
+  relatedEntityType: text("related_entity_type", {
+    enum: ["job", "equipment", "achievement", "report", "user", "invoice"]
+  }),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  priority: text("priority", { 
+    enum: ["low", "medium", "high", "urgent"] 
+  }).default("medium"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_notifications_user_id").on(table.userId),
+  index("idx_notifications_is_read").on(table.isRead),
+  index("idx_notifications_type").on(table.type),
+  index("idx_notifications_created_at").on(table.createdAt),
+  index("idx_notifications_user_unread").on(table.userId, table.isRead),
+]);
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  notificationType: text("notification_type", { 
+    enum: ["calibration_alert", "achievement_unlock", "inspection_milestone", "system", "job_assigned", "report_ready"] 
+  }).notNull(),
+  enabled: boolean("enabled").default(true),
+  emailEnabled: boolean("email_enabled").default(false),
+  pushEnabled: boolean("push_enabled").default(true),
+  inAppEnabled: boolean("in_app_enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_notification_preferences_user_id").on(table.userId),
+  index("idx_notification_preferences_type").on(table.notificationType),
+]);
+
 // 45L Tax Credit Tables
 export const taxCreditProjects = pgTable("tax_credit_projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1518,6 +1565,22 @@ export const insertFieldDependencySchema = createInsertSchema(fieldDependencies)
   priority: z.coerce.number().nullable().optional(),
 });
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ 
+  id: true, 
+  isRead: true,
+  readAt: true,
+  createdAt: true, 
+  updatedAt: true 
+}).extend({
+  expiresAt: z.coerce.date().nullable().optional(),
+});
+
+export const insertNotificationPreferenceSchema = createInsertSchema(notificationPreferences).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
 export const insertDuctLeakageTestSchema = createInsertSchema(ductLeakageTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   testDate: z.coerce.date(),
   equipmentCalibrationDate: z.coerce.date().nullable().optional(),
@@ -1666,6 +1729,12 @@ export type EquipmentMaintenance = typeof equipmentMaintenance.$inferSelect;
 export type InsertEquipmentMaintenance = z.infer<typeof insertEquipmentMaintenanceSchema>;
 export type EquipmentCheckout = typeof equipmentCheckouts.$inferSelect;
 export type InsertEquipmentCheckout = z.infer<typeof insertEquipmentCheckoutSchema>;
+
+// Notification Types
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
 
 // QA Types
 export type QaInspectionScore = typeof qaInspectionScores.$inferSelect;

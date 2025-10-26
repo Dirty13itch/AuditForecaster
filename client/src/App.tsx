@@ -14,6 +14,8 @@ import { InstallPrompt } from "@/components/InstallPrompt";
 import { DevModeIndicator } from "@/components/DevModeIndicator";
 import { DevModeBanner } from "@/components/DevModeBanner";
 import { useAuth } from "@/hooks/useAuth";
+import { NotificationProvider } from "@/contexts/NotificationContext";
+import { NotificationBell } from "@/components/NotificationBell";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
 import Photos from "@/pages/Photos";
@@ -63,6 +65,7 @@ import ConflictResolution from "@/pages/ConflictResolution";
 import CustomReports from "@/pages/CustomReports";
 import KPISettings from "@/pages/KPISettings";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
+import NotificationTest from "@/pages/NotificationTest";
 
 function Router() {
   return (
@@ -341,6 +344,11 @@ function Router() {
           <Forecast />
         </RouteErrorBoundary>
       )} />
+      <Route path="/notification-test" component={() => (
+        <RouteErrorBoundary>
+          <NotificationTest />
+        </RouteErrorBoundary>
+      )} />
       <Route component={() => (
         <RouteErrorBoundary>
           <NotFound />
@@ -387,6 +395,7 @@ function AppContent() {
             <header className="flex items-center justify-between p-2 border-b">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="flex items-center gap-2">
+                <NotificationBell />
                 <OfflineIndicator />
               </div>
             </header>
@@ -405,10 +414,12 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <AppContent />
-          <Toaster />
-          <InstallPrompt />
-          <DevModeIndicator />
+          <NotificationProvider>
+            <AppContent />
+            <Toaster />
+            <InstallPrompt />
+            <DevModeIndicator />
+          </NotificationProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>
