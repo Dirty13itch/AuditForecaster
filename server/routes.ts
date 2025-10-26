@@ -50,6 +50,10 @@ import {
   insertTaxCreditRequirementSchema,
   insertTaxCreditDocumentSchema,
   insertUnitCertificationSchema,
+  insertEquipmentSchema,
+  insertEquipmentCalibrationSchema,
+  insertEquipmentMaintenanceSchema,
+  insertEquipmentCheckoutSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -6186,6 +6190,360 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(summary);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch tax credit summary');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Equipment Management Routes
+  app.get("/api/equipment", isAuthenticated, async (req: any, res) => {
+    try {
+      const { status, type, userId, dueDays } = req.query;
+      
+      if (status && typeof status === 'string') {
+        const equipment = await storage.getEquipmentByStatus(status);
+        return res.json(equipment);
+      }
+      
+      if (userId && typeof userId === 'string') {
+        const equipment = await storage.getEquipmentByUser(userId);
+        return res.json(equipment);
+      }
+      
+      if (dueDays && typeof dueDays === 'string') {
+        const days = parseInt(dueDays);
+        const calibrationDue = await storage.getEquipmentDueForCalibration(days);
+        const maintenanceDue = await storage.getEquipmentDueForMaintenance(days);
+        return res.json({ calibrationDue, maintenanceDue });
+      }
+      
+      const equipment = await storage.getAllEquipment();
+      res.json(equipment);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch equipment');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/equipment/:id", isAuthenticated, async (req, res) => {
+    try {
+      const equipment = await storage.getEquipment(req.params.id);
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      res.json(equipment);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch equipment');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/equipment", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertEquipmentSchema.parse({
+        ...req.body,
+        userId: req.user?.claims?.sub,
+      });
+      
+      // Generate QR code if not provided
+      if (!validated.qrCode) {
+        validated.qrCode = `EQUIP-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      }
+      
+      // Set calibration/maintenance due dates based on intervals
+      if (!validated.calibrationDue && validated.lastCalibration && validated.calibrationInterval) {
+        const due = new Date(validated.lastCalibration);
+        due.setDate(due.getDate() + validated.calibrationInterval);
+        validated.calibrationDue = due;
+      }
+      
+      if (!validated.maintenanceDue && validated.lastMaintenance && validated.maintenanceInterval) {
+        const due = new Date(validated.lastMaintenance);
+        due.setDate(due.getDate() + validated.maintenanceInterval);
+        validated.maintenanceDue = due;
+      }
+      
+      const equipment = await storage.createEquipment(validated);
+      res.status(201).json(equipment);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create equipment');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/equipment/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const equipment = await storage.updateEquipment(req.params.id, req.body);
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      res.json(equipment);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update equipment');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/equipment/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const deleted = await storage.deleteEquipment(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete equipment');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Equipment Calibrations
+  app.get("/api/equipment/:equipmentId/calibrations", isAuthenticated, async (req, res) => {
+    try {
+      const calibrations = await storage.getEquipmentCalibrations(req.params.equipmentId);
+      res.json(calibrations);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch calibrations');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/calibrations/upcoming", isAuthenticated, async (req, res) => {
+    try {
+      const { days = '30' } = req.query;
+      const calibrations = await storage.getUpcomingCalibrations(parseInt(days as string));
+      res.json(calibrations);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch upcoming calibrations');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/calibrations/overdue", isAuthenticated, async (req, res) => {
+    try {
+      const calibrations = await storage.getOverdueCalibrations();
+      res.json(calibrations);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch overdue calibrations');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/calibrations", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertEquipmentCalibrationSchema.parse(req.body);
+      const calibration = await storage.createEquipmentCalibration(validated);
+      res.status(201).json(calibration);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create calibration');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/calibrations/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const deleted = await storage.deleteEquipmentCalibration(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Calibration not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete calibration');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Equipment Maintenance
+  app.get("/api/equipment/:equipmentId/maintenance", isAuthenticated, async (req, res) => {
+    try {
+      const maintenance = await storage.getEquipmentMaintenanceHistory(req.params.equipmentId);
+      res.json(maintenance);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch maintenance history');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/maintenance/upcoming", isAuthenticated, async (req, res) => {
+    try {
+      const { days = '30' } = req.query;
+      const maintenance = await storage.getUpcomingMaintenance(parseInt(days as string));
+      res.json(maintenance);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch upcoming maintenance');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/maintenance", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertEquipmentMaintenanceSchema.parse(req.body);
+      const maintenance = await storage.createEquipmentMaintenance(validated);
+      res.status(201).json(maintenance);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create maintenance');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/maintenance/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const deleted = await storage.deleteEquipmentMaintenance(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Maintenance record not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete maintenance');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Equipment Checkouts
+  app.get("/api/equipment/:equipmentId/checkouts", isAuthenticated, async (req, res) => {
+    try {
+      const checkouts = await storage.getEquipmentCheckouts(req.params.equipmentId);
+      res.json(checkouts);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch checkouts');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/checkouts/active", isAuthenticated, async (req, res) => {
+    try {
+      const checkouts = await storage.getActiveCheckouts();
+      res.json(checkouts);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch active checkouts');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/checkouts/user/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const checkouts = await storage.getCheckoutsByUser(req.params.userId);
+      res.json(checkouts);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch user checkouts');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/checkouts/job/:jobId", isAuthenticated, async (req, res) => {
+    try {
+      const checkouts = await storage.getCheckoutsByJob(req.params.jobId);
+      res.json(checkouts);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch job checkouts');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/checkouts", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertEquipmentCheckoutSchema.parse({
+        ...req.body,
+        userId: req.body.userId || req.user?.claims?.sub,
+      });
+      
+      // Check if equipment is available
+      const equipment = await storage.getEquipment(validated.equipmentId);
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      
+      if (equipment.status !== 'available') {
+        return res.status(400).json({ message: "Equipment is not available for checkout" });
+      }
+      
+      const checkout = await storage.createEquipmentCheckout(validated);
+      res.status(201).json(checkout);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create checkout');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/checkouts/:id/checkin", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { condition, notes } = req.body;
+      const actualReturn = new Date();
+      
+      const checkout = await storage.checkInEquipment(
+        req.params.id,
+        actualReturn,
+        condition || 'good',
+        notes
+      );
+      
+      if (!checkout) {
+        return res.status(404).json({ message: "Checkout not found" });
+      }
+      
+      res.json(checkout);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'check in equipment');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/checkouts/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const deleted = await storage.deleteEquipmentCheckout(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Checkout not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete checkout');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Equipment Alerts Summary
+  app.get("/api/equipment/alerts", isAuthenticated, async (req, res) => {
+    try {
+      const calibrationDue = await storage.getEquipmentDueForCalibration(7);
+      const maintenanceDue = await storage.getEquipmentDueForMaintenance(7);
+      const overdueCalibrations = await storage.getOverdueCalibrations();
+      const activeCheckouts = await storage.getActiveCheckouts();
+      
+      // Filter overdue checkouts
+      const now = new Date();
+      const overdueCheckouts = activeCheckouts.filter(
+        c => c.expectedReturn && new Date(c.expectedReturn) < now
+      );
+      
+      res.json({
+        calibrationDue: calibrationDue.length,
+        maintenanceDue: maintenanceDue.length,
+        overdueCalibrations: overdueCalibrations.length,
+        overdueCheckouts: overdueCheckouts.length,
+        details: {
+          calibrationDue,
+          maintenanceDue,
+          overdueCalibrations,
+          overdueCheckouts,
+        },
+      });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch equipment alerts');
       res.status(status).json({ message });
     }
   });

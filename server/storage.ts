@@ -87,6 +87,14 @@ import {
   type InsertTaxCreditDocument,
   type UnitCertification,
   type InsertUnitCertification,
+  type Equipment,
+  type InsertEquipment,
+  type EquipmentCalibration,
+  type InsertEquipmentCalibration,
+  type EquipmentMaintenance,
+  type InsertEquipmentMaintenance,
+  type EquipmentCheckout,
+  type InsertEquipmentCheckout,
   type ScoreSummary,
   users,
   builders,
@@ -132,6 +140,10 @@ import {
   taxCreditRequirements,
   taxCreditDocuments,
   unitCertifications,
+  equipment,
+  equipmentCalibrations,
+  equipmentMaintenance,
+  equipmentCheckouts,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -517,6 +529,46 @@ export interface IStorage {
   getUnitCertificationByJob(jobId: string): Promise<UnitCertification | undefined>;
   updateUnitCertification(id: string, certification: Partial<InsertUnitCertification>): Promise<UnitCertification | undefined>;
   deleteUnitCertification(id: string): Promise<boolean>;
+
+  // Equipment Management
+  createEquipment(equipment: InsertEquipment): Promise<Equipment>;
+  getEquipment(id: string): Promise<Equipment | undefined>;
+  getEquipmentByUser(userId: string): Promise<Equipment[]>;
+  getEquipmentByStatus(status: string): Promise<Equipment[]>;
+  getEquipmentDueForCalibration(days: number): Promise<Equipment[]>;
+  getEquipmentDueForMaintenance(days: number): Promise<Equipment[]>;
+  getAllEquipment(): Promise<Equipment[]>;
+  getEquipmentPaginated(params: PaginationParams): Promise<PaginatedResult<Equipment>>;
+  updateEquipment(id: string, equipment: Partial<InsertEquipment>): Promise<Equipment | undefined>;
+  deleteEquipment(id: string): Promise<boolean>;
+
+  // Equipment Calibrations
+  createEquipmentCalibration(calibration: InsertEquipmentCalibration): Promise<EquipmentCalibration>;
+  getEquipmentCalibration(id: string): Promise<EquipmentCalibration | undefined>;
+  getEquipmentCalibrations(equipmentId: string): Promise<EquipmentCalibration[]>;
+  getUpcomingCalibrations(days: number): Promise<EquipmentCalibration[]>;
+  getOverdueCalibrations(): Promise<EquipmentCalibration[]>;
+  updateEquipmentCalibration(id: string, calibration: Partial<InsertEquipmentCalibration>): Promise<EquipmentCalibration | undefined>;
+  deleteEquipmentCalibration(id: string): Promise<boolean>;
+
+  // Equipment Maintenance
+  createEquipmentMaintenance(maintenance: InsertEquipmentMaintenance): Promise<EquipmentMaintenance>;
+  getEquipmentMaintenance(id: string): Promise<EquipmentMaintenance | undefined>;
+  getEquipmentMaintenanceHistory(equipmentId: string): Promise<EquipmentMaintenance[]>;
+  getUpcomingMaintenance(days: number): Promise<EquipmentMaintenance[]>;
+  updateEquipmentMaintenance(id: string, maintenance: Partial<InsertEquipmentMaintenance>): Promise<EquipmentMaintenance | undefined>;
+  deleteEquipmentMaintenance(id: string): Promise<boolean>;
+
+  // Equipment Checkouts
+  createEquipmentCheckout(checkout: InsertEquipmentCheckout): Promise<EquipmentCheckout>;
+  getEquipmentCheckout(id: string): Promise<EquipmentCheckout | undefined>;
+  getEquipmentCheckouts(equipmentId: string): Promise<EquipmentCheckout[]>;
+  getActiveCheckouts(): Promise<EquipmentCheckout[]>;
+  getCheckoutsByUser(userId: string): Promise<EquipmentCheckout[]>;
+  getCheckoutsByJob(jobId: string): Promise<EquipmentCheckout[]>;
+  checkInEquipment(checkoutId: string, actualReturn: Date, condition: string, notes?: string): Promise<EquipmentCheckout | undefined>;
+  updateEquipmentCheckout(id: string, checkout: Partial<InsertEquipmentCheckout>): Promise<EquipmentCheckout | undefined>;
+  deleteEquipmentCheckout(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3652,6 +3704,312 @@ export class DatabaseStorage implements IStorage {
   async deleteUnitCertification(id: string): Promise<boolean> {
     const result = await db.delete(unitCertifications)
       .where(eq(unitCertifications.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Equipment Management Implementation
+  async createEquipment(insertEquipment: InsertEquipment): Promise<Equipment> {
+    const result = await db.insert(equipment).values(insertEquipment).returning();
+    return result[0];
+  }
+
+  async getEquipment(id: string): Promise<Equipment | undefined> {
+    const result = await db.select().from(equipment).where(eq(equipment.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getEquipmentByUser(userId: string): Promise<Equipment[]> {
+    return await db.select()
+      .from(equipment)
+      .where(eq(equipment.userId, userId))
+      .orderBy(asc(equipment.name));
+  }
+
+  async getEquipmentByStatus(status: string): Promise<Equipment[]> {
+    return await db.select()
+      .from(equipment)
+      .where(eq(equipment.status, status))
+      .orderBy(asc(equipment.name));
+  }
+
+  async getEquipmentDueForCalibration(days: number): Promise<Equipment[]> {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + days);
+    
+    return await db.select()
+      .from(equipment)
+      .where(and(
+        lte(equipment.calibrationDue, dueDate),
+        eq(equipment.status, 'available')
+      ))
+      .orderBy(asc(equipment.calibrationDue));
+  }
+
+  async getEquipmentDueForMaintenance(days: number): Promise<Equipment[]> {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + days);
+    
+    return await db.select()
+      .from(equipment)
+      .where(and(
+        lte(equipment.maintenanceDue, dueDate),
+        eq(equipment.status, 'available')
+      ))
+      .orderBy(asc(equipment.maintenanceDue));
+  }
+
+  async getAllEquipment(): Promise<Equipment[]> {
+    return await db.select().from(equipment).orderBy(asc(equipment.name));
+  }
+
+  async getEquipmentPaginated(params: PaginationParams): Promise<PaginatedResult<Equipment>> {
+    const { limit, offset } = params;
+    
+    const [data, totalResult] = await Promise.all([
+      db.select().from(equipment).limit(limit).offset(offset).orderBy(asc(equipment.name)),
+      db.select({ count: count() }).from(equipment)
+    ]);
+    
+    const total = totalResult[0].count;
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  }
+
+  async updateEquipment(id: string, updates: Partial<InsertEquipment>): Promise<Equipment | undefined> {
+    const result = await db.update(equipment)
+      .set(updates)
+      .where(eq(equipment.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteEquipment(id: string): Promise<boolean> {
+    const result = await db.delete(equipment).where(eq(equipment.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Equipment Calibrations Implementation
+  async createEquipmentCalibration(calibration: InsertEquipmentCalibration): Promise<EquipmentCalibration> {
+    const result = await db.insert(equipmentCalibrations).values(calibration).returning();
+    
+    // Update equipment's calibration dates
+    if (result[0]) {
+      await db.update(equipment)
+        .set({
+          lastCalibration: calibration.calibrationDate,
+          calibrationDue: calibration.nextDue,
+        })
+        .where(eq(equipment.id, calibration.equipmentId));
+    }
+    
+    return result[0];
+  }
+
+  async getEquipmentCalibration(id: string): Promise<EquipmentCalibration | undefined> {
+    const result = await db.select()
+      .from(equipmentCalibrations)
+      .where(eq(equipmentCalibrations.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getEquipmentCalibrations(equipmentId: string): Promise<EquipmentCalibration[]> {
+    return await db.select()
+      .from(equipmentCalibrations)
+      .where(eq(equipmentCalibrations.equipmentId, equipmentId))
+      .orderBy(desc(equipmentCalibrations.calibrationDate));
+  }
+
+  async getUpcomingCalibrations(days: number): Promise<EquipmentCalibration[]> {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + days);
+    
+    return await db.select()
+      .from(equipmentCalibrations)
+      .where(lte(equipmentCalibrations.nextDue, dueDate))
+      .orderBy(asc(equipmentCalibrations.nextDue));
+  }
+
+  async getOverdueCalibrations(): Promise<EquipmentCalibration[]> {
+    const today = new Date();
+    
+    return await db.select()
+      .from(equipmentCalibrations)
+      .where(lt(equipmentCalibrations.nextDue, today))
+      .orderBy(asc(equipmentCalibrations.nextDue));
+  }
+
+  async updateEquipmentCalibration(id: string, updates: Partial<InsertEquipmentCalibration>): Promise<EquipmentCalibration | undefined> {
+    const result = await db.update(equipmentCalibrations)
+      .set(updates)
+      .where(eq(equipmentCalibrations.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteEquipmentCalibration(id: string): Promise<boolean> {
+    const result = await db.delete(equipmentCalibrations)
+      .where(eq(equipmentCalibrations.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Equipment Maintenance Implementation
+  async createEquipmentMaintenance(maintenance: InsertEquipmentMaintenance): Promise<EquipmentMaintenance> {
+    const result = await db.insert(equipmentMaintenance).values(maintenance).returning();
+    
+    // Update equipment's maintenance dates
+    if (result[0]) {
+      await db.update(equipment)
+        .set({
+          lastMaintenance: maintenance.maintenanceDate,
+          maintenanceDue: maintenance.nextDue,
+        })
+        .where(eq(equipment.id, maintenance.equipmentId));
+    }
+    
+    return result[0];
+  }
+
+  async getEquipmentMaintenance(id: string): Promise<EquipmentMaintenance | undefined> {
+    const result = await db.select()
+      .from(equipmentMaintenance)
+      .where(eq(equipmentMaintenance.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getEquipmentMaintenanceHistory(equipmentId: string): Promise<EquipmentMaintenance[]> {
+    return await db.select()
+      .from(equipmentMaintenance)
+      .where(eq(equipmentMaintenance.equipmentId, equipmentId))
+      .orderBy(desc(equipmentMaintenance.maintenanceDate));
+  }
+
+  async getUpcomingMaintenance(days: number): Promise<EquipmentMaintenance[]> {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + days);
+    
+    return await db.select()
+      .from(equipmentMaintenance)
+      .where(lte(equipmentMaintenance.nextDue, dueDate))
+      .orderBy(asc(equipmentMaintenance.nextDue));
+  }
+
+  async updateEquipmentMaintenance(id: string, updates: Partial<InsertEquipmentMaintenance>): Promise<EquipmentMaintenance | undefined> {
+    const result = await db.update(equipmentMaintenance)
+      .set(updates)
+      .where(eq(equipmentMaintenance.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteEquipmentMaintenance(id: string): Promise<boolean> {
+    const result = await db.delete(equipmentMaintenance)
+      .where(eq(equipmentMaintenance.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Equipment Checkouts Implementation
+  async createEquipmentCheckout(checkout: InsertEquipmentCheckout): Promise<EquipmentCheckout> {
+    const result = await db.insert(equipmentCheckouts).values(checkout).returning();
+    
+    // Update equipment status to in_use
+    if (result[0]) {
+      await db.update(equipment)
+        .set({
+          status: 'in_use',
+          assignedTo: checkout.userId,
+        })
+        .where(eq(equipment.id, checkout.equipmentId));
+    }
+    
+    return result[0];
+  }
+
+  async getEquipmentCheckout(id: string): Promise<EquipmentCheckout | undefined> {
+    const result = await db.select()
+      .from(equipmentCheckouts)
+      .where(eq(equipmentCheckouts.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getEquipmentCheckouts(equipmentId: string): Promise<EquipmentCheckout[]> {
+    return await db.select()
+      .from(equipmentCheckouts)
+      .where(eq(equipmentCheckouts.equipmentId, equipmentId))
+      .orderBy(desc(equipmentCheckouts.checkoutDate));
+  }
+
+  async getActiveCheckouts(): Promise<EquipmentCheckout[]> {
+    return await db.select()
+      .from(equipmentCheckouts)
+      .where(eq(equipmentCheckouts.actualReturn, null))
+      .orderBy(desc(equipmentCheckouts.checkoutDate));
+  }
+
+  async getCheckoutsByUser(userId: string): Promise<EquipmentCheckout[]> {
+    return await db.select()
+      .from(equipmentCheckouts)
+      .where(eq(equipmentCheckouts.userId, userId))
+      .orderBy(desc(equipmentCheckouts.checkoutDate));
+  }
+
+  async getCheckoutsByJob(jobId: string): Promise<EquipmentCheckout[]> {
+    return await db.select()
+      .from(equipmentCheckouts)
+      .where(eq(equipmentCheckouts.jobId, jobId))
+      .orderBy(desc(equipmentCheckouts.checkoutDate));
+  }
+
+  async checkInEquipment(checkoutId: string, actualReturn: Date, condition: string, notes?: string): Promise<EquipmentCheckout | undefined> {
+    const checkout = await this.getEquipmentCheckout(checkoutId);
+    if (!checkout) return undefined;
+
+    const result = await db.update(equipmentCheckouts)
+      .set({
+        actualReturn,
+        condition,
+        notes: notes || checkout.notes,
+      })
+      .where(eq(equipmentCheckouts.id, checkoutId))
+      .returning();
+    
+    // Update equipment status to available
+    if (result[0]) {
+      await db.update(equipment)
+        .set({
+          status: 'available',
+          assignedTo: null,
+        })
+        .where(eq(equipment.id, checkout.equipmentId));
+    }
+    
+    return result[0];
+  }
+
+  async updateEquipmentCheckout(id: string, updates: Partial<InsertEquipmentCheckout>): Promise<EquipmentCheckout | undefined> {
+    const result = await db.update(equipmentCheckouts)
+      .set(updates)
+      .where(eq(equipmentCheckouts.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteEquipmentCheckout(id: string): Promise<boolean> {
+    const result = await db.delete(equipmentCheckouts)
+      .where(eq(equipmentCheckouts.id, id))
       .returning();
     return result.length > 0;
   }

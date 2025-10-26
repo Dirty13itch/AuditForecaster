@@ -45,6 +45,9 @@ import TaxCredit45L from "@/pages/TaxCredit45L";
 import TaxCreditProject from "@/pages/TaxCreditProject";
 import TaxCreditCompliance from "@/pages/TaxCreditCompliance";
 import TaxCreditReports from "@/pages/TaxCreditReports";
+import Equipment from "@/pages/Equipment";
+import EquipmentDetails from "@/pages/EquipmentDetails";
+import CalibrationSchedule from "@/pages/CalibrationSchedule";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
@@ -223,6 +226,21 @@ function Router() {
       <Route path="/tax-credits/reports" component={() => (
         <RouteErrorBoundary>
           <TaxCreditReports />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/equipment" component={() => (
+        <RouteErrorBoundary>
+          <Equipment />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/equipment/calibrations" component={() => (
+        <RouteErrorBoundary>
+          <CalibrationSchedule />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/equipment/:id" component={() => (
+        <RouteErrorBoundary>
+          <EquipmentDetails />
         </RouteErrorBoundary>
       )} />
       <Route path="/inspection/:id" component={() => (

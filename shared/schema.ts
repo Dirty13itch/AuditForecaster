@@ -901,6 +901,98 @@ export const financialSettings = pgTable("financial_settings", {
   index("idx_financial_settings_user_id").on(table.userId),
 ]);
 
+// Equipment Management Tables
+export const equipment = pgTable("equipment", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  type: text("type", { 
+    enum: ["blower_door", "duct_tester", "manometer", "camera", "flow_hood", "combustion_analyzer", "infrared_camera", "moisture_meter", "other"] 
+  }).notNull(),
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  serialNumber: text("serial_number").unique(),
+  purchaseDate: timestamp("purchase_date"),
+  purchaseCost: decimal("purchase_cost", { precision: 10, scale: 2 }),
+  currentValue: decimal("current_value", { precision: 10, scale: 2 }),
+  status: text("status", { 
+    enum: ["available", "in_use", "maintenance", "retired"] 
+  }).notNull().default("available"),
+  location: text("location"),
+  calibrationDue: timestamp("calibration_due"),
+  lastCalibration: timestamp("last_calibration"),
+  calibrationInterval: integer("calibration_interval").default(365), // days
+  maintenanceDue: timestamp("maintenance_due"),
+  lastMaintenance: timestamp("last_maintenance"),
+  maintenanceInterval: integer("maintenance_interval").default(90), // days
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: 'set null' }),
+  notes: text("notes"),
+  qrCode: text("qr_code"),
+  lastUsedDate: timestamp("last_used_date"),
+  totalUses: integer("total_uses").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_equipment_user_id").on(table.userId),
+  index("idx_equipment_status").on(table.status),
+  index("idx_equipment_type").on(table.type),
+  index("idx_equipment_serial_number").on(table.serialNumber),
+  index("idx_equipment_assigned_to").on(table.assignedTo),
+  index("idx_equipment_calibration_due").on(table.calibrationDue),
+  index("idx_equipment_maintenance_due").on(table.maintenanceDue),
+]);
+
+export const equipmentCalibrations = pgTable("equipment_calibrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id, { onDelete: 'cascade' }),
+  calibrationDate: timestamp("calibration_date").notNull(),
+  nextDue: timestamp("next_due").notNull(),
+  performedBy: text("performed_by"),
+  certificateNumber: text("certificate_number"),
+  cost: decimal("cost", { precision: 10, scale: 2 }),
+  passed: boolean("passed").notNull().default(true),
+  notes: text("notes"),
+  documentPath: text("document_path"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_equipment_calibrations_equipment_id").on(table.equipmentId),
+  index("idx_equipment_calibrations_next_due").on(table.nextDue),
+  index("idx_equipment_calibrations_passed").on(table.passed),
+]);
+
+export const equipmentMaintenance = pgTable("equipment_maintenance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id, { onDelete: 'cascade' }),
+  maintenanceDate: timestamp("maintenance_date").notNull(),
+  performedBy: text("performed_by"),
+  description: text("description").notNull(),
+  cost: decimal("cost", { precision: 10, scale: 2 }),
+  nextDue: timestamp("next_due"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_equipment_maintenance_equipment_id").on(table.equipmentId),
+  index("idx_equipment_maintenance_date").on(table.maintenanceDate),
+  index("idx_equipment_maintenance_next_due").on(table.nextDue),
+]);
+
+export const equipmentCheckouts = pgTable("equipment_checkouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
+  checkoutDate: timestamp("checkout_date").notNull().defaultNow(),
+  expectedReturn: timestamp("expected_return"),
+  actualReturn: timestamp("actual_return"),
+  condition: text("condition", { enum: ["good", "fair", "poor"] }).notNull().default("good"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_equipment_checkouts_equipment_id").on(table.equipmentId),
+  index("idx_equipment_checkouts_user_id").on(table.userId),
+  index("idx_equipment_checkouts_job_id").on(table.jobId),
+  index("idx_equipment_checkouts_actual_return").on(table.actualReturn),
+]);
+
 // 45L Tax Credit Tables
 export const taxCreditProjects = pgTable("tax_credit_projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1226,6 +1318,38 @@ export const insertUnitCertificationSchema = createInsertSchema(unitCertificatio
   hersIndex: z.coerce.number().nullable().optional(),
 });
 
+// Equipment Management Schemas
+export const insertEquipmentSchema = createInsertSchema(equipment).omit({ id: true, createdAt: true }).extend({
+  purchaseDate: z.coerce.date().nullable().optional(),
+  lastUsedDate: z.coerce.date().nullable().optional(),
+  calibrationDue: z.coerce.date().nullable().optional(),
+  lastCalibration: z.coerce.date().nullable().optional(),
+  maintenanceDue: z.coerce.date().nullable().optional(),
+  lastMaintenance: z.coerce.date().nullable().optional(),
+  purchaseCost: z.coerce.number().nullable().optional(),
+  currentValue: z.coerce.number().nullable().optional(),
+  calibrationInterval: z.coerce.number().nullable().optional(),
+  maintenanceInterval: z.coerce.number().nullable().optional(),
+  totalUses: z.coerce.number().nullable().optional(),
+});
+
+export const insertEquipmentCalibrationSchema = createInsertSchema(equipmentCalibrations).omit({ id: true, createdAt: true }).extend({
+  calibrationDate: z.coerce.date(),
+  nextDue: z.coerce.date(),
+  cost: z.coerce.number().nullable().optional(),
+});
+
+export const insertEquipmentMaintenanceSchema = createInsertSchema(equipmentMaintenance).omit({ id: true, createdAt: true }).extend({
+  maintenanceDate: z.coerce.date(),
+  nextDue: z.coerce.date().nullable().optional(),
+  cost: z.coerce.number().nullable().optional(),
+});
+
+export const insertEquipmentCheckoutSchema = createInsertSchema(equipmentCheckouts).omit({ id: true, createdAt: true, checkoutDate: true }).extend({
+  expectedReturn: z.coerce.date().nullable().optional(),
+  actualReturn: z.coerce.date().nullable().optional(),
+});
+
 export const insertFieldDependencySchema = createInsertSchema(fieldDependencies).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   priority: z.coerce.number().nullable().optional(),
 });
@@ -1366,6 +1490,16 @@ export type TaxCreditDocument = typeof taxCreditDocuments.$inferSelect;
 export type InsertTaxCreditDocument = z.infer<typeof insertTaxCreditDocumentSchema>;
 export type UnitCertification = typeof unitCertifications.$inferSelect;
 export type InsertUnitCertification = z.infer<typeof insertUnitCertificationSchema>;
+
+// Equipment Types
+export type Equipment = typeof equipment.$inferSelect;
+export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
+export type EquipmentCalibration = typeof equipmentCalibrations.$inferSelect;
+export type InsertEquipmentCalibration = z.infer<typeof insertEquipmentCalibrationSchema>;
+export type EquipmentMaintenance = typeof equipmentMaintenance.$inferSelect;
+export type InsertEquipmentMaintenance = z.infer<typeof insertEquipmentMaintenanceSchema>;
+export type EquipmentCheckout = typeof equipmentCheckouts.$inferSelect;
+export type InsertEquipmentCheckout = z.infer<typeof insertEquipmentCheckoutSchema>;
 
 export interface CalendarImportLogsResponse {
   logs: CalendarImportLog[];
