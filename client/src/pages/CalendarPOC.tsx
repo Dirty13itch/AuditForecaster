@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Calendar, CheckCircle2, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -154,6 +155,14 @@ export default function CalendarPOC() {
             Fetch All Calendars
           </Button>
 
+          {calendarsLoading && (
+            <div className="space-y-3">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
+          )}
+
           {calendarsError && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -223,29 +232,21 @@ export default function CalendarPOC() {
               </div>
               <Button
                 onClick={handleImport}
-                disabled={!events.length || importMutation.isPending}
-                data-testid="button-import-jobs"
-                className="gap-2"
+                disabled={!selectedCalendar || !events.length || importMutation.isPending}
+                data-testid="button-import"
               >
-                {importMutation.isPending ? (
-                  <>
-                    <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    Importing...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    Import Jobs
-                  </>
-                )}
+                {importMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {importMutation.isPending ? 'Importing...' : 'Import Events'}
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {eventsLoading && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading events...
+              <div className="space-y-3">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
               </div>
             )}
 
@@ -399,47 +400,23 @@ export default function CalendarPOC() {
       )}
 
       {/* Import Results */}
-      {importResult && (
-        <Alert className={importResult.success ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-red-500 bg-red-50 dark:bg-red-950"}>
-          <div className="flex items-start gap-3">
-            {importResult.success ? (
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
-            ) : (
-              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <AlertTitle className="text-base font-semibold mb-2">
-                {importResult.success ? "Import Complete" : "Import Failed"}
-              </AlertTitle>
-              <AlertDescription className="space-y-2">
-                {importResult.success && (
-                  <div className="space-y-1">
-                    <p className="text-sm">
-                      <strong>Jobs Created:</strong> {importResult.jobsCreated}
-                    </p>
-                    <p className="text-sm">
-                      <strong>Events Queued for Review:</strong> {importResult.eventsQueued}
-                    </p>
-                    {importResult.errors && importResult.errors.length > 0 && (
-                      <p className="text-sm text-amber-600 dark:text-amber-400">
-                        <strong>Warnings:</strong> {importResult.errors.length} events had issues
-                      </p>
-                    )}
-                    {importResult.importLogId && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Import Log ID: {importResult.importLogId}
-                      </p>
-                    )}
-                  </div>
-                )}
-                {!importResult.success && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {importResult.message || 'An error occurred during import'}
-                  </p>
-                )}
-              </AlertDescription>
-            </div>
-          </div>
+      {importResult && importResult.success && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertTitle>Import Complete</AlertTitle>
+          <AlertDescription>
+            Successfully created {importResult.jobsCreated} jobs and queued {importResult.eventsQueued} events for review.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {importResult && !importResult.success && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Import Failed</AlertTitle>
+          <AlertDescription>
+            {importResult.message || 'An error occurred during import'}
+          </AlertDescription>
         </Alert>
       )}
 

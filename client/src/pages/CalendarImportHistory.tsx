@@ -44,7 +44,7 @@ export default function CalendarImportHistory() {
     queryParams.append('hasErrors', 'true');
   }
 
-  const { data, isLoading } = useQuery<CalendarImportLogsResponse>({
+  const { data, isLoading, error } = useQuery<CalendarImportLogsResponse>({
     queryKey: ['/api/calendar/import-logs', currentPage, selectedCalendar, showErrorsOnly],
     queryFn: async () => {
       const response = await fetch(`/api/calendar/import-logs?${queryParams}`);
@@ -122,6 +122,27 @@ export default function CalendarImportHistory() {
   };
 
   const hasActiveFilters = selectedCalendar || showErrorsOnly;
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold" data-testid="heading-page-title">
+            Calendar Import History
+          </h1>
+          <p className="text-muted-foreground mt-2" data-testid="text-page-description">
+            View automated calendar import runs and their results
+          </p>
+        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Error loading import logs: {error instanceof Error ? error.message : 'Unknown error'}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
