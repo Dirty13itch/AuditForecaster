@@ -398,6 +398,7 @@ export interface IStorage {
   markGoogleEventAsConverted(id: string, jobId: string): Promise<GoogleEvent | undefined>;
   getJobsByStatus(statuses: string[]): Promise<Job[]>;
   getTodaysJobsByStatus(statuses: string[]): Promise<Job[]>;
+  getTodaysJobsByStatusPaginated(statuses: string[], params: PaginationParams): Promise<PaginatedResult<Job>>;
 
   recalculateReportScore(reportInstanceId: string): Promise<void>;
 
@@ -2482,6 +2483,44 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(asc(jobs.scheduledDate));
+  }
+
+  async getTodaysJobsByStatusPaginated(statuses: string[], params: PaginationParams): Promise<PaginatedResult<Job>> {
+    const { limit, offset } = params;
+    
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const whereCondition = and(
+      inArray(jobs.status, statuses),
+      gte(jobs.scheduledDate, startOfDay),
+      lte(jobs.scheduledDate, endOfDay)
+    );
+
+    const [data, totalResult] = await Promise.all([
+      db.select().from(jobs)
+        .where(whereCondition)
+        .orderBy(asc(jobs.scheduledDate))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: count() }).from(jobs)
+        .where(whereCondition)
+    ]);
+    
+    const total = totalResult[0].count;
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
   }
 
   async recalculateReportScore(reportInstanceId: string): Promise<void> {

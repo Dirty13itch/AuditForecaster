@@ -2092,9 +2092,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get today's in-progress/scheduled jobs
   app.get("/api/jobs/today", isAuthenticated, async (req, res) => {
     try {
+      // Support both paginated and non-paginated responses for backward compatibility
+      if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        const params = paginationParamsSchema.parse(req.query);
+        const result = await storage.getTodaysJobsByStatusPaginated(
+          ['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review'],
+          params
+        );
+        return res.json(result);
+      }
+      
+      // Legacy non-paginated response
       const jobs = await storage.getTodaysJobsByStatus(['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review']);
       res.json(jobs);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch today\'s jobs');
       res.status(status).json({ message });
     }
@@ -2103,9 +2118,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get today's completed jobs
   app.get("/api/jobs/completed-today", isAuthenticated, async (req, res) => {
     try {
+      // Support both paginated and non-paginated responses for backward compatibility
+      if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        const params = paginationParamsSchema.parse(req.query);
+        const result = await storage.getTodaysJobsByStatusPaginated(
+          ['completed'],
+          params
+        );
+        return res.json(result);
+      }
+      
+      // Legacy non-paginated response
       const jobs = await storage.getTodaysJobsByStatus(['completed']);
       res.json(jobs);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch completed jobs');
       res.status(status).json({ message });
     }

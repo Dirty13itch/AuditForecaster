@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi, ChevronLeft, ChevronRight } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,11 +11,142 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, GoogleEvent } from "@shared/schema";
+import type { PaginatedResult } from "@shared/pagination";
 import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
 import { indexedDB } from "@/utils/indexedDB";
 import { syncQueue } from "@/utils/syncQueue";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// Pagination hook to manage URL state
+function usePagination(key: string, defaultPageSize = 25) {
+  const [location, navigate] = useLocation();
+  const searchParams = new URLSearchParams(location.split('?')[1] || '');
+  
+  const page = parseInt(searchParams.get(`${key}_page`) || '1');
+  const pageSize = parseInt(searchParams.get(`${key}_size`) || defaultPageSize.toString());
+  
+  const setPage = (newPage: number) => {
+    searchParams.set(`${key}_page`, newPage.toString());
+    navigate(`${location.split('?')[0]}?${searchParams.toString()}`);
+  };
+  
+  const setPageSize = (newSize: number) => {
+    searchParams.set(`${key}_size`, newSize.toString());
+    searchParams.set(`${key}_page`, '1'); // Reset to first page when changing size
+    navigate(`${location.split('?')[0]}?${searchParams.toString()}`);
+  };
+  
+  return {
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize,
+    setPage,
+    setPageSize
+  };
+}
+
+// Pagination controls component
+function PaginationControls({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const totalPages = Math.ceil(total / pageSize);
+  const startItem = (page - 1) * pageSize + 1;
+  const endItem = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex items-center justify-between py-4">
+      <div className="flex items-center gap-4">
+        <p className="text-sm text-muted-foreground">
+          Showing {startItem} to {endItem} of {total} items
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Items per page:</span>
+          <Select value={pageSize.toString()} onValueChange={(v) => onPageSizeChange(parseInt(v))}>
+            <SelectTrigger className="w-20" data-testid="select-page-size">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10" data-testid="option-page-size-10">10</SelectItem>
+              <SelectItem value="25" data-testid="option-page-size-25">25</SelectItem>
+              <SelectItem value="50" data-testid="option-page-size-50">50</SelectItem>
+              <SelectItem value="100" data-testid="option-page-size-100">100</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page === 1}
+          data-testid="button-prev-page"
+        >
+          <ChevronLeft className="w-4 h-4 mr-1" />
+          Previous
+        </Button>
+        
+        <div className="flex items-center gap-1">
+          {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+            let pageNum;
+            if (totalPages <= 5) {
+              pageNum = i + 1;
+            } else if (page <= 3) {
+              pageNum = i + 1;
+            } else if (page >= totalPages - 2) {
+              pageNum = totalPages - 4 + i;
+            } else {
+              pageNum = page - 2 + i;
+            }
+            
+            return (
+              <Button
+                key={i}
+                variant={pageNum === page ? "default" : "outline"}
+                size="sm"
+                onClick={() => onPageChange(pageNum)}
+                data-testid={`button-page-${pageNum}`}
+                className="min-w-[40px]"
+              >
+                {pageNum}
+              </Button>
+            );
+          })}
+        </div>
+        
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page === totalPages}
+          data-testid="button-next-page"
+        >
+          Next
+          <ChevronRight className="w-4 h-4 ml-1" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function Jobs() {
   const [, navigate] = useLocation();
@@ -28,6 +159,11 @@ export default function Jobs() {
   const canCreateJobs = userRole === 'admin' || userRole === 'inspector';
 
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
+  
+  // Pagination state for different sections
+  const todaysPagination = usePagination('today', 25);
+  const completedPagination = usePagination('completed', 25);
+  const allJobsPagination = usePagination('all', 25);
   
   // Monitor online/offline status
   useEffect(() => {
@@ -89,68 +225,67 @@ export default function Jobs() {
     queryKey: ["/api/google-events/today"],
   });
 
-  // Fetch today's active jobs
-  // TODO: Add pagination for better performance when job count grows
-  const { data: todaysJobs = [], isLoading: isLoadingTodays } = useQuery<Job[]>({
-    queryKey: ["/api/jobs/today"],
-  });
-
-  // Fetch today's completed jobs
-  // TODO: Add pagination for better performance when job count grows
-  const { data: completedToday = [], isLoading: isLoadingCompleted } = useQuery<Job[]>({
-    queryKey: ["/api/jobs/completed-today"],
-  });
-
-  // Fetch all jobs with cursor-based infinite scroll pagination
-  const {
-    data: allJobsData,
-    isLoading: isLoadingAll,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: ["/api/jobs", "infinite"],
-    queryFn: async ({ pageParam }) => {
+  // Fetch today's active jobs with pagination
+  const { data: todaysJobsData, isLoading: isLoadingTodays } = useQuery<PaginatedResult<Job>>({
+    queryKey: ["/api/jobs/today", { limit: todaysPagination.pageSize, offset: todaysPagination.offset }],
+    queryFn: async () => {
       const params = new URLSearchParams({
-        limit: "20",
-        sortBy: "id",
-        sortOrder: "desc",
+        limit: todaysPagination.pageSize.toString(),
+        offset: todaysPagination.offset.toString(),
       });
-      if (pageParam) {
-        params.append("cursor", pageParam);
+      const response = await fetch(`/api/jobs/today?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch today's jobs");
       }
+      return response.json();
+    },
+  });
+
+  // Fetch today's completed jobs with pagination
+  const { data: completedTodayData, isLoading: isLoadingCompleted } = useQuery<PaginatedResult<Job>>({
+    queryKey: ["/api/jobs/completed-today", { limit: completedPagination.pageSize, offset: completedPagination.offset }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: completedPagination.pageSize.toString(),
+        offset: completedPagination.offset.toString(),
+      });
+      const response = await fetch(`/api/jobs/completed-today?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch completed jobs");
+      }
+      return response.json();
+    },
+  });
+
+  // Fetch all jobs with standard pagination
+  const { data: allJobsData, isLoading: isLoadingAll } = useQuery<PaginatedResult<Job>>({
+    queryKey: ["/api/jobs", { limit: allJobsPagination.pageSize, offset: allJobsPagination.offset }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: allJobsPagination.pageSize.toString(),
+        offset: allJobsPagination.offset.toString(),
+      });
       const response = await fetch(`/api/jobs?${params.toString()}`, {
         credentials: "include",
       });
       if (!response.ok) {
-        throw new Error("Failed to fetch jobs");
+        throw new Error("Failed to fetch all jobs");
       }
       return response.json();
     },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: undefined as string | undefined,
   });
 
-  const allJobs = allJobsData?.pages.flatMap((page) => page.data) ?? [];
-  
-  const loadMoreRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
-    
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          fetchNextPage();
-        }
-      },
-      { threshold: 0.1 }
-    );
-    
-    observer.observe(loadMoreRef.current);
-    
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  // Extract data and pagination info
+  const todaysJobs = todaysJobsData?.data || [];
+  const todaysPaginationInfo = todaysJobsData?.pagination;
+  const completedToday = completedTodayData?.data || [];
+  const completedPaginationInfo = completedTodayData?.pagination;
+  const allJobs = allJobsData?.data || [];
+  const allJobsPaginationInfo = allJobsData?.pagination;
 
   // Fetch builders for job cards
   const { data: builders = [] } = useQuery<Builder[]>({
@@ -226,56 +361,49 @@ export default function Jobs() {
       });
       setIsJobDialogOpen(false);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to create job",
+        description: error.message || "Failed to create job",
         variant: "destructive",
       });
     },
   });
 
-  const handleJobSave = async (data: any) => {
-    await createJobMutation.mutateAsync(data);
-  };
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-6 border-b">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Jobs</h1>
-          <p className="text-sm text-muted-foreground">Manage inspections and job workflow</p>
+    <div className="container max-w-7xl mx-auto px-4 py-6 space-y-6">
+      {/* Page Header */}
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold" data-testid="heading-jobs">Jobs</h1>
+          <Badge variant={isOnline ? "success" : "secondary"} className="flex items-center gap-1">
+            {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+            {isOnline ? "Online" : "Offline"}
+          </Badge>
         </div>
-        <Button 
-          onClick={() => setIsJobDialogOpen(true)} 
-          disabled={!canCreateJobs}
-          data-testid="button-add-job"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Job
-        </Button>
+        {canCreateJobs && (
+          <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-create-job">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Job
+          </Button>
+        )}
       </div>
 
-      {/* Main Content with 4 Sections */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <Accordion
-          type="multiple"
-          defaultValue={["planned", "todays-work", "completed-today", "all-jobs"]}
-          className="space-y-4"
-        >
-          {/* Section 1: Planned Today - Calendar Events */}
-          <AccordionItem value="planned" className="border rounded-lg">
+      {/* Job sections with pagination */}
+      <Accordion type="multiple" defaultValue={["todays-work", "all-jobs"]} className="space-y-4">
+        {/* Section 1: Planned Events (Calendar) */}
+        {plannedEvents.length > 0 && (
+          <AccordionItem value="planned-events" className="border rounded-lg">
             <AccordionTrigger 
               className="px-6 hover:no-underline hover-elevate"
-              data-testid="accordion-trigger-planned"
+              data-testid="accordion-trigger-planned-events"
             >
               <div className="flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-primary" />
                 <div className="text-left">
-                  <h2 className="text-lg font-semibold">Planned Today</h2>
+                  <h2 className="text-lg font-semibold">Planned Events</h2>
                   <p className="text-sm text-muted-foreground">
-                    Calendar events ready to start ({plannedEvents.length})
+                    From your calendar ({plannedEvents.length} events)
                   </p>
                 </div>
               </div>
@@ -287,41 +415,48 @@ export default function Jobs() {
                     <Skeleton key={i} className="h-32 w-full" />
                   ))}
                 </div>
-              ) : plannedEvents.length === 0 ? (
-                <div className="text-center py-12" data-testid="empty-planned-events">
-                  <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">No calendar events scheduled for today</p>
-                </div>
               ) : (
                 <div className="space-y-3">
-                  {plannedEvents.map((event) => (
+                  {plannedEvents.map((event: GoogleEvent) => (
                     <Card 
                       key={event.id} 
-                      className="hover-elevate"
-                      data-testid={`card-planned-event-${event.id}`}
+                      className="hover-elevate cursor-pointer"
+                      data-testid={`card-event-${event.id}`}
                     >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 space-y-1">
-                            <CardTitle className="text-base" data-testid="text-event-title">
-                              {event.title}
-                            </CardTitle>
+                      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                        <div className="flex-1">
+                          <CardTitle className="text-base" data-testid="text-event-title">
+                            {event.summary || "Untitled Event"}
+                          </CardTitle>
+                          <div className="flex flex-col gap-1 mt-2 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-4 h-4" />
+                              {format(new Date(event.startTime), "h:mm a")}
+                              {event.endTime && ` - ${format(new Date(event.endTime), "h:mm a")}`}
+                            </div>
                             {event.location && (
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
                                 <MapPin className="w-4 h-4" />
-                                <span data-testid="text-event-location">{event.location}</span>
+                                {event.location}
                               </div>
                             )}
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Clock className="w-4 h-4" />
-                              <span data-testid="text-event-time">
-                                {format(new Date(event.startTime), "h:mm a")} - {format(new Date(event.endTime), "h:mm a")}
-                              </span>
-                            </div>
                           </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <Badge 
+                            variant="secondary"
+                            className="bg-warning/10 text-warning hover:bg-warning/20"
+                            data-testid="badge-event-source"
+                          >
+                            {event.calendarName}
+                          </Badge>
                           <Button
-                            onClick={() => startJobMutation.mutate(event.id)}
-                            disabled={startJobMutation.isPending || !canCreateJobs}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startJobMutation.mutate(event.id);
+                            }}
+                            disabled={startJobMutation.isPending}
+                            variant="outline"
                             size="sm"
                             data-testid={`button-start-job-${event.id}`}
                           >
@@ -347,36 +482,38 @@ export default function Jobs() {
               )}
             </AccordionContent>
           </AccordionItem>
+        )}
 
-          {/* Section 2: Today's Work - Active Jobs */}
-          <AccordionItem value="todays-work" className="border rounded-lg">
-            <AccordionTrigger 
-              className="px-6 hover:no-underline hover-elevate"
-              data-testid="accordion-trigger-todays-work"
-            >
-              <div className="flex items-center gap-3">
-                <PlayCircle className="w-5 h-5 text-info" />
-                <div className="text-left">
-                  <h2 className="text-lg font-semibold">Today's Work</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Active jobs scheduled for today ({todaysJobs.length})
-                  </p>
-                </div>
+        {/* Section 2: Today's Work - Active Jobs */}
+        <AccordionItem value="todays-work" className="border rounded-lg">
+          <AccordionTrigger 
+            className="px-6 hover:no-underline hover-elevate"
+            data-testid="accordion-trigger-todays-work"
+          >
+            <div className="flex items-center gap-3">
+              <PlayCircle className="w-5 h-5 text-info" />
+              <div className="text-left">
+                <h2 className="text-lg font-semibold">Today's Work</h2>
+                <p className="text-sm text-muted-foreground">
+                  Active jobs scheduled for today ({todaysPaginationInfo?.total || 0} total)
+                </p>
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 pb-6 pt-2">
-              {isLoadingTodays ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-48 w-full" />
-                  ))}
-                </div>
-              ) : todaysJobs.length === 0 ? (
-                <div className="text-center py-12" data-testid="empty-todays-jobs">
-                  <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">No active jobs scheduled for today</p>
-                </div>
-              ) : (
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6 pt-2">
+            {isLoadingTodays ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-48 w-full" />
+                ))}
+              </div>
+            ) : todaysJobs.length === 0 ? (
+              <div className="text-center py-12" data-testid="empty-todays-jobs">
+                <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                <p className="text-muted-foreground">No active jobs scheduled for today</p>
+              </div>
+            ) : (
+              <>
                 <div className="space-y-3">
                   {todaysJobs.map((job) => (
                     <JobCard
@@ -387,43 +524,54 @@ export default function Jobs() {
                     />
                   ))}
                 </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
+                {todaysPaginationInfo && todaysPaginationInfo.total > todaysPagination.pageSize && (
+                  <PaginationControls
+                    page={todaysPagination.page}
+                    pageSize={todaysPagination.pageSize}
+                    total={todaysPaginationInfo.total}
+                    onPageChange={todaysPagination.setPage}
+                    onPageSizeChange={todaysPagination.setPageSize}
+                  />
+                )}
+              </>
+            )}
+          </AccordionContent>
+        </AccordionItem>
 
-          {/* Section 3: Completed Today */}
-          <AccordionItem value="completed-today" className="border rounded-lg">
-            <AccordionTrigger 
-              className="px-6 hover:no-underline hover-elevate"
-              data-testid="accordion-trigger-completed-today"
-            >
-              <div className="flex items-center gap-3">
-                <Badge className="bg-success text-success-foreground">
+        {/* Section 3: Completed Today */}
+        <AccordionItem value="completed-today" className="border rounded-lg">
+          <AccordionTrigger 
+            className="px-6 hover:no-underline hover-elevate"
+            data-testid="accordion-trigger-completed-today"
+          >
+            <div className="flex items-center gap-3">
+              <Badge className="bg-success text-success-foreground">
+                ✓
+              </Badge>
+              <div className="text-left">
+                <h2 className="text-lg font-semibold">Completed Today</h2>
+                <p className="text-sm text-muted-foreground">
+                  Jobs finished today ({completedPaginationInfo?.total || 0} total)
+                </p>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6 pt-2">
+            {isLoadingCompleted ? (
+              <div className="space-y-3">
+                {[1, 2].map((i) => (
+                  <Skeleton key={i} className="h-48 w-full" />
+                ))}
+              </div>
+            ) : completedToday.length === 0 ? (
+              <div className="text-center py-12" data-testid="empty-completed-today">
+                <Badge className="w-12 h-12 mx-auto mb-3 bg-muted text-muted-foreground rounded-full flex items-center justify-center text-2xl">
                   ✓
                 </Badge>
-                <div className="text-left">
-                  <h2 className="text-lg font-semibold">Completed Today</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Jobs finished today ({completedToday.length})
-                  </p>
-                </div>
+                <p className="text-muted-foreground">No jobs completed today yet</p>
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 pb-6 pt-2">
-              {isLoadingCompleted ? (
-                <div className="space-y-3">
-                  {[1, 2].map((i) => (
-                    <Skeleton key={i} className="h-48 w-full" />
-                  ))}
-                </div>
-              ) : completedToday.length === 0 ? (
-                <div className="text-center py-12" data-testid="empty-completed-today">
-                  <Badge className="w-12 h-12 mx-auto mb-3 bg-muted text-muted-foreground rounded-full flex items-center justify-center text-2xl">
-                    ✓
-                  </Badge>
-                  <p className="text-muted-foreground">No jobs completed today yet</p>
-                </div>
-              ) : (
+            ) : (
+              <>
                 <div className="space-y-3">
                   {completedToday.map((job) => (
                     <JobCard
@@ -434,43 +582,54 @@ export default function Jobs() {
                     />
                   ))}
                 </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
+                {completedPaginationInfo && completedPaginationInfo.total > completedPagination.pageSize && (
+                  <PaginationControls
+                    page={completedPagination.page}
+                    pageSize={completedPagination.pageSize}
+                    total={completedPaginationInfo.total}
+                    onPageChange={completedPagination.setPage}
+                    onPageSizeChange={completedPagination.setPageSize}
+                  />
+                )}
+              </>
+            )}
+          </AccordionContent>
+        </AccordionItem>
 
-          {/* Section 4: All Jobs - Full List */}
-          <AccordionItem value="all-jobs" className="border rounded-lg">
-            <AccordionTrigger 
-              className="px-6 hover:no-underline hover-elevate"
-              data-testid="accordion-trigger-all-jobs"
-            >
-              <div className="flex items-center gap-3">
-                <ChevronDown className="w-5 h-5" />
-                <div className="text-left">
-                  <h2 className="text-lg font-semibold">All Jobs</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Complete job list ({allJobs.length} total)
-                  </p>
-                </div>
+        {/* Section 4: All Jobs - Full List */}
+        <AccordionItem value="all-jobs" className="border rounded-lg">
+          <AccordionTrigger 
+            className="px-6 hover:no-underline hover-elevate"
+            data-testid="accordion-trigger-all-jobs"
+          >
+            <div className="flex items-center gap-3">
+              <ChevronDown className="w-5 h-5" />
+              <div className="text-left">
+                <h2 className="text-lg font-semibold">All Jobs</h2>
+                <p className="text-sm text-muted-foreground">
+                  Complete job list ({allJobsPaginationInfo?.total || 0} total)
+                </p>
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 pb-6 pt-2">
-              {isLoadingAll ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Skeleton key={i} className="h-48 w-full" />
-                  ))}
-                </div>
-              ) : allJobs.length === 0 ? (
-                <div className="text-center py-12" data-testid="empty-all-jobs">
-                  <Plus className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground mb-4">No jobs yet. Create your first job to get started.</p>
-                  <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-create-first-job">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create First Job
-                  </Button>
-                </div>
-              ) : (
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6 pt-2">
+            {isLoadingAll ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-48 w-full" />
+                ))}
+              </div>
+            ) : allJobs.length === 0 ? (
+              <div className="text-center py-12" data-testid="empty-all-jobs">
+                <Plus className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                <p className="text-muted-foreground mb-4">No jobs yet. Create your first job to get started.</p>
+                <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-create-first-job">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create First Job
+                </Button>
+              </div>
+            ) : (
+              <>
                 <div className="space-y-3">
                   {allJobs.map((job) => (
                     <JobCard
@@ -480,30 +639,31 @@ export default function Jobs() {
                       onClick={() => navigate(`/inspection/${job.id}`)}
                     />
                   ))}
-                  {hasNextPage && (
-                    <div ref={loadMoreRef} className="flex justify-center py-4">
-                      {isFetchingNextPage ? (
-                        <Loader2 className="w-6 h-6 animate-spin text-primary" data-testid="loader-fetching-more" />
-                      ) : (
-                        <div className="h-4" data-testid="load-more-trigger" />
-                      )}
-                    </div>
-                  )}
                 </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </div>
+                {allJobsPaginationInfo && allJobsPaginationInfo.total > allJobsPagination.pageSize && (
+                  <PaginationControls
+                    page={allJobsPagination.page}
+                    pageSize={allJobsPagination.pageSize}
+                    total={allJobsPaginationInfo.total}
+                    onPageChange={allJobsPagination.setPage}
+                    onPageSizeChange={allJobsPagination.setPageSize}
+                  />
+                )}
+              </>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       {/* Job Dialog */}
-      <JobDialog
-        open={isJobDialogOpen}
-        onOpenChange={setIsJobDialogOpen}
-        builders={builders}
-        onSave={handleJobSave}
-        isPending={createJobMutation.isPending}
-      />
+      {canCreateJobs && (
+        <JobDialog
+          isOpen={isJobDialogOpen}
+          onClose={() => setIsJobDialogOpen(false)}
+          onSubmit={createJobMutation.mutate}
+          isSubmitting={createJobMutation.isPending}
+        />
+      )}
     </div>
   );
 }
