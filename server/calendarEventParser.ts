@@ -26,6 +26,43 @@ const INSPECTION_TYPE_PATTERNS = [
 ];
 
 /**
+ * Maximum title length for logging (to prevent log bloat)
+ */
+const MAX_TITLE_LOG_LENGTH = 100;
+
+/**
+ * Maximum title length considered valid (very long titles are suspicious)
+ */
+const MAX_TITLE_LENGTH = 1000;
+
+/**
+ * Helper function to create an empty result with confidence=0
+ */
+function createEmptyResult(title: string): ParsedEvent {
+  return {
+    builderId: null,
+    builderName: null,
+    inspectionType: null,
+    confidence: 0,
+    rawTitle: title,
+    parsedBuilderAbbreviation: null,
+    parsedInspectionKeyword: null,
+  };
+}
+
+/**
+ * Helper function to truncate title for logging
+ */
+function truncateTitle(title: string): string {
+  if (typeof title !== 'string') {
+    return String(title).substring(0, MAX_TITLE_LOG_LENGTH);
+  }
+  return title.length > MAX_TITLE_LOG_LENGTH 
+    ? title.substring(0, MAX_TITLE_LOG_LENGTH) + '...' 
+    : title;
+}
+
+/**
  * Parses a calendar event title to extract builder and inspection type
  * 
  * Expected format: [Builder Abbreviation] [Job Type] - [Details]
@@ -44,102 +81,255 @@ export async function parseCalendarEvent(
   storage: IStorage,
   title: string
 ): Promise<ParsedEvent> {
-  const result: ParsedEvent = {
-    builderId: null,
-    builderName: null,
-    inspectionType: null,
-    confidence: 0,
-    rawTitle: title,
-    parsedBuilderAbbreviation: null,
-    parsedInspectionKeyword: null,
-  };
-
-  // Clean and normalize title
-  const normalizedTitle = title.trim().toLowerCase();
-  
-  if (!normalizedTitle) {
-    return result;
+  // Input validation - storage parameter
+  if (!storage) {
+    serverLogger.error('[Parser] Storage instance not provided');
+    return createEmptyResult('');
   }
 
-  // Step 1: Extract builder abbreviation (first token before space or dash)
-  const firstTokenMatch = normalizedTitle.match(/^([a-z0-9./]+)/i);
-  if (!firstTokenMatch) {
-    serverLogger.debug('[Parser] No builder abbreviation found in title:', title);
-    return result;
+  // Input validation - title parameter
+  if (title === null || title === undefined) {
+    serverLogger.error('[Parser] Title is null or undefined');
+    return createEmptyResult('');
   }
 
-  const potentialAbbreviation = firstTokenMatch[1];
-  result.parsedBuilderAbbreviation = potentialAbbreviation;
-
-  // Step 2: Look up builder from abbreviations table
-  const abbreviations = await storage.getBuilderAbbreviations();
-  let builderMatch = abbreviations.find(
-    (abbr) => abbr.abbreviation.toLowerCase() === potentialAbbreviation
-  );
-
-  // Try fuzzy matching if exact match fails
-  if (!builderMatch) {
-    builderMatch = abbreviations.find((abbr) => {
-      const abbrLower = abbr.abbreviation.toLowerCase();
-      return (
-        abbrLower.includes(potentialAbbreviation) ||
-        potentialAbbreviation.includes(abbrLower) ||
-        levenshteinDistance(abbrLower, potentialAbbreviation) <= 2
-      );
+  // Handle non-string titles
+  if (typeof title !== 'string') {
+    serverLogger.error('[Parser] Title is not a string:', {
+      type: typeof title,
+      value: truncateTitle(String(title)),
     });
+    return createEmptyResult(String(title));
   }
 
-  if (builderMatch) {
-    result.builderId = builderMatch.builderId;
-    
-    // Get builder details
-    const builder = await storage.getBuilderById(builderMatch.builderId);
-    if (builder) {
-      result.builderName = builder.companyName;
+  // Check for empty or whitespace-only strings
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) {
+    serverLogger.error('[Parser] Title is empty or whitespace-only');
+    return createEmptyResult(title);
+  }
+
+  // Handle very long titles (potential data corruption or attack)
+  if (title.length > MAX_TITLE_LENGTH) {
+    serverLogger.error('[Parser] Title exceeds maximum length:', {
+      length: title.length,
+      maxLength: MAX_TITLE_LENGTH,
+      title: truncateTitle(title),
+    });
+    return createEmptyResult(title);
+  }
+
+  const result: ParsedEvent = createEmptyResult(title);
+
+  try {
+    // Clean and normalize title - handle special characters gracefully
+    let normalizedTitle: string;
+    try {
+      normalizedTitle = trimmedTitle.toLowerCase();
+    } catch (error: any) {
+      serverLogger.error('[Parser] Failed to normalize title:', {
+        error: error.message,
+        title: truncateTitle(title),
+      });
+      return result;
     }
 
-    // Confidence boost for builder match
-    const isExactMatch = builderMatch.abbreviation.toLowerCase() === potentialAbbreviation;
-    result.confidence += isExactMatch ? 50 : 30;
-  } else {
-    serverLogger.debug('[Parser] No builder found for abbreviation:', potentialAbbreviation);
-  }
+    // Check if title has any alphanumeric characters
+    const hasAlphaNumeric = /[a-z0-9]/i.test(normalizedTitle);
+    if (!hasAlphaNumeric) {
+      serverLogger.error('[Parser] Title contains no alphanumeric characters:', {
+        title: truncateTitle(title),
+      });
+      return result;
+    }
 
-  // Step 3: Extract inspection type from remaining title
-  const remainingTitle = normalizedTitle.substring(potentialAbbreviation.length).trim();
-  
-  for (const inspectionType of INSPECTION_TYPE_PATTERNS) {
-    for (const pattern of inspectionType.patterns) {
-      if (remainingTitle.includes(pattern)) {
-        result.inspectionType = inspectionType.type;
-        result.parsedInspectionKeyword = pattern;
-        result.confidence += Math.min(inspectionType.confidence / 2, 50); // Max 50 points for inspection type
-        break;
+    // Step 1: Extract builder abbreviation (first token before space or dash)
+    const firstTokenMatch = normalizedTitle.match(/^([a-z0-9./]+)/i);
+    if (!firstTokenMatch) {
+      serverLogger.debug('[Parser] No builder abbreviation found in title:', truncateTitle(title));
+      return result;
+    }
+
+    const potentialAbbreviation = firstTokenMatch[1];
+    result.parsedBuilderAbbreviation = potentialAbbreviation;
+
+    // Step 2: Look up builder from abbreviations table
+    let abbreviations: any[];
+    try {
+      abbreviations = await storage.getBuilderAbbreviations();
+
+      // Validate abbreviations data
+      if (!Array.isArray(abbreviations)) {
+        serverLogger.error('[Parser] Invalid abbreviations data returned from storage:', {
+          type: typeof abbreviations,
+          title: truncateTitle(title),
+        });
+        return result;
       }
+
+      // Handle null/undefined abbreviations
+      if (abbreviations === null || abbreviations === undefined) {
+        serverLogger.error('[Parser] Abbreviations data is null or undefined:', {
+          title: truncateTitle(title),
+        });
+        return result;
+      }
+    } catch (dbError: any) {
+      serverLogger.error('[Parser] Database lookup failed for builder abbreviations:', {
+        error: dbError.message,
+        stack: dbError.stack,
+        title: truncateTitle(title),
+      });
+      return result; // Return confidence=0
     }
-    if (result.inspectionType) break;
+
+    let builderMatch = abbreviations.find(
+      (abbr) => {
+        // Validate abbreviation object structure
+        if (!abbr || typeof abbr.abbreviation !== 'string' || !abbr.builderId) {
+          serverLogger.error('[Parser] Malformed abbreviation data:', {
+            abbreviation: abbr,
+            title: truncateTitle(title),
+          });
+          return false;
+        }
+        return abbr.abbreviation.toLowerCase() === potentialAbbreviation;
+      }
+    );
+
+    // Try fuzzy matching if exact match fails
+    if (!builderMatch) {
+      builderMatch = abbreviations.find((abbr) => {
+        // Validate abbreviation object structure
+        if (!abbr || typeof abbr.abbreviation !== 'string' || !abbr.builderId) {
+          return false;
+        }
+
+        try {
+          const abbrLower = abbr.abbreviation.toLowerCase();
+          return (
+            abbrLower.includes(potentialAbbreviation) ||
+            potentialAbbreviation.includes(abbrLower) ||
+            levenshteinDistance(abbrLower, potentialAbbreviation) <= 2
+          );
+        } catch (error: any) {
+          serverLogger.error('[Parser] Error during fuzzy matching:', {
+            error: error.message,
+            abbreviation: abbr.abbreviation,
+            title: truncateTitle(title),
+          });
+          return false;
+        }
+      });
+    }
+
+    if (builderMatch) {
+      result.builderId = builderMatch.builderId;
+      
+      // Get builder details
+      try {
+        const builder = await storage.getBuilderById(builderMatch.builderId);
+        
+        // Handle null builder lookup
+        if (builder === null || builder === undefined) {
+          serverLogger.error('[Parser] Builder lookup returned null:', {
+            builderId: builderMatch.builderId,
+            title: truncateTitle(title),
+          });
+        } else {
+          // Validate builder object has required fields
+          if (!builder.companyName) {
+            serverLogger.error('[Parser] Builder object missing companyName field:', {
+              builderId: builderMatch.builderId,
+              builder: builder,
+              title: truncateTitle(title),
+            });
+          } else {
+            result.builderName = builder.companyName;
+          }
+        }
+      } catch (dbError: any) {
+        serverLogger.error('[Parser] Database lookup failed for builder details:', {
+          error: dbError.message,
+          stack: dbError.stack,
+          builderId: builderMatch.builderId,
+          title: truncateTitle(title),
+        });
+        // Continue processing even if builder details lookup fails
+      }
+
+      // Confidence boost for builder match
+      try {
+        const isExactMatch = builderMatch.abbreviation.toLowerCase() === potentialAbbreviation;
+        result.confidence += isExactMatch ? 50 : 30;
+      } catch (error: any) {
+        serverLogger.error('[Parser] Error calculating builder match confidence:', {
+          error: error.message,
+          title: truncateTitle(title),
+        });
+      }
+    } else {
+      serverLogger.debug('[Parser] No builder found for abbreviation:', potentialAbbreviation);
+    }
+
+    // Step 3: Extract inspection type from remaining title
+    try {
+      const remainingTitle = normalizedTitle.substring(potentialAbbreviation.length).trim();
+      
+      for (const inspectionType of INSPECTION_TYPE_PATTERNS) {
+        for (const pattern of inspectionType.patterns) {
+          if (remainingTitle.includes(pattern)) {
+            result.inspectionType = inspectionType.type;
+            result.parsedInspectionKeyword = pattern;
+            result.confidence += Math.min(inspectionType.confidence / 2, 50); // Max 50 points for inspection type
+            break;
+          }
+        }
+        if (result.inspectionType) break;
+      }
+    } catch (error: any) {
+      serverLogger.error('[Parser] Error extracting inspection type:', {
+        error: error.message,
+        title: truncateTitle(title),
+      });
+    }
+
+    // Step 4: Adjust confidence based on overall match quality
+    try {
+      if (result.builderId && result.inspectionType) {
+        // Both found - good parse
+        result.confidence = Math.min(result.confidence, 100);
+      } else if (result.builderId || result.inspectionType) {
+        // Only one found - partial match
+        result.confidence = Math.min(result.confidence, 70);
+      } else {
+        // Nothing found - very low confidence
+        result.confidence = Math.min(result.confidence, 30);
+      }
+    } catch (error: any) {
+      serverLogger.error('[Parser] Error adjusting confidence score:', {
+        error: error.message,
+        title: truncateTitle(title),
+      });
+    }
+
+    serverLogger.debug('[Parser] Parsed event:', {
+      title: truncateTitle(title),
+      builder: result.builderName,
+      inspectionType: result.inspectionType,
+      confidence: result.confidence,
+    });
+
+    return result;
+
+  } catch (error: any) {
+    serverLogger.error('[Parser] Unexpected error during parsing:', {
+      error: error.message,
+      stack: error.stack,
+      title: truncateTitle(title),
+    });
+    return result; // Return confidence=0
   }
-
-  // Step 4: Adjust confidence based on overall match quality
-  if (result.builderId && result.inspectionType) {
-    // Both found - good parse
-    result.confidence = Math.min(result.confidence, 100);
-  } else if (result.builderId || result.inspectionType) {
-    // Only one found - partial match
-    result.confidence = Math.min(result.confidence, 70);
-  } else {
-    // Nothing found - very low confidence
-    result.confidence = Math.min(result.confidence, 30);
-  }
-
-  serverLogger.debug('[Parser] Parsed event:', {
-    title,
-    builder: result.builderName,
-    inspectionType: result.inspectionType,
-    confidence: result.confidence,
-  });
-
-  return result;
 }
 
 /**
@@ -181,11 +371,41 @@ export async function parseCalendarEvents(
   storage: IStorage,
   titles: string[]
 ): Promise<ParsedEvent[]> {
+  // Input validation - storage parameter
+  if (!storage) {
+    serverLogger.error('[Parser] Storage instance not provided to batch parse');
+    return [];
+  }
+
+  // Input validation - titles parameter
+  if (!Array.isArray(titles)) {
+    serverLogger.error('[Parser] Invalid titles array provided to batch parse:', {
+      type: typeof titles,
+      value: titles,
+    });
+    return [];
+  }
+
+  if (titles === null || titles === undefined) {
+    serverLogger.error('[Parser] Titles array is null or undefined');
+    return [];
+  }
+
   const results: ParsedEvent[] = [];
   
-  for (const title of titles) {
-    const parsed = await parseCalendarEvent(storage, title);
-    results.push(parsed);
+  for (let i = 0; i < titles.length; i++) {
+    try {
+      const parsed = await parseCalendarEvent(storage, titles[i]);
+      results.push(parsed);
+    } catch (error: any) {
+      serverLogger.error('[Parser] Batch parse error at index', i, ':', {
+        error: error.message,
+        stack: error.stack,
+        title: titles[i] ? truncateTitle(titles[i]) : 'undefined',
+      });
+      // Push empty result for failed parse to maintain index consistency
+      results.push(createEmptyResult(titles[i] || ''));
+    }
   }
   
   return results;
