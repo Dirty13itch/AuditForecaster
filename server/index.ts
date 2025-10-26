@@ -213,13 +213,13 @@ async function startServer() {
       }
     }
     
-    // Register notification routes before other routes
+    // Register main API routes (this creates the HTTP server)
+    const server = await registerRoutes(app);
+    
+    // Register notification routes after authentication is set up
     registerNotificationRoutes(app);
     app.use(testNotificationRoutes);
     serverLogger.info('[Server] Notification routes registered');
-    
-    // Register main API routes (this creates the HTTP server)
-    const server = await registerRoutes(app);
     
     // Setup WebSocket server for real-time notifications
     setupWebSocket(server);
