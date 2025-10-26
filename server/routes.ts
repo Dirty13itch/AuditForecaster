@@ -53,6 +53,7 @@ import {
   updateJobComplianceStatus,
   updateReportComplianceStatus,
 } from "./complianceService";
+import { processCalendarEvents, type CalendarEvent } from './calendarImportService';
 import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
@@ -4152,6 +4153,225 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         success: false,
         message: 'Failed to fetch events', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Manual Review Queue API
+  app.get('/api/calendar/unmatched-events', isAuthenticated, requireRole('admin'), async (req, res) => {
+    try {
+      const { 
+        status, 
+        minConfidence, 
+        maxConfidence, 
+        startDate, 
+        endDate, 
+        builderMatch,
+        limit = '50', 
+        offset = '0' 
+      } = req.query;
+
+      const filters: any = {
+        limit: parseInt(limit as string, 10),
+        offset: parseInt(offset as string, 10),
+      };
+
+      if (status) {
+        filters.status = status as string;
+      }
+      if (minConfidence) {
+        filters.minConfidence = parseInt(minConfidence as string, 10);
+      }
+      if (maxConfidence) {
+        filters.maxConfidence = parseInt(maxConfidence as string, 10);
+      }
+      if (startDate) {
+        filters.startDate = new Date(startDate as string);
+      }
+      if (endDate) {
+        filters.endDate = new Date(endDate as string);
+      }
+      if (builderMatch && (builderMatch === 'matched' || builderMatch === 'unmatched' || builderMatch === 'all')) {
+        filters.builderMatch = builderMatch as 'matched' | 'unmatched' | 'all';
+      }
+
+      const result = await storage.getUnmatchedEvents(filters);
+      
+      res.json({
+        events: result.events,
+        pagination: {
+          total: result.total,
+          limit: filters.limit,
+          offset: filters.offset,
+          hasMore: filters.offset + filters.limit < result.total,
+        },
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error fetching unmatched events:', error);
+      res.status(500).json({ 
+        message: 'Failed to fetch unmatched events', 
+        error: error.message 
+      });
+    }
+  });
+
+  app.post('/api/calendar/unmatched-events/:id/approve', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { approveEventSchema } = await import('@shared/schema');
+      const validated = approveEventSchema.parse(req.body);
+      
+      const userId = (req.user as any)?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      const result = await storage.approveUnmatchedEvent(
+        req.params.id,
+        validated.builderId,
+        validated.inspectionType,
+        userId
+      );
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'calendar_event_approved',
+        resourceType: 'unmatched_calendar_event',
+        resourceId: req.params.id,
+        metadata: {
+          builderId: validated.builderId,
+          inspectionType: validated.inspectionType,
+          jobId: result.job.id,
+        },
+      });
+
+      res.json({
+        message: 'Event approved and job created successfully',
+        event: result.event,
+        job: result.job,
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: 'Validation error', 
+          errors: error.errors 
+        });
+      }
+      serverLogger.error('[API] Error approving event:', error);
+      res.status(500).json({ 
+        message: 'Failed to approve event', 
+        error: error.message 
+      });
+    }
+  });
+
+  app.post('/api/calendar/unmatched-events/:id/reject', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { rejectEventSchema } = await import('@shared/schema');
+      const validated = rejectEventSchema.parse(req.body);
+      
+      const userId = (req.user as any)?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      const event = await storage.rejectUnmatchedEvent(
+        req.params.id,
+        userId,
+        validated.reason
+      );
+
+      if (!event) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'calendar_event_rejected',
+        resourceType: 'unmatched_calendar_event',
+        resourceId: req.params.id,
+        metadata: {
+          reason: validated.reason,
+        },
+      });
+
+      res.json({
+        message: 'Event rejected successfully',
+        event,
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: 'Validation error', 
+          errors: error.errors 
+        });
+      }
+      serverLogger.error('[API] Error rejecting event:', error);
+      res.status(500).json({ 
+        message: 'Failed to reject event', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Calendar Import Trigger
+  app.post('/api/calendar/import', isAuthenticated, requireRole(['admin']), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { calendarId, events: mockEvents } = req.body;
+
+      if (!calendarId) {
+        return res.status(400).json({ 
+          message: 'calendar_id is required' 
+        });
+      }
+
+      if (!mockEvents || !Array.isArray(mockEvents)) {
+        return res.status(400).json({ 
+          message: 'events array is required (using mock data until real Google Calendar API is integrated)' 
+        });
+      }
+
+      const userId = (req.user as any)?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      serverLogger.info(`[API] Starting calendar import for calendar ${calendarId}, ${mockEvents.length} events`);
+
+      // Process events using import service
+      const result = await processCalendarEvents(
+        storage,
+        mockEvents as CalendarEvent[],
+        calendarId,
+        userId
+      );
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'calendar_import',
+        resourceType: 'calendar',
+        resourceId: calendarId,
+        metadata: {
+          eventsProcessed: mockEvents.length,
+          jobsCreated: result.jobsCreated,
+          eventsQueued: result.eventsQueued,
+          errors: result.errors.length,
+          importLogId: result.importLogId,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: `Import complete: ${result.jobsCreated} jobs created, ${result.eventsQueued} events queued for review`,
+        ...result,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Calendar import failed:', error);
+      res.status(500).json({ 
+        message: 'Calendar import failed', 
         error: error.message 
       });
     }

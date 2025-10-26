@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Calendar, CheckCircle2, AlertCircle } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface CalendarInfo {
   id: string;
@@ -54,6 +56,8 @@ interface EventsResponse {
 
 export default function CalendarPOC() {
   const [selectedCalendar, setSelectedCalendar] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<any>(null);
+  const { toast } = useToast();
 
   // Fetch calendar list
   const { 
@@ -78,6 +82,47 @@ export default function CalendarPOC() {
 
   const calendars: CalendarInfo[] = calendarsData?.calendars || [];
   const events: CalendarEvent[] = eventsData?.events || [];
+
+  const importMutation = useMutation({
+    mutationFn: async (data: { calendarId: string; events: any[] }) => {
+      return await apiRequest('/api/calendar/import', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      setImportResult(data);
+      toast({
+        title: "Import Complete",
+        description: `${data.jobsCreated} jobs created, ${data.eventsQueued} events queued for review`,
+      });
+      // Invalidate jobs query to refresh job list
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Import Failed",
+        description: error.message || 'Failed to import calendar events',
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleImport = () => {
+    if (!selectedCalendar || !events.length) {
+      toast({
+        title: "Cannot Import",
+        description: "Please select a calendar and parse events first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    importMutation.mutate({
+      calendarId: selectedCalendar,
+      events: events,
+    });
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -169,10 +214,32 @@ export default function CalendarPOC() {
       {selectedCalendar && (
         <Card>
           <CardHeader>
-            <CardTitle>Step 2: View Events & Validate Parser</CardTitle>
-            <CardDescription>
-              Review event titles to validate parsing patterns (e.g., "MI Test - Spec")
-            </CardDescription>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <CardTitle>Parsed Events</CardTitle>
+                <CardDescription>
+                  {events.length} events analyzed with confidence scores
+                </CardDescription>
+              </div>
+              <Button
+                onClick={handleImport}
+                disabled={!events.length || importMutation.isPending}
+                data-testid="button-import-jobs"
+                className="gap-2"
+              >
+                {importMutation.isPending ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Import Jobs
+                  </>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {eventsLoading && (
@@ -329,6 +396,51 @@ export default function CalendarPOC() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Import Results */}
+      {importResult && (
+        <Alert className={importResult.success ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-red-500 bg-red-50 dark:bg-red-950"}>
+          <div className="flex items-start gap-3">
+            {importResult.success ? (
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+            )}
+            <div className="flex-1">
+              <AlertTitle className="text-base font-semibold mb-2">
+                {importResult.success ? "Import Complete" : "Import Failed"}
+              </AlertTitle>
+              <AlertDescription className="space-y-2">
+                {importResult.success && (
+                  <div className="space-y-1">
+                    <p className="text-sm">
+                      <strong>Jobs Created:</strong> {importResult.jobsCreated}
+                    </p>
+                    <p className="text-sm">
+                      <strong>Events Queued for Review:</strong> {importResult.eventsQueued}
+                    </p>
+                    {importResult.errors && importResult.errors.length > 0 && (
+                      <p className="text-sm text-amber-600 dark:text-amber-400">
+                        <strong>Warnings:</strong> {importResult.errors.length} events had issues
+                      </p>
+                    )}
+                    {importResult.importLogId && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Import Log ID: {importResult.importLogId}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!importResult.success && (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {importResult.message || 'An error occurred during import'}
+                  </p>
+                )}
+              </AlertDescription>
+            </div>
+          </div>
+        </Alert>
       )}
 
       {/* Research Notes */}

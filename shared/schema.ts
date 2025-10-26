@@ -224,6 +224,7 @@ export const jobs = pgTable("jobs", {
   complianceFlags: jsonb("compliance_flags"),
   lastComplianceCheck: timestamp("last_compliance_check"),
   sourceGoogleEventId: varchar("source_google_event_id"),
+  googleEventId: varchar("google_event_id").unique(),
   originalScheduledDate: timestamp("original_scheduled_date"),
   isCancelled: boolean("is_cancelled").default(false),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
@@ -236,6 +237,7 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_created_by").on(table.createdBy),
   index("idx_jobs_address").on(table.address),
   index("idx_jobs_status_created_by").on(table.status, table.createdBy),
+  index("google_event_id_idx").on(table.googleEventId),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -298,8 +300,9 @@ export const calendarImportLogs = pgTable("calendar_import_logs", {
   eventsQueued: integer("events_queued").default(0),
   errors: text("errors"),
 }, (table) => [
-  index("idx_calendar_import_logs_timestamp").on(table.importTimestamp),
-  index("idx_calendar_import_logs_calendar_id").on(table.calendarId),
+  index("calendar_import_logs_calendar_id_idx").on(table.calendarId),
+  index("calendar_import_logs_import_timestamp_idx").on(table.importTimestamp),
+  index("calendar_import_logs_calendar_id_timestamp_idx").on(table.calendarId, table.importTimestamp),
 ]);
 
 // Unmatched calendar events for manual review
@@ -320,10 +323,11 @@ export const unmatchedCalendarEvents = pgTable("unmatched_calendar_events", {
   createdJobId: varchar("created_job_id").references(() => jobs.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  index("idx_unmatched_events_google_id").on(table.googleEventId),
-  index("idx_unmatched_events_status").on(table.status),
-  index("idx_unmatched_events_start_time").on(table.startTime),
-  index("idx_unmatched_events_confidence").on(table.confidenceScore),
+  index("unmatched_events_google_event_id_idx").on(table.googleEventId),
+  index("unmatched_events_status_idx").on(table.status),
+  index("unmatched_events_confidence_score_idx").on(table.confidenceScore),
+  index("unmatched_events_created_at_idx").on(table.createdAt),
+  index("unmatched_events_status_confidence_idx").on(table.status, table.confidenceScore),
 ]);
 
 export const expenses = pgTable("expenses", {
@@ -703,6 +707,26 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: tru
 export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
 export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true }).extend({
   earnedAt: z.coerce.date().optional(),
+});
+
+// Calendar import schemas
+export const approveEventSchema = z.object({
+  builderId: z.string().min(1, "Builder is required"),
+  inspectionType: z.string().min(1, "Inspection type is required"),
+});
+
+export const rejectEventSchema = z.object({
+  reason: z.string().optional(),
+});
+
+export const unmatchedEventFiltersSchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+  minConfidence: z.number().min(0).max(100).optional(),
+  maxConfidence: z.number().min(0).max(100).optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  limit: z.number().min(1).max(100).default(50).optional(),
+  offset: z.number().min(0).default(0).optional(),
 });
 
 export type UpsertUser = z.infer<typeof upsertUserSchema>;

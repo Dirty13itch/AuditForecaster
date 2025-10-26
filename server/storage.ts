@@ -43,6 +43,10 @@ import {
   type InsertCalendarPreference,
   type GoogleEvent,
   type InsertGoogleEvent,
+  type UnmatchedCalendarEvent,
+  type InsertUnmatchedCalendarEvent,
+  type CalendarImportLog,
+  type InsertCalendarImportLog,
   type UploadSession,
   type InsertUploadSession,
   type EmailPreference,
@@ -78,6 +82,8 @@ import {
   complianceHistory,
   calendarPreferences,
   googleEvents,
+  unmatchedCalendarEvents,
+  calendarImportLogs,
   uploadSessions,
   emailPreferences,
   auditLogs,
@@ -307,6 +313,28 @@ export interface IStorage {
   deleteBuilderAbbreviation(id: string): Promise<boolean>;
   seedBuilderAbbreviations(builderId: string, abbreviations: string[]): Promise<void>;
   getBuilderById(id: string): Promise<Builder | undefined>;
+
+  // Unmatched calendar events (manual review queue)
+  getUnmatchedEvents(filters?: {
+    status?: string;
+    minConfidence?: number;
+    maxConfidence?: number;
+    startDate?: Date;
+    endDate?: Date;
+    builderMatch?: 'matched' | 'unmatched' | 'all';
+    limit?: number;
+    offset?: number;
+  }): Promise<{ events: UnmatchedCalendarEvent[], total: number }>;
+  getUnmatchedEvent(id: string): Promise<UnmatchedCalendarEvent | undefined>;
+  createUnmatchedEvent(event: InsertUnmatchedCalendarEvent): Promise<UnmatchedCalendarEvent>;
+  updateUnmatchedEventStatus(id: string, status: string, reviewedBy?: string): Promise<UnmatchedCalendarEvent | undefined>;
+  approveUnmatchedEvent(id: string, builderId: string, inspectionType: string, reviewedBy: string): Promise<{ event: UnmatchedCalendarEvent, job: Job }>;
+  rejectUnmatchedEvent(id: string, reviewedBy: string, reason?: string): Promise<UnmatchedCalendarEvent | undefined>;
+
+  // Calendar import logs
+  createCalendarImportLog(log: InsertCalendarImportLog): Promise<CalendarImportLog>;
+  getImportLogsByCalendar(calendarId: string, limit?: number): Promise<CalendarImportLog[]>;
+  getRecentImportLogs(limit?: number): Promise<CalendarImportLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -672,9 +700,10 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getJobBySourceEventId(sourceEventId: string): Promise<Job | undefined> {
-    const result = await db.select().from(jobs)
-      .where(eq(jobs.sourceGoogleEventId, sourceEventId))
+  async getJobBySourceEventId(googleEventId: string): Promise<Job | undefined> {
+    const result = await db.select()
+      .from(jobs)
+      .where(eq(jobs.googleEventId, googleEventId))
       .limit(1);
     return result[0];
   }
@@ -2175,6 +2204,181 @@ export class DatabaseStorage implements IStorage {
 
   async getBuilderById(id: string): Promise<Builder | undefined> {
     return await this.getBuilder(id);
+  }
+
+  async getUnmatchedEvents(filters?: {
+    status?: string;
+    minConfidence?: number;
+    maxConfidence?: number;
+    startDate?: Date;
+    endDate?: Date;
+    builderMatch?: 'matched' | 'unmatched' | 'all';
+    limit?: number;
+    offset?: number;
+  }): Promise<{ events: UnmatchedCalendarEvent[], total: number }> {
+    const { 
+      status, 
+      minConfidence, 
+      maxConfidence, 
+      startDate, 
+      endDate, 
+      builderMatch = 'all',
+      limit = 50, 
+      offset = 0 
+    } = filters || {};
+    
+    const conditions = [];
+    
+    if (status) {
+      conditions.push(eq(unmatchedCalendarEvents.status, status));
+    }
+    if (minConfidence !== undefined) {
+      conditions.push(gte(unmatchedCalendarEvents.confidenceScore, minConfidence));
+    }
+    if (maxConfidence !== undefined) {
+      conditions.push(lte(unmatchedCalendarEvents.confidenceScore, maxConfidence));
+    }
+    if (startDate) {
+      conditions.push(gte(unmatchedCalendarEvents.startTime, startDate));
+    }
+    if (endDate) {
+      conditions.push(lte(unmatchedCalendarEvents.endTime, endDate));
+    }
+    
+    // Builder match filtering using rawEventJson
+    if (builderMatch === 'matched') {
+      // Events where parsed.builderName is not 'Unknown' and not null
+      conditions.push(
+        sql`${unmatchedCalendarEvents.rawEventJson}::jsonb->'parsed'->>'builderName' IS NOT NULL AND ${unmatchedCalendarEvents.rawEventJson}::jsonb->'parsed'->>'builderName' != 'Unknown'`
+      );
+    } else if (builderMatch === 'unmatched') {
+      // Events where parsed.builderName is 'Unknown' or null
+      conditions.push(
+        sql`(${unmatchedCalendarEvents.rawEventJson}::jsonb->'parsed'->>'builderName' IS NULL OR ${unmatchedCalendarEvents.rawEventJson}::jsonb->'parsed'->>'builderName' = 'Unknown')`
+      );
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    const [events, totalResult] = await Promise.all([
+      db.select()
+        .from(unmatchedCalendarEvents)
+        .where(whereClause)
+        .orderBy(desc(unmatchedCalendarEvents.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: count() })
+        .from(unmatchedCalendarEvents)
+        .where(whereClause)
+    ]);
+    
+    return {
+      events,
+      total: totalResult[0].count,
+    };
+  }
+
+  async getUnmatchedEvent(id: string): Promise<UnmatchedCalendarEvent | undefined> {
+    const result = await db.select()
+      .from(unmatchedCalendarEvents)
+      .where(eq(unmatchedCalendarEvents.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async createUnmatchedEvent(event: InsertUnmatchedCalendarEvent): Promise<UnmatchedCalendarEvent> {
+    const result = await db.insert(unmatchedCalendarEvents)
+      .values(event)
+      .returning();
+    return result[0];
+  }
+
+  async updateUnmatchedEventStatus(id: string, status: string, reviewedBy?: string): Promise<UnmatchedCalendarEvent | undefined> {
+    const updates: any = { status };
+    if (reviewedBy) {
+      updates.reviewedBy = reviewedBy;
+      updates.reviewedAt = new Date();
+    }
+    
+    const result = await db.update(unmatchedCalendarEvents)
+      .set(updates)
+      .where(eq(unmatchedCalendarEvents.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async approveUnmatchedEvent(id: string, builderId: string, inspectionType: string, reviewedBy: string): Promise<{ event: UnmatchedCalendarEvent, job: Job }> {
+    const unmatchedEvent = await this.getUnmatchedEvent(id);
+    if (!unmatchedEvent) {
+      throw new Error('Unmatched event not found');
+    }
+    
+    // Create job from approved event
+    const jobData: InsertJob = {
+      builderId,
+      inspectionType,
+      address: unmatchedEvent.location || '',
+      scheduledDate: unmatchedEvent.startTime,
+      status: 'scheduled',
+      createdBy: reviewedBy,
+      notes: `Auto-created from calendar event: ${unmatchedEvent.title}`,
+    };
+    
+    const job = await this.createJob(jobData);
+    
+    // Update event status
+    const updatedEvent = await this.updateUnmatchedEventStatus(id, 'approved', reviewedBy);
+    if (!updatedEvent) {
+      throw new Error('Failed to update event status');
+    }
+    
+    return { event: updatedEvent, job };
+  }
+
+  async rejectUnmatchedEvent(id: string, reviewedBy: string, reason?: string): Promise<UnmatchedCalendarEvent | undefined> {
+    const updates: any = {
+      status: 'rejected',
+      reviewedBy,
+      reviewedAt: new Date(),
+    };
+    
+    // Store rejection reason in raw_event_json metadata
+    const event = await this.getUnmatchedEvent(id);
+    if (event && reason) {
+      const rawEvent = typeof event.rawEventJson === 'string' 
+        ? JSON.parse(event.rawEventJson) 
+        : event.rawEventJson;
+      rawEvent.rejectionReason = reason;
+      updates.rawEventJson = rawEvent;
+    }
+    
+    const result = await db.update(unmatchedCalendarEvents)
+      .set(updates)
+      .where(eq(unmatchedCalendarEvents.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async createCalendarImportLog(log: InsertCalendarImportLog): Promise<CalendarImportLog> {
+    const result = await db.insert(calendarImportLogs)
+      .values(log)
+      .returning();
+    return result[0];
+  }
+
+  async getImportLogsByCalendar(calendarId: string, limit: number = 50): Promise<CalendarImportLog[]> {
+    return await db.select()
+      .from(calendarImportLogs)
+      .where(eq(calendarImportLogs.calendarId, calendarId))
+      .orderBy(desc(calendarImportLogs.importTimestamp))
+      .limit(limit);
+  }
+
+  async getRecentImportLogs(limit: number = 50): Promise<CalendarImportLog[]> {
+    return await db.select()
+      .from(calendarImportLogs)
+      .orderBy(desc(calendarImportLogs.importTimestamp))
+      .limit(limit);
   }
 }
 

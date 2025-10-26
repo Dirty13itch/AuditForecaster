@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity } from "lucide-react";
+import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -81,6 +81,24 @@ const menuItems = [
     url: "/admin/diagnostics",
     icon: Activity,
     adminOnly: true,
+  },
+];
+
+const calendarImportItems = [
+  {
+    title: "POC Testing",
+    url: "/calendar-poc",
+    icon: CalendarClock,
+  },
+  {
+    title: "Review Queue",
+    url: "/calendar-review",
+    icon: ClipboardCheck,
+  },
+  {
+    title: "Import History",
+    url: "/calendar-imports",
+    icon: History,
   },
 ];
 
@@ -190,6 +208,32 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {userRole === 'admin' && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupLabel>Calendar Import</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {calendarImportItems.map((item) => {
+                    const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild isActive={isActive}>
+                          <Link href={item.url} data-testid={`link-calendar-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                            <item.icon />
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
       
       <SidebarFooter>
