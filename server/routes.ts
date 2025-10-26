@@ -3997,6 +3997,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POC: Calendar Import Research & Testing Endpoints
+  // These endpoints help validate we can access contractor's shared calendar and parse events
+  app.get('/api/calendar/poc/list', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      serverLogger.info('[POC] Fetching all calendars for validation');
+      const calendars = await googleCalendarService.fetchCalendarList();
+      
+      // Return detailed calendar info for validation
+      res.json({
+        success: true,
+        count: calendars.length,
+        calendars: calendars.map(cal => ({
+          id: cal.id,
+          name: cal.summary,
+          description: cal.description,
+          accessRole: cal.accessRole,
+          isPrimary: cal.primary,
+          backgroundColor: cal.backgroundColor,
+          foregroundColor: cal.foregroundColor,
+        })),
+      });
+    } catch (error: any) {
+      serverLogger.error('[POC] Error fetching calendar list:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to fetch calendar list', 
+        error: error.message 
+      });
+    }
+  });
+
+  app.get('/api/calendar/poc/events', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const calendarId = req.query.calendarId as string;
+      
+      if (!calendarId) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'calendarId query parameter required' 
+        });
+      }
+
+      serverLogger.info(`[POC] Fetching events from calendar: ${calendarId}`);
+
+      // Fetch events from next 30 days for validation
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 30);
+
+      const events = await googleCalendarService.fetchEventsFromGoogle(startDate, endDate, [calendarId]);
+
+      // Return detailed event info for parser validation
+      res.json({
+        success: true,
+        calendarId,
+        dateRange: {
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+        },
+        count: events.length,
+        events: events.map(event => ({
+          id: event.id,
+          title: event.summary,
+          description: event.description,
+          location: event.location,
+          start: event.start,
+          end: event.end,
+          organizer: event.organizer,
+          status: event.status,
+        })),
+      });
+    } catch (error: any) {
+      serverLogger.error('[POC] Error fetching events:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to fetch events', 
+        error: error.message 
+      });
+    }
+  });
+
   app.post("/api/upload-sessions", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertUploadSessionSchema.parse(req.body);

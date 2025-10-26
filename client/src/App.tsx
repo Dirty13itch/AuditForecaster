@@ -30,6 +30,7 @@ import Analytics from "@/pages/Analytics";
 import AuditLogs from "@/pages/AuditLogs";
 import SettingsPage from "@/pages/SettingsPage";
 import AdminDiagnostics from "@/pages/AdminDiagnostics";
+import CalendarPOC from "@/pages/CalendarPOC";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
@@ -108,6 +109,11 @@ function Router() {
       <Route path="/admin/diagnostics" component={() => (
         <RouteErrorBoundary>
           <AdminDiagnostics />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/calendar-poc" component={() => (
+        <RouteErrorBoundary>
+          <CalendarPOC />
         </RouteErrorBoundary>
       )} />
       <Route path="/inspection/:id" component={() => (
