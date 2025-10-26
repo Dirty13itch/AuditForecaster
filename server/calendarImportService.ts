@@ -57,11 +57,18 @@ export async function createJobFromCalendarEvent(
     ? new Date(event.start.dateTime) 
     : (event.start.date ? new Date(event.start.date) : new Date());
 
+  // Generate job name from event data
+  const jobName = event.location 
+    ? `${parsed.inspectionType} - ${event.location}`
+    : event.summary;
+
   // Create job from event
   const jobData: InsertJob = {
+    name: jobName,
     builderId: parsed.builderId,
     inspectionType: parsed.inspectionType,
-    address: event.location || '',
+    address: event.location || event.summary || 'TBD',
+    contractor: 'TBD', // Calendar events don't have contractor info
     scheduledDate: startTime,
     status: 'scheduled',
     createdBy,
@@ -205,7 +212,7 @@ async function queueEventForReview(
     location: event.location || null,
     startTime,
     endTime,
-    rawEventJson: JSON.stringify({
+    rawEventJson: {
       ...event,
       parsed: {
         builderName: parsed.builderName,
@@ -214,7 +221,7 @@ async function queueEventForReview(
         parsedBuilderAbbreviation: parsed.parsedBuilderAbbreviation,
         parsedInspectionKeyword: parsed.parsedInspectionKeyword,
       },
-    }),
+    },
     confidenceScore: parsed.confidence,
     status,
   };

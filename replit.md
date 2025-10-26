@@ -4,6 +4,34 @@
 
 This full-stack energy auditing field application is designed for field inspectors to manage inspections, track jobs, schedule events, and generate reports. Its primary purpose is to streamline energy auditing workflows, improve data accuracy through photo documentation and OCR, and provide robust analytics. Key features include outdoor readability, offline-first functionality, and rapid data entry. The business vision is to transform field operations with a comprehensive, user-friendly, and powerful mobile solution.
 
+## Recent Changes
+
+### 2025-10-26: Fixed Integration Test Data Isolation
+**Critical Fix**: Resolved integration test cleanup issue that was deleting seeded M/I Homes abbreviations from the database, causing test failures and breaking manual workflows.
+
+**Changes Made**:
+- **Removed destructive cleanup** from `tests/calendarImport.integration.test.ts` beforeEach hook (lines 51-57) that was deleting builder abbreviations for 'mi-homes-builder'
+- **Changed test abbreviation** from "TESTMI" to "INTTEST" to ensure complete isolation from production/seeded data
+- **Updated all test events** to use the new "INTTEST" abbreviation across all 8 integration tests
+- **Added documentation** explaining the fix to prevent future similar issues
+
+**Impact**:
+- All 8 calendar import integration tests pass successfully
+- Test isolation is complete - no touching of seeded M/I Homes data
+- Fuzzy matching tests still work correctly with "inttest." matching "INTTEST"
+- No TypeScript/LSP errors
+- Existing cleanup in afterEach remains intact (deletes test data by testBuilderId)
+
+**Test Coverage**:
+- High-confidence event auto-import (≥80%)
+- Medium-confidence event with review queue (60-79%)
+- Low-confidence event manual review only (<60%)
+- Duplicate prevention via google_event_id
+- Batch import with mixed confidence scores
+- Events without summary handling
+- Complete event metadata storage
+- All-day event support
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

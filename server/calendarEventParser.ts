@@ -228,7 +228,7 @@ export async function parseCalendarEvent(
       
       // Get builder details
       try {
-        const builder = await storage.getBuilderById(builderMatch.builderId);
+        const builder = await storage.getBuilder(builderMatch.builderId);
         
         // Handle null builder lookup
         if (builder === null || builder === undefined) {

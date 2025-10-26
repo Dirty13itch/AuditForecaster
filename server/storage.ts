@@ -2410,16 +2410,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFilteredImportLogs(options: {
-    limit = 50,
-    offset = 0,
-    calendarId,
-    hasErrors
-  }: {
     limit?: number;
     offset?: number;
     calendarId?: string;
     hasErrors?: boolean;
   }): Promise<{ logs: CalendarImportLog[]; total: number }> {
+    const { limit = 50, offset = 0, calendarId, hasErrors } = options;
     // Build filter conditions
     const conditions = [];
     
