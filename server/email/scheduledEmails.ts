@@ -25,11 +25,8 @@ export function startScheduledEmails() {
         return;
       }
 
-      // Get all users (in a real app, you'd get users assigned to these jobs)
-      const users = await storage.getUser; // This is a placeholder - you'd need to get all users or users assigned to jobs
-      
-      // For now, we'll just log this since we don't have a way to get all users
-      // In production, you'd iterate through users and send them their personalized digests
+      // Get all users to send daily digests
+      const allUsers = await storage.getAllUsers();
       
       const digestJobs: DailyDigestJob[] = await Promise.all(
         todaysJobs.map(async (event) => {
@@ -51,28 +48,36 @@ export function startScheduledEmails() {
         })
       ).then(jobs => jobs.filter((j): j is DailyDigestJob => j !== null));
 
-      serverLogger.info('[ScheduledEmails] Daily digest would be sent', {
+      serverLogger.info('[ScheduledEmails] Processing daily digest', {
         jobCount: digestJobs.length,
-        jobs: digestJobs,
+        userCount: allUsers.length,
       });
 
-      // Note: In production, you'd get all users with dailyDigest=true and send to each
-      // Example:
-      // const allUsers = await getAllUsersWithDailyDigestEnabled();
-      // for (const user of allUsers) {
-      //   const userPrefs = await storage.getEmailPreferences(user.id);
-      //   if (userPrefs?.dailyDigest) {
-      //     const { subject, html } = dailyDigestTemplate({
-      //       date: today.toLocaleDateString(),
-      //       dayOfWeek: today.toLocaleDateString('en-US', { weekday: 'long' }),
-      //       jobs: digestJobs,
-      //       totalJobs: digestJobs.length,
-      //       unsubscribeUrl: `${process.env.APP_URL}/api/email-preferences/unsubscribe/${userPrefs.unsubscribeToken}`,
-      //       recipientName: user.firstName,
-      //     });
-      //     await emailService.sendEmail(user.email!, subject, html);
-      //   }
-      // }
+      // Send daily digest to each user who has it enabled
+      for (const user of allUsers) {
+        if (!user.email) {
+          continue; // Skip users without email
+        }
+        
+        const userPrefs = await storage.getEmailPreferences(user.id);
+        if (userPrefs?.dailyDigest) {
+          const { subject, html } = dailyDigestTemplate({
+            date: today.toLocaleDateString(),
+            dayOfWeek: today.toLocaleDateString('en-US', { weekday: 'long' }),
+            jobs: digestJobs,
+            totalJobs: digestJobs.length,
+            unsubscribeUrl: `${process.env.APP_URL || 'http://localhost:3000'}/api/email-preferences/unsubscribe/${userPrefs.unsubscribeToken || user.id}`,
+            recipientName: user.firstName || 'User',
+          });
+          
+          await emailService.sendEmail(user.email, subject, html);
+          serverLogger.info('[ScheduledEmails] Daily digest sent', { 
+            userId: user.id, 
+            email: user.email,
+            jobCount: digestJobs.length 
+          });
+        }
+      }
       
     } catch (error) {
       serverLogger.error('[ScheduledEmails] Failed to send daily digest', { error });
@@ -146,30 +151,41 @@ export function startScheduledEmails() {
         topAchievement,
       });
 
-      // Note: In production, you'd get all users with weeklyPerformanceSummary=true and send to each
-      // Example:
-      // const allUsers = await getAllUsersWithWeeklySummaryEnabled();
-      // for (const user of allUsers) {
-      //   const userPrefs = await storage.getEmailPreferences(user.id);
-      //   if (userPrefs?.weeklyPerformanceSummary) {
-      //     const weekStart = oneWeekAgo.toLocaleDateString();
-      //     const weekEnd = today.toLocaleDateString();
-      //     
-      //     const { subject, html } = weeklyPerformanceSummaryTemplate({
-      //       weekStart,
-      //       weekEnd,
-      //       jobsCompleted: thisWeekJobs.length,
-      //       passRate,
-      //       averageACH50,
-      //       photosUploaded: thisWeekPhotos.length,
-      //       topAchievement,
-      //       unsubscribeUrl: `${process.env.APP_URL}/api/email-preferences/unsubscribe/${userPrefs.unsubscribeToken}`,
-      //       recipientName: user.firstName,
-      //     });
-      //     
-      //     await emailService.sendEmail(user.email!, subject, html);
-      //   }
-      // }
+      // Get all users to send weekly performance summaries
+      const allUsers = await storage.getAllUsers();
+      
+      // Send weekly performance summary to each user who has it enabled
+      for (const user of allUsers) {
+        if (!user.email) {
+          continue; // Skip users without email
+        }
+        
+        const userPrefs = await storage.getEmailPreferences(user.id);
+        if (userPrefs?.weeklyPerformanceSummary) {
+          const weekStart = oneWeekAgo.toLocaleDateString();
+          const weekEnd = today.toLocaleDateString();
+          
+          const { subject, html } = weeklyPerformanceSummaryTemplate({
+            weekStart,
+            weekEnd,
+            jobsCompleted: thisWeekJobs.length,
+            passRate,
+            averageACH50,
+            photosUploaded: thisWeekPhotos.length,
+            topAchievement,
+            unsubscribeUrl: `${process.env.APP_URL || 'http://localhost:3000'}/api/email-preferences/unsubscribe/${userPrefs.unsubscribeToken || user.id}`,
+            recipientName: user.firstName || 'User',
+          });
+          
+          await emailService.sendEmail(user.email, subject, html);
+          serverLogger.info('[ScheduledEmails] Weekly summary sent', {
+            userId: user.id,
+            email: user.email,
+            jobsCompleted: thisWeekJobs.length,
+            passRate: passRate.toFixed(1),
+          });
+        }
+      }
       
     } catch (error) {
       serverLogger.error('[ScheduledEmails] Failed to send weekly summary', { error });
