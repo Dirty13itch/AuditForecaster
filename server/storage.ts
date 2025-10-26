@@ -53,6 +53,8 @@ import {
   type InsertAchievement,
   type UserAchievement,
   type InsertUserAchievement,
+  type BuilderAbbreviation,
+  type InsertBuilderAbbreviation,
   type ScoreSummary,
   users,
   builders,
@@ -81,6 +83,7 @@ import {
   auditLogs,
   achievements,
   userAchievements,
+  builderAbbreviations,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -296,6 +299,14 @@ export interface IStorage {
   updateUserAchievementProgress(userId: string, achievementId: string, progress: number): Promise<UserAchievement | undefined>;
   checkUserHasAchievement(userId: string, achievementId: string): Promise<boolean>;
   seedAchievements(achievementDefs: InsertAchievement[]): Promise<void>;
+
+  // Builder abbreviations for calendar parsing
+  getBuilderAbbreviations(): Promise<BuilderAbbreviation[]>;
+  getBuilderAbbreviationsByBuilder(builderId: string): Promise<BuilderAbbreviation[]>;
+  createBuilderAbbreviation(abbr: InsertBuilderAbbreviation): Promise<BuilderAbbreviation>;
+  deleteBuilderAbbreviation(id: string): Promise<boolean>;
+  seedBuilderAbbreviations(builderId: string, abbreviations: string[]): Promise<void>;
+  getBuilderById(id: string): Promise<Builder | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2134,6 +2145,36 @@ export class DatabaseStorage implements IStorage {
         await db.insert(achievements).values(def);
       }
     }
+  }
+
+  async getBuilderAbbreviations(): Promise<BuilderAbbreviation[]> {
+    return await db.select().from(builderAbbreviations);
+  }
+
+  async getBuilderAbbreviationsByBuilder(builderId: string): Promise<BuilderAbbreviation[]> {
+    return await db.select().from(builderAbbreviations).where(eq(builderAbbreviations.builderId, builderId));
+  }
+
+  async createBuilderAbbreviation(abbr: InsertBuilderAbbreviation): Promise<BuilderAbbreviation> {
+    const result = await db.insert(builderAbbreviations).values(abbr).returning();
+    return result[0];
+  }
+
+  async deleteBuilderAbbreviation(id: string): Promise<boolean> {
+    const result = await db.delete(builderAbbreviations).where(eq(builderAbbreviations.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async seedBuilderAbbreviations(builderId: string, abbreviations: string[]): Promise<void> {
+    for (const abbr of abbreviations) {
+      await db.insert(builderAbbreviations)
+        .values({ builderId, abbreviation: abbr, isPrimary: abbr === abbreviations[0] })
+        .onConflictDoNothing();
+    }
+  }
+
+  async getBuilderById(id: string): Promise<Builder | undefined> {
+    return await this.getBuilder(id);
   }
 }
 

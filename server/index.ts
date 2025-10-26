@@ -339,6 +339,19 @@ async function startServer() {
             serverLogger.error('Failed to seed achievements on startup:', error);
           }
           
+          // Seed builder abbreviations for M/I Homes
+          try {
+            const allBuilders = await storage.getAllBuilders();
+            const miHomes = allBuilders.find(b => b.companyName.toLowerCase().includes('m/i homes'));
+            
+            if (miHomes) {
+              await storage.seedBuilderAbbreviations(miHomes.id, ['MI', 'M/I', 'M.I.', 'MIHomes']);
+              log('Seeded builder abbreviations for M/I Homes');
+            }
+          } catch (error) {
+            serverLogger.error('Failed to seed builder abbreviations:', error);
+          }
+          
           // DEV MODE: Seed test users for development authentication bypass
           try {
             serverLogger.warn('╔════════════════════════════════════════════════════════════════╗');
