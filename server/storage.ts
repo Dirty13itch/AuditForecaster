@@ -77,6 +77,14 @@ import {
   type InsertPayment,
   type FinancialSettings,
   type InsertFinancialSettings,
+  type TaxCreditProject,
+  type InsertTaxCreditProject,
+  type TaxCreditRequirement,
+  type InsertTaxCreditRequirement,
+  type TaxCreditDocument,
+  type InsertTaxCreditDocument,
+  type UnitCertification,
+  type InsertUnitCertification,
   type ScoreSummary,
   users,
   builders,
@@ -117,6 +125,10 @@ import {
   invoices,
   payments,
   financialSettings,
+  taxCreditProjects,
+  taxCreditRequirements,
+  taxCreditDocuments,
+  unitCertifications,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -461,6 +473,38 @@ export interface IStorage {
   getLatestDuctLeakageTest(jobId: string): Promise<DuctLeakageTest | undefined>;
   updateDuctLeakageTest(id: string, test: Partial<InsertDuctLeakageTest>): Promise<DuctLeakageTest | undefined>;
   deleteDuctLeakageTest(id: string): Promise<boolean>;
+
+  // 45L Tax Credit operations
+  // Tax Credit Projects
+  createTaxCreditProject(project: InsertTaxCreditProject): Promise<TaxCreditProject>;
+  getTaxCreditProject(id: string): Promise<TaxCreditProject | undefined>;
+  getTaxCreditProjectsByBuilder(builderId: string): Promise<TaxCreditProject[]>;
+  getTaxCreditProjectsByYear(taxYear: number): Promise<TaxCreditProject[]>;
+  getTaxCreditProjectsPaginated(params: PaginationParams): Promise<PaginatedResult<TaxCreditProject>>;
+  updateTaxCreditProject(id: string, project: Partial<InsertTaxCreditProject>): Promise<TaxCreditProject | undefined>;
+  deleteTaxCreditProject(id: string): Promise<boolean>;
+
+  // Tax Credit Requirements
+  createTaxCreditRequirement(requirement: InsertTaxCreditRequirement): Promise<TaxCreditRequirement>;
+  getTaxCreditRequirement(id: string): Promise<TaxCreditRequirement | undefined>;
+  getTaxCreditRequirementsByProject(projectId: string): Promise<TaxCreditRequirement[]>;
+  updateTaxCreditRequirement(id: string, requirement: Partial<InsertTaxCreditRequirement>): Promise<TaxCreditRequirement | undefined>;
+  deleteTaxCreditRequirement(id: string): Promise<boolean>;
+
+  // Tax Credit Documents
+  createTaxCreditDocument(document: InsertTaxCreditDocument): Promise<TaxCreditDocument>;
+  getTaxCreditDocument(id: string): Promise<TaxCreditDocument | undefined>;
+  getTaxCreditDocumentsByProject(projectId: string): Promise<TaxCreditDocument[]>;
+  updateTaxCreditDocument(id: string, document: Partial<InsertTaxCreditDocument>): Promise<TaxCreditDocument | undefined>;
+  deleteTaxCreditDocument(id: string): Promise<boolean>;
+
+  // Unit Certifications
+  createUnitCertification(certification: InsertUnitCertification): Promise<UnitCertification>;
+  getUnitCertification(id: string): Promise<UnitCertification | undefined>;
+  getUnitCertificationsByProject(projectId: string): Promise<UnitCertification[]>;
+  getUnitCertificationByJob(jobId: string): Promise<UnitCertification | undefined>;
+  updateUnitCertification(id: string, certification: Partial<InsertUnitCertification>): Promise<UnitCertification | undefined>;
+  deleteUnitCertification(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3301,6 +3345,205 @@ export class DatabaseStorage implements IStorage {
   async deleteDuctLeakageTest(id: string): Promise<boolean> {
     const result = await db.delete(ductLeakageTests)
       .where(eq(ductLeakageTests.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // 45L Tax Credit Implementations
+  
+  // Tax Credit Projects
+  async createTaxCreditProject(project: InsertTaxCreditProject): Promise<TaxCreditProject> {
+    const result = await db.insert(taxCreditProjects)
+      .values(project)
+      .returning();
+    return result[0];
+  }
+
+  async getTaxCreditProject(id: string): Promise<TaxCreditProject | undefined> {
+    const result = await db.select()
+      .from(taxCreditProjects)
+      .where(eq(taxCreditProjects.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getTaxCreditProjectsByBuilder(builderId: string): Promise<TaxCreditProject[]> {
+    return await db.select()
+      .from(taxCreditProjects)
+      .where(eq(taxCreditProjects.builderId, builderId))
+      .orderBy(desc(taxCreditProjects.createdAt));
+  }
+
+  async getTaxCreditProjectsByYear(taxYear: number): Promise<TaxCreditProject[]> {
+    return await db.select()
+      .from(taxCreditProjects)
+      .where(eq(taxCreditProjects.taxYear, taxYear))
+      .orderBy(desc(taxCreditProjects.createdAt));
+  }
+
+  async getTaxCreditProjectsPaginated(params: PaginationParams): Promise<PaginatedResult<TaxCreditProject>> {
+    const { limit, offset } = params;
+    
+    const [data, totalResult] = await Promise.all([
+      db.select().from(taxCreditProjects).limit(limit).offset(offset).orderBy(desc(taxCreditProjects.createdAt)),
+      db.select({ count: count() }).from(taxCreditProjects)
+    ]);
+    
+    const total = totalResult[0].count;
+    
+    return {
+      data,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  }
+
+  async updateTaxCreditProject(id: string, project: Partial<InsertTaxCreditProject>): Promise<TaxCreditProject | undefined> {
+    const result = await db.update(taxCreditProjects)
+      .set({
+        ...project,
+        updatedAt: new Date(),
+      })
+      .where(eq(taxCreditProjects.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteTaxCreditProject(id: string): Promise<boolean> {
+    const result = await db.delete(taxCreditProjects)
+      .where(eq(taxCreditProjects.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Tax Credit Requirements
+  async createTaxCreditRequirement(requirement: InsertTaxCreditRequirement): Promise<TaxCreditRequirement> {
+    const result = await db.insert(taxCreditRequirements)
+      .values(requirement)
+      .returning();
+    return result[0];
+  }
+
+  async getTaxCreditRequirement(id: string): Promise<TaxCreditRequirement | undefined> {
+    const result = await db.select()
+      .from(taxCreditRequirements)
+      .where(eq(taxCreditRequirements.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getTaxCreditRequirementsByProject(projectId: string): Promise<TaxCreditRequirement[]> {
+    return await db.select()
+      .from(taxCreditRequirements)
+      .where(eq(taxCreditRequirements.projectId, projectId))
+      .orderBy(taxCreditRequirements.requirementType);
+  }
+
+  async updateTaxCreditRequirement(id: string, requirement: Partial<InsertTaxCreditRequirement>): Promise<TaxCreditRequirement | undefined> {
+    const result = await db.update(taxCreditRequirements)
+      .set({
+        ...requirement,
+        updatedAt: new Date(),
+      })
+      .where(eq(taxCreditRequirements.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteTaxCreditRequirement(id: string): Promise<boolean> {
+    const result = await db.delete(taxCreditRequirements)
+      .where(eq(taxCreditRequirements.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Tax Credit Documents
+  async createTaxCreditDocument(document: InsertTaxCreditDocument): Promise<TaxCreditDocument> {
+    const result = await db.insert(taxCreditDocuments)
+      .values(document)
+      .returning();
+    return result[0];
+  }
+
+  async getTaxCreditDocument(id: string): Promise<TaxCreditDocument | undefined> {
+    const result = await db.select()
+      .from(taxCreditDocuments)
+      .where(eq(taxCreditDocuments.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getTaxCreditDocumentsByProject(projectId: string): Promise<TaxCreditDocument[]> {
+    return await db.select()
+      .from(taxCreditDocuments)
+      .where(eq(taxCreditDocuments.projectId, projectId))
+      .orderBy(desc(taxCreditDocuments.uploadDate));
+  }
+
+  async updateTaxCreditDocument(id: string, document: Partial<InsertTaxCreditDocument>): Promise<TaxCreditDocument | undefined> {
+    const result = await db.update(taxCreditDocuments)
+      .set(document)
+      .where(eq(taxCreditDocuments.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteTaxCreditDocument(id: string): Promise<boolean> {
+    const result = await db.delete(taxCreditDocuments)
+      .where(eq(taxCreditDocuments.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Unit Certifications
+  async createUnitCertification(certification: InsertUnitCertification): Promise<UnitCertification> {
+    const result = await db.insert(unitCertifications)
+      .values(certification)
+      .returning();
+    return result[0];
+  }
+
+  async getUnitCertification(id: string): Promise<UnitCertification | undefined> {
+    const result = await db.select()
+      .from(unitCertifications)
+      .where(eq(unitCertifications.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getUnitCertificationsByProject(projectId: string): Promise<UnitCertification[]> {
+    return await db.select()
+      .from(unitCertifications)
+      .where(eq(unitCertifications.projectId, projectId))
+      .orderBy(unitCertifications.unitAddress);
+  }
+
+  async getUnitCertificationByJob(jobId: string): Promise<UnitCertification | undefined> {
+    const result = await db.select()
+      .from(unitCertifications)
+      .where(eq(unitCertifications.jobId, jobId))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateUnitCertification(id: string, certification: Partial<InsertUnitCertification>): Promise<UnitCertification | undefined> {
+    const result = await db.update(unitCertifications)
+      .set({
+        ...certification,
+        updatedAt: new Date(),
+      })
+      .where(eq(unitCertifications.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteUnitCertification(id: string): Promise<boolean> {
+    const result = await db.delete(unitCertifications)
+      .where(eq(unitCertifications.id, id))
       .returning();
     return result.length > 0;
   }

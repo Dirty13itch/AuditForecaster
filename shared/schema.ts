@@ -871,6 +871,95 @@ export const financialSettings = pgTable("financial_settings", {
   index("idx_financial_settings_user_id").on(table.userId),
 ]);
 
+// 45L Tax Credit Tables
+export const taxCreditProjects = pgTable("tax_credit_projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  projectName: text("project_name").notNull(),
+  projectType: text("project_type", { 
+    enum: ["single_family", "multifamily", "manufactured"] 
+  }).notNull(),
+  totalUnits: integer("total_units").notNull(),
+  qualifiedUnits: integer("qualified_units").default(0),
+  creditAmount: decimal("credit_amount", { precision: 12, scale: 2 }).default("0"),
+  certificationDate: timestamp("certification_date"),
+  taxYear: integer("tax_year").notNull(),
+  status: text("status", { 
+    enum: ["pending", "certified", "claimed", "denied"] 
+  }).notNull().default("pending"),
+  softwareTool: text("software_tool"),
+  softwareVersion: text("software_version"),
+  referenceHome: jsonb("reference_home"),
+  qualifiedHome: jsonb("qualified_home"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+}, (table) => [
+  index("idx_tax_credit_projects_builder_id").on(table.builderId),
+  index("idx_tax_credit_projects_status").on(table.status),
+  index("idx_tax_credit_projects_tax_year").on(table.taxYear),
+]);
+
+export const taxCreditRequirements = pgTable("tax_credit_requirements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => taxCreditProjects.id, { onDelete: 'cascade' }),
+  requirementType: text("requirement_type").notNull(),
+  description: text("description").notNull(),
+  status: text("status", { 
+    enum: ["pending", "completed", "failed", "na"] 
+  }).notNull().default("pending"),
+  completedDate: timestamp("completed_date"),
+  notes: text("notes"),
+  documentIds: text("document_ids").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_tax_credit_requirements_project_id").on(table.projectId),
+  index("idx_tax_credit_requirements_status").on(table.status),
+]);
+
+export const taxCreditDocuments = pgTable("tax_credit_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => taxCreditProjects.id, { onDelete: 'cascade' }),
+  documentType: text("document_type").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  uploadDate: timestamp("upload_date").defaultNow(),
+  expirationDate: timestamp("expiration_date"),
+  status: text("status", { 
+    enum: ["active", "expired", "archived"] 
+  }).notNull().default("active"),
+  notes: text("notes"),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+}, (table) => [
+  index("idx_tax_credit_documents_project_id").on(table.projectId),
+  index("idx_tax_credit_documents_status").on(table.status),
+]);
+
+export const unitCertifications = pgTable("unit_certifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => taxCreditProjects.id, { onDelete: 'cascade' }),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
+  unitAddress: text("unit_address").notNull(),
+  unitNumber: text("unit_number"),
+  heatingLoad: decimal("heating_load", { precision: 10, scale: 2 }),
+  coolingLoad: decimal("cooling_load", { precision: 10, scale: 2 }),
+  annualEnergyUse: decimal("annual_energy_use", { precision: 10, scale: 2 }),
+  percentSavings: decimal("percent_savings", { precision: 5, scale: 2 }),
+  qualified: boolean("qualified").default(false),
+  certificationDate: timestamp("certification_date"),
+  blowerDoorACH50: decimal("blower_door_ach50", { precision: 8, scale: 2 }),
+  ductLeakageCFM25: decimal("duct_leakage_cfm25", { precision: 8, scale: 2 }),
+  hersIndex: integer("hers_index"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_unit_certifications_project_id").on(table.projectId),
+  index("idx_unit_certifications_job_id").on(table.jobId),
+  index("idx_unit_certifications_qualified").on(table.qualified),
+]);
+
 // For Replit Auth upsert operations
 export const upsertUserSchema = createInsertSchema(users).pick({
   id: true,
@@ -1080,6 +1169,33 @@ export const insertFinancialSettingsSchema = createInsertSchema(financialSetting
   paymentTermsDays: z.coerce.number().nullable().optional(),
 });
 
+// 45L Tax Credit Insert Schemas
+export const insertTaxCreditProjectSchema = createInsertSchema(taxCreditProjects).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  taxYear: z.coerce.number(),
+  totalUnits: z.coerce.number(),
+  qualifiedUnits: z.coerce.number().optional(),
+  certificationDate: z.coerce.date().nullable().optional(),
+});
+
+export const insertTaxCreditRequirementSchema = createInsertSchema(taxCreditRequirements).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  completedDate: z.coerce.date().nullable().optional(),
+});
+
+export const insertTaxCreditDocumentSchema = createInsertSchema(taxCreditDocuments).omit({ id: true, uploadDate: true }).extend({
+  expirationDate: z.coerce.date().nullable().optional(),
+});
+
+export const insertUnitCertificationSchema = createInsertSchema(unitCertifications).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  certificationDate: z.coerce.date().nullable().optional(),
+  heatingLoad: z.coerce.number().nullable().optional(),
+  coolingLoad: z.coerce.number().nullable().optional(),
+  annualEnergyUse: z.coerce.number().nullable().optional(),
+  percentSavings: z.coerce.number().nullable().optional(),
+  blowerDoorACH50: z.coerce.number().nullable().optional(),
+  ductLeakageCFM25: z.coerce.number().nullable().optional(),
+  hersIndex: z.coerce.number().nullable().optional(),
+});
+
 export const insertDuctLeakageTestSchema = createInsertSchema(ductLeakageTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   testDate: z.coerce.date(),
   equipmentCalibrationDate: z.coerce.date().nullable().optional(),
@@ -1204,6 +1320,16 @@ export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type FinancialSettings = typeof financialSettings.$inferSelect;
 export type InsertFinancialSettings = z.infer<typeof insertFinancialSettingsSchema>;
+
+// 45L Tax Credit Types
+export type TaxCreditProject = typeof taxCreditProjects.$inferSelect;
+export type InsertTaxCreditProject = z.infer<typeof insertTaxCreditProjectSchema>;
+export type TaxCreditRequirement = typeof taxCreditRequirements.$inferSelect;
+export type InsertTaxCreditRequirement = z.infer<typeof insertTaxCreditRequirementSchema>;
+export type TaxCreditDocument = typeof taxCreditDocuments.$inferSelect;
+export type InsertTaxCreditDocument = z.infer<typeof insertTaxCreditDocumentSchema>;
+export type UnitCertification = typeof unitCertifications.$inferSelect;
+export type InsertUnitCertification = z.infer<typeof insertUnitCertificationSchema>;
 
 export interface CalendarImportLogsResponse {
   logs: CalendarImportLog[];

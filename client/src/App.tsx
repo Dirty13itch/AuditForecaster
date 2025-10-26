@@ -41,6 +41,10 @@ import AdminDiagnostics from "@/pages/AdminDiagnostics";
 import CalendarPOC from "@/pages/CalendarPOC";
 import CalendarReview from "@/pages/CalendarReview";
 import CalendarImportHistory from "@/pages/CalendarImportHistory";
+import TaxCredit45L from "@/pages/TaxCredit45L";
+import TaxCreditProject from "@/pages/TaxCreditProject";
+import TaxCreditCompliance from "@/pages/TaxCreditCompliance";
+import TaxCreditReports from "@/pages/TaxCreditReports";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
@@ -194,6 +198,31 @@ function Router() {
       <Route path="/calendar-imports" component={() => (
         <RouteErrorBoundary>
           <CalendarImportHistory />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/tax-credits" component={() => (
+        <RouteErrorBoundary>
+          <TaxCredit45L />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/tax-credits/projects/new" component={() => (
+        <RouteErrorBoundary>
+          <TaxCreditProject />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/tax-credits/projects/:id" component={() => (
+        <RouteErrorBoundary>
+          <TaxCreditProject />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/tax-credits/compliance" component={() => (
+        <RouteErrorBoundary>
+          <TaxCreditCompliance />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/tax-credits/reports" component={() => (
+        <RouteErrorBoundary>
+          <TaxCreditReports />
         </RouteErrorBoundary>
       )} />
       <Route path="/inspection/:id" component={() => (

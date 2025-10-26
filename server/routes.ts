@@ -46,6 +46,10 @@ import {
   insertInvoiceSchema,
   insertPaymentSchema,
   insertFinancialSettingsSchema,
+  insertTaxCreditProjectSchema,
+  insertTaxCreditRequirementSchema,
+  insertTaxCreditDocumentSchema,
+  insertUnitCertificationSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -5666,6 +5670,369 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logError('Achievements/Seed', error);
       res.status(500).json({ message: 'Failed to seed achievements' });
+    }
+  });
+
+  // 45L Tax Credit API Endpoints
+  
+  // Tax Credit Projects
+  app.get("/api/tax-credit-projects", isAuthenticated, async (req, res) => {
+    try {
+      const params = paginationParamsSchema.parse(req.query);
+      const result = await storage.getTaxCreditProjectsPaginated(params);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch tax credit projects');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/tax-credit-projects/:id", isAuthenticated, async (req, res) => {
+    try {
+      const project = await storage.getTaxCreditProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Tax credit project not found" });
+      }
+      res.json(project);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch tax credit project');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/tax-credit-projects/builder/:builderId", isAuthenticated, async (req, res) => {
+    try {
+      const projects = await storage.getTaxCreditProjectsByBuilder(req.params.builderId);
+      res.json(projects);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder tax credit projects');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/tax-credit-projects/year/:year", isAuthenticated, async (req, res) => {
+    try {
+      const year = parseInt(req.params.year);
+      if (isNaN(year)) {
+        return res.status(400).json({ message: "Invalid year parameter" });
+      }
+      const projects = await storage.getTaxCreditProjectsByYear(year);
+      res.json(projects);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch tax credit projects by year');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/tax-credit-projects", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = insertTaxCreditProjectSchema.parse({
+        ...req.body,
+        createdBy: userId,
+        creditAmount: (req.body.qualifiedUnits || 0) * 2500,
+      });
+      
+      const project = await storage.createTaxCreditProject(validated);
+      
+      await createAuditLog(req, {
+        action: 'created',
+        resourceType: 'tax_credit_project',
+        resourceId: project.id,
+        metadata: { projectName: project.projectName },
+      });
+      
+      res.json(project);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create tax credit project');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const updates = req.body;
+      
+      // Recalculate credit amount if qualified units changed
+      if (updates.qualifiedUnits !== undefined) {
+        updates.creditAmount = updates.qualifiedUnits * 2500;
+      }
+      
+      const project = await storage.updateTaxCreditProject(req.params.id, updates);
+      if (!project) {
+        return res.status(404).json({ message: "Tax credit project not found" });
+      }
+      
+      await createAuditLog(req, {
+        action: 'updated',
+        resourceType: 'tax_credit_project',
+        resourceId: project.id,
+        metadata: { updates },
+      });
+      
+      res.json(project);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update tax credit project');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const success = await storage.deleteTaxCreditProject(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Tax credit project not found" });
+      }
+      
+      await createAuditLog(req, {
+        action: 'deleted',
+        resourceType: 'tax_credit_project',
+        resourceId: req.params.id,
+      });
+      
+      res.json({ message: "Tax credit project deleted successfully" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete tax credit project');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Tax Credit Requirements
+  app.get("/api/tax-credit-requirements/project/:projectId", isAuthenticated, async (req, res) => {
+    try {
+      const requirements = await storage.getTaxCreditRequirementsByProject(req.params.projectId);
+      res.json(requirements);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch tax credit requirements');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/tax-credit-requirements", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertTaxCreditRequirementSchema.parse(req.body);
+      const requirement = await storage.createTaxCreditRequirement(validated);
+      
+      await createAuditLog(req, {
+        action: 'created',
+        resourceType: 'tax_credit_requirement',
+        resourceId: requirement.id,
+        metadata: { projectId: requirement.projectId },
+      });
+      
+      res.json(requirement);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create tax credit requirement');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/tax-credit-requirements/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const requirement = await storage.updateTaxCreditRequirement(req.params.id, req.body);
+      if (!requirement) {
+        return res.status(404).json({ message: "Tax credit requirement not found" });
+      }
+      res.json(requirement);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update tax credit requirement');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Tax Credit Documents
+  app.get("/api/tax-credit-documents/project/:projectId", isAuthenticated, async (req, res) => {
+    try {
+      const documents = await storage.getTaxCreditDocumentsByProject(req.params.projectId);
+      res.json(documents);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch tax credit documents');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/tax-credit-documents", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = insertTaxCreditDocumentSchema.parse({
+        ...req.body,
+        uploadedBy: userId,
+      });
+      
+      const document = await storage.createTaxCreditDocument(validated);
+      
+      await createAuditLog(req, {
+        action: 'uploaded',
+        resourceType: 'tax_credit_document',
+        resourceId: document.id,
+        metadata: { projectId: document.projectId, fileName: document.fileName },
+      });
+      
+      res.json(document);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create tax credit document');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/tax-credit-documents/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const success = await storage.deleteTaxCreditDocument(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Tax credit document not found" });
+      }
+      
+      await createAuditLog(req, {
+        action: 'deleted',
+        resourceType: 'tax_credit_document',
+        resourceId: req.params.id,
+      });
+      
+      res.json({ message: "Tax credit document deleted successfully" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete tax credit document');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Unit Certifications
+  app.get("/api/unit-certifications/project/:projectId", isAuthenticated, async (req, res) => {
+    try {
+      const certifications = await storage.getUnitCertificationsByProject(req.params.projectId);
+      res.json(certifications);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch unit certifications');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/unit-certifications/job/:jobId", isAuthenticated, async (req, res) => {
+    try {
+      const certification = await storage.getUnitCertificationByJob(req.params.jobId);
+      if (!certification) {
+        return res.status(404).json({ message: "Unit certification not found for this job" });
+      }
+      res.json(certification);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch unit certification by job');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/unit-certifications", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertUnitCertificationSchema.parse(req.body);
+      
+      // Auto-calculate qualification based on savings percentage and HERS index
+      if (!validated.qualified && validated.percentSavings) {
+        validated.qualified = validated.percentSavings >= 50;
+      } else if (!validated.qualified && validated.hersIndex) {
+        validated.qualified = validated.hersIndex <= 55;
+      }
+      
+      const certification = await storage.createUnitCertification(validated);
+      
+      // Update project qualified units count
+      if (certification.qualified) {
+        const project = await storage.getTaxCreditProject(certification.projectId);
+        if (project) {
+          await storage.updateTaxCreditProject(project.id, {
+            qualifiedUnits: (project.qualifiedUnits || 0) + 1,
+            creditAmount: ((project.qualifiedUnits || 0) + 1) * 2500,
+          });
+        }
+      }
+      
+      await createAuditLog(req, {
+        action: 'created',
+        resourceType: 'unit_certification',
+        resourceId: certification.id,
+        metadata: { 
+          projectId: certification.projectId, 
+          unitAddress: certification.unitAddress,
+          qualified: certification.qualified,
+        },
+      });
+      
+      res.json(certification);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create unit certification');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/unit-certifications/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const updates = req.body;
+      
+      // Recalculate qualification if relevant fields changed
+      if (updates.percentSavings !== undefined && updates.qualified === undefined) {
+        updates.qualified = updates.percentSavings >= 50;
+      } else if (updates.hersIndex !== undefined && updates.qualified === undefined) {
+        updates.qualified = updates.hersIndex <= 55;
+      }
+      
+      const certification = await storage.updateUnitCertification(req.params.id, updates);
+      if (!certification) {
+        return res.status(404).json({ message: "Unit certification not found" });
+      }
+      
+      res.json(certification);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'update unit certification');
+      res.status(status).json({ message });
+    }
+  });
+
+  // 45L Tax Credit Summary Dashboard Endpoint
+  app.get("/api/tax-credit-summary", isAuthenticated, async (req, res) => {
+    try {
+      const currentYear = new Date().getFullYear();
+      
+      // Get all projects for current year
+      const projects = await storage.getTaxCreditProjectsByYear(currentYear);
+      
+      // Calculate summary statistics
+      const summary = {
+        totalProjects: projects.length,
+        pendingProjects: projects.filter(p => p.status === 'pending').length,
+        certifiedProjects: projects.filter(p => p.status === 'certified').length,
+        totalUnits: projects.reduce((sum, p) => sum + (p.totalUnits || 0), 0),
+        qualifiedUnits: projects.reduce((sum, p) => sum + (p.qualifiedUnits || 0), 0),
+        totalPotentialCredits: projects.reduce((sum, p) => sum + parseFloat(p.creditAmount || '0'), 0),
+        complianceRate: projects.length > 0 
+          ? (projects.filter(p => p.status === 'certified').length / projects.length) * 100 
+          : 0,
+        projectsByBuilder: projects.reduce((acc, p) => {
+          acc[p.builderId] = (acc[p.builderId] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+      };
+      
+      res.json(summary);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch tax credit summary');
+      res.status(status).json({ message });
     }
   });
 
