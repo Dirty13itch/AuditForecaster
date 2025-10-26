@@ -97,6 +97,16 @@ import {
   type InsertEquipmentMaintenance,
   type EquipmentCheckout,
   type InsertEquipmentCheckout,
+  type QaInspectionScore,
+  type InsertQaInspectionScore,
+  type QaChecklist,
+  type InsertQaChecklist,
+  type QaChecklistItem,
+  type InsertQaChecklistItem,
+  type QaChecklistResponse,
+  type InsertQaChecklistResponse,
+  type QaPerformanceMetric,
+  type InsertQaPerformanceMetric,
   type ScoreSummary,
   users,
   builders,
@@ -147,6 +157,11 @@ import {
   equipmentCalibrations,
   equipmentMaintenance,
   equipmentCheckouts,
+  qaInspectionScores,
+  qaChecklists,
+  qaChecklistItems,
+  qaChecklistResponses,
+  qaPerformanceMetrics,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -584,6 +599,65 @@ export interface IStorage {
   checkInEquipment(checkoutId: string, actualReturn: Date, condition: string, notes?: string): Promise<EquipmentCheckout | undefined>;
   updateEquipmentCheckout(id: string, checkout: Partial<InsertEquipmentCheckout>): Promise<EquipmentCheckout | undefined>;
   deleteEquipmentCheckout(id: string): Promise<boolean>;
+
+  // Quality Assurance Operations
+  // QA Inspection Scores
+  createQaInspectionScore(score: InsertQaInspectionScore): Promise<QaInspectionScore>;
+  getQaInspectionScore(id: string): Promise<QaInspectionScore | undefined>;
+  getQaInspectionScoreByJob(jobId: string): Promise<QaInspectionScore | undefined>;
+  getQaInspectionScoresByInspector(inspectorId: string): Promise<QaInspectionScore[]>;
+  getQaInspectionScoresByReviewStatus(status: string): Promise<QaInspectionScore[]>;
+  getQaInspectionScoresPaginated(params: PaginationParams): Promise<PaginatedResult<QaInspectionScore>>;
+  updateQaInspectionScore(id: string, score: Partial<InsertQaInspectionScore>): Promise<QaInspectionScore | undefined>;
+  reviewQaInspectionScore(id: string, reviewerId: string, status: string, notes?: string): Promise<QaInspectionScore | undefined>;
+  deleteQaInspectionScore(id: string): Promise<boolean>;
+
+  // QA Checklists
+  createQaChecklist(checklist: InsertQaChecklist): Promise<QaChecklist>;
+  getQaChecklist(id: string): Promise<QaChecklist | undefined>;
+  getAllQaChecklists(): Promise<QaChecklist[]>;
+  getQaChecklistsByCategory(category: string): Promise<QaChecklist[]>;
+  getActiveQaChecklists(): Promise<QaChecklist[]>;
+  updateQaChecklist(id: string, checklist: Partial<InsertQaChecklist>): Promise<QaChecklist | undefined>;
+  toggleQaChecklistActive(id: string): Promise<QaChecklist | undefined>;
+  deleteQaChecklist(id: string): Promise<boolean>;
+
+  // QA Checklist Items
+  createQaChecklistItem(item: InsertQaChecklistItem): Promise<QaChecklistItem>;
+  getQaChecklistItem(id: string): Promise<QaChecklistItem | undefined>;
+  getQaChecklistItems(checklistId: string): Promise<QaChecklistItem[]>;
+  getCriticalQaChecklistItems(checklistId: string): Promise<QaChecklistItem[]>;
+  updateQaChecklistItem(id: string, item: Partial<InsertQaChecklistItem>): Promise<QaChecklistItem | undefined>;
+  reorderQaChecklistItems(checklistId: string, itemIds: string[]): Promise<boolean>;
+  deleteQaChecklistItem(id: string): Promise<boolean>;
+
+  // QA Checklist Responses
+  createQaChecklistResponse(response: InsertQaChecklistResponse): Promise<QaChecklistResponse>;
+  getQaChecklistResponse(id: string): Promise<QaChecklistResponse | undefined>;
+  getQaChecklistResponsesByJob(jobId: string): Promise<QaChecklistResponse[]>;
+  getQaChecklistResponsesByChecklist(checklistId: string): Promise<QaChecklistResponse[]>;
+  getQaChecklistResponsesByUser(userId: string): Promise<QaChecklistResponse[]>;
+  bulkCreateQaChecklistResponses(responses: InsertQaChecklistResponse[]): Promise<QaChecklistResponse[]>;
+  updateQaChecklistResponse(id: string, response: Partial<InsertQaChecklistResponse>): Promise<QaChecklistResponse | undefined>;
+  deleteQaChecklistResponse(id: string): Promise<boolean>;
+
+  // QA Performance Metrics
+  createQaPerformanceMetric(metric: InsertQaPerformanceMetric): Promise<QaPerformanceMetric>;
+  getQaPerformanceMetric(id: string): Promise<QaPerformanceMetric | undefined>;
+  getQaPerformanceMetricsByUser(userId: string): Promise<QaPerformanceMetric[]>;
+  getQaPerformanceMetricsByPeriod(period: string, startDate: Date, endDate: Date): Promise<QaPerformanceMetric[]>;
+  getLatestQaPerformanceMetric(userId: string, period: string): Promise<QaPerformanceMetric | undefined>;
+  getTeamQaPerformanceMetrics(period: string, startDate: Date, endDate: Date): Promise<QaPerformanceMetric[]>;
+  calculateQaPerformanceMetrics(userId: string, period: string, startDate: Date, endDate: Date): Promise<QaPerformanceMetric>;
+  updateQaPerformanceMetric(id: string, metric: Partial<InsertQaPerformanceMetric>): Promise<QaPerformanceMetric | undefined>;
+  deleteQaPerformanceMetric(id: string): Promise<boolean>;
+
+  // QA Analytics
+  getQaScoreTrends(userId?: string, days?: number): Promise<any>;
+  getQaCategoryBreakdown(userId?: string, startDate?: Date, endDate?: Date): Promise<any>;
+  getQaLeaderboard(period: string, limit?: number): Promise<any>;
+  getQaTrainingNeeds(): Promise<any>;
+  getQaComplianceRate(startDate?: Date, endDate?: Date): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {

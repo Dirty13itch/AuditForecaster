@@ -1015,6 +1015,112 @@ export const equipmentCheckouts = pgTable("equipment_checkouts", {
   index("idx_equipment_checkouts_actual_return").on(table.actualReturn),
 ]);
 
+// Quality Assurance Tables
+export const qaInspectionScores = pgTable("qa_inspection_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  inspectorId: varchar("inspector_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reportInstanceId: varchar("report_instance_id").references(() => reportInstances.id, { onDelete: 'set null' }),
+  totalScore: decimal("total_score", { precision: 5, scale: 2 }).notNull(),
+  maxScore: decimal("max_score", { precision: 5, scale: 2 }).notNull().default("100"),
+  percentage: decimal("percentage", { precision: 5, scale: 2 }).notNull(),
+  grade: text("grade", { enum: ["A", "B", "C", "D", "F"] }).notNull(),
+  completenessScore: decimal("completeness_score", { precision: 5, scale: 2 }),
+  accuracyScore: decimal("accuracy_score", { precision: 5, scale: 2 }),
+  complianceScore: decimal("compliance_score", { precision: 5, scale: 2 }),
+  photoQualityScore: decimal("photo_quality_score", { precision: 5, scale: 2 }),
+  timelinessScore: decimal("timeliness_score", { precision: 5, scale: 2 }),
+  reviewStatus: text("review_status", { 
+    enum: ["pending", "reviewed", "approved", "needs_improvement"] 
+  }).notNull().default("pending"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: 'set null' }),
+  reviewDate: timestamp("review_date"),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_qa_inspection_scores_job_id").on(table.jobId),
+  index("idx_qa_inspection_scores_inspector_id").on(table.inspectorId),
+  index("idx_qa_inspection_scores_review_status").on(table.reviewStatus),
+  index("idx_qa_inspection_scores_grade").on(table.grade),
+  index("idx_qa_inspection_scores_created_at").on(table.createdAt),
+]);
+
+export const qaChecklists = pgTable("qa_checklists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  category: text("category", { 
+    enum: ["pre_inspection", "during", "post", "compliance"] 
+  }).notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  requiredForJobTypes: text("required_for_job_types").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_qa_checklists_category").on(table.category),
+  index("idx_qa_checklists_is_active").on(table.isActive),
+]);
+
+export const qaChecklistItems = pgTable("qa_checklist_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  checklistId: varchar("checklist_id").notNull().references(() => qaChecklists.id, { onDelete: 'cascade' }),
+  itemText: text("item_text").notNull(),
+  isCritical: boolean("is_critical").notNull().default(false),
+  category: text("category"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  helpText: text("help_text"),
+  requiredEvidence: text("required_evidence", { 
+    enum: ["photo", "measurement", "signature", "note", "none"] 
+  }).default("none"),
+}, (table) => [
+  index("idx_qa_checklist_items_checklist_id").on(table.checklistId),
+  index("idx_qa_checklist_items_is_critical").on(table.isCritical),
+  index("idx_qa_checklist_items_sort_order").on(table.sortOrder),
+]);
+
+export const qaChecklistResponses = pgTable("qa_checklist_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  checklistId: varchar("checklist_id").notNull().references(() => qaChecklists.id, { onDelete: 'cascade' }),
+  itemId: varchar("item_id").notNull().references(() => qaChecklistItems.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  response: text("response", { 
+    enum: ["completed", "skipped", "na"] 
+  }).notNull(),
+  notes: text("notes"),
+  evidenceIds: text("evidence_ids").array(),
+  completedAt: timestamp("completed_at").defaultNow(),
+}, (table) => [
+  index("idx_qa_checklist_responses_job_id").on(table.jobId),
+  index("idx_qa_checklist_responses_checklist_id").on(table.checklistId),
+  index("idx_qa_checklist_responses_user_id").on(table.userId),
+  index("idx_qa_checklist_responses_response").on(table.response),
+]);
+
+export const qaPerformanceMetrics = pgTable("qa_performance_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  period: text("period", { 
+    enum: ["month", "quarter", "year"] 
+  }).notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  avgScore: decimal("avg_score", { precision: 5, scale: 2 }),
+  jobsCompleted: integer("jobs_completed").notNull().default(0),
+  jobsReviewed: integer("jobs_reviewed").notNull().default(0),
+  onTimeRate: decimal("on_time_rate", { precision: 5, scale: 2 }),
+  firstPassRate: decimal("first_pass_rate", { precision: 5, scale: 2 }),
+  customerSatisfaction: decimal("customer_satisfaction", { precision: 5, scale: 2 }),
+  strongAreas: text("strong_areas").array(),
+  improvementAreas: text("improvement_areas").array(),
+  calculatedAt: timestamp("calculated_at").defaultNow(),
+}, (table) => [
+  index("idx_qa_performance_metrics_user_id").on(table.userId),
+  index("idx_qa_performance_metrics_period").on(table.period),
+  index("idx_qa_performance_metrics_period_dates").on(table.periodStart, table.periodEnd),
+  index("idx_qa_performance_metrics_calculated_at").on(table.calculatedAt),
+]);
+
 // 45L Tax Credit Tables
 export const taxCreditProjects = pgTable("tax_credit_projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1376,6 +1482,38 @@ export const insertEquipmentCheckoutSchema = createInsertSchema(equipmentCheckou
   actualReturn: z.coerce.date().nullable().optional(),
 });
 
+// QA Insert Schemas
+export const insertQaInspectionScoreSchema = createInsertSchema(qaInspectionScores).omit({ id: true, createdAt: true }).extend({
+  reviewDate: z.coerce.date().nullable().optional(),
+  totalScore: z.coerce.number(),
+  maxScore: z.coerce.number().default(100),
+  percentage: z.coerce.number(),
+  completenessScore: z.coerce.number().nullable().optional(),
+  accuracyScore: z.coerce.number().nullable().optional(),
+  complianceScore: z.coerce.number().nullable().optional(),
+  photoQualityScore: z.coerce.number().nullable().optional(),
+  timelinessScore: z.coerce.number().nullable().optional(),
+});
+
+export const insertQaChecklistSchema = createInsertSchema(qaChecklists).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const insertQaChecklistItemSchema = createInsertSchema(qaChecklistItems).omit({ id: true }).extend({
+  sortOrder: z.coerce.number().default(0),
+});
+
+export const insertQaChecklistResponseSchema = createInsertSchema(qaChecklistResponses).omit({ id: true, completedAt: true });
+
+export const insertQaPerformanceMetricSchema = createInsertSchema(qaPerformanceMetrics).omit({ id: true, calculatedAt: true }).extend({
+  periodStart: z.coerce.date(),
+  periodEnd: z.coerce.date(),
+  avgScore: z.coerce.number().nullable().optional(),
+  jobsCompleted: z.coerce.number().default(0),
+  jobsReviewed: z.coerce.number().default(0),
+  onTimeRate: z.coerce.number().nullable().optional(),
+  firstPassRate: z.coerce.number().nullable().optional(),
+  customerSatisfaction: z.coerce.number().nullable().optional(),
+});
+
 export const insertFieldDependencySchema = createInsertSchema(fieldDependencies).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   priority: z.coerce.number().nullable().optional(),
 });
@@ -1528,6 +1666,18 @@ export type EquipmentMaintenance = typeof equipmentMaintenance.$inferSelect;
 export type InsertEquipmentMaintenance = z.infer<typeof insertEquipmentMaintenanceSchema>;
 export type EquipmentCheckout = typeof equipmentCheckouts.$inferSelect;
 export type InsertEquipmentCheckout = z.infer<typeof insertEquipmentCheckoutSchema>;
+
+// QA Types
+export type QaInspectionScore = typeof qaInspectionScores.$inferSelect;
+export type InsertQaInspectionScore = z.infer<typeof insertQaInspectionScoreSchema>;
+export type QaChecklist = typeof qaChecklists.$inferSelect;
+export type InsertQaChecklist = z.infer<typeof insertQaChecklistSchema>;
+export type QaChecklistItem = typeof qaChecklistItems.$inferSelect;
+export type InsertQaChecklistItem = z.infer<typeof insertQaChecklistItemSchema>;
+export type QaChecklistResponse = typeof qaChecklistResponses.$inferSelect;
+export type InsertQaChecklistResponse = z.infer<typeof insertQaChecklistResponseSchema>;
+export type QaPerformanceMetric = typeof qaPerformanceMetrics.$inferSelect;
+export type InsertQaPerformanceMetric = z.infer<typeof insertQaPerformanceMetricSchema>;
 
 export interface CalendarImportLogsResponse {
   logs: CalendarImportLog[];

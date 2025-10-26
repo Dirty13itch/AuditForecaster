@@ -50,6 +50,11 @@ import TaxCreditReports from "@/pages/TaxCreditReports";
 import Equipment from "@/pages/Equipment";
 import EquipmentDetails from "@/pages/EquipmentDetails";
 import CalibrationSchedule from "@/pages/CalibrationSchedule";
+import QualityAssurance from "@/pages/QualityAssurance";
+import QAScoring from "@/pages/QAScoring";
+import QAChecklists from "@/pages/QAChecklists";
+import QAPerformance from "@/pages/QAPerformance";
+import QAReview from "@/components/QAReview";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
@@ -243,6 +248,36 @@ function Router() {
       <Route path="/equipment/:id" component={() => (
         <RouteErrorBoundary>
           <EquipmentDetails />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/qa" component={() => (
+        <RouteErrorBoundary>
+          <QualityAssurance />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/qa/scoring" component={() => (
+        <RouteErrorBoundary>
+          <QAScoring />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/qa/scoring/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <QAScoring />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/qa/checklists" component={() => (
+        <RouteErrorBoundary>
+          <QAChecklists />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/qa/performance" component={() => (
+        <RouteErrorBoundary>
+          <QAPerformance />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/qa/review" component={() => (
+        <RouteErrorBoundary>
+          <QAReview />
         </RouteErrorBoundary>
       )} />
       <Route path="/inspection/:id" component={() => (
