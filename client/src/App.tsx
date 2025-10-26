@@ -47,6 +47,7 @@ import AdminDiagnostics from "@/pages/AdminDiagnostics";
 import CalendarPOC from "@/pages/CalendarPOC";
 import CalendarReview from "@/pages/CalendarReview";
 import CalendarImportHistory from "@/pages/CalendarImportHistory";
+import CalendarImportQueuePage from "@/pages/CalendarImportQueuePage";
 import TaxCredit45L from "@/pages/TaxCredit45L";
 import TaxCreditProject from "@/pages/TaxCreditProject";
 import TaxCreditCompliance from "@/pages/TaxCreditCompliance";
@@ -212,6 +213,11 @@ function Router() {
       <Route path="/admin/diagnostics" component={() => (
         <RouteErrorBoundary>
           <AdminDiagnostics />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/admin/calendar-import" component={() => (
+        <RouteErrorBoundary>
+          <CalendarImportQueuePage />
         </RouteErrorBoundary>
       )} />
       <Route path="/calendar-poc" component={() => (

@@ -2171,21 +2171,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/google-events", isAuthenticated, async (req, res) => {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, forceSync } = req.query;
       
       if (!startDate || !endDate) {
         return res.status(400).json({ message: 'startDate and endDate are required' });
       }
       
-      const events = await storage.getGoogleEventsByDateRange(
-        new Date(startDate as string),
-        new Date(endDate as string)
-      );
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      
+      // If forceSync is true or if we don't have recent data, fetch from Google Calendar
+      if (forceSync === 'true') {
+        serverLogger.info('[API] Force syncing Google Calendar events');
+        
+        // Import the extended service
+        const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+        
+        // Fetch fresh events from Building Knowledge calendar
+        const freshEvents = await extendedService.fetchBuildingKnowledgeEvents(start, end);
+        serverLogger.info(`[API] Fetched ${freshEvents.length} events from Building Knowledge calendar`);
+        
+        // Return the fresh events
+        return res.json(freshEvents);
+      }
+      
+      // Otherwise, get from database (which may be stale)
+      const events = await storage.getGoogleEventsByDateRange(start, end);
+      
+      // If we have no events, try to fetch from Google Calendar
+      if (!events || events.length === 0) {
+        serverLogger.info('[API] No cached events found, fetching from Google Calendar');
+        
+        // Import the extended service
+        const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+        
+        // Fetch fresh events from Building Knowledge calendar
+        const freshEvents = await extendedService.fetchBuildingKnowledgeEvents(start, end);
+        serverLogger.info(`[API] Fetched ${freshEvents.length} fresh events from Building Knowledge calendar`);
+        
+        return res.json(freshEvents);
+      }
       
       res.json(events);
     } catch (error: any) {
       serverLogger.error('[API] Error fetching Google events:', error);
       res.status(500).json({ message: 'Failed to fetch Google events', error: error.message });
+    }
+  });
+
+  // Test Google Calendar connection and fetch available calendars
+  app.get('/api/google-calendar/test', isAuthenticated, requireRole('admin'), async (req, res) => {
+    try {
+      // Import the extended service
+      const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+      
+      const testResult = await extendedService.testConnection();
+      res.json(testResult);
+    } catch (error: any) {
+      serverLogger.error('[API] Error testing Google Calendar connection:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to test Google Calendar connection', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Sync Google Calendar events (admin only)
+  app.post('/api/google-calendar/sync', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { startDate, endDate } = req.body;
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: 'startDate and endDate are required' });
+      }
+      
+      const userId = req.user.claims.sub;
+      
+      // Import the extended service
+      const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+      
+      // Perform intelligent sync
+      const syncResult = await extendedService.intelligentEventSync(
+        new Date(startDate),
+        new Date(endDate),
+        userId
+      );
+      
+      serverLogger.info('[API] Google Calendar sync complete:', syncResult);
+      res.json({
+        success: true,
+        message: 'Calendar sync completed',
+        ...syncResult,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error syncing Google Calendar:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to sync Google Calendar', 
+        error: error.message 
+      });
     }
   });
 

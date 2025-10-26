@@ -112,6 +112,12 @@ const menuItems = [
     icon: Activity,
     adminOnly: true,
   },
+  {
+    title: "Calendar Import",
+    url: "/admin/calendar-import",
+    icon: Calendar,
+    adminOnly: true,
+  },
 ];
 
 const calendarImportItems = [

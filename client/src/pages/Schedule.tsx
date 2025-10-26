@@ -146,19 +146,41 @@ export default function Schedule() {
     },
   });
 
-  const { data: googleOnlyEvents = [] } = useQuery<GoogleEvent[]>({
+  const { data: googleOnlyEvents = [], isLoading: googleEventsLoading, refetch: refetchGoogleEvents } = useQuery<GoogleEvent[]>({
     queryKey: ['/api/google-events', startDate.toISOString(), endDate.toISOString()],
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
+        forceSync: 'true', // Always sync with Google Calendar for real-time data
       });
       const response = await fetch(`/api/google-events?${params.toString()}`, {
         credentials: 'include',
       });
-      if (!response.ok) return [];
-      return response.json();
+      if (!response.ok) {
+        console.error('[Schedule] Failed to fetch Google events');
+        setSyncStatus('error');
+        return [];
+      }
+      const events = await response.json();
+      
+      // Update sync status on successful fetch
+      if (events && events.length >= 0) {
+        setLastSyncedAt(new Date());
+        setSyncStatus('synced');
+        // Clear sync status after 3 seconds
+        const timeoutId = setTimeout(() => setSyncStatus('idle'), 3000);
+        setSyncStatusTimeoutId(prev => {
+          if (prev) clearTimeout(prev);
+          return timeoutId;
+        });
+      }
+      
+      return events;
     },
+    refetchInterval: 60000, // Auto-refresh every minute
+    retry: 3,
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   const createEventMutation = useMutation({
