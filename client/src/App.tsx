@@ -32,6 +32,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import AdminDiagnostics from "@/pages/AdminDiagnostics";
 import CalendarPOC from "@/pages/CalendarPOC";
 import CalendarReview from "@/pages/CalendarReview";
+import CalendarImportHistory from "@/pages/CalendarImportHistory";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
@@ -120,6 +121,11 @@ function Router() {
       <Route path="/calendar-review" component={() => (
         <RouteErrorBoundary>
           <CalendarReview />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/calendar-imports" component={() => (
+        <RouteErrorBoundary>
+          <CalendarImportHistory />
         </RouteErrorBoundary>
       )} />
       <Route path="/inspection/:id" component={() => (

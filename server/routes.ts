@@ -4517,6 +4517,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Calendar Import Logs
+  app.get('/api/calendar/import-logs', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+      const calendarId = req.query.calendarId as string | undefined;
+      const hasErrors = req.query.hasErrors === 'true';
+      
+      const { logs, total } = await storage.getFilteredImportLogs({
+        limit,
+        offset,
+        calendarId,
+        hasErrors
+      });
+      
+      res.json({
+        logs,
+        total,
+        limit,
+        offset
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Failed to fetch calendar import logs:', error);
+      res.status(500).json({ message: 'Failed to fetch import logs' });
+    }
+  });
+
   app.post("/api/upload-sessions", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertUploadSessionSchema.parse(req.body);

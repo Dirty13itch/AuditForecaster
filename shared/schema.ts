@@ -795,3 +795,10 @@ export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
 export type UserAchievement = typeof userAchievements.$inferSelect;
 export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
+
+export interface CalendarImportLogsResponse {
+  logs: CalendarImportLog[];
+  total: number;
+  limit: number;
+  offset: number;
+}

@@ -337,6 +337,12 @@ export interface IStorage {
   createCalendarImportLog(log: InsertCalendarImportLog): Promise<CalendarImportLog>;
   getImportLogsByCalendar(calendarId: string, limit?: number): Promise<CalendarImportLog[]>;
   getRecentImportLogs(limit?: number): Promise<CalendarImportLog[]>;
+  getFilteredImportLogs(options: {
+    limit?: number;
+    offset?: number;
+    calendarId?: string;
+    hasErrors?: boolean;
+  }): Promise<{ logs: CalendarImportLog[]; total: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2401,6 +2407,49 @@ export class DatabaseStorage implements IStorage {
       .from(calendarImportLogs)
       .orderBy(desc(calendarImportLogs.importTimestamp))
       .limit(limit);
+  }
+
+  async getFilteredImportLogs(options: {
+    limit = 50,
+    offset = 0,
+    calendarId,
+    hasErrors
+  }: {
+    limit?: number;
+    offset?: number;
+    calendarId?: string;
+    hasErrors?: boolean;
+  }): Promise<{ logs: CalendarImportLog[]; total: number }> {
+    // Build filter conditions
+    const conditions = [];
+    
+    if (calendarId) {
+      conditions.push(eq(calendarImportLogs.calendarId, calendarId));
+    }
+    
+    if (hasErrors) {
+      conditions.push(sql`${calendarImportLogs.errors} IS NOT NULL AND ${calendarImportLogs.errors} != ''`);
+    }
+    
+    // Build WHERE clause
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Fetch logs with filters
+    const logs = await db.select()
+      .from(calendarImportLogs)
+      .where(whereClause)
+      .orderBy(desc(calendarImportLogs.importTimestamp))
+      .limit(limit)
+      .offset(offset);
+    
+    // Get total count with same filters
+    const countResult = await db.select({ count: sql<number>`count(*)::int` })
+      .from(calendarImportLogs)
+      .where(whereClause);
+    
+    const total = countResult[0]?.count || 0;
+    
+    return { logs, total };
   }
 }
 
