@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -16,13 +16,15 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Camera, Save, Send, ChevronDown, ChevronRight, Signature, FileText, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { CalendarIcon, Camera, Save, Send, ChevronDown, ChevronRight, Signature, FileText, CheckCircle, Clock, AlertCircle, Calculator, Eye, EyeOff } from "lucide-react";
 import { format } from "date-fns";
+import { ConditionalLogicEngine } from "@/utils/conditionalLogic";
 import type { 
   ReportInstance,
   ReportFieldValue,
   TemplateSection,
-  TemplateField
+  TemplateField,
+  FieldDependency
 } from "@shared/schema";
 
 interface SectionInstanceData {
@@ -278,6 +280,7 @@ function SectionInstance({
   section,
   fields,
   instanceData,
+  fieldStates,
   onFieldChange,
   isExpanded,
   onToggleExpanded
@@ -285,10 +288,17 @@ function SectionInstance({
   section: TemplateSection;
   fields: TemplateField[];
   instanceData: SectionInstanceData;
+  fieldStates: Record<string, { visible: boolean; required: boolean; enabled: boolean; value: any }>;
   onFieldChange: (sectionId: string, instanceIndex: number, fieldId: string, value: any) => void;
   isExpanded: boolean;
   onToggleExpanded: () => void;
 }) {
+  // Filter fields based on visibility
+  const visibleFields = fields.filter(field => {
+    const state = fieldStates[field.id];
+    return !state || state.visible !== false;
+  });
+
   return (
     <Card className="mb-4">
       <CardHeader
@@ -316,22 +326,39 @@ function SectionInstance({
       {isExpanded && (
         <CardContent>
           <div className="space-y-4">
-            {fields.map(field => (
-              <div key={field.id}>
-                <Label htmlFor={`field-${field.id}`}>
-                  {field.label}
-                  {field.isRequired && <span className="text-destructive ml-1">*</span>}
-                </Label>
-                {field.description && (
-                  <p className="text-sm text-muted-foreground mb-2">{field.description}</p>
-                )}
-                <FieldInput
-                  field={field}
-                  value={instanceData.fieldValues[field.id]}
-                  onChange={(value) => onFieldChange(section.id, instanceData.instanceIndex, field.id, value)}
-                />
-              </div>
-            ))}
+            {visibleFields.map(field => {
+              const state = fieldStates[field.id] || { visible: true, required: field.isRequired, enabled: true, value: null };
+              const isCalculated = field.fieldType === "calculation" || field.fieldType === "conditional_calculation";
+              
+              return (
+                <div 
+                  key={field.id} 
+                  className={`transition-all duration-200 ${state.visible ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}
+                >
+                  <Label htmlFor={`field-${field.id}`} className="flex items-center gap-2">
+                    {field.label}
+                    {state.required && <span className="text-destructive">*</span>}
+                    {isCalculated && <Calculator className="h-3 w-3 text-muted-foreground" />}
+                    {!state.enabled && <EyeOff className="h-3 w-3 text-muted-foreground" />}
+                  </Label>
+                  {field.description && (
+                    <p className="text-sm text-muted-foreground mb-2">{field.description}</p>
+                  )}
+                  <FieldInput
+                    field={field}
+                    value={isCalculated ? state.value : instanceData.fieldValues[field.id]}
+                    onChange={(value) => onFieldChange(section.id, instanceData.instanceIndex, field.id, value)}
+                    disabled={!state.enabled || isCalculated}
+                  />
+                  {field.conditions && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      <Eye className="inline h-3 w-3 mr-1" />
+                      This field has conditional visibility
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       )}
@@ -345,6 +372,8 @@ export default function ReportFilloutPage() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [sectionInstances, setSectionInstances] = useState<SectionInstanceData[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+  const [fieldStates, setFieldStates] = useState<Record<string, { visible: boolean; required: boolean; enabled: boolean; value: any }>>({});
+  const [conditionalEngine, setConditionalEngine] = useState<ConditionalLogicEngine | null>(null);
 
   // Fetch report instance
   const { data: reportInstance, isLoading: isLoadingInstance } = useQuery<ReportInstance>({
@@ -361,6 +390,12 @@ export default function ReportFilloutPage() {
   // Fetch template fields
   const { data: fields = [], isLoading: isLoadingFields } = useQuery<TemplateField[]>({
     queryKey: ["/api/report-templates", reportInstance?.templateId, "fields"],
+    enabled: !!reportInstance?.templateId,
+  });
+
+  // Fetch field dependencies
+  const { data: dependencies = [] } = useQuery<FieldDependency[]>({
+    queryKey: ["/api/templates", reportInstance?.templateId, "dependencies"],
     enabled: !!reportInstance?.templateId,
   });
 
@@ -400,6 +435,27 @@ export default function ReportFilloutPage() {
     }
   }, [sections, existingValues]);
 
+  // Initialize conditional logic engine
+  useEffect(() => {
+    if (fields.length > 0) {
+      const engine = new ConditionalLogicEngine(
+        fields,
+        dependencies || [],
+        fieldValues,
+        false // Set to true for debug mode
+      );
+      setConditionalEngine(engine);
+      
+      // Get initial field states
+      const states = engine.getFieldStates();
+      const stateMap: Record<string, any> = {};
+      states.forEach((state, fieldId) => {
+        stateMap[fieldId] = state;
+      });
+      setFieldStates(stateMap);
+    }
+  }, [fields, dependencies, fieldValues]);
+
   // Save field value mutation
   const saveFieldValue = useMutation({
     mutationFn: (data: any) => 
@@ -424,10 +480,22 @@ export default function ReportFilloutPage() {
 
   const handleFieldChange = (sectionId: string, instanceIndex: number, fieldId: string, value: any) => {
     // Update local state
-    setFieldValues(prev => ({
-      ...prev,
+    const newFieldValues = {
+      ...fieldValues,
       [fieldId]: value
-    }));
+    };
+    setFieldValues(newFieldValues);
+    
+    // Update conditional logic engine and evaluate conditions
+    if (conditionalEngine) {
+      conditionalEngine.updateFieldValue(fieldId, value);
+      const states = conditionalEngine.getFieldStates();
+      const stateMap: Record<string, any> = {};
+      states.forEach((state, fId) => {
+        stateMap[fId] = state;
+      });
+      setFieldStates(stateMap);
+    }
     
     // Save to backend
     const fieldData: any = {
@@ -600,6 +668,7 @@ export default function ReportFilloutPage() {
               section={section}
               fields={sectionFields}
               instanceData={instance}
+              fieldStates={fieldStates}
               onFieldChange={handleFieldChange}
               isExpanded={expandedSections.has(section.id)}
               onToggleExpanded={() => toggleSection(section.id)}

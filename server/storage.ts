@@ -31,6 +31,8 @@ import {
   type InsertTemplateSection,
   type TemplateField,
   type InsertTemplateField,
+  type FieldDependency,
+  type InsertFieldDependency,
   type ReportInstance,
   type InsertReportInstance,
   type ReportSectionInstance,
@@ -102,6 +104,7 @@ import {
   reportTemplates,
   templateSections,
   templateFields,
+  fieldDependencies,
   reportInstances,
   reportSectionInstances,
   reportFieldValues,
@@ -258,6 +261,15 @@ export interface IStorage {
   updateTemplateField(id: string, field: Partial<InsertTemplateField>): Promise<TemplateField | undefined>;
   deleteTemplateField(id: string): Promise<boolean>;
   reorderTemplateFields(sectionId: string, fieldIds: string[]): Promise<boolean>;
+
+  // Field Dependencies for Conditional Logic
+  createFieldDependency(dependency: InsertFieldDependency): Promise<FieldDependency>;
+  getFieldDependency(id: string): Promise<FieldDependency | undefined>;
+  getFieldDependencies(fieldId: string): Promise<FieldDependency[]>;
+  getDependenciesByDependsOn(dependsOnFieldId: string): Promise<FieldDependency[]>;
+  updateFieldDependency(id: string, dependency: Partial<InsertFieldDependency>): Promise<FieldDependency | undefined>;
+  deleteFieldDependency(id: string): Promise<boolean>;
+  deleteFieldDependencies(fieldId: string): Promise<boolean>;
 
   // Report Instances
   createReportInstance(instance: InsertReportInstance): Promise<ReportInstance>;
@@ -1339,6 +1351,18 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getTemplateFieldById(id: string): Promise<TemplateField | undefined> {
+    const result = await db.select().from(templateFields).where(eq(templateFields.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getTemplateFieldsByTemplateId(templateId: string): Promise<TemplateField[]> {
+    return await db.select()
+      .from(templateFields)
+      .where(eq(templateFields.templateId, templateId))
+      .orderBy(templateFields.orderIndex);
+  }
+
   async getTemplateField(id: string): Promise<TemplateField | undefined> {
     const result = await db.select().from(templateFields).where(eq(templateFields.id, id)).limit(1);
     return result[0];
@@ -1376,6 +1400,90 @@ export class DatabaseStorage implements IStorage {
     
     await Promise.all(updates);
     return true;
+  }
+
+  // Field Dependencies for Conditional Logic
+  async createFieldDependency(dependency: InsertFieldDependency): Promise<FieldDependency> {
+    const result = await db.insert(fieldDependencies).values(dependency).returning();
+    return result[0];
+  }
+
+  async getFieldDependency(id: string): Promise<FieldDependency | undefined> {
+    const result = await db.select().from(fieldDependencies).where(eq(fieldDependencies.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getFieldDependencies(fieldId: string): Promise<FieldDependency[]> {
+    return await db.select()
+      .from(fieldDependencies)
+      .where(and(
+        eq(fieldDependencies.fieldId, fieldId),
+        eq(fieldDependencies.isActive, true)
+      ))
+      .orderBy(fieldDependencies.priority);
+  }
+
+  async getDependenciesByDependsOn(dependsOnFieldId: string): Promise<FieldDependency[]> {
+    return await db.select()
+      .from(fieldDependencies)
+      .where(and(
+        eq(fieldDependencies.dependsOnFieldId, dependsOnFieldId),
+        eq(fieldDependencies.isActive, true)
+      ))
+      .orderBy(fieldDependencies.priority);
+  }
+
+  async updateFieldDependency(id: string, updates: Partial<InsertFieldDependency>): Promise<FieldDependency | undefined> {
+    const result = await db.update(fieldDependencies)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(fieldDependencies.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteFieldDependency(id: string): Promise<boolean> {
+    await db.delete(fieldDependencies).where(eq(fieldDependencies.id, id));
+    return true;
+  }
+
+  async deleteFieldDependencies(fieldId: string): Promise<boolean> {
+    await db.delete(fieldDependencies).where(eq(fieldDependencies.fieldId, fieldId));
+    return true;
+  }
+
+  async getFieldDependenciesByTemplate(templateId: string): Promise<FieldDependency[]> {
+    return await db.select()
+      .from(fieldDependencies)
+      .where(and(
+        eq(fieldDependencies.templateId, templateId),
+        eq(fieldDependencies.isActive, true)
+      ))
+      .orderBy(fieldDependencies.priority);
+  }
+
+  async upsertFieldDependency(dependency: InsertFieldDependency): Promise<FieldDependency> {
+    // Try to find existing dependency
+    const existing = await db.select()
+      .from(fieldDependencies)
+      .where(and(
+        eq(fieldDependencies.templateId, dependency.templateId),
+        eq(fieldDependencies.sourceFieldId, dependency.sourceFieldId || ''),
+        eq(fieldDependencies.targetFieldId, dependency.targetFieldId || '')
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing
+      const result = await db.update(fieldDependencies)
+        .set({ ...dependency, updatedAt: new Date() })
+        .where(eq(fieldDependencies.id, existing[0].id))
+        .returning();
+      return result[0];
+    } else {
+      // Create new
+      const result = await db.insert(fieldDependencies).values(dependency).returning();
+      return result[0];
+    }
   }
 
   async createReportInstance(insertInstance: InsertReportInstance): Promise<ReportInstance> {

@@ -588,14 +588,14 @@ export default function TaxCreditReports() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <XCircle className="h-4 w-4 text-red-600" />
-                      <span className="text-sm">HERS Index > 55</span>
+                      <span className="text-sm">HERS Index {">"} 55</span>
                     </div>
                     <span className="text-sm font-medium">23%</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <XCircle className="h-4 w-4 text-red-600" />
-                      <span className="text-sm">Energy Savings &lt; 50%</span>
+                      <span className="text-sm">Energy Savings {"<"} 50%</span>
                     </div>
                     <span className="text-sm font-medium">18%</span>
                   </div>

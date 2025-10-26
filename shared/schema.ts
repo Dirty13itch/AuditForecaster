@@ -422,8 +422,11 @@ export const templateFields = pgTable("template_fields", {
    * photo: { minCount: 1, maxCount: 10, allowAnnotations: true }
    * calculation: { formula: "field1 + field2", dependencies: ["field1", "field2"] }
    */
-  validationRules: jsonb("validation_rules"),
-  conditionalLogic: jsonb("conditional_logic"),
+  // Enhanced conditional logic fields
+  conditions: jsonb("conditions"), // Array of condition objects for show/hide logic
+  calculation: jsonb("calculation"), // Formula and dependent field references for calculated fields
+  validationRules: jsonb("validation_rules"), // Custom validation based on other fields
+  conditionalLogic: jsonb("conditional_logic"), // Legacy field - kept for compatibility
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -501,6 +504,33 @@ export const reportFieldValues = pgTable("report_field_values", {
   index("idx_report_field_values_section_instance_id").on(table.sectionInstanceId),
   index("idx_report_field_values_template_field_id").on(table.templateFieldId),
   index("idx_report_field_values_field_type").on(table.fieldType),
+]);
+
+// Field Dependencies - Tracks relationships and conditional logic between fields
+export const fieldDependencies = pgTable("field_dependencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fieldId: varchar("field_id").notNull().references(() => templateFields.id, { onDelete: 'cascade' }),
+  dependsOnFieldId: varchar("depends_on_field_id").notNull().references(() => templateFields.id, { onDelete: 'cascade' }),
+  conditionType: text("condition_type", {
+    enum: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equals", "less_than_or_equals", "contains", "not_contains", "empty", "not_empty", "in", "not_in"]
+  }).notNull(),
+  conditionValue: jsonb("condition_value"), // Can be string, number, array, or object depending on condition
+  action: text("action", {
+    enum: ["show", "hide", "require", "unrequire", "enable", "disable", "calculate", "validate", "set_value", "clear_value"]
+  }).notNull(),
+  actionValue: jsonb("action_value"), // Additional data for the action (e.g., value to set, calculation formula)
+  priority: integer("priority").default(0), // Order of execution when multiple dependencies exist
+  groupId: varchar("group_id"), // For grouping related conditions with AND/OR logic
+  groupOperator: text("group_operator", { enum: ["AND", "OR"] }).default("AND"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_field_dependencies_field_id").on(table.fieldId),
+  index("idx_field_dependencies_depends_on_field_id").on(table.dependsOnFieldId),
+  index("idx_field_dependencies_group_id").on(table.groupId),
+  index("idx_field_dependencies_action").on(table.action),
+  index("idx_field_dependencies_is_active").on(table.isActive),
 ]);
 
 export const forecasts = pgTable("forecasts", {
@@ -1196,6 +1226,10 @@ export const insertUnitCertificationSchema = createInsertSchema(unitCertificatio
   hersIndex: z.coerce.number().nullable().optional(),
 });
 
+export const insertFieldDependencySchema = createInsertSchema(fieldDependencies).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  priority: z.coerce.number().nullable().optional(),
+});
+
 export const insertDuctLeakageTestSchema = createInsertSchema(ductLeakageTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   testDate: z.coerce.date(),
   equipmentCalibrationDate: z.coerce.date().nullable().optional(),
@@ -1251,6 +1285,7 @@ export type MileageLog = typeof mileageLogs.$inferSelect;
 export type ReportTemplate = typeof reportTemplates.$inferSelect;
 export type TemplateSection = typeof templateSections.$inferSelect;
 export type TemplateField = typeof templateFields.$inferSelect;
+export type FieldDependency = typeof fieldDependencies.$inferSelect;
 export type ReportInstance = typeof reportInstances.$inferSelect;
 export type ReportSectionInstance = typeof reportSectionInstances.$inferSelect;
 export type ReportFieldValue = typeof reportFieldValues.$inferSelect;
@@ -1279,6 +1314,7 @@ export type InsertMileageLog = z.infer<typeof insertMileageLogSchema>;
 export type InsertReportTemplate = z.infer<typeof insertReportTemplateSchema>;
 export type InsertTemplateSection = z.infer<typeof insertTemplateSectionSchema>;
 export type InsertTemplateField = z.infer<typeof insertTemplateFieldSchema>;
+export type InsertFieldDependency = z.infer<typeof insertFieldDependencySchema>;
 export type InsertReportInstance = z.infer<typeof insertReportInstanceSchema>;
 export type InsertReportSectionInstance = z.infer<typeof insertReportSectionInstanceSchema>;
 export type InsertReportFieldValue = z.infer<typeof insertReportFieldValueSchema>;

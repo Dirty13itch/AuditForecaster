@@ -18,6 +18,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { FieldEditDialog } from "@/components/FieldEditDialog";
 import type { 
   ReportTemplate, 
   TemplateSection, 
@@ -45,6 +46,40 @@ const FIELD_TYPES = [
   { value: "signature", label: "Signature", description: "Digital signature capture" },
   { value: "calculation", label: "Calculation", description: "Auto-calculated based on formula" },
   { value: "conditional_calculation", label: "Conditional Calc", description: "Calculated based on conditions" },
+];
+
+// Condition operators for conditional logic
+const CONDITION_OPERATORS = [
+  { value: "equals", label: "Equals", description: "Field value exactly matches" },
+  { value: "not_equals", label: "Not Equals", description: "Field value doesn't match" },
+  { value: "greater_than", label: "Greater Than", description: "Numeric value is greater" },
+  { value: "less_than", label: "Less Than", description: "Numeric value is less" },
+  { value: "greater_than_or_equals", label: "Greater or Equal", description: "Numeric value is greater or equal" },
+  { value: "less_than_or_equals", label: "Less or Equal", description: "Numeric value is less or equal" },
+  { value: "contains", label: "Contains", description: "Text contains substring" },
+  { value: "not_contains", label: "Not Contains", description: "Text doesn't contain substring" },
+  { value: "empty", label: "Is Empty", description: "Field has no value" },
+  { value: "not_empty", label: "Is Not Empty", description: "Field has a value" },
+];
+
+// Condition actions for field behavior
+const CONDITION_ACTIONS = [
+  { value: "show", label: "Show", description: "Make field visible" },
+  { value: "hide", label: "Hide", description: "Make field hidden" },
+  { value: "require", label: "Make Required", description: "Field becomes required" },
+  { value: "unrequire", label: "Make Optional", description: "Field becomes optional" },
+  { value: "enable", label: "Enable", description: "Enable field input" },
+  { value: "disable", label: "Disable", description: "Disable field input" },
+];
+
+// Calculation functions available
+const CALCULATION_FUNCTIONS = [
+  { value: "SUM", label: "SUM", description: "Add all values", example: "SUM({field1}, {field2})" },
+  { value: "AVG", label: "AVERAGE", description: "Calculate average", example: "AVG({field1}, {field2})" },
+  { value: "MIN", label: "MIN", description: "Find minimum value", example: "MIN({field1}, {field2})" },
+  { value: "MAX", label: "MAX", description: "Find maximum value", example: "MAX({field1}, {field2})" },
+  { value: "COUNT", label: "COUNT", description: "Count non-empty values", example: "COUNT({field1}, {field2})" },
+  { value: "IF", label: "IF", description: "Conditional calculation", example: "IF({field1} > 10, {field2}, {field3})" },
 ];
 
 // Sortable field component
@@ -237,6 +272,7 @@ function TemplateSection({
       {editingField && (
         <FieldEditDialog
           field={editingField}
+          allFields={fields}
           onSave={(field) => {
             onUpdateField(field);
             setEditingField(null);
@@ -248,164 +284,6 @@ function TemplateSection({
   );
 }
 
-// Field edit dialog
-function FieldEditDialog({ 
-  field, 
-  onSave, 
-  onCancel 
-}: { 
-  field: TemplateField;
-  onSave: (field: TemplateField) => void;
-  onCancel: () => void;
-}) {
-  const [editedField, setEditedField] = useState(field);
-  const [options, setOptions] = useState<string[]>(
-    (field.configuration as any)?.options || []
-  );
-
-  const handleSave = () => {
-    const updatedField = {
-      ...editedField,
-      configuration: {
-        ...(editedField.configuration || {}),
-        ...(["select", "multiselect"].includes(editedField.fieldType) && {
-          options
-        })
-      }
-    };
-    onSave(updatedField);
-  };
-
-  return (
-    <Dialog open onOpenChange={onCancel}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit Field</DialogTitle>
-          <DialogDescription>
-            Configure the field properties and behavior
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="field-label">Label</Label>
-              <Input
-                id="field-label"
-                value={editedField.label}
-                onChange={(e) => setEditedField({...editedField, label: e.target.value})}
-                data-testid="input-field-label"
-              />
-            </div>
-            <div>
-              <Label htmlFor="field-placeholder">Placeholder</Label>
-              <Input
-                id="field-placeholder"
-                value={editedField.placeholder || ""}
-                onChange={(e) => setEditedField({...editedField, placeholder: e.target.value})}
-                data-testid="input-field-placeholder"
-              />
-            </div>
-          </div>
-          
-          <div>
-            <Label htmlFor="field-description">Description</Label>
-            <Textarea
-              id="field-description"
-              value={editedField.description || ""}
-              onChange={(e) => setEditedField({...editedField, description: e.target.value})}
-              placeholder="Optional help text for this field"
-              data-testid="textarea-field-description"
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="field-type">Field Type</Label>
-            <Select
-              value={editedField.fieldType}
-              onValueChange={(value) => setEditedField({...editedField, fieldType: value as any})}
-            >
-              <SelectTrigger id="field-type" data-testid="select-field-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FIELD_TYPES.map(type => (
-                  <SelectItem key={type.value} value={type.value}>
-                    <div>
-                      <div>{type.label}</div>
-                      <div className="text-xs text-muted-foreground">{type.description}</div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {/* Options for select fields */}
-          {["select", "multiselect"].includes(editedField.fieldType) && (
-            <div>
-              <Label>Options</Label>
-              <div className="space-y-2 mt-2">
-                {options.map((option, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      value={option}
-                      onChange={(e) => {
-                        const newOptions = [...options];
-                        newOptions[index] = e.target.value;
-                        setOptions(newOptions);
-                      }}
-                      placeholder={`Option ${index + 1}`}
-                      data-testid={`input-option-${index}`}
-                    />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setOptions(options.filter((_, i) => i !== index))}
-                      data-testid={`button-remove-option-${index}`}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setOptions([...options, ""])}
-                  data-testid="button-add-option"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Option
-                </Button>
-              </div>
-            </div>
-          )}
-          
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={editedField.isRequired || false}
-                onChange={(e) => setEditedField({...editedField, isRequired: e.target.checked})}
-                data-testid="checkbox-required"
-              />
-              <span>Required field</span>
-            </label>
-          </div>
-        </div>
-        
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} data-testid="button-save-field">
-            Save Changes
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 export default function ReportTemplatesPage() {
   const { toast } = useToast();

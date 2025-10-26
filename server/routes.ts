@@ -3198,6 +3198,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get template sections
+  app.get("/api/report-templates/:id/sections", isAuthenticated, async (req, res) => {
+    try {
+      const sections = await storage.getTemplateSections(req.params.id);
+      res.json(sections);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch template sections');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get template fields
+  app.get("/api/report-templates/:id/fields", isAuthenticated, async (req, res) => {
+    try {
+      const fields = await storage.getTemplateFieldsByTemplateId(req.params.id);
+      res.json(fields);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch template fields');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get field dependencies
+  app.get("/api/templates/:id/dependencies", isAuthenticated, async (req, res) => {
+    try {
+      const dependencies = await storage.getFieldDependenciesByTemplate(req.params.id);
+      res.json(dependencies);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch field dependencies');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Update field conditions
+  app.post("/api/templates/:id/fields/:fieldId/conditions", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { id: templateId, fieldId } = req.params;
+      const { conditions } = req.body;
+      
+      // Update the field's conditions
+      const field = await storage.getTemplateFieldById(fieldId);
+      if (!field || field.templateId !== templateId) {
+        return res.status(404).json({ error: "Field not found" });
+      }
+      
+      await storage.updateTemplateField(fieldId, {
+        ...field,
+        conditions: conditions
+      });
+      
+      // Update dependencies based on conditions
+      if (conditions && conditions.length > 0) {
+        // Extract all referenced fields from conditions
+        const referencedFields = new Set<string>();
+        conditions.forEach((condition: any) => {
+          if (condition.targetField) {
+            referencedFields.add(condition.targetField);
+          }
+          if (condition.conditions) {
+            condition.conditions.forEach((c: any) => {
+              if (c.targetField) {
+                referencedFields.add(c.targetField);
+              }
+            });
+          }
+        });
+        
+        // Update dependencies
+        for (const targetFieldId of referencedFields) {
+          await storage.upsertFieldDependency({
+            templateId,
+            sourceFieldId: targetFieldId,
+            targetFieldId: fieldId,
+            conditionType: "visibility",
+            conditionConfig: conditions
+          });
+        }
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to update field conditions:", error);
+      res.status(500).json({ error: "Failed to update field conditions" });
+    }
+  });
+
+  // Test conditions with sample data
+  app.post("/api/templates/:id/test-conditions", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const templateId = req.params.id;
+      const { fieldValues } = req.body;
+      
+      // Get all fields and dependencies
+      const fields = await storage.getTemplateFieldsByTemplateId(templateId);
+      const dependencies = await storage.getFieldDependenciesByTemplate(templateId);
+      
+      // Initialize the conditional logic engine
+      const { ConditionalLogicEngine } = await import("../client/src/utils/conditionalLogic");
+      const engine = new ConditionalLogicEngine(fields, dependencies, fieldValues);
+      
+      // Get the evaluated field states
+      const states = engine.getFieldStates();
+      const result: Record<string, any> = {};
+      states.forEach((state, fieldId) => {
+        result[fieldId] = state;
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to test conditions:", error);
+      res.status(500).json({ error: "Failed to test conditions" });
+    }
+  });
+
   app.put("/api/report-templates/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertReportTemplateSchema.partial().parse(req.body);
@@ -3311,6 +3425,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: `Recalculated scores for ${recalculated} report instances` });
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'recalculate report scores');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get report field values
+  app.get("/api/report-instances/:id/field-values", isAuthenticated, async (req, res) => {
+    try {
+      const values = await storage.getReportFieldValues(req.params.id);
+      res.json(values);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch field values');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Save report field value
+  app.post("/api/report-field-values", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertReportFieldValueSchema.parse(req.body);
+      
+      // Check if value already exists
+      const existing = await storage.getReportFieldValuesBySection(validated.reportInstanceId);
+      const existingValue = existing.find(v => v.templateFieldId === validated.templateFieldId);
+      
+      let result;
+      if (existingValue) {
+        // Update existing value
+        result = await storage.updateReportFieldValue(existingValue.id, validated);
+      } else {
+        // Create new value
+        result = await storage.createReportFieldValue(validated);
+      }
+      
+      res.json(result);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'save field value');
       res.status(status).json({ message });
     }
   });
