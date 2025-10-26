@@ -406,6 +406,15 @@ async function startServer() {
         } catch (error) {
           serverLogger.error('[Server] Failed to initialize scheduled emails:', error);
         }
+
+        // Initialize automated calendar import job
+        try {
+          const { startScheduledCalendarImport } = await import('./scheduledCalendarImport');
+          await startScheduledCalendarImport();
+          serverLogger.info('[Server] Automated calendar import cron job initialized');
+        } catch (error) {
+          serverLogger.error('[Server] Failed to initialize calendar import cron job:', error);
+        }
         
         resolve();
       });
