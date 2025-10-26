@@ -72,6 +72,18 @@ export default function CalendarReview() {
   const [endDate, setEndDate] = useState<string>("");
   const [builderMatch, setBuilderMatch] = useState<'all' | 'matched' | 'unmatched'>('all');
 
+  // Build query string for fetching unmatched events
+  const queryParams = new URLSearchParams({
+    status: selectedStatus,
+    minConfidence: minConfidence.toString(),
+    maxConfidence: maxConfidence.toString(),
+    limit: limit.toString(),
+    offset: (page * limit).toString(),
+    builderMatch,
+  });
+  if (startDate) queryParams.append('startDate', startDate);
+  if (endDate) queryParams.append('endDate', endDate);
+
   // Fetch unmatched events
   const { 
     data, 
@@ -79,19 +91,7 @@ export default function CalendarReview() {
     error,
     refetch 
   } = useQuery<EventsResponse>({
-    queryKey: [
-      '/api/calendar/unmatched-events', 
-      { 
-        status: selectedStatus,
-        minConfidence,
-        maxConfidence,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-        builderMatch,
-        limit, 
-        offset: page * limit 
-      }
-    ],
+    queryKey: [`/api/calendar/unmatched-events?${queryParams.toString()}`],
   });
 
   const events = data?.events || [];

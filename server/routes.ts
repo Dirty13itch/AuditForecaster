@@ -158,6 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           first_name: user.firstName || '',
           last_name: user.lastName || '',
         },
+        role: user.role || 'inspector',
         // Set far future expiry for dev sessions (1 week)
         expires_at: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60),
       };
@@ -4140,7 +4141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // POC: Calendar Import Research & Testing Endpoints
   // These endpoints use mock data for parser validation while Google OAuth is rate-limited
-  app.get('/api/calendar/poc/list', isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.get('/api/calendar/poc/list', isAuthenticated, requireRole('admin'), async (req, res) => {
     try {
       serverLogger.info('[POC] Returning mock calendars for validation');
       
@@ -4181,7 +4182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/calendar/poc/events', isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.get('/api/calendar/poc/events', isAuthenticated, requireRole('admin'), async (req, res) => {
     try {
       const calendarId = req.query.calendarId as string;
       
@@ -4457,7 +4458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Calendar Import Trigger
-  app.post('/api/calendar/import', isAuthenticated, requireRole(['admin']), csrfSynchronisedProtection, async (req, res) => {
+  app.post('/api/calendar/import', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req, res) => {
     try {
       const { calendarId, events: mockEvents } = req.body;
 
@@ -4518,7 +4519,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Calendar Import Logs
-  app.get('/api/calendar/import-logs', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+  app.get('/api/calendar/import-logs', isAuthenticated, requireRole('admin', 'manager'), async (req, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;

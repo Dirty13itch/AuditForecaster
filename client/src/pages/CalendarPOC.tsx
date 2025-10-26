@@ -77,7 +77,7 @@ export default function CalendarPOC() {
     isLoading: eventsLoading, 
     error: eventsError 
   } = useQuery<EventsResponse>({
-    queryKey: ['/api/calendar/poc/events', selectedCalendar],
+    queryKey: [`/api/calendar/poc/events?calendarId=${selectedCalendar}`],
     enabled: !!selectedCalendar,
   });
 
@@ -86,10 +86,8 @@ export default function CalendarPOC() {
 
   const importMutation = useMutation({
     mutationFn: async (data: { calendarId: string; events: any[] }) => {
-      return await apiRequest('/api/calendar/import', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest('POST', '/api/calendar/import', data);
+      return response.json();
     },
     onSuccess: (data) => {
       setImportResult(data);
