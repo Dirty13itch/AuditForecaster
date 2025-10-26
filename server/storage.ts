@@ -311,6 +311,8 @@ export interface IStorage {
   getBuilderAbbreviationsByBuilder(builderId: string): Promise<BuilderAbbreviation[]>;
   createBuilderAbbreviation(abbr: InsertBuilderAbbreviation): Promise<BuilderAbbreviation>;
   deleteBuilderAbbreviation(id: string): Promise<boolean>;
+  updateBuilderAbbreviation(id: string, data: Partial<InsertBuilderAbbreviation>): Promise<BuilderAbbreviation | undefined>;
+  setPrimaryBuilderAbbreviation(builderId: string, abbreviationId: string): Promise<void>;
   seedBuilderAbbreviations(builderId: string, abbreviations: string[]): Promise<void>;
   getBuilderById(id: string): Promise<Builder | undefined>;
 
@@ -2192,6 +2194,26 @@ export class DatabaseStorage implements IStorage {
   async deleteBuilderAbbreviation(id: string): Promise<boolean> {
     const result = await db.delete(builderAbbreviations).where(eq(builderAbbreviations.id, id)).returning();
     return result.length > 0;
+  }
+
+  async updateBuilderAbbreviation(id: string, data: Partial<InsertBuilderAbbreviation>): Promise<BuilderAbbreviation | undefined> {
+    const result = await db.update(builderAbbreviations)
+      .set(data)
+      .where(eq(builderAbbreviations.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async setPrimaryBuilderAbbreviation(builderId: string, abbreviationId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.update(builderAbbreviations)
+        .set({ isPrimary: false })
+        .where(eq(builderAbbreviations.builderId, builderId));
+      
+      await tx.update(builderAbbreviations)
+        .set({ isPrimary: true })
+        .where(eq(builderAbbreviations.id, abbreviationId));
+    });
   }
 
   async seedBuilderAbbreviations(builderId: string, abbreviations: string[]): Promise<void> {

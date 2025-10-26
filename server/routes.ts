@@ -40,6 +40,7 @@ import {
   insertCalendarPreferenceSchema,
   insertUploadSessionSchema,
   insertEmailPreferenceSchema,
+  insertBuilderAbbreviationSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -1279,6 +1280,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete development');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Builder Abbreviations CRUD
+  app.get('/api/builders/:builderId/abbreviations', isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
+    try {
+      const { builderId } = req.params;
+      const abbreviations = await storage.getBuilderAbbreviationsByBuilder(builderId);
+      res.json(abbreviations);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder abbreviations');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post('/api/builders/:builderId/abbreviations', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { builderId } = req.params;
+      const validatedData = insertBuilderAbbreviationSchema.parse({
+        ...req.body,
+        builderId,
+      });
+
+      const abbreviation = await storage.createBuilderAbbreviation(validatedData);
+
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_abbreviation.create',
+        resourceType: 'builder_abbreviation',
+        resourceId: abbreviation.id,
+        metadata: {
+          builderId,
+          abbreviation: abbreviation.abbreviation,
+          isPrimary: abbreviation.isPrimary,
+        },
+      }, storage);
+
+      res.status(201).json(abbreviation);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create builder abbreviation');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertBuilderAbbreviationSchema.partial().parse(req.body);
+
+      const abbreviation = await storage.updateBuilderAbbreviation(id, validatedData);
+      
+      if (!abbreviation) {
+        return res.status(404).json({ message: 'Abbreviation not found' });
+      }
+
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_abbreviation.update',
+        resourceType: 'builder_abbreviation',
+        resourceId: id,
+        metadata: {
+          changes: validatedData,
+        },
+      }, storage);
+
+      res.json(abbreviation);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update builder abbreviation');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteBuilderAbbreviation(id);
+
+      if (!success) {
+        return res.status(404).json({ message: 'Abbreviation not found' });
+      }
+
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'builder_abbreviation.delete',
+        resourceType: 'builder_abbreviation',
+        resourceId: id,
+        metadata: {},
+      }, storage);
+
+      res.json({ success: true });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete builder abbreviation');
       res.status(status).json({ message });
     }
   });
