@@ -28,6 +28,8 @@ import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
 import ReportTemplates from "@/pages/ReportTemplates";
 import ReportFillout from "@/pages/ReportFillout";
+import BlowerDoorTest from "@/pages/BlowerDoorTest";
+import DuctLeakageTest from "@/pages/DuctLeakageTest";
 import Analytics from "@/pages/Analytics";
 import AuditLogs from "@/pages/AuditLogs";
 import SettingsPage from "@/pages/SettingsPage";
@@ -103,6 +105,16 @@ function Router() {
       <Route path="/reports/fillout/:id" component={() => (
         <RouteErrorBoundary>
           <ReportFillout />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/blower-door/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <BlowerDoorTest />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/duct-leakage/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <DuctLeakageTest />
         </RouteErrorBoundary>
       )} />
       <Route path="/analytics" component={() => (
