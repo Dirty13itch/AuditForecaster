@@ -61,7 +61,9 @@ function EventEditDialog({ event, open, onClose, onConfirm, builders }: EventEdi
       inspectionType: event.suggestedInspectionType || "standard",
       address: event.location || "TBD",
       contractor: "TBD",
-      scheduledDate: event.startTime ? new Date(event.startTime).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      scheduledDate: event.startTime && !isNaN(Date.parse(event.startTime)) 
+        ? new Date(event.startTime).toISOString().split('T')[0] 
+        : new Date().toISOString().split('T')[0],
       notes: event.description || "",
     },
   });
@@ -279,7 +281,11 @@ function EventCard({ event, isSelected, onSelectChange, onApprove, onReject, onE
         <div className="space-y-2 text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-3 w-3" />
-            <span>{format(new Date(event.startTime), "MMM d, h:mm a")}</span>
+            <span>
+              {event.startTime && !isNaN(Date.parse(event.startTime)) 
+                ? format(new Date(event.startTime), "MMM d, h:mm a")
+                : "Date not available"}
+            </span>
           </div>
           {event.location && (
             <div className="flex items-start gap-2 text-muted-foreground">
@@ -416,11 +422,13 @@ export function CalendarImportQueue() {
       const response = await apiRequest('POST', `/api/google-events/${eventId}/convert`, {
         jobData: {
           ...jobData,
-          scheduledDate: new Date(jobData.scheduledDate),
+          scheduledDate: jobData.scheduledDate && !isNaN(Date.parse(jobData.scheduledDate))
+            ? new Date(jobData.scheduledDate)
+            : new Date(),
         },
         scheduleData: {
-          startTime: events.find(e => e.id === eventId)?.startTime,
-          endTime: events.find(e => e.id === eventId)?.endTime,
+          startTime: events.find(e => e.id === eventId)?.startTime || null,
+          endTime: events.find(e => e.id === eventId)?.endTime || null,
         },
         keepSynced: true,
       });
@@ -511,7 +519,9 @@ export function CalendarImportQueue() {
       inspectionType: event.suggestedInspectionType,
       address: event.location || "TBD",
       contractor: "TBD",
-      scheduledDate: new Date(event.startTime).toISOString().split('T')[0],
+      scheduledDate: event.startTime && !isNaN(Date.parse(event.startTime))
+        ? new Date(event.startTime).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
       notes: event.description,
     };
 
@@ -895,7 +905,9 @@ export function CalendarImportQueue() {
           jobDetails={{
             name: selectedEventForAssignment.summary,
             address: selectedEventForAssignment.location || "TBD",
-            scheduledDate: new Date(selectedEventForAssignment.startTime),
+            scheduledDate: selectedEventForAssignment.startTime && !isNaN(Date.parse(selectedEventForAssignment.startTime))
+              ? new Date(selectedEventForAssignment.startTime)
+              : new Date(),
             inspectionType: selectedEventForAssignment.suggestedInspectionType || "standard",
             estimatedDuration: 120,
           }}
