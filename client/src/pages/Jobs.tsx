@@ -6,7 +6,16 @@ import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOf
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListItemSkeleton, DashboardCardSkeleton } from "@/components/ui/skeleton-variants";
+import { 
+  FadeIn, 
+  FadeInUp, 
+  StaggerContainer, 
+  StaggerItem,
+  HoverScale,
+  ErrorShake
+} from "@/components/ui/animated-wrapper";
+import { useDebounce } from "@/hooks/useAnimation";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -424,17 +433,17 @@ export default function Jobs() {
               {isLoadingPlanned ? (
                 <div className="space-y-3">
                   {[1, 2].map((i) => (
-                    <Skeleton key={i} className="h-32 w-full" />
+                    <ListItemSkeleton key={i} />
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3">
+                <StaggerContainer className="space-y-3">
                   {plannedEvents.map((event: GoogleEvent) => (
-                    <Card 
-                      key={event.id} 
-                      className="hover-elevate cursor-pointer"
-                      data-testid={`card-event-${event.id}`}
-                    >
+                    <StaggerItem key={event.id}>
+                      <Card 
+                        className="hover-elevate cursor-pointer"
+                        data-testid={`card-event-${event.id}`}
+                      >
                       <CardHeader className="flex flex-row items-start justify-between space-y-0">
                         <div className="flex-1">
                           <CardTitle className="text-base" data-testid="text-event-title">
@@ -489,8 +498,9 @@ export default function Jobs() {
                         </CardContent>
                       )}
                     </Card>
+                    </StaggerItem>
                   ))}
-                </div>
+                </StaggerContainer>
               )}
             </AccordionContent>
           </AccordionItem>
@@ -516,7 +526,7 @@ export default function Jobs() {
             {isLoadingTodays ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-48 w-full" />
+                  <DashboardCardSkeleton key={i} />
                 ))}
               </div>
             ) : todaysJobs.length === 0 ? (
@@ -526,16 +536,17 @@ export default function Jobs() {
               </div>
             ) : (
               <>
-                <div className="space-y-3">
+                <StaggerContainer className="space-y-3">
                   {todaysJobs.map((job) => (
-                    <JobCard
-                      key={job.id}
-                      {...job}
-                      builders={builders}
-                      onClick={() => navigate(`/inspection/${job.id}`)}
-                    />
+                    <StaggerItem key={job.id}>
+                      <JobCard
+                        {...job}
+                        builders={builders}
+                        onClick={() => navigate(`/inspection/${job.id}`)}
+                      />
+                    </StaggerItem>
                   ))}
-                </div>
+                </StaggerContainer>
                 {todaysPaginationInfo && todaysPaginationInfo.total > todaysPagination.pageSize && (
                   <PaginationControls
                     page={todaysPagination.page}
@@ -572,7 +583,7 @@ export default function Jobs() {
             {isLoadingCompleted ? (
               <div className="space-y-3">
                 {[1, 2].map((i) => (
-                  <Skeleton key={i} className="h-48 w-full" />
+                  <DashboardCardSkeleton key={i} />
                 ))}
               </div>
             ) : completedToday.length === 0 ? (
@@ -628,7 +639,7 @@ export default function Jobs() {
             {isLoadingAll ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <Skeleton key={i} className="h-48 w-full" />
+                  <DashboardCardSkeleton key={i} />
                 ))}
               </div>
             ) : allJobs.length === 0 ? (

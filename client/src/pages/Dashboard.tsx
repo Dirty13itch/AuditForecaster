@@ -4,7 +4,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Skeleton } from "@/components/ui/skeleton";
+import { 
+  DashboardCardSkeleton, 
+  TableSkeleton, 
+  ChartSkeleton,
+  MetricCardSkeleton,
+  ActivityFeedSkeleton
+} from "@/components/ui/skeleton-variants";
+import { 
+  FadeIn, 
+  FadeInUp, 
+  StaggerContainer, 
+  StaggerItem,
+  AnimatedNumber,
+  HoverScale
+} from "@/components/ui/animated-wrapper";
+import { useAnimatedCounter } from "@/hooks/useAnimation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -463,68 +478,78 @@ export default function Dashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <MetricCard
-            title="Jobs Completed"
-            value={metrics.jobsCompleted}
-            previousValue={metrics.jobsCompleted - 5}
-            sparklineData={generateSparklineData(metrics.jobsCompleted)}
-            icon={<CheckCircle2 className="h-5 w-5 text-success" />}
-            format="number"
-            trend={metrics.jobsCompletedTrend > 0 ? "up" : "down"}
-            trendValue={`${Math.abs(metrics.jobsCompletedTrend).toFixed(1)}%`}
-            loading={isLoading}
-            animate={isLiveMode}
-            live={isLiveMode}
-          />
-          <MetricCard
-            title="Avg QA Score"
-            value={`${metrics.avgQaScore.toFixed(1)}%`}
-            sparklineData={generateSparklineData(metrics.avgQaScore)}
-            icon={<Star className="h-5 w-5 text-warning" />}
-            trend={metrics.avgQaScoreTrend > 0 ? "up" : "down"}
-            trendValue={`${Math.abs(metrics.avgQaScoreTrend).toFixed(1)}%`}
-            loading={isLoading}
-            animate={isLiveMode}
-            live={isLiveMode}
-          />
-          <MetricCard
-            title="Monthly Revenue"
-            value={metrics.monthlyRevenue}
-            previousValue={metrics.monthlyRevenue - 5000}
-            sparklineData={generateSparklineData(metrics.monthlyRevenue / 1000)}
-            icon={<DollarSign className="h-5 w-5 text-success" />}
-            format="currency"
-            trend={metrics.monthlyRevenueTrend > 0 ? "up" : "down"}
-            trendValue={`${Math.abs(metrics.monthlyRevenueTrend).toFixed(1)}%`}
-            loading={isLoading}
-            animate={isLiveMode}
-            live={isLiveMode}
-          />
-          <MetricCard
-            title="Compliance Rate"
-            value={`${metrics.complianceRate.toFixed(1)}%`}
-            sparklineData={generateSparklineData(metrics.complianceRate)}
-            icon={<Target className="h-5 w-5 text-info" />}
-            trend={metrics.complianceRateTrend > 0 ? "up" : "down"}
-            trendValue={`${Math.abs(metrics.complianceRateTrend).toFixed(1)}%`}
-            loading={isLoading}
-            animate={isLiveMode}
-            live={isLiveMode}
-          />
-          <MetricCard
-            title="Active Builders"
-            value={metrics.activeBuilders}
-            previousValue={metrics.activeBuilders - 2}
-            sparklineData={generateSparklineData(metrics.activeBuilders)}
-            icon={<Users className="h-5 w-5 text-primary" />}
-            trend={metrics.activeBuildersTrend > 0 ? "up" : "down"}
-            trendValue={`${Math.abs(metrics.activeBuildersTrend).toFixed(0)}%`}
-            loading={isLoading}
-            animate={isLiveMode}
-            live={isLiveMode}
-          />
-        </div>
+        <StaggerContainer className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <StaggerItem>
+            <MetricCard
+              title="Jobs Completed"
+              value={metrics.jobsCompleted}
+              previousValue={metrics.jobsCompleted - 5}
+              sparklineData={generateSparklineData(metrics.jobsCompleted)}
+              icon={<CheckCircle2 className="h-5 w-5 text-success" />}
+              format="number"
+              trend={metrics.jobsCompletedTrend > 0 ? "up" : "down"}
+              trendValue={`${Math.abs(metrics.jobsCompletedTrend).toFixed(1)}%`}
+              loading={isLoading}
+              animate={isLiveMode}
+              live={isLiveMode}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <MetricCard
+              title="Avg QA Score"
+              value={`${metrics.avgQaScore.toFixed(1)}%`}
+              sparklineData={generateSparklineData(metrics.avgQaScore)}
+              icon={<Star className="h-5 w-5 text-warning" />}
+              trend={metrics.avgQaScoreTrend > 0 ? "up" : "down"}
+              trendValue={`${Math.abs(metrics.avgQaScoreTrend).toFixed(1)}%`}
+              loading={isLoading}
+              animate={isLiveMode}
+              live={isLiveMode}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <MetricCard
+              title="Monthly Revenue"
+              value={metrics.monthlyRevenue}
+              previousValue={metrics.monthlyRevenue - 5000}
+              sparklineData={generateSparklineData(metrics.monthlyRevenue / 1000)}
+              icon={<DollarSign className="h-5 w-5 text-success" />}
+              format="currency"
+              trend={metrics.monthlyRevenueTrend > 0 ? "up" : "down"}
+              trendValue={`${Math.abs(metrics.monthlyRevenueTrend).toFixed(1)}%`}
+              loading={isLoading}
+              animate={isLiveMode}
+              live={isLiveMode}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <MetricCard
+              title="Compliance Rate"
+              value={`${metrics.complianceRate.toFixed(1)}%`}
+              sparklineData={generateSparklineData(metrics.complianceRate)}
+              icon={<Target className="h-5 w-5 text-info" />}
+              trend={metrics.complianceRateTrend > 0 ? "up" : "down"}
+              trendValue={`${Math.abs(metrics.complianceRateTrend).toFixed(1)}%`}
+              loading={isLoading}
+              animate={isLiveMode}
+              live={isLiveMode}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <MetricCard
+              title="Active Builders"
+              value={metrics.activeBuilders}
+              previousValue={metrics.activeBuilders - 2}
+              sparklineData={generateSparklineData(metrics.activeBuilders)}
+              icon={<Users className="h-5 w-5 text-primary" />}
+              trend={metrics.activeBuildersTrend > 0 ? "up" : "down"}
+              trendValue={`${Math.abs(metrics.activeBuildersTrend).toFixed(0)}%`}
+              loading={isLoading}
+              animate={isLiveMode}
+              live={isLiveMode}
+            />
+          </StaggerItem>
+        </StaggerContainer>
 
         {/* Progress Widgets */}
         <div className="grid gap-4 md:grid-cols-3">

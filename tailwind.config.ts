@@ -108,10 +108,108 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        shimmer: {
+          "100%": {
+            transform: "translateX(100%)",
+          },
+        },
+        fadeIn: {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        fadeInUp: {
+          from: { opacity: "0", transform: "translateY(10px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        fadeInDown: {
+          from: { opacity: "0", transform: "translateY(-10px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        scaleIn: {
+          from: { transform: "scale(0.95)", opacity: "0" },
+          to: { transform: "scale(1)", opacity: "1" },
+        },
+        slideInRight: {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        slideInLeft: {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        shake: {
+          "0%, 100%": { transform: "translateX(0)" },
+          "10%, 30%, 50%, 70%, 90%": { transform: "translateX(-2px)" },
+          "20%, 40%, 60%, 80%": { transform: "translateX(2px)" },
+        },
+        bounce: {
+          "0%, 100%": {
+            transform: "translateY(-25%)",
+            animationTimingFunction: "cubic-bezier(0.8,0,1,1)",
+          },
+          "50%": {
+            transform: "none",
+            animationTimingFunction: "cubic-bezier(0,0,0.2,1)",
+          },
+        },
+        ripple: {
+          to: {
+            transform: "scale(4)",
+            opacity: "0",
+          },
+        },
+        checkmark: {
+          "0%": {
+            strokeDasharray: "100",
+            strokeDashoffset: "100",
+          },
+          "100%": {
+            strokeDasharray: "100",
+            strokeDashoffset: "0",
+          },
+        },
+        spin: {
+          to: { transform: "rotate(360deg)" },
+        },
+        ping: {
+          "75%, 100%": {
+            transform: "scale(2)",
+            opacity: "0",
+          },
+        },
+        pulse: {
+          "50%": {
+            opacity: ".5",
+          },
+        },
+        countUp: {
+          from: { opacity: "0", transform: "translateY(0.25rem)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "progress-stripes": {
+          from: { backgroundPosition: "0 0" },
+          to: { backgroundPosition: "20px 0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        shimmer: "shimmer 2s infinite",
+        fadeIn: "fadeIn 0.3s ease-out",
+        fadeInUp: "fadeInUp 0.4s ease-out",
+        fadeInDown: "fadeInDown 0.4s ease-out",
+        scaleIn: "scaleIn 0.2s ease-out",
+        slideInRight: "slideInRight 0.3s ease-out",
+        slideInLeft: "slideInLeft 0.3s ease-out",
+        shake: "shake 0.5s ease-in-out",
+        bounce: "bounce 1s infinite",
+        ripple: "ripple 0.6s linear",
+        checkmark: "checkmark 0.4s ease-out forwards",
+        spin: "spin 1s linear infinite",
+        ping: "ping 1s cubic-bezier(0, 0, 0.2, 1) infinite",
+        pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        countUp: "countUp 0.4s ease-out",
+        "progress-stripes": "progress-stripes 1s linear infinite",
       },
     },
   },
