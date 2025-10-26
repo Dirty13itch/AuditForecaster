@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Stage, Layer, Line, Rect, Circle, Text, Arrow, Transformer } from "react-konva";
-import { useParams, useNavigate } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -62,7 +62,7 @@ interface Shape {
 }
 
 export default function PhotoAnnotation() {
-  const [navigate] = useNavigate();
+  const [, setLocation] = useLocation();
   const { photoId } = useParams();
   const { toast } = useToast();
 
@@ -110,7 +110,7 @@ export default function PhotoAnnotation() {
         title: "Annotations saved",
         description: "Your annotations have been saved successfully.",
       });
-      navigate(`/photos`);
+      setLocation(`/photos`);
     },
     onError: () => {
       toast({
@@ -316,7 +316,7 @@ export default function PhotoAnnotation() {
           <Card>
             <CardContent className="p-6">
               <p className="text-muted-foreground">Photo not found</p>
-              <Button onClick={() => navigate("/photos")} className="mt-4">
+              <Button onClick={() => setLocation("/photos")} className="mt-4">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Photos
               </Button>
@@ -598,7 +598,7 @@ export default function PhotoAnnotation() {
 
             <div className="flex gap-2 pt-4">
               <Button
-                onClick={() => navigate("/photos")}
+                onClick={() => setLocation("/photos")}
                 variant="outline"
                 className="flex-1"
                 data-testid="button-cancel"

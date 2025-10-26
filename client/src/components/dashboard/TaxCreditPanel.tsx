@@ -30,8 +30,10 @@ export function TaxCreditPanel({ eligibleCount, totalCredits, isLoading }: TaxCr
     );
   }
 
-  const progressPercentage = Math.min((totalCredits / GOAL_CREDITS) * 100, 100);
-  const remainingHomes = Math.max(0, Math.ceil((GOAL_CREDITS - totalCredits) / 2000));
+  // Ensure totalCredits is a number
+  const safeCredits = totalCredits || 0;
+  const progressPercentage = Math.min((safeCredits / GOAL_CREDITS) * 100, 100);
+  const remainingHomes = Math.max(0, Math.ceil((GOAL_CREDITS - safeCredits) / 2000));
 
   return (
     <Card data-testid="card-tax-credits">
@@ -63,7 +65,7 @@ export function TaxCreditPanel({ eligibleCount, totalCredits, isLoading }: TaxCr
               Potential Credits
             </div>
             <div className="text-3xl font-bold text-success" data-testid="text-total-credits">
-              ${totalCredits.toLocaleString()}
+              ${safeCredits.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
               Tax deduction potential
@@ -87,7 +89,7 @@ export function TaxCreditPanel({ eligibleCount, totalCredits, isLoading }: TaxCr
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Progress to Goal</span>
-            <span className="font-medium">${totalCredits.toLocaleString()} / ${GOAL_CREDITS.toLocaleString()}</span>
+            <span className="font-medium">${safeCredits.toLocaleString()} / ${GOAL_CREDITS.toLocaleString()}</span>
           </div>
           <Progress 
             value={progressPercentage} 
