@@ -275,6 +275,57 @@ export const googleEvents = pgTable("google_events", {
   index("idx_google_events_start_time").on(table.startTime),
 ]);
 
+// Builder abbreviation lookup table for calendar event parsing
+export const builderAbbreviations = pgTable("builder_abbreviations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  abbreviation: text("abbreviation").notNull(),
+  isPrimary: boolean("is_primary").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_builder_abbreviations_abbreviation").on(table.abbreviation),
+  index("idx_builder_abbreviations_builder_id").on(table.builderId),
+]);
+
+// Calendar import logs for tracking automated imports
+export const calendarImportLogs = pgTable("calendar_import_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  calendarId: text("calendar_id").notNull(),
+  calendarName: text("calendar_name"),
+  importTimestamp: timestamp("import_timestamp").notNull().defaultNow(),
+  eventsProcessed: integer("events_processed").default(0),
+  jobsCreated: integer("jobs_created").default(0),
+  eventsQueued: integer("events_queued").default(0),
+  errors: text("errors"),
+}, (table) => [
+  index("idx_calendar_import_logs_timestamp").on(table.importTimestamp),
+  index("idx_calendar_import_logs_calendar_id").on(table.calendarId),
+]);
+
+// Unmatched calendar events for manual review
+export const unmatchedCalendarEvents = pgTable("unmatched_calendar_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  googleEventId: text("google_event_id").notNull(),
+  calendarId: text("calendar_id").notNull(),
+  title: text("title").notNull(),
+  location: text("location"),
+  description: text("description"),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  rawEventJson: jsonb("raw_event_json"),
+  confidenceScore: integer("confidence_score"),
+  status: text("status", { enum: ["pending", "approved", "rejected", "auto_created"] }).default("pending"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp("reviewed_at"),
+  createdJobId: varchar("created_job_id").references(() => jobs.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_unmatched_events_google_id").on(table.googleEventId),
+  index("idx_unmatched_events_status").on(table.status),
+  index("idx_unmatched_events_start_time").on(table.startTime),
+  index("idx_unmatched_events_confidence").on(table.confidenceScore),
+]);
+
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'cascade' }),
@@ -636,6 +687,13 @@ export const insertGoogleEventSchema = createInsertSchema(googleEvents).omit({ i
   endTime: z.coerce.date(),
   lastSyncedAt: z.coerce.date().nullable().optional(),
 });
+export const insertBuilderAbbreviationSchema = createInsertSchema(builderAbbreviations).omit({ id: true, createdAt: true });
+export const insertCalendarImportLogSchema = createInsertSchema(calendarImportLogs).omit({ id: true, importTimestamp: true });
+export const insertUnmatchedCalendarEventSchema = createInsertSchema(unmatchedCalendarEvents).omit({ id: true, createdAt: true }).extend({
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+  reviewedAt: z.coerce.date().nullable().optional(),
+});
 export const insertUploadSessionSchema = createInsertSchema(uploadSessions).omit({ id: true }).extend({
   timestamp: z.coerce.date(),
   acknowledgedAt: z.coerce.date().nullable().optional(),
@@ -697,6 +755,12 @@ export type CalendarPreference = typeof calendarPreferences.$inferSelect;
 export type InsertCalendarPreference = z.infer<typeof insertCalendarPreferenceSchema>;
 export type GoogleEvent = typeof googleEvents.$inferSelect;
 export type InsertGoogleEvent = z.infer<typeof insertGoogleEventSchema>;
+export type BuilderAbbreviation = typeof builderAbbreviations.$inferSelect;
+export type InsertBuilderAbbreviation = z.infer<typeof insertBuilderAbbreviationSchema>;
+export type CalendarImportLog = typeof calendarImportLogs.$inferSelect;
+export type InsertCalendarImportLog = z.infer<typeof insertCalendarImportLogSchema>;
+export type UnmatchedCalendarEvent = typeof unmatchedCalendarEvents.$inferSelect;
+export type InsertUnmatchedCalendarEvent = z.infer<typeof insertUnmatchedCalendarEventSchema>;
 export type UploadSession = typeof uploadSessions.$inferSelect;
 export type InsertUploadSession = z.infer<typeof insertUploadSessionSchema>;
 export type EmailPreference = typeof emailPreferences.$inferSelect;
