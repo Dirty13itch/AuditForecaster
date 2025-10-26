@@ -583,6 +583,31 @@ export const checklistItems = pgTable("checklist_items", {
   index("idx_checklist_items_status").on(table.status),
 ]);
 
+export const photoAlbums = pgTable("photo_albums", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  coverPhotoId: varchar("cover_photo_id"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_photo_albums_created_by").on(table.createdBy),
+  index("idx_photo_albums_name").on(table.name),
+]);
+
+export const photoAlbumItems = pgTable("photo_album_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => photoAlbums.id, { onDelete: 'cascade' }),
+  photoId: varchar("photo_id").notNull().references(() => photos.id, { onDelete: 'cascade' }),
+  orderIndex: integer("order_index").default(0),
+  addedAt: timestamp("added_at").defaultNow(),
+}, (table) => [
+  index("idx_photo_album_items_album_id").on(table.albumId),
+  index("idx_photo_album_items_photo_id").on(table.photoId),
+  index("idx_photo_album_items_order").on(table.albumId, table.orderIndex),
+]);
+
 export const photos = pgTable("photos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
@@ -597,6 +622,14 @@ export const photos = pgTable("photos", {
   ocrText: text("ocr_text"),
   ocrConfidence: decimal("ocr_confidence", { precision: 5, scale: 2 }),
   ocrMetadata: jsonb("ocr_metadata"),
+  isFavorite: boolean("is_favorite").default(false),
+  orderIndex: integer("order_index").default(0),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+  width: integer("width"),
+  height: integer("height"),
+  exifData: jsonb("exif_data"),
+  location: text("location"),
   uploadedAt: timestamp("uploaded_at").notNull().default(sql`now()`),
   uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
@@ -604,6 +637,9 @@ export const photos = pgTable("photos", {
   index("idx_photos_hash").on(table.hash),
   index("idx_photos_tags").using("gin", table.tags),
   index("idx_photos_checklist_item_id").on(table.checklistItemId).where(sql`${table.checklistItemId} IS NOT NULL`),
+  index("idx_photos_is_favorite").on(table.isFavorite),
+  index("idx_photos_order_index").on(table.orderIndex),
+  index("idx_photos_location").on(table.location),
 ]);
 
 export const complianceRules = pgTable("compliance_rules", {
@@ -1389,6 +1425,8 @@ export const updateChecklistItemSchema = z.object({
   voiceNoteUrl: z.string().nullable().optional(),
   voiceNoteDuration: z.number().nullable().optional(),
 });
+export const insertPhotoAlbumSchema = createInsertSchema(photoAlbums).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPhotoAlbumItemSchema = createInsertSchema(photoAlbumItems).omit({ id: true, addedAt: true });
 export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, uploadedAt: true });
 export const insertComplianceRuleSchema = createInsertSchema(complianceRules).omit({ id: true, createdAt: true });
 export const insertComplianceHistorySchema = createInsertSchema(complianceHistory).omit({ id: true }).extend({
@@ -1642,6 +1680,8 @@ export type ReportSectionInstance = typeof reportSectionInstances.$inferSelect;
 export type ReportFieldValue = typeof reportFieldValues.$inferSelect;
 export type Forecast = typeof forecasts.$inferSelect;
 export type ChecklistItem = typeof checklistItems.$inferSelect;
+export type PhotoAlbum = typeof photoAlbums.$inferSelect;
+export type PhotoAlbumItem = typeof photoAlbumItems.$inferSelect;
 export type Photo = typeof photos.$inferSelect;
 export type ComplianceRule = typeof complianceRules.$inferSelect;
 export type ComplianceHistory = typeof complianceHistory.$inferSelect;
@@ -1672,6 +1712,8 @@ export type InsertReportFieldValue = z.infer<typeof insertReportFieldValueSchema
 export type InsertForecast = z.infer<typeof insertForecastSchema>;
 export type InsertChecklistItem = z.infer<typeof insertChecklistItemSchema>;
 export type UpdateChecklistItem = z.infer<typeof updateChecklistItemSchema>;
+export type InsertPhotoAlbum = z.infer<typeof insertPhotoAlbumSchema>;
+export type InsertPhotoAlbumItem = z.infer<typeof insertPhotoAlbumItemSchema>;
 export type InsertPhoto = z.infer<typeof insertPhotoSchema>;
 export type InsertComplianceRule = z.infer<typeof insertComplianceRuleSchema>;
 export type InsertComplianceHistory = z.infer<typeof insertComplianceHistorySchema>;

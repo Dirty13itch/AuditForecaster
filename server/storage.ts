@@ -39,6 +39,10 @@ import {
   type InsertReportSectionInstance,
   type ReportFieldValue,
   type InsertReportFieldValue,
+  type PhotoAlbum,
+  type InsertPhotoAlbum,
+  type PhotoAlbumItem,
+  type InsertPhotoAlbumItem,
   type Photo,
   type InsertPhoto,
   type Forecast,
@@ -134,6 +138,8 @@ import {
   reportInstances,
   reportSectionInstances,
   reportFieldValues,
+  photoAlbums,
+  photoAlbumItems,
   photos,
   forecasts,
   checklistItems,
@@ -351,10 +357,34 @@ export interface IStorage {
   // Bulk photo operations
   bulkDeletePhotos(ids: string[]): Promise<number>;
   bulkUpdatePhotoTags(ids: string[], mode: 'add' | 'remove' | 'replace', tags: string[]): Promise<number>;
+  bulkMovePhotosToJob(photoIds: string[], jobId: string): Promise<number>;
+  bulkUpdatePhotoFavorites(photoIds: string[], isFavorite: boolean): Promise<number>;
+  
+  // Photo albums
+  createPhotoAlbum(album: InsertPhotoAlbum): Promise<PhotoAlbum>;
+  getPhotoAlbum(id: string): Promise<PhotoAlbum | undefined>;
+  getPhotoAlbums(): Promise<PhotoAlbum[]>;
+  getPhotoAlbumsByUser(userId: string): Promise<PhotoAlbum[]>;
+  updatePhotoAlbum(id: string, album: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum | undefined>;
+  deletePhotoAlbum(id: string): Promise<boolean>;
+  
+  // Album items management
+  addPhotosToAlbum(albumId: string, photoIds: string[]): Promise<PhotoAlbumItem[]>;
+  removePhotosFromAlbum(albumId: string, photoIds: string[]): Promise<number>;
+  getAlbumPhotos(albumId: string): Promise<Photo[]>;
+  updatePhotoOrder(albumId: string, photoId: string, newOrder: number): Promise<boolean>;
+  bulkUpdatePhotoOrder(albumId: string, photoOrders: Array<{ photoId: string; orderIndex: number }>): Promise<boolean>;
+  
+  // Photo organization
+  getFavoritePhotos(userId?: string): Promise<Photo[]>;
+  getRecentPhotos(limit?: number, userId?: string): Promise<Photo[]>;
+  getPhotosByLocation(location: string): Promise<Photo[]>;
+  detectDuplicatePhotos(): Promise<Array<{ hash: string; photos: Photo[] }>>;
   
   // Photo OCR and annotations
   updatePhotoOCR(photoId: string, ocrText: string | null, ocrConfidence: number | null, ocrMetadata: any): Promise<Photo | undefined>;
   updatePhotoAnnotations(photoId: string, annotations: any): Promise<Photo | undefined>;
+  updatePhotoMetadata(photoId: string, metadata: { width?: number; height?: number; fileSize?: number; mimeType?: string; exifData?: any }): Promise<Photo | undefined>;
   
   // Photo upload sessions for cleanup reminders
   createPhotoUploadSession(session: InsertPhotoUploadSession): Promise<PhotoUploadSession>;
@@ -2201,6 +2231,239 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return result.length;
+  }
+
+  async bulkMovePhotosToJob(photoIds: string[], jobId: string): Promise<number> {
+    if (photoIds.length === 0) return 0;
+    
+    const result = await db.update(photos)
+      .set({ jobId })
+      .where(inArray(photos.id, photoIds))
+      .returning();
+    
+    return result.length;
+  }
+
+  async bulkUpdatePhotoFavorites(photoIds: string[], isFavorite: boolean): Promise<number> {
+    if (photoIds.length === 0) return 0;
+    
+    const result = await db.update(photos)
+      .set({ isFavorite })
+      .where(inArray(photos.id, photoIds))
+      .returning();
+    
+    return result.length;
+  }
+
+  // Photo albums
+  async createPhotoAlbum(album: InsertPhotoAlbum): Promise<PhotoAlbum> {
+    const result = await db.insert(photoAlbums).values(album).returning();
+    return result[0];
+  }
+
+  async getPhotoAlbum(id: string): Promise<PhotoAlbum | undefined> {
+    const result = await db.select()
+      .from(photoAlbums)
+      .where(eq(photoAlbums.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getPhotoAlbums(): Promise<PhotoAlbum[]> {
+    return await db.select()
+      .from(photoAlbums)
+      .orderBy(desc(photoAlbums.createdAt));
+  }
+
+  async getPhotoAlbumsByUser(userId: string): Promise<PhotoAlbum[]> {
+    return await db.select()
+      .from(photoAlbums)
+      .where(eq(photoAlbums.createdBy, userId))
+      .orderBy(desc(photoAlbums.createdAt));
+  }
+
+  async updatePhotoAlbum(id: string, album: Partial<InsertPhotoAlbum>): Promise<PhotoAlbum | undefined> {
+    const result = await db.update(photoAlbums)
+      .set({
+        ...album,
+        updatedAt: new Date()
+      })
+      .where(eq(photoAlbums.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deletePhotoAlbum(id: string): Promise<boolean> {
+    const result = await db.delete(photoAlbums)
+      .where(eq(photoAlbums.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Album items management
+  async addPhotosToAlbum(albumId: string, photoIds: string[]): Promise<PhotoAlbumItem[]> {
+    if (photoIds.length === 0) return [];
+    
+    // Get current max order index
+    const maxOrderResult = await db.select({ maxOrder: sql<number>`COALESCE(MAX(${photoAlbumItems.orderIndex}), 0)` })
+      .from(photoAlbumItems)
+      .where(eq(photoAlbumItems.albumId, albumId));
+    
+    const startOrder = (maxOrderResult[0]?.maxOrder || 0) + 1;
+    
+    const items = photoIds.map((photoId, index) => ({
+      albumId,
+      photoId,
+      orderIndex: startOrder + index
+    }));
+    
+    const result = await db.insert(photoAlbumItems)
+      .values(items)
+      .onConflictDoNothing()
+      .returning();
+    
+    return result;
+  }
+
+  async removePhotosFromAlbum(albumId: string, photoIds: string[]): Promise<number> {
+    if (photoIds.length === 0) return 0;
+    
+    const result = await db.delete(photoAlbumItems)
+      .where(and(
+        eq(photoAlbumItems.albumId, albumId),
+        inArray(photoAlbumItems.photoId, photoIds)
+      ))
+      .returning();
+    
+    return result.length;
+  }
+
+  async getAlbumPhotos(albumId: string): Promise<Photo[]> {
+    const results = await db.select({
+      photo: photos,
+      orderIndex: photoAlbumItems.orderIndex
+    })
+      .from(photoAlbumItems)
+      .innerJoin(photos, eq(photoAlbumItems.photoId, photos.id))
+      .where(eq(photoAlbumItems.albumId, albumId))
+      .orderBy(photoAlbumItems.orderIndex);
+    
+    return results.map(r => r.photo);
+  }
+
+  async updatePhotoOrder(albumId: string, photoId: string, newOrder: number): Promise<boolean> {
+    const result = await db.update(photoAlbumItems)
+      .set({ orderIndex: newOrder })
+      .where(and(
+        eq(photoAlbumItems.albumId, albumId),
+        eq(photoAlbumItems.photoId, photoId)
+      ))
+      .returning();
+    
+    return result.length > 0;
+  }
+
+  async bulkUpdatePhotoOrder(albumId: string, photoOrders: Array<{ photoId: string; orderIndex: number }>): Promise<boolean> {
+    if (photoOrders.length === 0) return false;
+    
+    // Use a transaction to update all orders at once
+    await db.transaction(async (tx) => {
+      for (const { photoId, orderIndex } of photoOrders) {
+        await tx.update(photoAlbumItems)
+          .set({ orderIndex })
+          .where(and(
+            eq(photoAlbumItems.albumId, albumId),
+            eq(photoAlbumItems.photoId, photoId)
+          ));
+      }
+    });
+    
+    return true;
+  }
+
+  // Photo organization
+  async getFavoritePhotos(userId?: string): Promise<Photo[]> {
+    let query = db.select().from(photos).where(eq(photos.isFavorite, true));
+    
+    if (userId) {
+      const results = await db.select({ photo: photos })
+        .from(photos)
+        .innerJoin(jobs, eq(photos.jobId, jobs.id))
+        .where(and(
+          eq(photos.isFavorite, true),
+          eq(jobs.createdBy, userId)
+        ))
+        .orderBy(desc(photos.uploadedAt));
+      
+      return results.map(r => r.photo);
+    }
+    
+    return await query.orderBy(desc(photos.uploadedAt));
+  }
+
+  async getRecentPhotos(limit: number = 50, userId?: string): Promise<Photo[]> {
+    if (userId) {
+      const results = await db.select({ photo: photos })
+        .from(photos)
+        .innerJoin(jobs, eq(photos.jobId, jobs.id))
+        .where(eq(jobs.createdBy, userId))
+        .orderBy(desc(photos.uploadedAt))
+        .limit(limit);
+      
+      return results.map(r => r.photo);
+    }
+    
+    return await db.select()
+      .from(photos)
+      .orderBy(desc(photos.uploadedAt))
+      .limit(limit);
+  }
+
+  async getPhotosByLocation(location: string): Promise<Photo[]> {
+    return await db.select()
+      .from(photos)
+      .where(eq(photos.location, location))
+      .orderBy(desc(photos.uploadedAt));
+  }
+
+  async detectDuplicatePhotos(): Promise<Array<{ hash: string; photos: Photo[] }>> {
+    // Find photos grouped by hash where hash is not null and there are duplicates
+    const duplicates = await db.select({
+      hash: photos.hash,
+      count: sql<number>`COUNT(*)`,
+    })
+      .from(photos)
+      .where(sql`${photos.hash} IS NOT NULL`)
+      .groupBy(photos.hash)
+      .having(sql`COUNT(*) > 1`);
+    
+    const results: Array<{ hash: string; photos: Photo[] }> = [];
+    
+    for (const dup of duplicates) {
+      if (dup.hash) {
+        const duplicatePhotos = await db.select()
+          .from(photos)
+          .where(eq(photos.hash, dup.hash));
+        
+        results.push({
+          hash: dup.hash,
+          photos: duplicatePhotos
+        });
+      }
+    }
+    
+    return results;
+  }
+
+  async updatePhotoMetadata(
+    photoId: string,
+    metadata: { width?: number; height?: number; fileSize?: number; mimeType?: string; exifData?: any }
+  ): Promise<Photo | undefined> {
+    const result = await db.update(photos)
+      .set(metadata)
+      .where(eq(photos.id, photoId))
+      .returning();
+    return result[0];
   }
 
   async createForecast(insertForecast: InsertForecast): Promise<Forecast> {

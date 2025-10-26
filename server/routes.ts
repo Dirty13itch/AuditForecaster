@@ -32,6 +32,8 @@ import {
   insertMileageLogSchema,
   insertReportTemplateSchema,
   insertReportInstanceSchema,
+  insertPhotoAlbumSchema,
+  insertPhotoAlbumItemSchema,
   insertPhotoSchema,
   insertChecklistItemSchema,
   updateChecklistItemSchema,
@@ -4212,6 +4214,248 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(status).json({ message });
       }
       const { status, message } = handleDatabaseError(error, 'bulk tag photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Bulk move photos to job
+  app.post("/api/photos/bulk-move", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    const bulkMoveSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one photo ID is required"),
+      jobId: z.string().min(1, "Job ID is required"),
+    });
+
+    try {
+      const { ids, jobId } = bulkMoveSchema.parse(req.body);
+      
+      // Verify job exists
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Target job not found" });
+      }
+      
+      // Limit bulk operations to 200 items for safety
+      if (ids.length > 200) {
+        return res.status(400).json({ message: "Cannot move more than 200 photos at once" });
+      }
+
+      const updated = await storage.bulkMovePhotosToJob(ids, jobId);
+      res.json({ updated, total: ids.length, jobId });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'bulk move photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Bulk update photo favorites
+  app.post("/api/photos/bulk-favorites", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    const bulkFavoritesSchema = z.object({
+      ids: z.array(z.string()).min(1, "At least one photo ID is required"),
+      isFavorite: z.boolean(),
+    });
+
+    try {
+      const { ids, isFavorite } = bulkFavoritesSchema.parse(req.body);
+      
+      // Limit bulk operations to 200 items for safety
+      if (ids.length > 200) {
+        return res.status(400).json({ message: "Cannot update more than 200 photos at once" });
+      }
+
+      const updated = await storage.bulkUpdatePhotoFavorites(ids, isFavorite);
+      res.json({ updated, total: ids.length, isFavorite });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'bulk update favorites');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get favorite photos
+  app.get("/api/photos/favorites", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const photos = await storage.getFavoritePhotos(userId);
+      res.json(photos);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch favorite photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get recent photos
+  app.get("/api/photos/recent", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const limit = parseInt(req.query.limit as string) || 50;
+      const photos = await storage.getRecentPhotos(limit, userId);
+      res.json(photos);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch recent photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Detect duplicate photos
+  app.get("/api/photos/duplicates", isAuthenticated, async (req, res) => {
+    try {
+      const duplicates = await storage.detectDuplicatePhotos();
+      res.json(duplicates);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'detect duplicate photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Photo Albums CRUD
+  app.post("/api/photo-albums", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const validated = insertPhotoAlbumSchema.parse({
+        ...req.body,
+        createdBy: userId,
+      });
+      const album = await storage.createPhotoAlbum(validated);
+      res.status(201).json(album);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create photo album');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/photo-albums", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const albums = await storage.getPhotoAlbumsByUser(userId);
+      res.json(albums);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch photo albums');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/photo-albums/:id", isAuthenticated, async (req, res) => {
+    try {
+      const album = await storage.getPhotoAlbum(req.params.id);
+      if (!album) {
+        return res.status(404).json({ message: "Album not found" });
+      }
+      res.json(album);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch photo album');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/photo-albums/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertPhotoAlbumSchema.partial().parse(req.body);
+      const album = await storage.updatePhotoAlbum(req.params.id, validated);
+      if (!album) {
+        return res.status(404).json({ message: "Album not found" });
+      }
+      res.json(album);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update photo album');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/photo-albums/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const deleted = await storage.deletePhotoAlbum(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Album not found" });
+      }
+      res.status(204).end();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete photo album');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Album photos management
+  app.get("/api/photo-albums/:id/photos", isAuthenticated, async (req, res) => {
+    try {
+      const photos = await storage.getAlbumPhotos(req.params.id);
+      res.json(photos);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch album photos');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/photo-albums/:id/photos", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    const addPhotosSchema = z.object({
+      photoIds: z.array(z.string()).min(1, "At least one photo ID is required"),
+    });
+
+    try {
+      const { photoIds } = addPhotosSchema.parse(req.body);
+      const items = await storage.addPhotosToAlbum(req.params.id, photoIds);
+      res.json({ added: items.length, total: photoIds.length });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'add photos to album');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/photo-albums/:id/photos", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    const removePhotosSchema = z.object({
+      photoIds: z.array(z.string()).min(1, "At least one photo ID is required"),
+    });
+
+    try {
+      const { photoIds } = removePhotosSchema.parse(req.body);
+      const removed = await storage.removePhotosFromAlbum(req.params.id, photoIds);
+      res.json({ removed, total: photoIds.length });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'remove photos from album');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/photo-albums/:id/reorder", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    const reorderSchema = z.object({
+      photoOrders: z.array(z.object({
+        photoId: z.string(),
+        orderIndex: z.number(),
+      })).min(1),
+    });
+
+    try {
+      const { photoOrders } = reorderSchema.parse(req.body);
+      const success = await storage.bulkUpdatePhotoOrder(req.params.id, photoOrders);
+      res.json({ success });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'reorder album photos');
       res.status(status).json({ message });
     }
   });

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useInfiniteQuery, useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Camera, Filter, X, FilterX, CheckSquare, Square, WifiOff, CloudUpload } from "lucide-react";
+import { ArrowLeft, Camera, Filter, X, FilterX, CheckSquare, Square, WifiOff, CloudUpload, Compare, Star, FolderOpen } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import TopBar from "@/components/TopBar";
@@ -17,6 +17,9 @@ import { Label } from "@/components/ui/label";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { SelectionToolbar, commonBulkActions } from "@/components/SelectionToolbar";
 import { BulkDeleteDialog, BulkTagDialog, BulkExportDialog, type TagOperationMode, type ExportFormat } from "@/components/BulkActionDialogs";
+import { EnhancedPhotoGallery } from "@/components/photos/EnhancedPhotoGallery";
+import { PhotoComparisonTool } from "@/components/photos/PhotoComparisonTool";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { indexedDB } from "@/utils/indexedDB";
 import { syncQueue } from "@/utils/syncQueue";
 import {
@@ -43,6 +46,10 @@ export default function Photos() {
   const { toast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingUploads, setPendingUploads] = useState<number>(0);
+  
+  // View mode state
+  const [viewMode, setViewMode] = useState<"classic" | "enhanced" | "comparison">("enhanced");
+  const [showComparisonTool, setShowComparisonTool] = useState(false);
   
   // Filter states
   const [selectedTags, setSelectedTags] = useState<PhotoTag[]>([]);
