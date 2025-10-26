@@ -33,18 +33,22 @@ import {
   Wrench,
   Calendar,
   User,
+  Download,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Link } from 'wouter';
 import type { Equipment, EquipmentCalibration, EquipmentCheckout } from '@shared/schema';
+import ExportDialog from '@/components/ExportDialog';
+import { format } from 'date-fns';
 
 export default function Equipment() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const { toast } = useToast();
 
   // Fetch equipment

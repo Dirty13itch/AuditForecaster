@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight, Award } from "lucide-react";
+import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight, Award, Download } from "lucide-react";
 import { analyticsLogger } from "@/lib/logger";
 import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth, subDays, isWithinInterval, eachMonthOfInterval, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,6 +28,7 @@ import { getTagConfig } from "@shared/photoTags";
 import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
 import { calculateAccuracy } from "@shared/forecastAccuracy";
 import { DateRangePicker, type DateRange } from "@/components/DateRangePicker";
+import ExportDialog from "@/components/ExportDialog";
 
 const STATUS_COLORS = {
   pending: "#FFC107",
@@ -50,6 +51,7 @@ export default function Analytics() {
   const [, setLocation] = useLocation();
   const [sortColumn, setSortColumn] = useState<string>('completionRate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   
   // Initialize date range with last 6 months (to maintain current behavior)
   const getInitialDateRange = (): DateRange => {

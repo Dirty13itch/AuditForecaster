@@ -78,6 +78,9 @@ import { getConfig, isDevelopment } from "./config";
 import { getTroubleshootingGuide, getAllTroubleshootingGuides, suggestTroubleshootingGuide } from "./auth/troubleshooting";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { exportService, type ExportOptions } from "./exportService";
+import { createReadStream } from "fs";
+import { unlink } from "fs/promises";
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
@@ -6923,6 +6926,209 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch equipment alerts');
       res.status(status).json({ message });
+    }
+  });
+
+  // ==============================================================
+  // Export API Endpoints
+  // ==============================================================
+
+  // Export jobs data
+  app.post("/api/export/jobs", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const options: ExportOptions = {
+        format: req.body.format || 'csv',
+        columns: req.body.columns,
+        filters: req.body.filters,
+        dateRange: req.body.dateRange ? {
+          startDate: new Date(req.body.dateRange.startDate),
+          endDate: new Date(req.body.dateRange.endDate),
+        } : undefined,
+        customFileName: req.body.fileName,
+      };
+
+      const result = await exportService.exportJobs(options);
+      
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.size.toString());
+      
+      const stream = createReadStream(result.filePath);
+      stream.pipe(res);
+      
+      // Clean up file after sending
+      stream.on('end', () => {
+        unlink(result.filePath).catch(err => {
+          serverLogger.error('Failed to delete export file', { error: err, file: result.filePath });
+        });
+      });
+    } catch (error) {
+      logError('Export/Jobs', error);
+      res.status(500).json({ message: "Failed to export jobs data" });
+    }
+  });
+
+  // Export financial data (invoices, expenses, mileage)
+  app.post("/api/export/financial", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const options: ExportOptions & { dataType: 'invoices' | 'expenses' | 'mileage' } = {
+        format: req.body.format || 'csv',
+        dataType: req.body.dataType,
+        columns: req.body.columns,
+        dateRange: req.body.dateRange ? {
+          startDate: new Date(req.body.dateRange.startDate),
+          endDate: new Date(req.body.dateRange.endDate),
+        } : undefined,
+        customFileName: req.body.fileName,
+      };
+
+      const result = await exportService.exportFinancialData(options);
+      
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.size.toString());
+      
+      const stream = createReadStream(result.filePath);
+      stream.pipe(res);
+      
+      stream.on('end', () => {
+        unlink(result.filePath).catch(err => {
+          serverLogger.error('Failed to delete export file', { error: err, file: result.filePath });
+        });
+      });
+    } catch (error) {
+      logError('Export/Financial', error);
+      res.status(500).json({ message: "Failed to export financial data" });
+    }
+  });
+
+  // Export equipment data
+  app.post("/api/export/equipment", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const options: ExportOptions = {
+        format: req.body.format || 'csv',
+        columns: req.body.columns,
+        filters: req.body.filters,
+        customFileName: req.body.fileName,
+      };
+
+      const result = await exportService.exportEquipment(options);
+      
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.size.toString());
+      
+      const stream = createReadStream(result.filePath);
+      stream.pipe(res);
+      
+      stream.on('end', () => {
+        unlink(result.filePath).catch(err => {
+          serverLogger.error('Failed to delete export file', { error: err, file: result.filePath });
+        });
+      });
+    } catch (error) {
+      logError('Export/Equipment', error);
+      res.status(500).json({ message: "Failed to export equipment data" });
+    }
+  });
+
+  // Export QA scores
+  app.post("/api/export/qa-scores", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const options: ExportOptions = {
+        format: req.body.format || 'csv',
+        columns: req.body.columns,
+        dateRange: req.body.dateRange ? {
+          startDate: new Date(req.body.dateRange.startDate),
+          endDate: new Date(req.body.dateRange.endDate),
+        } : undefined,
+        customFileName: req.body.fileName,
+      };
+
+      const result = await exportService.exportQAScores(options);
+      
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.size.toString());
+      
+      const stream = createReadStream(result.filePath);
+      stream.pipe(res);
+      
+      stream.on('end', () => {
+        unlink(result.filePath).catch(err => {
+          serverLogger.error('Failed to delete export file', { error: err, file: result.filePath });
+        });
+      });
+    } catch (error) {
+      logError('Export/QAScores', error);
+      res.status(500).json({ message: "Failed to export QA scores" });
+    }
+  });
+
+  // Export analytics report
+  app.post("/api/export/analytics", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const options: ExportOptions & { reportType: string } = {
+        format: req.body.format || 'pdf',
+        reportType: req.body.reportType || 'general',
+        dateRange: req.body.dateRange ? {
+          startDate: new Date(req.body.dateRange.startDate),
+          endDate: new Date(req.body.dateRange.endDate),
+        } : undefined,
+        customFileName: req.body.fileName,
+      };
+
+      const result = await exportService.exportAnalytics(options);
+      
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.size.toString());
+      
+      const stream = createReadStream(result.filePath);
+      stream.pipe(res);
+      
+      stream.on('end', () => {
+        unlink(result.filePath).catch(err => {
+          serverLogger.error('Failed to delete export file', { error: err, file: result.filePath });
+        });
+      });
+    } catch (error) {
+      logError('Export/Analytics', error);
+      res.status(500).json({ message: "Failed to export analytics report" });
+    }
+  });
+
+  // Export photo metadata
+  app.post("/api/export/photos", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const options: ExportOptions = {
+        format: req.body.format || 'csv',
+        columns: req.body.columns,
+        filters: req.body.filters,
+        dateRange: req.body.dateRange ? {
+          startDate: new Date(req.body.dateRange.startDate),
+          endDate: new Date(req.body.dateRange.endDate),
+        } : undefined,
+        customFileName: req.body.fileName,
+      };
+
+      const result = await exportService.exportPhotoMetadata(options);
+      
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.size.toString());
+      
+      const stream = createReadStream(result.filePath);
+      stream.pipe(res);
+      
+      stream.on('end', () => {
+        unlink(result.filePath).catch(err => {
+          serverLogger.error('Failed to delete export file', { error: err, file: result.filePath });
+        });
+      });
+    } catch (error) {
+      logError('Export/Photos', error);
+      res.status(500).json({ message: "Failed to export photo metadata" });
     }
   });
 

@@ -1,5 +1,6 @@
 import sgMail from '@sendgrid/mail';
 import { serverLogger } from '../logger';
+import { scheduledExportTemplate, type ScheduledExportData } from './templates/scheduledExport';
 
 interface EmailResult {
   success: boolean;
@@ -141,6 +142,79 @@ class EmailService {
 
   getFromEmail(): string {
     return this.fromEmail;
+  }
+
+  async sendScheduledExport(data: ScheduledExportData): Promise<EmailResult> {
+    const template = scheduledExportTemplate(data);
+    
+    // Send to all recipients
+    const results = await Promise.all(
+      data.to.map(async (recipient) => {
+        if (!this.checkRateLimit(recipient)) {
+          return {
+            success: false,
+            error: 'Rate limit exceeded',
+          };
+        }
+
+        if (!this.isConfigured || !this.isEnabled) {
+          serverLogger.info('[Email] Scheduled export email (simulated)', {
+            to: recipient,
+            subject: template.subject,
+            exportName: data.exportName,
+            dataType: data.dataType,
+            format: data.format,
+            hasAttachment: !!data.attachment,
+          });
+          return { success: true, messageId: 'simulated-' + Date.now() };
+        }
+
+        try {
+          const msg = {
+            to: recipient,
+            from: {
+              email: this.fromEmail,
+              name: 'Field Inspection System',
+            },
+            subject: template.subject,
+            html: template.html,
+            attachments: template.attachments,
+          };
+
+          const [response] = await sgMail.send(msg);
+          
+          serverLogger.info('[Email] Scheduled export sent', {
+            to: recipient,
+            messageId: response.headers['x-message-id'],
+            exportName: data.exportName,
+          });
+
+          return {
+            success: true,
+            messageId: response.headers['x-message-id'],
+          };
+        } catch (error: any) {
+          serverLogger.error('[Email] Failed to send scheduled export', {
+            to: recipient,
+            error: error.message,
+            exportName: data.exportName,
+          });
+          
+          return {
+            success: false,
+            error: error.message,
+          };
+        }
+      })
+    );
+
+    // Return success if at least one email was sent successfully
+    const successCount = results.filter(r => r.success).length;
+    return {
+      success: successCount > 0,
+      messageId: results.find(r => r.messageId)?.messageId,
+      error: successCount === 0 ? 'Failed to send to all recipients' : undefined,
+    };
   }
 }
 

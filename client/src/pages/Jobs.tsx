@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import type { Job, Builder, GoogleEvent } from "@shared/schema";
 import type { PaginatedResult } from "@shared/pagination";
 import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
+import ExportDialog from "@/components/ExportDialog";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
 import { indexedDB } from "@/utils/indexedDB";
 import { syncQueue } from "@/utils/syncQueue";
@@ -159,6 +160,7 @@ export default function Jobs() {
   const canCreateJobs = userRole === 'admin' || userRole === 'inspector';
 
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   
   // Pagination state for different sections
   const todaysPagination = usePagination('today', 25);
@@ -381,12 +383,22 @@ export default function Jobs() {
             {isOnline ? "Online" : "Offline"}
           </Badge>
         </div>
-        {canCreateJobs && (
-          <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-create-job">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Job
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setIsExportDialogOpen(true)} 
+            data-testid="button-export-jobs"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
           </Button>
-        )}
+          {canCreateJobs && (
+            <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-create-job">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Job
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Job sections with pagination */}
@@ -664,6 +676,29 @@ export default function Jobs() {
           isSubmitting={createJobMutation.isPending}
         />
       )}
+
+      {/* Export Dialog */}
+      <ExportDialog
+        open={isExportDialogOpen}
+        onOpenChange={setIsExportDialogOpen}
+        dataType="jobs"
+        availableColumns={[
+          { key: 'id', label: 'ID' },
+          { key: 'name', label: 'Job Name' },
+          { key: 'status', label: 'Status' },
+          { key: 'address', label: 'Address' },
+          { key: 'city', label: 'City' },
+          { key: 'state', label: 'State' },
+          { key: 'zipCode', label: 'ZIP Code' },
+          { key: 'scheduledDate', label: 'Scheduled Date' },
+          { key: 'completedDate', label: 'Completed Date' },
+          { key: 'builderId', label: 'Builder ID' },
+          { key: 'assignedTo', label: 'Assigned To' },
+          { key: 'createdAt', label: 'Created Date' },
+          { key: 'updatedAt', label: 'Last Updated' },
+        ]}
+        defaultFileName={`jobs-export-${format(new Date(), 'yyyy-MM-dd')}`}
+      />
     </div>
   );
 }
