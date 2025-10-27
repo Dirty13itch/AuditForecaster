@@ -477,18 +477,263 @@ class SyncQueueManager {
   }
 
   private autoMerge(localData: any, remoteData: any): any {
-    // Simple last-write-wins merge strategy
-    // In a real implementation, this would be more sophisticated
-    const merged = { ...remoteData };
+    // Sophisticated field-level merge strategy with conflict detection
+    const merged: any = {};
+    const allKeys = new Set([...Object.keys(localData), ...Object.keys(remoteData)]);
     
-    // Preserve local changes that don't conflict
-    Object.keys(localData).forEach(key => {
-      if (localData[key] !== remoteData[key] && !remoteData[key]) {
-        merged[key] = localData[key];
+    // Track merge decisions for logging
+    const mergeDecisions: Record<string, string> = {};
+    
+    allKeys.forEach(key => {
+      const localValue = localData[key];
+      const remoteValue = remoteData[key];
+      
+      // Special handling for system fields
+      if (key === 'id' || key === '_id') {
+        merged[key] = remoteValue || localValue;
+        mergeDecisions[key] = 'prefer-remote-id';
+        return;
+      }
+      
+      // Handle timestamps - prefer most recent
+      if (key === 'updatedAt' || key === 'lastModified' || key === 'timestamp') {
+        const localTime = new Date(localValue).getTime();
+        const remoteTime = new Date(remoteValue).getTime();
+        
+        if (!isNaN(localTime) && !isNaN(remoteTime)) {
+          merged[key] = localTime > remoteTime ? localValue : remoteValue;
+          mergeDecisions[key] = localTime > remoteTime ? 'local-newer' : 'remote-newer';
+        } else {
+          merged[key] = remoteValue || localValue;
+          mergeDecisions[key] = remoteValue ? 'remote-valid' : 'local-valid';
+        }
+        return;
+      }
+      
+      // Handle missing values
+      if (localValue === undefined && remoteValue === undefined) {
+        return; // Skip field entirely
+      }
+      
+      if (localValue === undefined || localValue === null) {
+        merged[key] = remoteValue;
+        mergeDecisions[key] = 'remote-only';
+        return;
+      }
+      
+      if (remoteValue === undefined || remoteValue === null) {
+        merged[key] = localValue;
+        mergeDecisions[key] = 'local-only';
+        return;
+      }
+      
+      // Handle arrays
+      if (Array.isArray(localValue) && Array.isArray(remoteValue)) {
+        merged[key] = this.mergeArrays(localValue, remoteValue, key);
+        mergeDecisions[key] = 'merged-arrays';
+        return;
+      }
+      
+      // Handle nested objects
+      if (this.isPlainObject(localValue) && this.isPlainObject(remoteValue)) {
+        merged[key] = this.autoMerge(localValue, remoteValue);
+        mergeDecisions[key] = 'merged-nested-objects';
+        return;
+      }
+      
+      // Handle conflicting primitive values
+      if (localValue !== remoteValue) {
+        // Apply field-specific merge strategies
+        const mergeStrategy = this.getFieldMergeStrategy(key, localData, remoteData);
+        
+        switch (mergeStrategy) {
+          case 'prefer-local':
+            merged[key] = localValue;
+            mergeDecisions[key] = 'prefer-local';
+            break;
+            
+          case 'prefer-remote':
+            merged[key] = remoteValue;
+            mergeDecisions[key] = 'prefer-remote';
+            break;
+            
+          case 'combine':
+            // For strings, concatenate with separator
+            if (typeof localValue === 'string' && typeof remoteValue === 'string') {
+              merged[key] = `${remoteValue} [LOCAL: ${localValue}]`;
+              mergeDecisions[key] = 'combined-strings';
+            } else if (typeof localValue === 'number' && typeof remoteValue === 'number') {
+              // For numbers, average them
+              merged[key] = (localValue + remoteValue) / 2;
+              mergeDecisions[key] = 'averaged-numbers';
+            } else {
+              // Default to remote
+              merged[key] = remoteValue;
+              mergeDecisions[key] = 'default-remote';
+            }
+            break;
+            
+          default:
+            // Last-write-wins based on timestamps
+            if (localData.updatedAt && remoteData.updatedAt) {
+              const localTime = new Date(localData.updatedAt).getTime();
+              const remoteTime = new Date(remoteData.updatedAt).getTime();
+              merged[key] = localTime > remoteTime ? localValue : remoteValue;
+              mergeDecisions[key] = localTime > remoteTime ? 'local-timestamp-newer' : 'remote-timestamp-newer';
+            } else {
+              // Default to remote (server authority)
+              merged[key] = remoteValue;
+              mergeDecisions[key] = 'server-authority';
+            }
+        }
+      } else {
+        // Values are identical
+        merged[key] = localValue;
+        mergeDecisions[key] = 'identical';
       }
     });
     
+    // Log merge decisions in debug mode
+    if (queryClientLogger && Object.keys(mergeDecisions).length > 0) {
+      const conflictCount = Object.values(mergeDecisions).filter(d => 
+        !['identical', 'local-only', 'remote-only'].includes(d)
+      ).length;
+      
+      if (conflictCount > 0) {
+        queryClientLogger.info('[SyncQueue] Merge completed with conflicts:', {
+          totalFields: allKeys.size,
+          conflicts: conflictCount,
+          decisions: mergeDecisions
+        });
+      }
+    }
+    
     return merged;
+  }
+  
+  private mergeArrays(localArray: any[], remoteArray: any[], fieldName: string): any[] {
+    // Strategy depends on field type
+    if (fieldName === 'tags' || fieldName === 'categories' || fieldName === 'labels') {
+      // For tags/categories, merge unique values
+      const uniqueValues = new Set([...localArray, ...remoteArray]);
+      return Array.from(uniqueValues);
+    }
+    
+    if (fieldName === 'history' || fieldName === 'logs' || fieldName === 'events') {
+      // For history/logs, combine and sort by timestamp
+      const combined = [...localArray, ...remoteArray];
+      
+      // Try to sort by timestamp if objects have timestamp fields
+      if (combined.length > 0 && combined[0].timestamp) {
+        return combined.sort((a, b) => {
+          const timeA = new Date(a.timestamp).getTime();
+          const timeB = new Date(b.timestamp).getTime();
+          return timeB - timeA; // Most recent first
+        });
+      }
+      
+      return combined;
+    }
+    
+    // For items with IDs, merge by ID
+    if (localArray.length > 0 && localArray[0].id) {
+      const idMap = new Map();
+      
+      // Add remote items first (lower priority)
+      remoteArray.forEach(item => {
+        if (item.id) {
+          idMap.set(item.id, item);
+        }
+      });
+      
+      // Overlay local items (higher priority)
+      localArray.forEach(item => {
+        if (item.id) {
+          const existing = idMap.get(item.id);
+          if (existing) {
+            // Recursively merge items with same ID
+            idMap.set(item.id, this.autoMerge(item, existing));
+          } else {
+            idMap.set(item.id, item);
+          }
+        }
+      });
+      
+      return Array.from(idMap.values());
+    }
+    
+    // Default: prefer remote array (server authority)
+    return remoteArray.length > 0 ? remoteArray : localArray;
+  }
+  
+  private isPlainObject(obj: any): boolean {
+    return obj !== null && 
+           typeof obj === 'object' && 
+           obj.constructor === Object &&
+           !Array.isArray(obj) &&
+           !(obj instanceof Date);
+  }
+  
+  private getFieldMergeStrategy(
+    fieldName: string,
+    localData: any,
+    remoteData: any
+  ): 'prefer-local' | 'prefer-remote' | 'combine' | 'timestamp' {
+    // Critical fields that should prefer server version
+    const serverAuthorityFields = [
+      'status',
+      'state',
+      'approved',
+      'published',
+      'verified',
+      'locked',
+      'paymentStatus',
+      'syncStatus'
+    ];
+    
+    if (serverAuthorityFields.includes(fieldName)) {
+      return 'prefer-remote';
+    }
+    
+    // User-generated content fields that should prefer local
+    const localPreferenceFields = [
+      'notes',
+      'comments',
+      'description',
+      'userNotes',
+      'draftContent',
+      'unsavedChanges'
+    ];
+    
+    if (localPreferenceFields.includes(fieldName)) {
+      // Only prefer local if it's actually newer or longer
+      const localValue = localData[fieldName];
+      const remoteValue = remoteData[fieldName];
+      
+      if (typeof localValue === 'string' && typeof remoteValue === 'string') {
+        // If local content is significantly longer, it likely has more information
+        if (localValue.length > remoteValue.length * 1.2) {
+          return 'prefer-local';
+        }
+      }
+      
+      return 'combine'; // Combine both versions
+    }
+    
+    // Numeric fields that could be combined
+    const combinableFields = [
+      'quantity',
+      'count',
+      'total',
+      'progress'
+    ];
+    
+    if (combinableFields.includes(fieldName)) {
+      return 'combine';
+    }
+    
+    // Default to timestamp-based resolution
+    return 'timestamp';
   }
 
   private async createNewVersion(entityType: string, data: any): Promise<void> {

@@ -76,6 +76,7 @@ export class ConditionalLogicEngine {
   private calculationCache: Map<string, any>;
   private debugMode: boolean = false;
   private debugLog: string[] = [];
+  private customValidators: Map<string, (value: any, field: TemplateField, allValues: FieldValues) => boolean | string>;
 
   constructor(
     fields: TemplateField[],
@@ -90,6 +91,7 @@ export class ConditionalLogicEngine {
     this.dependencyGraph = {};
     this.calculationCache = new Map();
     this.debugMode = debugMode;
+    this.customValidators = new Map();
 
     // Group dependencies by field
     dependencies.forEach(dep => {
@@ -433,8 +435,15 @@ export class ConditionalLogicEngine {
     // Custom validation rules
     if (rules.rules && Array.isArray(rules.rules)) {
       for (const rule of rules.rules) {
-        if (!this.evaluateValidationRule(rule, value)) {
+        // Pass fieldId for custom validators
+        const ruleWithFieldId = { ...rule, fieldId: field.id };
+        const result = this.evaluateValidationRule(ruleWithFieldId, value);
+        
+        // If result is false or a string (error message), validation failed
+        if (result === false) {
           return rule.message || `${field.label} validation failed`;
+        } else if (typeof result === 'string') {
+          return result; // Use the custom error message from validator
         }
       }
     }
@@ -452,7 +461,7 @@ export class ConditionalLogicEngine {
     return undefined;
   }
 
-  private evaluateValidationRule(rule: any, value: any): boolean {
+  private evaluateValidationRule(rule: any, value: any): boolean | string {
     switch (rule.type) {
       case "min":
         return Number(value) >= Number(rule.value);
@@ -465,7 +474,36 @@ export class ConditionalLogicEngine {
       case "pattern":
         return new RegExp(rule.value).test(String(value));
       case "custom":
-        // Custom validation function (would need to be passed in)
+        // Execute custom validation function if registered
+        if (rule.validatorId && this.customValidators.has(rule.validatorId)) {
+          const validator = this.customValidators.get(rule.validatorId)!;
+          const field = this.fields.get(rule.fieldId);
+          
+          try {
+            const result = validator(value, field || {} as TemplateField, this.fieldValues);
+            
+            // If the validator returns a string, it's an error message
+            if (typeof result === 'string') {
+              return false;
+            }
+            
+            // Otherwise, it should return a boolean
+            return result === true;
+          } catch (error) {
+            if (this.debugMode) {
+              this.debugLog.push(`Custom validator '${rule.validatorId}' threw error: ${error}`);
+            }
+            // If validator throws, treat as validation failure
+            return false;
+          }
+        }
+        
+        // If no custom validator is registered but one is required, log warning and pass
+        if (this.debugMode && rule.validatorId) {
+          this.debugLog.push(`Warning: Custom validator '${rule.validatorId}' not found`);
+        }
+        
+        // Default to true if no validator is specified
         return true;
       default:
         return true;
@@ -648,6 +686,53 @@ export class ConditionalLogicEngine {
     if (!enabled) {
       this.clearDebugLog();
     }
+  }
+
+  // Custom validator management methods
+  public registerCustomValidator(
+    validatorId: string,
+    validator: (value: any, field: TemplateField, allValues: FieldValues) => boolean | string
+  ): void {
+    if (!validatorId) {
+      throw new Error('Validator ID is required');
+    }
+    
+    if (typeof validator !== 'function') {
+      throw new Error('Validator must be a function');
+    }
+    
+    this.customValidators.set(validatorId, validator);
+    
+    if (this.debugMode) {
+      this.debugLog.push(`Custom validator '${validatorId}' registered`);
+    }
+  }
+  
+  public unregisterCustomValidator(validatorId: string): boolean {
+    const existed = this.customValidators.has(validatorId);
+    this.customValidators.delete(validatorId);
+    
+    if (this.debugMode && existed) {
+      this.debugLog.push(`Custom validator '${validatorId}' unregistered`);
+    }
+    
+    return existed;
+  }
+  
+  public hasCustomValidator(validatorId: string): boolean {
+    return this.customValidators.has(validatorId);
+  }
+  
+  public clearCustomValidators(): void {
+    this.customValidators.clear();
+    
+    if (this.debugMode) {
+      this.debugLog.push('All custom validators cleared');
+    }
+  }
+  
+  public getRegisteredValidatorIds(): string[] {
+    return Array.from(this.customValidators.keys());
   }
 
   public getDependencyChain(fieldId: string): string[] {
