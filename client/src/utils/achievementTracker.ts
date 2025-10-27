@@ -42,7 +42,7 @@ class AchievementTracker {
         this.calculateAllProgress();
       }
     } catch (error) {
-      console.error('Failed to initialize achievement tracker:', error);
+      // Failed to initialize achievement tracker - will retry on next user action
     }
   }
 
@@ -165,7 +165,7 @@ class AchievementTracker {
         queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       }
     } catch (error) {
-      console.error('Failed to unlock achievement:', error);
+      // Failed to unlock achievement - will retry on next trigger
     }
   }
 

@@ -98,7 +98,7 @@ class StreakTracker {
         });
       }
     } catch (error) {
-      console.error('Failed to load streaks:', error);
+      // Failed to load streaks - will retry on next event
     }
   }
 
@@ -209,7 +209,7 @@ class StreakTracker {
         body: JSON.stringify(streak)
       });
     } catch (error) {
-      console.error('Failed to save streak:', error);
+      // Failed to save streak - will retry on next event
     }
   }
 

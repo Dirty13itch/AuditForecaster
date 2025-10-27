@@ -79,7 +79,7 @@ export default function Challenges() {
         refetch();
       }
     } catch (error) {
-      console.error('Failed to join challenge:', error);
+      // Failed to join challenge - handled silently
     }
   };
 

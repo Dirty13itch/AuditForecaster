@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { isAuthenticated } from "./replitAuth";
+import { serverLogger } from "./logger";
 import {
   sendCalibrationAlert,
   sendAchievementUnlocked,
@@ -82,7 +83,7 @@ router.post("/api/test-notifications", isAuthenticated, async (req: any, res) =>
       message: "Test notifications sent successfully",
     });
   } catch (error) {
-    console.error("Error sending test notifications:", error);
+    serverLogger.error("Error sending test notifications:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send test notifications",
@@ -112,7 +113,7 @@ router.post("/api/test-notification-single", isAuthenticated, async (req: any, r
       message: "Test notification sent",
     });
   } catch (error) {
-    console.error("Error sending test notification:", error);
+    serverLogger.error("Error sending test notification:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send test notification",

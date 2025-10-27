@@ -163,7 +163,7 @@ export default function Schedule() {
         credentials: 'include',
       });
       if (!response.ok) {
-        console.error('[Schedule] Failed to fetch Google events');
+        // Failed to fetch Google events
         setSyncStatus('error');
         return [];
       }

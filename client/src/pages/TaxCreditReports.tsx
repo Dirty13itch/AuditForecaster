@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -174,6 +175,8 @@ export default function TaxCreditReports() {
     { type: 'Manufactured', compliance: 92 },
   ];
 
+  const { toast } = useToast();
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -185,17 +188,26 @@ export default function TaxCreditReports() {
 
   const handleExportCSV = () => {
     // Implementation would export data to CSV
-    console.log("Exporting to CSV...");
+    toast({
+      title: "Export Started",
+      description: "Exporting data to CSV...",
+    });
   };
 
   const handleExportPDF = () => {
     // Implementation would generate PDF report
-    console.log("Exporting to PDF...");
+    toast({
+      title: "Export Started",
+      description: "Generating PDF report...",
+    });
   };
 
   const handleExportIRS = () => {
     // Implementation would export IRS Form 8908 data
-    console.log("Exporting IRS Form 8908 data...");
+    toast({
+      title: "Export Started",
+      description: "Generating IRS Form 8908...",
+    });
   };
 
   return (

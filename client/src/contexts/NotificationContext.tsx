@@ -171,7 +171,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
-        console.log("WebSocket connected");
+        // WebSocket connected successfully
         setIsConnected(true);
         // Clear any existing reconnect timeout
         if (reconnectTimeoutRef.current) {
@@ -189,16 +189,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             ws.send(JSON.stringify({ type: "pong" }));
           }
         } catch (error) {
-          console.error("Error parsing WebSocket message:", error);
+          // Error parsing WebSocket message - ignore invalid messages
         }
       };
 
       ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        // WebSocket error occurred - will attempt reconnect on close
       };
 
       ws.onclose = () => {
-        console.log("WebSocket disconnected");
+        // WebSocket disconnected - attempting reconnect
         setIsConnected(false);
         wsRef.current = null;
         
@@ -210,7 +210,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       wsRef.current = ws;
     } catch (error) {
-      console.error("Failed to create WebSocket connection:", error);
+      // Failed to create WebSocket connection - falling back to polling
       setIsConnected(false);
       
       // Fall back to polling

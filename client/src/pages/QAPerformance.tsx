@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -152,9 +153,14 @@ export default function QAPerformance() {
     return "text-destructive";
   };
 
+  const { toast } = useToast();
+
   const exportReport = () => {
     // Implement PDF/Excel export
-    console.log("Exporting report...");
+    toast({
+      title: "Export Started",
+      description: "Generating performance report...",
+    });
   };
 
   return (

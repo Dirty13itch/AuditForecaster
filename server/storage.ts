@@ -5372,7 +5372,7 @@ export class DatabaseStorage implements IStorage {
         );
         results.push(assignedJob);
       } catch (error) {
-        console.error(`Failed to assign job ${jobId} to inspector ${inspectorId}:`, error);
+        serverLogger.error(`Failed to assign job ${jobId} to inspector ${inspectorId}:`, error);
       }
     }
     

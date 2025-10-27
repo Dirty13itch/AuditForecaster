@@ -2924,7 +2924,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         }
       } catch (notificationError) {
-        console.error('Failed to send assignment notification:', notificationError);
+        serverLogger.error('Failed to send assignment notification:', notificationError);
         // Don't fail the request if notification fails
       }
       
@@ -2974,7 +2974,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               metadata: { jobId: job.id }
             });
           } catch (error) {
-            console.error(`Failed to send notification for job ${job.id}:`, error);
+            serverLogger.error(`Failed to send notification for job ${job.id}:`, error);
           }
         }
       }
@@ -3734,7 +3734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true });
     } catch (error) {
-      console.error("Failed to update field conditions:", error);
+      serverLogger.error("Failed to update field conditions:", error);
       res.status(500).json({ error: "Failed to update field conditions" });
     }
   });
@@ -3762,7 +3762,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(result);
     } catch (error) {
-      console.error("Failed to test conditions:", error);
+      serverLogger.error("Failed to test conditions:", error);
       res.status(500).json({ error: "Failed to test conditions" });
     }
   });

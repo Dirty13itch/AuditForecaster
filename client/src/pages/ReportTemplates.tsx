@@ -364,7 +364,7 @@ export default function ReportTemplatesPage() {
       });
     },
     onError: (error) => {
-      console.error("Failed to create template:", error);
+      // Failed to create template - error shown in toast
       toast({
         title: "Error",
         description: "Failed to create template. Please try again.",
