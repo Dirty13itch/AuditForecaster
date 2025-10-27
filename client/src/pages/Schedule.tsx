@@ -376,7 +376,7 @@ export default function Schedule() {
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     const jobMap = new Map(jobs.map(j => [j.id, j]));
     
-    // App events (linked to jobs)
+    // App events (linked to jobs via schedule_events table)
     const appEvents = scheduleEvents
       .map(event => {
         const job = jobMap.get(event.jobId);
@@ -399,6 +399,29 @@ export default function Schedule() {
       })
       .filter((e): e is CalendarEvent => e !== null);
     
+    // Jobs with scheduledDate but no schedule_event record
+    const scheduledJobIds = new Set(scheduleEvents.map(e => e.jobId));
+    const jobOnlyEvents = jobs
+      .filter(job => job.scheduledDate && !scheduledJobIds.has(job.id))
+      .map(job => {
+        const start = new Date(job.scheduledDate);
+        const end = new Date(start);
+        end.setHours(start.getHours() + 2); // Default 2 hour duration
+        
+        return {
+          id: `job-${job.id}`,
+          jobId: job.id,
+          title: job.name,
+          start,
+          end,
+          resource: {
+            status: job.status,
+            job,
+            eventType: 'app' as const,
+          },
+        };
+      });
+    
     // Google-only events (not linked to jobs)
     const googleEvents = googleOnlyEvents
       .filter(event => !event.isConverted)
@@ -414,12 +437,12 @@ export default function Schedule() {
         },
       }));
     
-    return [...appEvents, ...googleEvents];
+    return [...appEvents, ...jobOnlyEvents, ...googleEvents];
   }, [scheduleEvents, jobs, googleOnlyEvents]);
 
   const unscheduledJobs = useMemo(() => {
     const scheduledJobIds = new Set(scheduleEvents.map(e => e.jobId));
-    return jobs.filter(job => !scheduledJobIds.has(job.id));
+    return jobs.filter(job => !scheduledJobIds.has(job.id) && !job.scheduledDate);
   }, [jobs, scheduleEvents]);
 
   const filteredUnscheduledJobs = useMemo(() => {
@@ -502,20 +525,44 @@ export default function Schedule() {
       return;
     }
 
-    updateEventMutation.mutate({
-      id: selectedEvent.resource.scheduleEventId,
-      startTime,
-      endTime,
-    });
+    // If this is a job-only event (no schedule_event record), create one
+    if (!selectedEvent.resource.scheduleEventId) {
+      createEventMutation.mutate({
+        jobId: selectedEvent.jobId,
+        title: selectedEvent.title,
+        startTime,
+        endTime,
+      });
+    } else {
+      // Update existing schedule_event
+      updateEventMutation.mutate({
+        id: selectedEvent.resource.scheduleEventId,
+        startTime,
+        endTime,
+      });
+    }
 
     setEventDialogOpen(false);
-  }, [selectedEvent, eventFormData, checkConflict, updateEventMutation, toast]);
+  }, [selectedEvent, eventFormData, checkConflict, updateEventMutation, createEventMutation, toast]);
 
   const handleDeleteEvent = useCallback(() => {
     if (!selectedEvent) return;
-    deleteEventMutation.mutate(selectedEvent.resource.scheduleEventId);
+    
+    // Only delete if there's a schedule_event record
+    if (selectedEvent.resource.scheduleEventId) {
+      deleteEventMutation.mutate(selectedEvent.resource.scheduleEventId);
+    } else {
+      // For job-only events, we can't delete the event itself
+      // Just close the dialog - user would need to clear scheduledDate from the job
+      toast({
+        title: 'Cannot delete job event',
+        description: 'This is a job with a scheduled date. To remove it from the calendar, clear the scheduled date from the job.',
+        variant: 'default'
+      });
+    }
+    
     setEventDialogOpen(false);
-  }, [selectedEvent, deleteEventMutation]);
+  }, [selectedEvent, deleteEventMutation, toast]);
 
   const handleConfirmConflict = useCallback(() => {
     if (!pendingEvent) return;

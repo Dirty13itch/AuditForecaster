@@ -956,6 +956,7 @@ function ReportGenerationDialog({
   builders: Builder[];
 }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const form = useForm<ReportGenerationValues>({
     resolver: zodResolver(reportGenerationSchema),
     defaultValues: {
@@ -971,33 +972,36 @@ function ReportGenerationDialog({
   const selectedJob = jobs.find(j => j.id === selectedJobId);
 
   const generateReportMutation = useMutation({
-    mutationFn: (data: ReportGenerationValues) => {
-      const job = jobs.find(j => j.id === data.jobId);
-      const reportData = {
-        overview: data.overview || `Inspection report for ${job?.name}`,
-        checklistSummary: `${job?.completedItems ?? 0}/${job?.totalItems ?? 52} items completed`,
-        forecast: {
-          predictedTDL: "125.0",
-          predictedDLO: "8.5",
-        },
-        finalNotes: data.finalNotes || "",
-        inspector: data.inspector || "John Doe, HERS Rater",
-      };
+    mutationFn: async (data: ReportGenerationValues) => {
+      const template = templates.find(t => t.id === data.templateId);
+      if (!template) {
+        throw new Error("Template not found");
+      }
 
-      return apiRequest("/api/report-instances", "POST", {
+      const response = await apiRequest("/api/report-instances", "POST", {
         jobId: data.jobId,
         templateId: data.templateId,
-        data: JSON.stringify(reportData),
+        templateVersion: template.version || 1,
+        status: "draft",
       });
+
+      return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (reportInstance) => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-instances"] });
-      toast({ title: "Report generated successfully" });
+      toast({ title: "Report created successfully", description: "Redirecting to report fillout page..." });
       onOpenChange(false);
       form.reset();
+      
+      // Navigate to the report fillout page
+      setLocation(`/reports/fillout/${reportInstance.id}`);
     },
-    onError: () => {
-      toast({ title: "Failed to generate report", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create report", 
+        description: error?.message || "Please try again",
+        variant: "destructive" 
+      });
     },
   });
 
