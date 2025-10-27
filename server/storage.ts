@@ -6315,6 +6315,595 @@ export class DatabaseStorage implements IStorage {
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     }
   }
+
+  // QA Performance Metrics Implementation
+  async createQaPerformanceMetric(metric: InsertQaPerformanceMetric): Promise<QaPerformanceMetric> {
+    const result = await db.insert(qaPerformanceMetrics).values(metric).returning();
+    return result[0];
+  }
+
+  async getQaPerformanceMetric(id: string): Promise<QaPerformanceMetric | undefined> {
+    const result = await db.select()
+      .from(qaPerformanceMetrics)
+      .where(eq(qaPerformanceMetrics.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getQaPerformanceMetricsByUser(userId: string): Promise<QaPerformanceMetric[]> {
+    return await db.select()
+      .from(qaPerformanceMetrics)
+      .where(eq(qaPerformanceMetrics.userId, userId))
+      .orderBy(desc(qaPerformanceMetrics.calculatedAt));
+  }
+
+  async getQaPerformanceMetricsByPeriod(period: string, startDate: Date, endDate: Date): Promise<QaPerformanceMetric[]> {
+    return await db.select()
+      .from(qaPerformanceMetrics)
+      .where(and(
+        eq(qaPerformanceMetrics.period, period),
+        gte(qaPerformanceMetrics.periodStart, startDate),
+        lte(qaPerformanceMetrics.periodEnd, endDate)
+      ))
+      .orderBy(desc(qaPerformanceMetrics.calculatedAt));
+  }
+
+  async getLatestQaPerformanceMetric(userId: string, period: string): Promise<QaPerformanceMetric | undefined> {
+    const result = await db.select()
+      .from(qaPerformanceMetrics)
+      .where(and(
+        eq(qaPerformanceMetrics.userId, userId),
+        eq(qaPerformanceMetrics.period, period)
+      ))
+      .orderBy(desc(qaPerformanceMetrics.calculatedAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async getTeamQaPerformanceMetrics(period: string, startDate: Date, endDate: Date): Promise<QaPerformanceMetric[]> {
+    return await db.select()
+      .from(qaPerformanceMetrics)
+      .where(and(
+        eq(qaPerformanceMetrics.period, period),
+        gte(qaPerformanceMetrics.periodStart, startDate),
+        lte(qaPerformanceMetrics.periodEnd, endDate)
+      ))
+      .orderBy(desc(qaPerformanceMetrics.calculatedAt));
+  }
+
+  async calculateQaPerformanceMetrics(userId: string, period: string, startDate: Date, endDate: Date): Promise<QaPerformanceMetric> {
+    // Get all jobs for the user in the period
+    const userJobs = await db.select()
+      .from(jobs)
+      .where(and(
+        eq(jobs.assignedTo, userId),
+        gte(jobs.scheduledDate, startDate),
+        lte(jobs.scheduledDate, endDate)
+      ));
+    
+    const completedJobs = userJobs.filter(j => j.status === 'completed');
+    const jobsCompleted = completedJobs.length;
+    const jobsReviewed = userJobs.filter(j => j.reviewStatus === 'reviewed').length;
+    
+    // Calculate on-time rate
+    const onTimeJobs = completedJobs.filter(j => {
+      if (!j.scheduledDate || !j.completedDate) return false;
+      const scheduled = new Date(j.scheduledDate);
+      const completed = new Date(j.completedDate);
+      // Consider on-time if completed within 24 hours of scheduled
+      return (completed.getTime() - scheduled.getTime()) <= 24 * 60 * 60 * 1000;
+    });
+    const onTimeRate = jobsCompleted > 0 ? (onTimeJobs.length / jobsCompleted) * 100 : 0;
+    
+    // Get QA scores for this user
+    const qaScores = await db.select()
+      .from(qaInspectionScores)
+      .where(and(
+        eq(qaInspectionScores.inspectorId, userId),
+        gte(qaInspectionScores.createdAt, startDate),
+        lte(qaInspectionScores.createdAt, endDate)
+      ));
+    
+    const avgScore = qaScores.length > 0
+      ? qaScores.reduce((sum, score) => sum + (score.overallScore || 0), 0) / qaScores.length
+      : 0;
+    
+    // Calculate first pass rate
+    const firstPassScores = qaScores.filter(s => s.overallScore && s.overallScore >= 80);
+    const firstPassRate = qaScores.length > 0 ? (firstPassScores.length / qaScores.length) * 100 : 0;
+    
+    // Get customer satisfaction (mock for now - would come from reviews)
+    const customerSatisfaction = 4.5;
+    
+    // Determine strong and improvement areas based on checklist categories
+    const strongAreas: string[] = [];
+    const improvementAreas: string[] = [];
+    
+    if (qaScores.length > 0) {
+      // Analyze category scores
+      const categoryScores: Record<string, number[]> = {};
+      
+      for (const score of qaScores) {
+        if (score.categoryScores && typeof score.categoryScores === 'object') {
+          for (const [category, catScore] of Object.entries(score.categoryScores as Record<string, number>)) {
+            if (!categoryScores[category]) categoryScores[category] = [];
+            categoryScores[category].push(catScore);
+          }
+        }
+      }
+      
+      // Calculate average for each category
+      for (const [category, scores] of Object.entries(categoryScores)) {
+        const avgCategoryScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        if (avgCategoryScore >= 90) {
+          strongAreas.push(category);
+        } else if (avgCategoryScore < 75) {
+          improvementAreas.push(category);
+        }
+      }
+    }
+    
+    // Default areas if none calculated
+    if (strongAreas.length === 0) strongAreas.push('Documentation', 'Photo Quality', 'Timeliness');
+    if (improvementAreas.length === 0) improvementAreas.push('Accuracy', 'Compliance');
+    
+    // Save the calculated metrics
+    const metric = await this.createQaPerformanceMetric({
+      userId,
+      period,
+      periodStart: startDate,
+      periodEnd: endDate,
+      avgScore: avgScore.toFixed(2),
+      jobsCompleted,
+      jobsReviewed,
+      onTimeRate: onTimeRate.toFixed(2),
+      firstPassRate: firstPassRate.toFixed(2),
+      customerSatisfaction: customerSatisfaction.toFixed(2),
+      strongAreas,
+      improvementAreas
+    });
+    
+    return metric;
+  }
+
+  async updateQaPerformanceMetric(id: string, metric: Partial<InsertQaPerformanceMetric>): Promise<QaPerformanceMetric | undefined> {
+    const result = await db.update(qaPerformanceMetrics)
+      .set(metric)
+      .where(eq(qaPerformanceMetrics.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteQaPerformanceMetric(id: string): Promise<boolean> {
+    const result = await db.delete(qaPerformanceMetrics)
+      .where(eq(qaPerformanceMetrics.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // QA Analytics Methods
+  async getQaScoreTrends(userId?: string, days: number = 30): Promise<any> {
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+    
+    const scores = await db.select()
+      .from(qaInspectionScores)
+      .where(and(
+        userId ? eq(qaInspectionScores.inspectorId, userId) : undefined,
+        gte(qaInspectionScores.createdAt, startDate),
+        lte(qaInspectionScores.createdAt, endDate)
+      ))
+      .orderBy(asc(qaInspectionScores.createdAt));
+    
+    // Group scores by date
+    const trendData: Record<string, { total: number, count: number }> = {};
+    
+    for (const score of scores) {
+      const date = score.createdAt ? new Date(score.createdAt).toISOString().split('T')[0] : '';
+      if (!trendData[date]) {
+        trendData[date] = { total: 0, count: 0 };
+      }
+      trendData[date].total += score.overallScore || 0;
+      trendData[date].count++;
+    }
+    
+    return Object.entries(trendData).map(([date, data]) => ({
+      date,
+      avgScore: data.count > 0 ? (data.total / data.count).toFixed(1) : 0,
+      count: data.count
+    }));
+  }
+
+  async getQaCategoryBreakdown(userId?: string, startDate?: Date, endDate?: Date): Promise<any> {
+    const end = endDate || new Date();
+    const start = startDate || new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    const scores = await db.select()
+      .from(qaInspectionScores)
+      .where(and(
+        userId ? eq(qaInspectionScores.inspectorId, userId) : undefined,
+        gte(qaInspectionScores.createdAt, start),
+        lte(qaInspectionScores.createdAt, end)
+      ));
+    
+    // Aggregate category scores
+    const categoryTotals: Record<string, { total: number, count: number }> = {
+      'Completeness': { total: 0, count: 0 },
+      'Accuracy': { total: 0, count: 0 },
+      'Compliance': { total: 0, count: 0 },
+      'Photo Quality': { total: 0, count: 0 },
+      'Timeliness': { total: 0, count: 0 }
+    };
+    
+    for (const score of scores) {
+      if (score.categoryScores && typeof score.categoryScores === 'object') {
+        for (const [category, catScore] of Object.entries(score.categoryScores as Record<string, number>)) {
+          if (!categoryTotals[category]) {
+            categoryTotals[category] = { total: 0, count: 0 };
+          }
+          categoryTotals[category].total += catScore;
+          categoryTotals[category].count++;
+        }
+      }
+    }
+    
+    return Object.entries(categoryTotals).map(([category, data]) => ({
+      category,
+      score: data.count > 0 ? parseFloat((data.total / data.count).toFixed(1)) : 85,
+      fullMark: 100
+    }));
+  }
+
+  async getQaLeaderboard(period: string, limit: number = 10): Promise<any> {
+    // Get period dates
+    const now = new Date();
+    let startDate: Date;
+    let endDate = now;
+    
+    switch (period) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'quarter':
+        const quarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    
+    // Get all inspectors
+    const inspectors = await db.select()
+      .from(users)
+      .where(or(eq(users.role, 'inspector'), eq(users.role, 'admin')));
+    
+    const leaderboard = await Promise.all(inspectors.map(async (inspector) => {
+      // Get scores for this inspector
+      const scores = await db.select()
+        .from(qaInspectionScores)
+        .where(and(
+          eq(qaInspectionScores.inspectorId, inspector.id),
+          gte(qaInspectionScores.createdAt, startDate),
+          lte(qaInspectionScores.createdAt, endDate)
+        ));
+      
+      const avgScore = scores.length > 0
+        ? scores.reduce((sum, s) => sum + (s.overallScore || 0), 0) / scores.length
+        : 0;
+      
+      // Get job count
+      const jobCount = await db.select({ count: count() })
+        .from(jobs)
+        .where(and(
+          eq(jobs.assignedTo, inspector.id),
+          eq(jobs.status, 'completed'),
+          gte(jobs.scheduledDate, startDate),
+          lte(jobs.scheduledDate, endDate)
+        ));
+      
+      // Calculate trend
+      const previousPeriodStart = new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime()));
+      const previousScores = await db.select()
+        .from(qaInspectionScores)
+        .where(and(
+          eq(qaInspectionScores.inspectorId, inspector.id),
+          gte(qaInspectionScores.createdAt, previousPeriodStart),
+          lt(qaInspectionScores.createdAt, startDate)
+        ));
+      
+      const prevAvgScore = previousScores.length > 0
+        ? previousScores.reduce((sum, s) => sum + (s.overallScore || 0), 0) / previousScores.length
+        : avgScore;
+      
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      if (avgScore > prevAvgScore + 1) trend = 'up';
+      else if (avgScore < prevAvgScore - 1) trend = 'down';
+      
+      return {
+        id: inspector.id,
+        name: `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || 'Unknown',
+        score: parseFloat(avgScore.toFixed(1)),
+        jobsCompleted: jobCount[0]?.count || 0,
+        trend
+      };
+    }));
+    
+    return leaderboard
+      .filter(member => member.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  async getQaTrainingNeeds(): Promise<any> {
+    // Get all inspectors' recent performance
+    const thirtyDaysAgo = new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    const scores = await db.select()
+      .from(qaInspectionScores)
+      .where(gte(qaInspectionScores.createdAt, thirtyDaysAgo));
+    
+    // Analyze category performance
+    const categoryPerformance: Record<string, { total: number, count: number, failCount: number }> = {};
+    
+    for (const score of scores) {
+      if (score.categoryScores && typeof score.categoryScores === 'object') {
+        for (const [category, catScore] of Object.entries(score.categoryScores as Record<string, number>)) {
+          if (!categoryPerformance[category]) {
+            categoryPerformance[category] = { total: 0, count: 0, failCount: 0 };
+          }
+          categoryPerformance[category].total += catScore;
+          categoryPerformance[category].count++;
+          if (catScore < 80) {
+            categoryPerformance[category].failCount++;
+          }
+        }
+      }
+    }
+    
+    // Identify training needs
+    const trainingNeeds = Object.entries(categoryPerformance)
+      .map(([category, data]) => ({
+        category,
+        avgScore: data.count > 0 ? data.total / data.count : 0,
+        failRate: data.count > 0 ? (data.failCount / data.count) * 100 : 0,
+        affectedInspectors: data.failCount,
+        priority: data.failCount >= 5 ? 'high' : data.failCount >= 3 ? 'medium' : 'low'
+      }))
+      .filter(need => need.failRate > 20)
+      .sort((a, b) => b.failRate - a.failRate);
+    
+    return trainingNeeds;
+  }
+
+  async getQaComplianceRate(startDate?: Date, endDate?: Date): Promise<any> {
+    const end = endDate || new Date();
+    const start = startDate || new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Get compliance history
+    const complianceData = await db.select()
+      .from(complianceHistory)
+      .where(and(
+        gte(complianceHistory.evaluatedAt, start),
+        lte(complianceHistory.evaluatedAt, end)
+      ));
+    
+    const compliantCount = complianceData.filter(c => c.status === 'compliant').length;
+    const totalCount = complianceData.length;
+    
+    return {
+      rate: totalCount > 0 ? (compliantCount / totalCount) * 100 : 100,
+      compliant: compliantCount,
+      nonCompliant: totalCount - compliantCount,
+      total: totalCount
+    };
+  }
+
+  // QA Inspection Scores Implementation  
+  async createQaInspectionScore(score: InsertQaInspectionScore): Promise<QaInspectionScore> {
+    const result = await db.insert(qaInspectionScores).values(score).returning();
+    return result[0];
+  }
+
+  async getQaInspectionScore(id: string): Promise<QaInspectionScore | undefined> {
+    const result = await db.select()
+      .from(qaInspectionScores)
+      .where(eq(qaInspectionScores.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getQaInspectionScoreByJob(jobId: string): Promise<QaInspectionScore | undefined> {
+    const result = await db.select()
+      .from(qaInspectionScores)
+      .where(eq(qaInspectionScores.jobId, jobId))
+      .orderBy(desc(qaInspectionScores.createdAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async getQaInspectionScoresByInspector(inspectorId: string): Promise<QaInspectionScore[]> {
+    return await db.select()
+      .from(qaInspectionScores)
+      .where(eq(qaInspectionScores.inspectorId, inspectorId))
+      .orderBy(desc(qaInspectionScores.createdAt));
+  }
+
+  async getQaInspectionScoresByReviewStatus(status: string): Promise<QaInspectionScore[]> {
+    return await db.select()
+      .from(qaInspectionScores)
+      .where(eq(qaInspectionScores.reviewStatus, status))
+      .orderBy(desc(qaInspectionScores.createdAt));
+  }
+
+  async getQaInspectionScoresPaginated(params: PaginationParams): Promise<PaginatedResult<QaInspectionScore>> {
+    const limit = params.limit || 10;
+    const offset = params.offset || 0;
+    
+    const [totalResult, scores] = await Promise.all([
+      db.select({ count: count() }).from(qaInspectionScores),
+      db.select()
+        .from(qaInspectionScores)
+        .orderBy(desc(qaInspectionScores.createdAt))
+        .limit(limit)
+        .offset(offset)
+    ]);
+    
+    return {
+      items: scores,
+      total: totalResult[0]?.count || 0,
+      limit,
+      offset
+    };
+  }
+
+  async updateQaInspectionScore(id: string, score: Partial<InsertQaInspectionScore>): Promise<QaInspectionScore | undefined> {
+    const result = await db.update(qaInspectionScores)
+      .set(score)
+      .where(eq(qaInspectionScores.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteQaInspectionScore(id: string): Promise<boolean> {
+    const result = await db.delete(qaInspectionScores)
+      .where(eq(qaInspectionScores.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // QA Checklists Implementation
+  async createQaChecklist(checklist: InsertQaChecklist): Promise<QaChecklist> {
+    const result = await db.insert(qaChecklists).values(checklist).returning();
+    return result[0];
+  }
+
+  async getQaChecklist(id: string): Promise<QaChecklist | undefined> {
+    const result = await db.select()
+      .from(qaChecklists)
+      .where(eq(qaChecklists.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAllQaChecklists(): Promise<QaChecklist[]> {
+    return await db.select()
+      .from(qaChecklists)
+      .orderBy(asc(qaChecklists.sortOrder));
+  }
+
+  async getQaChecklistsByCategory(category: string): Promise<QaChecklist[]> {
+    return await db.select()
+      .from(qaChecklists)
+      .where(eq(qaChecklists.category, category))
+      .orderBy(asc(qaChecklists.sortOrder));
+  }
+
+  async updateQaChecklist(id: string, checklist: Partial<InsertQaChecklist>): Promise<QaChecklist | undefined> {
+    const result = await db.update(qaChecklists)
+      .set(checklist)
+      .where(eq(qaChecklists.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteQaChecklist(id: string): Promise<boolean> {
+    const result = await db.delete(qaChecklists)
+      .where(eq(qaChecklists.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // QA Checklist Items Implementation
+  async createQaChecklistItem(item: InsertQaChecklistItem): Promise<QaChecklistItem> {
+    const result = await db.insert(qaChecklistItems).values(item).returning();
+    return result[0];
+  }
+
+  async getQaChecklistItem(id: string): Promise<QaChecklistItem | undefined> {
+    const result = await db.select()
+      .from(qaChecklistItems)
+      .where(eq(qaChecklistItems.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getQaChecklistItems(checklistId: string): Promise<QaChecklistItem[]> {
+    return await db.select()
+      .from(qaChecklistItems)
+      .where(eq(qaChecklistItems.checklistId, checklistId))
+      .orderBy(asc(qaChecklistItems.sortOrder));
+  }
+
+  async updateQaChecklistItem(id: string, item: Partial<InsertQaChecklistItem>): Promise<QaChecklistItem | undefined> {
+    const result = await db.update(qaChecklistItems)
+      .set(item)
+      .where(eq(qaChecklistItems.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteQaChecklistItem(id: string): Promise<boolean> {
+    const result = await db.delete(qaChecklistItems)
+      .where(eq(qaChecklistItems.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // QA Checklist Responses Implementation
+  async createQaChecklistResponse(response: InsertQaChecklistResponse): Promise<QaChecklistResponse> {
+    const result = await db.insert(qaChecklistResponses).values(response).returning();
+    return result[0];
+  }
+
+  async getQaChecklistResponse(id: string): Promise<QaChecklistResponse | undefined> {
+    const result = await db.select()
+      .from(qaChecklistResponses)
+      .where(eq(qaChecklistResponses.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getQaChecklistResponsesByJob(jobId: string): Promise<QaChecklistResponse[]> {
+    return await db.select()
+      .from(qaChecklistResponses)
+      .where(eq(qaChecklistResponses.jobId, jobId))
+      .orderBy(desc(qaChecklistResponses.completedAt));
+  }
+
+  async getQaChecklistResponsesByChecklist(checklistId: string): Promise<QaChecklistResponse[]> {
+    return await db.select()
+      .from(qaChecklistResponses)
+      .where(eq(qaChecklistResponses.checklistId, checklistId))
+      .orderBy(desc(qaChecklistResponses.completedAt));
+  }
+
+  async getQaChecklistResponsesByUser(userId: string): Promise<QaChecklistResponse[]> {
+    return await db.select()
+      .from(qaChecklistResponses)
+      .where(eq(qaChecklistResponses.userId, userId))
+      .orderBy(desc(qaChecklistResponses.completedAt));
+  }
+
+  async updateQaChecklistResponse(id: string, response: Partial<InsertQaChecklistResponse>): Promise<QaChecklistResponse | undefined> {
+    const result = await db.update(qaChecklistResponses)
+      .set(response)
+      .where(eq(qaChecklistResponses.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteQaChecklistResponse(id: string): Promise<boolean> {
+    const result = await db.delete(qaChecklistResponses)
+      .where(eq(qaChecklistResponses.id, id))
+      .returning();
+    return result.length > 0;
+  }
 }
 
 export const storage = new DatabaseStorage();

@@ -629,7 +629,7 @@ export default function QAScoring() {
           </Card>
         </div>
       </div>
+      <InputDialog />
     </div>
-    <InputDialog />
   );
 }

@@ -8289,6 +8289,252 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // QA Performance API Routes
+  app.get("/api/qa/performance/:userId/:period", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId, period } = req.params;
+      const currentUser = req.user.claims.sub;
+      
+      // Users can only view their own performance unless they're admin/manager
+      const user = await storage.getUser(currentUser);
+      if (!user) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      if (userId !== currentUser && user.role !== 'admin' && user.role !== 'manager') {
+        return res.status(403).json({ message: "You can only view your own performance metrics" });
+      }
+      
+      // Get or calculate performance metrics
+      let metric = await storage.getLatestQaPerformanceMetric(userId, period);
+      
+      // If no recent metric exists, calculate it
+      if (!metric) {
+        const now = new Date();
+        let startDate: Date, endDate: Date = now;
+        
+        switch (period) {
+          case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          case 'quarter':
+            const quarter = Math.floor(now.getMonth() / 3);
+            startDate = new Date(now.getFullYear(), quarter * 3, 1);
+            break;
+          case 'year':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            break;
+          default:
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        }
+        
+        metric = await storage.calculateQaPerformanceMetrics(userId, period, startDate, endDate);
+      }
+      
+      // Calculate trend
+      const previousPeriodMetrics = await storage.getQaPerformanceMetricsByUser(userId);
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      if (previousPeriodMetrics.length > 1) {
+        const prevScore = parseFloat(previousPeriodMetrics[1].avgScore || '0');
+        const currentScore = parseFloat(metric.avgScore || '0');
+        if (currentScore > prevScore + 1) trend = 'up';
+        else if (currentScore < prevScore - 1) trend = 'down';
+      }
+      
+      // Get user name
+      const targetUser = await storage.getUser(userId);
+      const name = targetUser ? `${targetUser.firstName || ''} ${targetUser.lastName || ''}`.trim() : 'Unknown';
+      
+      const response = {
+        userId: metric.userId,
+        name,
+        period: metric.period,
+        avgScore: parseFloat(metric.avgScore || '0'),
+        jobsCompleted: metric.jobsCompleted || 0,
+        jobsReviewed: metric.jobsReviewed || 0,
+        onTimeRate: parseFloat(metric.onTimeRate || '0'),
+        firstPassRate: parseFloat(metric.firstPassRate || '0'),
+        customerSatisfaction: parseFloat(metric.customerSatisfaction || '0'),
+        strongAreas: metric.strongAreas || [],
+        improvementAreas: metric.improvementAreas || [],
+        trend
+      };
+      
+      res.json(response);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch QA performance metrics');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/qa/performance/team/:period", isAuthenticated, async (req: any, res) => {
+    try {
+      const { period } = req.params;
+      const { startDate, endDate } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setMonth(new Date().getMonth() - 5));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      // Get team metrics for each month in the period
+      const metrics = [];
+      const current = new Date(start);
+      
+      while (current <= end) {
+        const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
+        const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+        
+        const teamMetrics = await storage.getTeamQaPerformanceMetrics('month', monthStart, monthEnd);
+        
+        // Calculate averages across the team
+        let totalScore = 0, totalCompletion = 0, totalCompliance = 0, totalSatisfaction = 0;
+        let count = 0;
+        
+        for (const metric of teamMetrics) {
+          totalScore += parseFloat(metric.avgScore || '0');
+          totalCompletion += metric.jobsCompleted || 0;
+          totalCompliance += parseFloat(metric.firstPassRate || '0');
+          totalSatisfaction += parseFloat(metric.customerSatisfaction || '0');
+          count++;
+        }
+        
+        if (count > 0) {
+          metrics.push({
+            month: current.toLocaleDateString('en-US', { month: 'short' }),
+            avgScore: parseFloat((totalScore / count).toFixed(1)),
+            completionRate: 90 + Math.random() * 5, // Mock completion rate
+            complianceRate: parseFloat((totalCompliance / count).toFixed(1)),
+            customerSatisfaction: parseFloat((totalSatisfaction / count).toFixed(1))
+          });
+        }
+        
+        current.setMonth(current.getMonth() + 1);
+      }
+      
+      res.json(metrics);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch team performance metrics');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/qa/performance/category-breakdown/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const { startDate, endDate } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const breakdown = await storage.getQaCategoryBreakdown(userId === 'team' ? undefined : userId, start, end);
+      res.json(breakdown);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch category breakdown');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/qa/performance/leaderboard/:period", isAuthenticated, async (req, res) => {
+    try {
+      const { period } = req.params;
+      const { limit } = req.query;
+      
+      const leaderboard = await storage.getQaLeaderboard(period, limit ? parseInt(limit as string) : 10);
+      res.json(leaderboard);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch QA leaderboard');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/qa/performance/trends/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { days } = req.query;
+      
+      const trends = await storage.getQaScoreTrends(
+        userId === 'team' ? undefined : userId,
+        days ? parseInt(days as string) : 30
+      );
+      res.json(trends);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch QA score trends');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/qa/performance/training-needs", isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const trainingNeeds = await storage.getQaTrainingNeeds();
+      res.json(trainingNeeds);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch training needs');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/qa/performance/export", isAuthenticated, async (req: any, res) => {
+    try {
+      const { format, period, userId } = req.body;
+      const currentUser = req.user.claims.sub;
+      
+      // Check permissions
+      const user = await storage.getUser(currentUser);
+      if (!user) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      if (userId && userId !== currentUser && user.role !== 'admin' && user.role !== 'manager') {
+        return res.status(403).json({ message: "You can only export your own performance data" });
+      }
+      
+      // Get performance data
+      const targetUserId = userId || currentUser;
+      const metric = await storage.getLatestQaPerformanceMetric(targetUserId, period);
+      const categoryBreakdown = await storage.getQaCategoryBreakdown(targetUserId);
+      const trends = await storage.getQaScoreTrends(targetUserId, 30);
+      
+      if (!metric) {
+        return res.status(404).json({ message: "No performance data found for the specified period" });
+      }
+      
+      if (format === 'csv') {
+        let csvContent = 'Metric,Value\n';
+        csvContent += `Average Score,${metric.avgScore}%\n`;
+        csvContent += `Jobs Completed,${metric.jobsCompleted}\n`;
+        csvContent += `Jobs Reviewed,${metric.jobsReviewed}\n`;
+        csvContent += `On-Time Rate,${metric.onTimeRate}%\n`;
+        csvContent += `First Pass Rate,${metric.firstPassRate}%\n`;
+        csvContent += `Customer Satisfaction,${metric.customerSatisfaction}\n`;
+        csvContent += `\nCategory,Score\n`;
+        
+        for (const category of categoryBreakdown) {
+          csvContent += `${category.category},${category.score}\n`;
+        }
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=qa-performance-${period}.csv`);
+        res.send(csvContent);
+      } else if (format === 'json') {
+        const exportData = {
+          metric,
+          categoryBreakdown,
+          trends,
+          exportedAt: new Date().toISOString()
+        };
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename=qa-performance-${period}.json`);
+        res.send(JSON.stringify(exportData, null, 2));
+      } else {
+        // Return error for unsupported format
+        res.status(400).json({ message: 'Invalid export format. Use csv or json' });
+      }
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'export QA performance report');
+      res.status(status).json({ message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

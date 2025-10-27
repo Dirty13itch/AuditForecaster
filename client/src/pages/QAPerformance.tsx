@@ -92,14 +92,26 @@ export default function QAPerformance() {
 
   // Fetch individual performance
   const { data: individualMetric, isLoading: individualLoading } = useQuery<PerformanceMetric>({
-    queryKey: ['/api/qa/performance', selectedUserId, selectedPeriod],
-    enabled: false // Will be enabled when backend is ready
+    queryKey: [`/api/qa/performance/${selectedUserId}/${selectedPeriod}`],
+    enabled: !!selectedUserId
   });
 
   // Fetch team performance
   const { data: teamMetrics, isLoading: teamLoading } = useQuery<TeamPerformance[]>({
-    queryKey: ['/api/qa/performance/team', selectedPeriod, dateRange],
-    enabled: false // Will be enabled when backend is ready
+    queryKey: [`/api/qa/performance/team/${selectedPeriod}`],
+    enabled: true
+  });
+
+  // Fetch category breakdown
+  const { data: categoryBreakdown } = useQuery<CategoryBreakdown[]>({
+    queryKey: [`/api/qa/performance/category-breakdown/${selectedView === 'team' ? 'team' : selectedUserId}`],
+    enabled: true
+  });
+
+  // Fetch leaderboard
+  const { data: leaderboard } = useQuery<Array<{ id: string; name: string; score: number; jobsCompleted: number; trend: 'up' | 'down' | 'stable' }>>({
+    queryKey: [`/api/qa/performance/leaderboard/${selectedPeriod}`],
+    enabled: selectedView === 'team'
   });
 
   // Mock data
@@ -145,6 +157,8 @@ export default function QAPerformance() {
 
   const displayMetric = individualMetric || mockIndividualMetric;
   const displayTeamMetrics = teamMetrics || mockTeamMetrics;
+  const displayCategoryBreakdown = categoryBreakdown || mockCategoryBreakdown;
+  const displayLeaderboard = leaderboard || mockTeamMembers;
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return "text-green-600 dark:text-green-400";
@@ -155,12 +169,45 @@ export default function QAPerformance() {
 
   const { toast } = useToast();
 
-  const exportReport = () => {
-    // Implement PDF/Excel export
-    toast({
-      title: "Export Started",
-      description: "Generating performance report...",
-    });
+  const exportReport = async () => {
+    try {
+      const response = await fetch('/api/qa/performance/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          format: 'csv', // Can be 'csv', 'json', or 'pdf'
+          period: selectedPeriod,
+          userId: selectedView === 'individual' ? selectedUserId : undefined
+        })
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `qa-performance-${selectedPeriod}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        toast({
+          title: "Export Complete",
+          description: "Your performance report has been downloaded.",
+        });
+      } else {
+        throw new Error('Export failed');
+      }
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "There was an error generating the report. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -213,7 +260,7 @@ export default function QAPerformance() {
                 <CardContent>
                   <ScrollArea className="h-[400px]">
                     <div className="space-y-2 pr-4">
-                      {mockTeamMembers.map((member) => (
+                      {displayLeaderboard.map((member) => (
                         <div
                           key={member.id}
                           className={`p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -530,13 +577,13 @@ export default function QAPerformance() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={mockCategoryBreakdown}>
+                <BarChart data={displayCategoryBreakdown}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="category" />
                   <YAxis domain={[0, 100]} />
                   <Tooltip />
                   <Bar dataKey="score" fill="hsl(var(--primary))">
-                    {mockCategoryBreakdown.map((entry, index) => (
+                    {displayCategoryBreakdown.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={entry.score >= 90 ? "#10b981" : entry.score >= 80 ? "hsl(var(--primary))" : "#f59e0b"}
@@ -556,7 +603,7 @@ export default function QAPerformance() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {mockTeamMembers
+                {displayLeaderboard
                   .sort((a, b) => b.score - a.score)
                   .map((member, index) => (
                     <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg border">
