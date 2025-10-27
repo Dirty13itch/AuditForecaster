@@ -106,7 +106,7 @@ function DraggableJobCard({ job }: DraggableJobCardProps) {
 
 export default function Schedule() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const isMobile = useIsMobile();
   const isAdmin = user?.role === 'admin';
   
@@ -351,6 +351,7 @@ export default function Schedule() {
       queryClient.invalidateQueries({ queryKey: ['/api/pending-events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/inspectors/workload'] });
       toast({ title: 'Event assigned successfully' });
     },
     onError: (error: any) => {
@@ -372,6 +373,7 @@ export default function Schedule() {
       queryClient.invalidateQueries({ queryKey: ['/api/pending-events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/inspectors/workload'] });
       toast({ title: 'Events assigned successfully' });
     },
     onError: (error: any) => {
@@ -1109,7 +1111,7 @@ export default function Schedule() {
         </div>
 
         {/* Admin-only Unassigned Events Queue (Desktop Sidebar) */}
-        {isAdmin && !isMobile && (
+        {!authLoading && isAdmin === true && !isMobile && (
           <UnassignedQueue
             events={pendingEvents}
             inspectors={inspectors}
@@ -1121,7 +1123,7 @@ export default function Schedule() {
       </div>
 
       {/* Admin-only Unassigned Events Queue (Mobile Bottom Sheet) */}
-      {isAdmin && isMobile && (
+      {!authLoading && isAdmin === true && isMobile && (
         <UnassignedQueueSheet
           events={pendingEvents}
           inspectors={inspectors}

@@ -2710,11 +2710,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        serverLogger.info('[API] Fetching inspector workload:', { startDate, endDate });
+        // Parse and validate dates
+        const parsedStartDate = new Date(startDate as string);
+        const parsedEndDate = new Date(endDate as string);
+
+        // Check if dates are valid
+        if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid date format. Please provide valid ISO 8601 dates.'
+          });
+        }
+
+        serverLogger.info('[API] Fetching inspector workload:', { 
+          startDate: parsedStartDate.toISOString(), 
+          endDate: parsedEndDate.toISOString() 
+        });
 
         const workload = await storage.getInspectorWorkload({
-          startDate: new Date(startDate as string),
-          endDate: new Date(endDate as string),
+          startDate: parsedStartDate,
+          endDate: parsedEndDate,
         });
 
         res.json(workload);
