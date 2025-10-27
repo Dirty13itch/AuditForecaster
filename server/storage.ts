@@ -5581,7 +5581,6 @@ export class DatabaseStorage implements IStorage {
       jobCount,
       scheduledMinutes,
       workloadLevel,
-      lastJobLocation: lastJob?.address,
       lastJobLatitude: null, // Would need geocoding to get actual coordinates
       lastJobLongitude: null,
     });
