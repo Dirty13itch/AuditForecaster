@@ -351,10 +351,22 @@ export default function Jobs() {
     mutationFn: async ({ jobId, inspectorId }: { jobId: string; inspectorId: string }) => {
       return apiRequest("POST", `/api/jobs/${jobId}/assign`, { inspectorId });
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs/today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/inspectors/workload"] });
+    onSuccess: async (data) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ 
+          predicate: (query) => query.queryKey[0] === "/api/jobs",
+          refetchType: 'active'
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/jobs/today"],
+          refetchType: 'active'
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/inspectors/workload"],
+          refetchType: 'active'
+        }),
+      ]);
+      
       toast({
         title: "Job Assigned",
         description: `Job assigned successfully`,
