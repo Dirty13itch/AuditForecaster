@@ -189,6 +189,7 @@ import {
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
+import { type UserRole } from "./permissions";
 import { db } from "./db";
 import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count, isNull } from "drizzle-orm";
 
@@ -197,6 +198,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>; // Alias for getUser, used by audit logger
   getAllUsers(): Promise<User[]>;
+  getUsersByRole(role: UserRole): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>;
 
   createBuilder(builder: InsertBuilder): Promise<Builder>;
@@ -270,7 +272,7 @@ export interface IStorage {
   createScheduleEvent(event: InsertScheduleEvent): Promise<ScheduleEvent>;
   getScheduleEvent(id: string): Promise<ScheduleEvent | undefined>;
   getScheduleEventsByJob(jobId: string): Promise<ScheduleEvent[]>;
-  getScheduleEventsByDateRange(startDate: Date, endDate: Date): Promise<ScheduleEvent[]>;
+  getScheduleEventsByDateRange(startDate: Date, endDate: Date, userId?: string, userRole?: UserRole): Promise<ScheduleEvent[]>;
   updateScheduleEvent(id: string, event: Partial<InsertScheduleEvent>): Promise<ScheduleEvent | undefined>;
   deleteScheduleEvent(id: string): Promise<boolean>;
 
@@ -559,6 +561,24 @@ export interface IStorage {
     jobCount: number;
     scheduledMinutes: number;
   }>>;
+
+  // New assignment endpoints with ScheduleEvent creation
+  assignPendingEventToInspector(params: {
+    eventId: string;
+    inspectorId: string;
+    adminId: string;
+  }): Promise<{ job: Job; scheduleEvent: ScheduleEvent }>;
+
+  bulkAssignPendingEvents(params: {
+    eventIds: string[];
+    inspectorId: string;
+    adminId: string;
+  }): Promise<{ assignedCount: number; errors: string[] }>;
+
+  getInspectorWorkload(params: {
+    startDate: Date;
+    endDate: Date;
+  }): Promise<Array<{ inspectorId: string; inspectorName: string; jobCount: number }>>;
 
   // Financial operations
   // Invoices
@@ -1228,7 +1248,7 @@ export class DatabaseStorage implements IStorage {
 
   async getJobsByUser(userId: string): Promise<Job[]> {
     return await db.select().from(jobs)
-      .where(eq(jobs.createdBy, userId))
+      .where(eq(jobs.assignedTo, userId))
       .orderBy(desc(jobs.id));
   }
 
@@ -1283,10 +1303,10 @@ export class DatabaseStorage implements IStorage {
     
     const whereCondition = cursor 
       ? and(
-          eq(jobs.createdBy, userId),
+          eq(jobs.assignedTo, userId),
           sortOrder === 'desc' ? lt(jobs.id, cursor) : gt(jobs.id, cursor)
         )
-      : eq(jobs.createdBy, userId);
+      : eq(jobs.assignedTo, userId);
     
     const orderByCondition = sortOrder === 'desc' ? desc(jobs.id) : asc(jobs.id);
     
@@ -1349,7 +1369,40 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(scheduleEvents).where(eq(scheduleEvents.jobId, jobId));
   }
 
-  async getScheduleEventsByDateRange(startDate: Date, endDate: Date): Promise<ScheduleEvent[]> {
+  async getScheduleEventsByDateRange(
+    startDate: Date, 
+    endDate: Date, 
+    userId?: string, 
+    userRole?: UserRole
+  ): Promise<ScheduleEvent[]> {
+    // If inspector role, join with jobs and filter by assignedTo
+    if (userRole === 'inspector' && userId) {
+      const eventsWithJobs = await db
+        .select({
+          id: scheduleEvents.id,
+          jobId: scheduleEvents.jobId,
+          title: scheduleEvents.title,
+          startTime: scheduleEvents.startTime,
+          endTime: scheduleEvents.endTime,
+          notes: scheduleEvents.notes,
+          googleCalendarEventId: scheduleEvents.googleCalendarEventId,
+          googleCalendarId: scheduleEvents.googleCalendarId,
+          lastSyncedAt: scheduleEvents.lastSyncedAt,
+          color: scheduleEvents.color,
+        })
+        .from(scheduleEvents)
+        .innerJoin(jobs, eq(scheduleEvents.jobId, jobs.id))
+        .where(
+          and(
+            gte(scheduleEvents.startTime, startDate),
+            lte(scheduleEvents.startTime, endDate),
+            eq(jobs.assignedTo, userId)
+          )
+        );
+      return eventsWithJobs;
+    }
+    
+    // Admin and other roles see all events
     return await db.select().from(scheduleEvents)
       .where(
         and(
@@ -3962,6 +4015,141 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // New assignment methods with ScheduleEvent creation
+  async assignPendingEventToInspector(params: {
+    eventId: string;
+    inspectorId: string;
+    adminId: string;
+  }): Promise<{ job: Job; scheduleEvent: ScheduleEvent }> {
+    const { eventId, inspectorId, adminId } = params;
+
+    // 1. Get pending event by ID
+    const event = await this.getPendingCalendarEvent(eventId);
+    if (!event) {
+      throw new Error('Pending event not found');
+    }
+
+    if (event.status === 'assigned') {
+      throw new Error('Event has already been assigned');
+    }
+
+    // 2. Verify inspector exists
+    const inspector = await this.getUser(inspectorId);
+    if (!inspector) {
+      throw new Error('Inspector not found');
+    }
+
+    // 3. Create Job with assignment details
+    const job = await this.createJob({
+      name: event.rawTitle,
+      address: event.parsedBuilderName || 'Address TBD',
+      builderId: event.parsedBuilderId || undefined,
+      contractor: event.parsedBuilderName || 'Unknown',
+      status: 'scheduled',
+      inspectionType: event.parsedJobType || 'other',
+      scheduledDate: event.eventDate,
+      assignedTo: inspectorId,
+      assignedBy: adminId,
+      assignedAt: new Date(),
+      createdBy: adminId,
+      sourceGoogleEventId: event.googleEventId,
+      notes: event.rawDescription || undefined,
+    });
+
+    // 4. Create ScheduleEvent linked to job
+    const scheduleEvent = await this.createScheduleEvent({
+      jobId: job.id,
+      title: event.rawTitle,
+      startTime: event.eventDate,
+      endTime: new Date(event.eventDate.getTime() + 2 * 60 * 60 * 1000), // Default 2 hours
+      eventType: 'inspection',
+      status: 'scheduled',
+      location: event.parsedBuilderName || undefined,
+      description: event.rawDescription || undefined,
+    });
+
+    // 5. Update pending event status
+    await db.update(pendingCalendarEvents)
+      .set({
+        status: 'assigned',
+        assignedJobId: job.id,
+        processedAt: new Date(),
+        processedBy: adminId,
+      })
+      .where(eq(pendingCalendarEvents.id, eventId));
+
+    // 6. Return job and schedule event
+    return { job, scheduleEvent };
+  }
+
+  async bulkAssignPendingEvents(params: {
+    eventIds: string[];
+    inspectorId: string;
+    adminId: string;
+  }): Promise<{ assignedCount: number; errors: string[] }> {
+    const { eventIds, inspectorId, adminId } = params;
+    const errors: string[] = [];
+    let assignedCount = 0;
+
+    // Loop through eventIds and assign each
+    for (const eventId of eventIds) {
+      try {
+        await this.assignPendingEventToInspector({
+          eventId,
+          inspectorId,
+          adminId,
+        });
+        assignedCount++;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        errors.push(`Event ${eventId}: ${errorMessage}`);
+      }
+    }
+
+    return { assignedCount, errors };
+  }
+
+  async getInspectorWorkload(params: {
+    startDate: Date;
+    endDate: Date;
+  }): Promise<Array<{ inspectorId: string; inspectorName: string; jobCount: number }>> {
+    const { startDate, endDate } = params;
+
+    // Query jobs grouped by assigned_to
+    const workloadData = await db
+      .select({
+        inspectorId: jobs.assignedTo,
+        jobCount: sql<number>`count(*)::int`,
+      })
+      .from(jobs)
+      .where(
+        and(
+          gte(jobs.scheduledDate, startDate),
+          lte(jobs.scheduledDate, endDate),
+          sql`${jobs.assignedTo} IS NOT NULL`,
+          sql`${jobs.isCancelled} = false OR ${jobs.isCancelled} IS NULL`
+        )
+      )
+      .groupBy(jobs.assignedTo);
+
+    // Enrich with inspector names from users table
+    const result = [];
+    for (const item of workloadData) {
+      if (!item.inspectorId) continue;
+
+      const inspector = await this.getUser(item.inspectorId);
+      result.push({
+        inspectorId: item.inspectorId,
+        inspectorName: inspector
+          ? `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown'
+          : 'Unknown',
+        jobCount: item.jobCount,
+      });
+    }
+
+    return result;
+  }
+
   // Blower Door Tests Implementation
   async createBlowerDoorTest(test: InsertBlowerDoorTest): Promise<BlowerDoorTest> {
     const result = await db.insert(blowerDoorTests)
@@ -5666,6 +5854,14 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(users)
       .where(inArray(users.role, roles));
+  }
+
+  async getUsersByRole(role: UserRole): Promise<User[]> {
+    return await db
+      .select()
+      .from(users)
+      .where(eq(users.role, role))
+      .orderBy(asc(users.firstName), asc(users.lastName));
   }
 
   // Analytics Dashboard Implementation Methods

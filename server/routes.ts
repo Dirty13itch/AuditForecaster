@@ -149,6 +149,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all inspectors - for dynamic assignment UI
+  app.get("/api/users/inspectors", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const inspectors = await storage.getUsersByRole('inspector');
+      res.json(inspectors);
+    } catch (error) {
+      logError('Users/GetInspectors', error);
+      res.status(500).json({ message: "Failed to fetch inspectors" });
+    }
+  });
+
   // DEV MODE: Instant login endpoint (development only)
   // SECURITY: Returns 404 in production to ensure this endpoint is completely inaccessible
   app.get("/api/dev-login/:userId", async (req: any, res) => {
@@ -2146,8 +2157,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/schedule-events", isAuthenticated, async (req, res) => {
+  app.get("/api/schedule-events", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+      
+      const userRole = (user.role as UserRole) || 'inspector';
       const { startDate, endDate, jobId } = req.query;
 
       if (jobId && typeof jobId === "string") {
@@ -2158,7 +2177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (startDate && endDate) {
         const start = new Date(startDate as string);
         const end = new Date(endDate as string);
-        const events = await storage.getScheduleEventsByDateRange(start, end);
+        const events = await storage.getScheduleEventsByDateRange(start, end, user.id, userRole);
         return res.json(events);
       }
 
@@ -2542,6 +2561,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // NEW ASSIGNMENT ENDPOINTS WITH SCHEDULE EVENT CREATION
+  
+  // POST /api/pending-events/assign - Assign single pending event to inspector
+  app.post('/api/pending-events/assign', 
+    isAuthenticated, 
+    requireRole('admin'), 
+    csrfSynchronisedProtection,
+    async (req: any, res) => {
+      try {
+        const { eventId, inspectorId } = req.body;
+        const adminId = req.user.claims.sub;
+
+        // Validate input
+        if (!eventId || !inspectorId) {
+          return res.status(400).json({ 
+            success: false,
+            message: 'eventId and inspectorId are required' 
+          });
+        }
+
+        serverLogger.info('[API] Assigning pending event to inspector:', { 
+          eventId, 
+          inspectorId, 
+          adminId 
+        });
+
+        const result = await storage.assignPendingEventToInspector({
+          eventId,
+          inspectorId,
+          adminId,
+        });
+
+        // Create audit log
+        await createAuditLog(req, {
+          userId: adminId,
+          action: 'assign_pending_event',
+          resourceType: 'pending_calendar_event',
+          resourceId: eventId,
+          changes: {
+            inspectorId,
+            jobId: result.job.id,
+            scheduleEventId: result.scheduleEvent.id,
+          },
+          ipAddress: req.ip,
+        }, storage);
+
+        res.json({
+          success: true,
+          job: result.job,
+          scheduleEvent: result.scheduleEvent,
+        });
+      } catch (error: any) {
+        serverLogger.error('[API] Error assigning pending event:', error);
+        const errorResponse = handleDatabaseError(error, 'assignPendingEvent');
+        res.status(errorResponse.status).json({ 
+          success: false,
+          message: errorResponse.message,
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // POST /api/pending-events/bulk-assign - Bulk assign multiple pending events
+  app.post('/api/pending-events/bulk-assign',
+    isAuthenticated,
+    requireRole('admin'),
+    csrfSynchronisedProtection,
+    async (req: any, res) => {
+      try {
+        const { eventIds, inspectorId } = req.body;
+        const adminId = req.user.claims.sub;
+
+        // Validate input
+        if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
+          return res.status(400).json({ 
+            success: false,
+            message: 'eventIds array is required and must not be empty' 
+          });
+        }
+
+        if (!inspectorId) {
+          return res.status(400).json({ 
+            success: false,
+            message: 'inspectorId is required' 
+          });
+        }
+
+        serverLogger.info('[API] Bulk assigning pending events:', { 
+          eventCount: eventIds.length, 
+          inspectorId, 
+          adminId 
+        });
+
+        const result = await storage.bulkAssignPendingEvents({
+          eventIds,
+          inspectorId,
+          adminId,
+        });
+
+        // Create audit log
+        await createAuditLog(req, {
+          userId: adminId,
+          action: 'bulk_assign_pending_events',
+          resourceType: 'pending_calendar_event',
+          resourceId: 'bulk',
+          changes: {
+            eventCount: eventIds.length,
+            inspectorId,
+            assignedCount: result.assignedCount,
+            errorCount: result.errors.length,
+          },
+          ipAddress: req.ip,
+        }, storage);
+
+        res.json({
+          success: true,
+          assignedCount: result.assignedCount,
+          errors: result.errors,
+        });
+      } catch (error: any) {
+        serverLogger.error('[API] Error bulk assigning pending events:', error);
+        const errorResponse = handleDatabaseError(error, 'bulkAssignPendingEvents');
+        res.status(errorResponse.status).json({ 
+          success: false,
+          message: errorResponse.message,
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // GET /api/inspectors/workload - Get inspector workload for assignment decisions
+  app.get('/api/inspectors/workload',
+    isAuthenticated,
+    requireRole('admin'),
+    async (req: any, res) => {
+      try {
+        const { startDate, endDate } = req.query;
+
+        // Validate input
+        if (!startDate || !endDate) {
+          return res.status(400).json({ 
+            success: false,
+            message: 'startDate and endDate query parameters are required' 
+          });
+        }
+
+        serverLogger.info('[API] Fetching inspector workload:', { startDate, endDate });
+
+        const workload = await storage.getInspectorWorkload({
+          startDate: new Date(startDate as string),
+          endDate: new Date(endDate as string),
+        });
+
+        res.json(workload);
+      } catch (error: any) {
+        serverLogger.error('[API] Error fetching inspector workload:', error);
+        const errorResponse = handleDatabaseError(error, 'getInspectorWorkload');
+        res.status(errorResponse.status).json({ 
+          success: false,
+          message: errorResponse.message,
+          error: error.message 
+        });
+      }
+    }
+  );
 
   // Convert Google event to job
   app.post('/api/google-events/:id/convert', isAuthenticated, csrfSynchronisedProtection, async (req, res) => {

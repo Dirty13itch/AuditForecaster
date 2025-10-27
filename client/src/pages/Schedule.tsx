@@ -15,9 +15,12 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
-import { CalendarLayersPanel } from "@/components/CalendarLayersPanel";
 import { ConvertGoogleEventDialog } from "@/components/ConvertGoogleEventDialog";
-import type { Job, ScheduleEvent, GoogleEvent } from "@shared/schema";
+import { UnassignedQueue } from "@/components/UnassignedQueue";
+import { UnassignedQueueSheet } from "@/components/UnassignedQueueSheet";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
+import type { Job, ScheduleEvent, GoogleEvent, PendingCalendarEvent, User } from "@shared/schema";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
 const localizer = dateFnsLocalizer({
@@ -103,6 +106,10 @@ function DraggableJobCard({ job }: DraggableJobCardProps) {
 
 export default function Schedule() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isMobile = useIsMobile();
+  const isAdmin = user?.role === 'admin';
+  
   const [view, setView] = useState<View>('month');
   const [date, setDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,6 +131,15 @@ export default function Schedule() {
 
   const startDate = startOfMonth(date);
   const endDate = endOfMonth(date);
+  
+  // Auto-switch view based on screen size
+  useEffect(() => {
+    if (isMobile && view !== 'agenda') {
+      setView('agenda');
+    } else if (!isMobile && view === 'agenda') {
+      setView('month');
+    }
+  }, [isMobile, view]);
 
   const { data: jobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
     queryKey: ['/api/jobs'],
@@ -186,6 +202,18 @@ export default function Schedule() {
     refetchInterval: 60000, // Auto-refresh every minute
     retry: 3,
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+  });
+
+  // Fetch pending calendar events (admin only)
+  const { data: pendingEvents = [], isLoading: pendingEventsLoading } = useQuery<PendingCalendarEvent[]>({
+    queryKey: ['/api/pending-events'],
+    enabled: isAdmin,
+  });
+
+  // Fetch inspectors (admin only) - for dynamic assignment
+  const { data: inspectors = [] } = useQuery<User[]>({
+    queryKey: ['/api/users/inspectors'],
+    enabled: isAdmin,
   });
 
   const createEventMutation = useMutation({
@@ -290,6 +318,48 @@ export default function Schedule() {
     },
     onError: () => {
       toast({ title: 'Failed to delete event', variant: 'destructive' });
+    },
+  });
+
+  // Assign single pending event to inspector
+  const assignEventMutation = useMutation({
+    mutationFn: async ({ eventId, inspectorId }: { eventId: string; inspectorId: string }) => {
+      const response = await apiRequest('POST', '/api/pending-events/assign', { eventId, inspectorId });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pending-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      toast({ title: 'Event assigned successfully' });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to assign event', 
+        description: error?.message || 'An error occurred',
+        variant: 'destructive' 
+      });
+    },
+  });
+
+  // Bulk assign pending events to inspector
+  const bulkAssignMutation = useMutation({
+    mutationFn: async ({ eventIds, inspectorId }: { eventIds: string[]; inspectorId: string }) => {
+      const response = await apiRequest('POST', '/api/pending-events/bulk-assign', { eventIds, inspectorId });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pending-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      toast({ title: 'Events assigned successfully' });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to assign events', 
+        description: error?.message || 'An error occurred',
+        variant: 'destructive' 
+      });
     },
   });
 
@@ -578,6 +648,17 @@ export default function Schedule() {
     setPendingEvent(null);
   }, [pendingEvent, createEventMutation]);
 
+  // Create dynamic color mapping for inspectors
+  const inspectorColors = useMemo(() => {
+    if (!inspectors || inspectors.length === 0) return {};
+    
+    const colors = ['#2E5BBA', '#28A745', '#FD7E14', '#9C27B0', '#FF5722'];
+    return inspectors.reduce((acc, inspector, index) => {
+      acc[inspector.id] = colors[index % colors.length];
+      return acc;
+    }, {} as Record<string, string>);
+  }, [inspectors]);
+
   const eventStyleGetter = useCallback((event: CalendarEvent) => {
     if (event.resource.eventType === 'google') {
       // Google-only events - use lighter style
@@ -593,28 +674,36 @@ export default function Schedule() {
       };
     }
     
-    // App events - existing styling
-    const statusColors = {
-      'pending': '#FFC107',
-      'scheduled': '#2E5BBA',
-      'in-progress': '#2E5BBA',
-      'completed': '#28A745',
-      'review': '#FD7E14',
-    };
-
-    const backgroundColor = statusColors[event.resource.status as keyof typeof statusColors] || '#6C757D';
-
+    // Color coding based on assignment status
+    // Unassigned events = orange
+    if (event.resource.job && !event.resource.job.assignedTo) {
+      return {
+        style: {
+          backgroundColor: '#FD7E14', // orange
+          color: 'white',
+          borderRadius: '4px',
+          opacity: 0.9,
+          border: '2px solid #F57C00',
+          display: 'block',
+        },
+      };
+    }
+    
+    // Assigned - use dynamic color mapping
+    const assignedTo = event.resource.job?.assignedTo;
+    const color = assignedTo ? inspectorColors[assignedTo] || '#6C757D' : '#6C757D';
+    
     return {
       style: {
-        backgroundColor,
+        backgroundColor: color,
+        color: 'white',
         borderRadius: '4px',
         opacity: 0.9,
-        color: 'white',
         border: '0',
         display: 'block',
       },
     };
-  }, []);
+  }, [inspectorColors]);
 
   const CalendarWrapper = useCallback(({ children }: { children: React.ReactNode }) => {
     const [, drop] = useDrop(() => ({
@@ -755,19 +844,18 @@ export default function Schedule() {
         </div>
         
         <div className="flex flex-1 overflow-hidden">
-          <div className="w-80 border-r bg-background p-4 overflow-y-auto">
-          {/* Google Calendar Layers */}
-          <CalendarLayersPanel />
-          
-          {/* Unscheduled Jobs section */}
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-2" data-testid="text-unscheduled-jobs-title">
-              Unscheduled Jobs
-            </h2>
-            <Badge variant="secondary" data-testid="badge-unscheduled-count">
-              {filteredUnscheduledJobs.length} jobs
-            </Badge>
-          </div>
+          {/* Left sidebar: Unscheduled Jobs (only on desktop when not admin, or always show for all users) */}
+          {!isMobile && (
+            <div className="w-80 border-r bg-background p-4 overflow-y-auto">
+              {/* Unscheduled Jobs section */}
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold mb-2" data-testid="text-unscheduled-jobs-title">
+                  Unscheduled Jobs
+                </h2>
+                <Badge variant="secondary" data-testid="badge-unscheduled-count">
+                  {filteredUnscheduledJobs.length} jobs
+                </Badge>
+              </div>
 
           <div className="mb-4">
             <div className="relative">
@@ -782,18 +870,19 @@ export default function Schedule() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            {filteredUnscheduledJobs.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-no-unscheduled">
-                {searchQuery ? 'No matching jobs found' : 'All jobs are scheduled'}
-              </p>
-            ) : (
-              filteredUnscheduledJobs.map((job) => (
-                <DraggableJobCard key={job.id} job={job} />
-              ))
-            )}
-          </div>
-        </div>
+              <div className="space-y-3">
+                {filteredUnscheduledJobs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-no-unscheduled">
+                    {searchQuery ? 'No matching jobs found' : 'All jobs are scheduled'}
+                  </p>
+                ) : (
+                  filteredUnscheduledJobs.map((job) => (
+                    <DraggableJobCard key={job.id} job={job} />
+                  ))
+                )}
+              </div>
+            </div>
+          )}
 
         <div className="flex-1 flex flex-col">
           {/* Inspector Workload Summary */}
@@ -998,7 +1087,28 @@ export default function Schedule() {
             </CalendarWrapper>
           </div>
         </div>
+
+        {/* Admin-only Unassigned Events Queue (Desktop Sidebar) */}
+        {isAdmin && !isMobile && (
+          <UnassignedQueue
+            events={pendingEvents}
+            inspectors={inspectors}
+            onAssign={(eventId, inspectorId) => assignEventMutation.mutate({ eventId, inspectorId })}
+            onBulkAssign={(eventIds, inspectorId) => bulkAssignMutation.mutate({ eventIds, inspectorId })}
+            isLoading={pendingEventsLoading}
+          />
+        )}
       </div>
+
+      {/* Admin-only Unassigned Events Queue (Mobile Bottom Sheet) */}
+      {isAdmin && isMobile && (
+        <UnassignedQueueSheet
+          events={pendingEvents}
+          inspectors={inspectors}
+          onAssign={(eventId, inspectorId) => assignEventMutation.mutate({ eventId, inspectorId })}
+          isLoading={pendingEventsLoading}
+        />
+      )}
 
       <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
         <DialogContent data-testid="dialog-event-details">
