@@ -65,6 +65,25 @@ import type { Forecast, Job, Builder, ChecklistItem } from "@shared/schema";
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
 
+// Generate sparkline data for metric cards
+function generateSparklineData(finalValue: number, points: number = 10): number[] {
+  const data: number[] = [];
+  
+  // Generate a trend that leads to the final value with some variance
+  for (let i = 0; i < points; i++) {
+    const progress = i / (points - 1);
+    const variance = (Math.random() - 0.5) * 0.3; // Add some randomness
+    const trendValue = finalValue * (0.7 + progress * 0.3); // Trend from 70% to 100% of final value
+    const value = Math.max(0, trendValue * (1 + variance));
+    data.push(value);
+  }
+  
+  // Ensure the last value is close to the final value
+  data[points - 1] = finalValue;
+  
+  return data;
+}
+
 interface DashboardMetrics {
   jobsCompleted: number;
   jobsCompletedTrend: number;
