@@ -2317,7 +2317,11 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (tags && tags.length > 0) {
-      conditions.push(sql`${photos.tags} @> ${tags}`);
+      // Convert JavaScript array to PostgreSQL array format
+      // Use sql.join to safely construct array elements with proper escaping
+      const arrayElements = sql.join(tags.map(tag => sql`${tag}`), sql`, `);
+      const pgArray = sql`ARRAY[${arrayElements}]::text[]`;
+      conditions.push(sql`${photos.tags} @> ${pgArray}`);
     }
     
     if (dateFrom) {
@@ -2366,7 +2370,11 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (tags && tags.length > 0) {
-      conditions.push(sql`${photos.tags} @> ${tags}`);
+      // Convert JavaScript array to PostgreSQL array format
+      // Use sql.join to safely construct array elements with proper escaping
+      const arrayElements = sql.join(tags.map(tag => sql`${tag}`), sql`, `);
+      const pgArray = sql`ARRAY[${arrayElements}]::text[]`;
+      conditions.push(sql`${photos.tags} @> ${pgArray}`);
     }
     
     if (dateFrom) {
@@ -2434,7 +2442,11 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (tags && tags.length > 0) {
-      conditions.push(sql`${photos.tags} @> ${tags}`);
+      // Convert JavaScript array to PostgreSQL array format
+      // Use sql.join to safely construct array elements with proper escaping
+      const arrayElements = sql.join(tags.map(tag => sql`${tag}`), sql`, `);
+      const pgArray = sql`ARRAY[${arrayElements}]::text[]`;
+      conditions.push(sql`${photos.tags} @> ${pgArray}`);
     }
     
     if (dateFrom) {
