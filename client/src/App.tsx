@@ -1,6 +1,7 @@
 import { initSentry } from "@/lib/sentry";
 initSentry();
 
+import { useEffect } from "react";
 import { Switch, Route, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ import { DevModeBanner } from "@/components/DevModeBanner";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationBell } from "@/components/NotificationBell";
+import { fetchCsrfToken } from "@/lib/csrfToken";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
 import Photos from "@/pages/Photos";
@@ -402,6 +404,15 @@ function AppContent() {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
   };
+
+  // Pre-fetch CSRF token when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCsrfToken().catch(err => {
+        console.error('[App] Failed to pre-fetch CSRF token:', err);
+      });
+    }
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return (

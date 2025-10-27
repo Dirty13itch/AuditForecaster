@@ -313,6 +313,11 @@ export function AppSidebar() {
                   <p className="text-sm font-medium truncate">{getUserName()}</p>
                   <RoleBadge role={userRole} size="sm" showIcon={false} />
                 </div>
+                {user?.email && (
+                  <p className="text-xs text-muted-foreground truncate mb-1" data-testid="user-email" title={user.email}>
+                    {user.email}
+                  </p>
+                )}
                 <div className="flex items-center gap-2">
                   {isOnline ? (
                     <div className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="status-online">

@@ -178,7 +178,7 @@ export default function Schedule() {
     },
   });
 
-  const { data: googleOnlyEvents = [], isLoading: googleEventsLoading, refetch: refetchGoogleEvents } = useQuery<GoogleEvent[]>({
+  const { data: googleOnlyEvents = [], isLoading: googleEventsLoading, error: googleEventsError, refetch: refetchGoogleEvents } = useQuery<GoogleEvent[]>({
     queryKey: ['/api/google-events', startDate.toISOString(), endDate.toISOString()],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -190,9 +190,14 @@ export default function Schedule() {
         credentials: 'include',
       });
       if (!response.ok) {
-        // Failed to fetch Google events
+        // Failed to fetch Google events - get error message
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        const errorMessage = errorData.message || 'Failed to fetch Google Calendar events';
+        console.error('[Schedule] Google Calendar error:', errorMessage, errorData);
         setSyncStatus('error');
-        return [];
+        setSyncError(errorMessage); // Store error message for display
+        // Throw error so useQuery can handle it properly
+        throw new Error(errorMessage);
       }
       const events = await response.json();
       
@@ -200,6 +205,7 @@ export default function Schedule() {
       if (events && events.length >= 0) {
         setLastSyncedAt(new Date());
         setSyncStatus('synced');
+        setSyncError(null); // Clear any previous errors
         // Clear sync status after 3 seconds
         const timeoutId = setTimeout(() => setSyncStatus('idle'), 3000);
         setSyncStatusTimeoutId(prev => {
@@ -211,8 +217,8 @@ export default function Schedule() {
       return events;
     },
     refetchInterval: 60000, // Auto-refresh every minute
-    retry: 3,
-    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retry: 1, // Only retry once for Google Calendar errors
+    retryDelay: 2000,
   });
 
   // Fetch pending calendar events (admin only)
@@ -996,9 +1002,9 @@ export default function Schedule() {
                   </div>
                 )}
                 {syncStatus === 'error' && (
-                  <div className="flex items-center gap-1 text-sm text-destructive" data-testid="status-error">
+                  <div className="flex items-center gap-1 text-sm text-destructive" data-testid="status-error" title={syncError || 'Calendar sync failed'}>
                     <AlertCircle className="h-4 w-4" />
-                    <span>Sync error</span>
+                    <span>{syncError || 'Sync error'}</span>
                   </div>
                 )}
                 {syncStatus === 'offline' && (
