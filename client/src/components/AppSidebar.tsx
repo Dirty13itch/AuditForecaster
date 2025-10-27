@@ -127,6 +127,11 @@ const menuItems = [
 
 const calendarImportItems = [
   {
+    title: "Calendar Management",
+    url: "/calendar-management",
+    icon: Calendar,
+  },
+  {
     title: "POC Testing",
     url: "/calendar-poc",
     icon: CalendarClock,

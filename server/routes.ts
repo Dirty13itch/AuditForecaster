@@ -2298,6 +2298,251 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Calendar Management Routes - Building Knowledge Calendar Sync
+  
+  // Sync Building Knowledge calendar to pending events (instant on-demand sync)
+  app.post('/api/calendar/sync-now', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      serverLogger.info('[API] Starting on-demand Building Knowledge calendar sync', { userId });
+      
+      // Import the extended service
+      const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+      
+      // Perform sync
+      const syncResult = await extendedService.syncBuildingKnowledgeCalendar(userId);
+      
+      serverLogger.info('[API] Building Knowledge calendar sync complete:', syncResult);
+      
+      res.json({
+        success: true,
+        message: `Synced ${syncResult.newEvents} new events from Building Knowledge calendar`,
+        count: syncResult.newEvents,
+        total: syncResult.totalEvents,
+        duplicates: syncResult.duplicateEvents,
+        errors: syncResult.errors,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error syncing Building Knowledge calendar:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to sync Building Knowledge calendar', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Get pending calendar events with filters
+  app.get('/api/pending-events', isAuthenticated, async (req: any, res) => {
+    try {
+      const { status, builderId, startDate, endDate, jobType, confidence, builderUnmatched, sortBy, limit, offset } = req.query;
+      
+      // Parse query parameters
+      const filters: any = {};
+      
+      if (status) filters.status = status;
+      if (builderId) filters.builderId = builderId;
+      if (startDate) filters.startDate = new Date(startDate);
+      if (endDate) filters.endDate = new Date(endDate);
+      if (jobType) filters.jobType = jobType;
+      if (confidence) filters.confidence = confidence;
+      if (builderUnmatched === 'true') filters.builderUnmatched = true;
+      if (sortBy) filters.sortBy = sortBy;
+      if (limit) filters.limit = parseInt(limit);
+      if (offset) filters.offset = parseInt(offset);
+      
+      serverLogger.info('[API] Fetching pending events with filters:', filters);
+      
+      const result = await storage.getPendingEvents(filters);
+      
+      res.json({
+        success: true,
+        events: result.events,
+        total: result.total,
+        limit: filters.limit || 50,
+        offset: filters.offset || 0,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error fetching pending events:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to fetch pending events', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Assign single pending event to inspector
+  app.post('/api/pending-events/:id/assign', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { inspectorId } = req.body;
+      const userId = req.user.claims.sub;
+      
+      if (!inspectorId) {
+        return res.status(400).json({ message: 'inspectorId is required' });
+      }
+      
+      serverLogger.info('[API] Assigning pending event to inspector:', { eventId: id, inspectorId, userId });
+      
+      const result = await storage.assignEventToInspector(id, inspectorId, userId);
+      
+      // Create audit log
+      await createAuditLog({
+        userId,
+        action: 'assign_calendar_event',
+        resourceType: 'pending_calendar_event',
+        resourceId: id,
+        changes: {
+          inspectorId,
+          jobId: result.job.id,
+        },
+        ipAddress: req.ip,
+      });
+      
+      res.json({
+        success: true,
+        message: 'Event assigned to inspector',
+        event: result.event,
+        job: result.job,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error assigning event to inspector:', error);
+      res.status(500).json({ 
+        success: false,
+        message: error.message || 'Failed to assign event to inspector', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Bulk assign multiple pending events to inspector
+  app.post('/api/pending-events/bulk-assign', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { eventIds, inspectorId } = req.body;
+      const userId = req.user.claims.sub;
+      
+      if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
+        return res.status(400).json({ message: 'eventIds array is required' });
+      }
+      
+      if (!inspectorId) {
+        return res.status(400).json({ message: 'inspectorId is required' });
+      }
+      
+      serverLogger.info('[API] Bulk assigning pending events to inspector:', { 
+        count: eventIds.length, 
+        inspectorId, 
+        userId 
+      });
+      
+      const result = await storage.bulkAssignEvents(eventIds, inspectorId, userId);
+      
+      // Create audit log
+      await createAuditLog({
+        userId,
+        action: 'bulk_assign_calendar_events',
+        resourceType: 'pending_calendar_event',
+        resourceId: 'bulk',
+        changes: {
+          eventCount: eventIds.length,
+          inspectorId,
+          jobsCreated: result.jobs.length,
+        },
+        ipAddress: req.ip,
+      });
+      
+      res.json({
+        success: true,
+        message: `Assigned ${result.events.length} events to inspector`,
+        events: result.events,
+        jobs: result.jobs,
+        assigned: result.events.length,
+        total: eventIds.length,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error bulk assigning events:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to bulk assign events', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Reject pending event
+  app.delete('/api/pending-events/:id/reject', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.claims.sub;
+      
+      serverLogger.info('[API] Rejecting pending event:', { eventId: id, userId });
+      
+      const event = await storage.rejectEvent(id, userId);
+      
+      if (!event) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      
+      // Create audit log
+      await createAuditLog({
+        userId,
+        action: 'reject_calendar_event',
+        resourceType: 'pending_calendar_event',
+        resourceId: id,
+        changes: {
+          status: 'rejected',
+        },
+        ipAddress: req.ip,
+      });
+      
+      res.json({
+        success: true,
+        message: 'Event rejected',
+        event,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error rejecting event:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to reject event', 
+        error: error.message 
+      });
+    }
+  });
+
+  // Get weekly workload for inspectors
+  app.get('/api/weekly-workload', isAuthenticated, async (req: any, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: 'startDate and endDate are required' });
+      }
+      
+      serverLogger.info('[API] Fetching weekly workload:', { startDate, endDate });
+      
+      const workload = await storage.getWeeklyWorkload(
+        new Date(startDate),
+        new Date(endDate)
+      );
+      
+      res.json({
+        success: true,
+        workload,
+        count: workload.length,
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Error fetching weekly workload:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to fetch weekly workload', 
+        error: error.message 
+      });
+    }
+  });
+
   // Convert Google event to job
   app.post('/api/google-events/:id/convert', isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {

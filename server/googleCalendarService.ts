@@ -8,6 +8,7 @@ import { googleCalendarService as baseService, getUncachableGoogleCalendarClient
 import { serverLogger } from './logger';
 import type { ScheduleEvent, Job, GoogleEvent, InsertGoogleEvent } from '@shared/schema';
 import { storage } from './storage';
+import { parseCalendarEvent } from './eventParser';
 
 // Re-export core functions from googleCalendar
 export { getUncachableGoogleCalendarClient, allDayDateToUTC };
@@ -478,6 +479,126 @@ export class ExtendedGoogleCalendarService {
         success: false,
         message: `Failed to connect: ${error.message}`,
       };
+    }
+  }
+
+  /**
+   * Sync Building Knowledge calendar events to pending_calendar_events table
+   * This is the main method for on-demand calendar synchronization
+   * 
+   * @param userId The user ID who triggered the sync (for audit trail)
+   * @returns Count of new events imported
+   */
+  async syncBuildingKnowledgeCalendar(userId: string): Promise<{
+    totalEvents: number;
+    newEvents: number;
+    duplicateEvents: number;
+    errors: string[];
+  }> {
+    const result = {
+      totalEvents: 0,
+      newEvents: 0,
+      duplicateEvents: 0,
+      errors: [] as string[],
+    };
+
+    try {
+      serverLogger.info('[GoogleCalendarService] Starting Building Knowledge calendar sync', { userId });
+
+      // Define date range: next 30 days from today
+      const startDate = new Date();
+      startDate.setHours(0, 0, 0, 0); // Start of today
+      
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 30); // 30 days from now
+      endDate.setHours(23, 59, 59, 999); // End of that day
+
+      serverLogger.info('[GoogleCalendarService] Fetching events for date range:', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+
+      // Fetch events from Building Knowledge calendar
+      const googleEvents = await this.fetchBuildingKnowledgeEvents(startDate, endDate);
+      result.totalEvents = googleEvents.length;
+
+      serverLogger.info(`[GoogleCalendarService] Retrieved ${result.totalEvents} events from Building Knowledge calendar`);
+
+      // Get all builders with abbreviations for matching
+      const builders = await storage.getAllBuilders();
+      serverLogger.info(`[GoogleCalendarService] Loaded ${builders.length} builders for matching`);
+
+      // Process each event
+      for (const googleEvent of googleEvents) {
+        try {
+          // Check if event already exists (deduplication)
+          const existingEvent = await storage.getPendingCalendarEventByGoogleId(googleEvent.googleEventId);
+          
+          if (existingEvent) {
+            result.duplicateEvents++;
+            serverLogger.debug(`[GoogleCalendarService] Skipping duplicate event: ${googleEvent.summary} (${googleEvent.googleEventId})`);
+            continue;
+          }
+
+          // Parse the event to extract builder and job type
+          const parsedResult = parseCalendarEvent(
+            googleEvent.summary,
+            googleEvent.description,
+            builders
+          );
+
+          serverLogger.debug('[GoogleCalendarService] Parsed event:', {
+            title: googleEvent.summary,
+            parsedBuilder: parsedResult.parsedBuilderName,
+            parsedJobType: parsedResult.parsedJobType,
+            confidence: parsedResult.confidenceScore,
+          });
+
+          // Create pending calendar event
+          await storage.createPendingCalendarEvent({
+            googleEventId: googleEvent.googleEventId,
+            rawTitle: googleEvent.summary,
+            rawDescription: googleEvent.description || null,
+            eventDate: googleEvent.startTime,
+            eventTime: null, // Flexible timing for inspections
+            parsedBuilderName: parsedResult.parsedBuilderName,
+            parsedBuilderId: parsedResult.parsedBuilderId || null,
+            parsedJobType: parsedResult.parsedJobType,
+            confidenceScore: parsedResult.confidenceScore,
+            status: 'pending',
+            metadata: {
+              location: googleEvent.location,
+              htmlLink: googleEvent.htmlLink,
+              organizer: googleEvent.organizerEmail,
+              calendarId: googleEvent.calendarId,
+            },
+            importedBy: userId,
+          });
+
+          result.newEvents++;
+          serverLogger.info(`[GoogleCalendarService] ✓ Created pending event: ${googleEvent.summary}`);
+
+        } catch (error: any) {
+          const errorMsg = `Failed to process event "${googleEvent.summary}": ${error.message}`;
+          serverLogger.error(`[GoogleCalendarService] ${errorMsg}`);
+          result.errors.push(errorMsg);
+        }
+      }
+
+      serverLogger.info('[GoogleCalendarService] Sync completed:', {
+        totalEvents: result.totalEvents,
+        newEvents: result.newEvents,
+        duplicateEvents: result.duplicateEvents,
+        errors: result.errors.length,
+      });
+
+      return result;
+
+    } catch (error: any) {
+      const errorMsg = `Calendar sync failed: ${error.message}`;
+      serverLogger.error(`[GoogleCalendarService] ${errorMsg}`, error);
+      result.errors.push(errorMsg);
+      return result;
     }
   }
 }

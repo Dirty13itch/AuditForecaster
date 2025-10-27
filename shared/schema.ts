@@ -54,6 +54,7 @@ export const builders = pgTable("builders", {
   volumeTier: text("volume_tier", { enum: ["low", "medium", "high", "premium"] }),
   billingTerms: text("billing_terms"),
   preferredLeadTime: integer("preferred_lead_time"),
+  abbreviations: text("abbreviations").array(), // Calendar parsing abbreviations e.g. ['MI', 'MIH', 'M/I']
 }, (table) => [
   index("idx_builders_company_name").on(table.companyName),
   index("idx_builders_name_company").on(table.name, table.companyName),
@@ -138,6 +139,37 @@ export const builderInteractions = pgTable("builder_interactions", {
   index("idx_builder_interactions_builder_date").on(table.builderId, table.interactionDate),
   index("idx_builder_interactions_created_by").on(table.createdBy),
   index("idx_builder_interactions_contact_id").on(table.contactId),
+]);
+
+// Pending calendar events from Building Knowledge calendar awaiting assignment
+export const pendingCalendarEvents = pgTable("pending_calendar_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  googleEventId: text("google_event_id").notNull().unique(), // For deduplication and sync tracking
+  rawTitle: text("raw_title").notNull(), // Original event title from Google Calendar
+  rawDescription: text("raw_description"), // Original event description
+  eventDate: timestamp("event_date").notNull(), // When the inspection is scheduled
+  eventTime: text("event_time"), // Optional time info (flexible "get it done that day")
+  parsedBuilderName: text("parsed_builder_name"), // Extracted builder name from title
+  parsedBuilderId: varchar("parsed_builder_id").references(() => builders.id, { onDelete: 'set null' }), // Matched builder
+  parsedJobType: text("parsed_job_type", { 
+    enum: ["pre_drywall", "final", "final_special", "multifamily", "other"] 
+  }), // SV2 -> pre_drywall, Test -> final
+  confidenceScore: integer("confidence_score").default(0), // 0-100 match confidence
+  status: text("status", { 
+    enum: ["pending", "assigned", "rejected", "duplicate"] 
+  }).notNull().default("pending"),
+  assignedJobId: varchar("assigned_job_id").references(() => jobs.id, { onDelete: 'set null' }), // Link to created job if assigned
+  metadata: jsonb("metadata"), // Store full Google Calendar event data
+  importedAt: timestamp("imported_at").defaultNow(),
+  importedBy: varchar("imported_by").references(() => users.id, { onDelete: 'set null' }), // Who triggered the import
+  processedAt: timestamp("processed_at"), // When assigned/rejected
+  processedBy: varchar("processed_by").references(() => users.id, { onDelete: 'set null' }), // Who assigned/rejected
+}, (table) => [
+  index("idx_pending_events_google_id").on(table.googleEventId),
+  index("idx_pending_events_status").on(table.status),
+  index("idx_pending_events_date").on(table.eventDate),
+  index("idx_pending_events_builder").on(table.parsedBuilderId),
+  index("idx_pending_events_status_date").on(table.status, table.eventDate),
 ]);
 
 export const developments = pgTable("developments", {
@@ -1413,6 +1445,15 @@ export const insertBuilderInteractionSchema = createInsertSchema(builderInteract
   followUpDate: z.coerce.date().nullable().optional(),
 });
 export const updateBuilderInteractionSchema = insertBuilderInteractionSchema.omit({ builderId: true, createdBy: true }).partial();
+
+export const insertPendingCalendarEventSchema = createInsertSchema(pendingCalendarEvents).omit({ 
+  id: true, 
+  importedAt: true, 
+  processedAt: true 
+}).extend({
+  eventDate: z.coerce.date(),
+  confidenceScore: z.number().min(0).max(100).optional(),
+});
 export const insertDevelopmentSchema = createInsertSchema(developments).omit({ id: true, createdAt: true }).extend({
   startDate: z.coerce.date().nullable().optional(),
   targetCompletionDate: z.coerce.date().nullable().optional(),
@@ -1786,6 +1827,7 @@ export type BuilderContact = typeof builderContacts.$inferSelect;
 export type BuilderAgreement = typeof builderAgreements.$inferSelect;
 export type BuilderProgram = typeof builderPrograms.$inferSelect;
 export type BuilderInteraction = typeof builderInteractions.$inferSelect;
+export type PendingCalendarEvent = typeof pendingCalendarEvents.$inferSelect;
 export type Development = typeof developments.$inferSelect;
 export type Lot = typeof lots.$inferSelect;
 export type Plan = typeof plans.$inferSelect;
@@ -1815,6 +1857,7 @@ export type InsertBuilderProgram = z.infer<typeof insertBuilderProgramSchema>;
 export type UpdateBuilderProgram = z.infer<typeof updateBuilderProgramSchema>;
 export type InsertBuilderInteraction = z.infer<typeof insertBuilderInteractionSchema>;
 export type UpdateBuilderInteraction = z.infer<typeof updateBuilderInteractionSchema>;
+export type InsertPendingCalendarEvent = z.infer<typeof insertPendingCalendarEventSchema>;
 export type InsertDevelopment = z.infer<typeof insertDevelopmentSchema>;
 export type UpdateDevelopment = z.infer<typeof updateDevelopmentSchema>;
 export type InsertLot = z.infer<typeof insertLotSchema>;

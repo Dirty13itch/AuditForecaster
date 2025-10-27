@@ -122,11 +122,14 @@ import {
   type InsertAssignmentHistory,
   type InspectorPreferences,
   type InsertInspectorPreferences,
+  type PendingCalendarEvent,
+  type InsertPendingCalendarEvent,
   notifications,
   notificationPreferences,
   inspectorWorkload,
   assignmentHistory,
   inspectorPreferences,
+  pendingCalendarEvents,
   users,
   builders,
   builderContacts,
@@ -187,7 +190,7 @@ import {
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
 import { db } from "./db";
-import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count } from "drizzle-orm";
+import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User operations for Replit Auth
@@ -529,6 +532,33 @@ export interface IStorage {
     calendarId?: string;
     hasErrors?: boolean;
   }): Promise<{ logs: CalendarImportLog[]; total: number }>;
+
+  // Pending calendar events (Building Knowledge calendar sync)
+  createPendingCalendarEvent(event: InsertPendingCalendarEvent): Promise<PendingCalendarEvent>;
+  getPendingCalendarEvent(id: string): Promise<PendingCalendarEvent | undefined>;
+  getPendingCalendarEventByGoogleId(googleEventId: string): Promise<PendingCalendarEvent | undefined>;
+  getPendingEvents(filters?: {
+    status?: 'pending' | 'assigned' | 'rejected' | 'duplicate';
+    builderId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    jobType?: 'pre_drywall' | 'final' | 'final_special' | 'multifamily' | 'other';
+    confidence?: 'all' | 'high' | 'medium' | 'low' | 'unmatched';
+    builderUnmatched?: boolean;
+    sortBy?: 'date' | 'confidence' | 'importTime';
+    limit?: number;
+    offset?: number;
+  }): Promise<{ events: PendingCalendarEvent[], total: number }>;
+  assignEventToInspector(eventId: string, inspectorId: string, userId: string): Promise<{ event: PendingCalendarEvent, job: Job }>;
+  bulkAssignEvents(eventIds: string[], inspectorId: string, userId: string): Promise<{ events: PendingCalendarEvent[], jobs: Job[] }>;
+  rejectEvent(eventId: string, userId: string): Promise<PendingCalendarEvent | undefined>;
+  getWeeklyWorkload(startDate: Date, endDate: Date): Promise<Array<{
+    inspectorId: string;
+    inspectorName: string;
+    date: string;
+    jobCount: number;
+    scheduledMinutes: number;
+  }>>;
 
   // Financial operations
   // Invoices
@@ -3687,6 +3717,249 @@ export class DatabaseStorage implements IStorage {
     const total = countResult[0]?.count || 0;
     
     return { logs, total };
+  }
+
+  // Pending Calendar Events Implementation
+  async createPendingCalendarEvent(event: InsertPendingCalendarEvent): Promise<PendingCalendarEvent> {
+    const result = await db.insert(pendingCalendarEvents)
+      .values(event)
+      .returning();
+    return result[0];
+  }
+
+  async getPendingCalendarEvent(id: string): Promise<PendingCalendarEvent | undefined> {
+    const result = await db.select()
+      .from(pendingCalendarEvents)
+      .where(eq(pendingCalendarEvents.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getPendingCalendarEventByGoogleId(googleEventId: string): Promise<PendingCalendarEvent | undefined> {
+    const result = await db.select()
+      .from(pendingCalendarEvents)
+      .where(eq(pendingCalendarEvents.googleEventId, googleEventId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getPendingEvents(filters?: {
+    status?: 'pending' | 'assigned' | 'rejected' | 'duplicate';
+    builderId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    jobType?: 'pre_drywall' | 'final' | 'final_special' | 'multifamily' | 'other';
+    confidence?: 'all' | 'high' | 'medium' | 'low' | 'unmatched';
+    builderUnmatched?: boolean;
+    sortBy?: 'date' | 'confidence' | 'importTime';
+    limit?: number;
+    offset?: number;
+  }): Promise<{ events: PendingCalendarEvent[], total: number }> {
+    const { status, builderId, startDate, endDate, jobType, confidence, builderUnmatched, sortBy, limit = 50, offset = 0 } = filters || {};
+    
+    // Build filter conditions
+    const conditions = [];
+    
+    if (status) {
+      conditions.push(eq(pendingCalendarEvents.status, status));
+    }
+    
+    if (builderId) {
+      conditions.push(eq(pendingCalendarEvents.parsedBuilderId, builderId));
+    }
+    
+    if (startDate) {
+      conditions.push(gte(pendingCalendarEvents.eventDate, startDate));
+    }
+    
+    if (endDate) {
+      conditions.push(lte(pendingCalendarEvents.eventDate, endDate));
+    }
+    
+    if (jobType) {
+      conditions.push(eq(pendingCalendarEvents.parsedJobType, jobType));
+    }
+    
+    // Confidence filter
+    if (confidence && confidence !== 'all') {
+      if (confidence === 'high') {
+        conditions.push(gt(pendingCalendarEvents.confidenceScore, 85));
+      } else if (confidence === 'medium') {
+        conditions.push(and(
+          gte(pendingCalendarEvents.confidenceScore, 60),
+          lte(pendingCalendarEvents.confidenceScore, 85)
+        ));
+      } else if (confidence === 'low') {
+        conditions.push(and(
+          gte(pendingCalendarEvents.confidenceScore, 1),
+          lt(pendingCalendarEvents.confidenceScore, 60)
+        ));
+      } else if (confidence === 'unmatched') {
+        conditions.push(eq(pendingCalendarEvents.confidenceScore, 0));
+      }
+    }
+    
+    // Builder unmatched filter
+    if (builderUnmatched === true) {
+      conditions.push(isNull(pendingCalendarEvents.parsedBuilderId));
+    }
+    
+    // Build WHERE clause
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Determine sorting
+    let orderByClause;
+    if (sortBy === 'confidence') {
+      orderByClause = asc(pendingCalendarEvents.confidenceScore);
+    } else if (sortBy === 'importTime') {
+      orderByClause = desc(pendingCalendarEvents.importedAt);
+    } else {
+      // Default to date sorting
+      orderByClause = asc(pendingCalendarEvents.eventDate);
+    }
+    
+    // Fetch events with filters
+    const events = await db.select()
+      .from(pendingCalendarEvents)
+      .where(whereClause)
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    // Get total count with same filters
+    const countResult = await db.select({ count: sql<number>`count(*)::int` })
+      .from(pendingCalendarEvents)
+      .where(whereClause);
+    
+    const total = countResult[0]?.count || 0;
+    
+    return { events, total };
+  }
+
+  async assignEventToInspector(eventId: string, inspectorId: string, userId: string): Promise<{ event: PendingCalendarEvent, job: Job }> {
+    // Get the pending event
+    const event = await this.getPendingCalendarEvent(eventId);
+    if (!event) {
+      throw new Error('Pending event not found');
+    }
+    
+    // Verify inspector exists
+    const inspector = await this.getUser(inspectorId);
+    if (!inspector) {
+      throw new Error('Inspector not found');
+    }
+    
+    // Create job from the event
+    const job = await this.createJob({
+      name: event.rawTitle,
+      address: event.parsedBuilderName || 'Address TBD',
+      builderId: event.parsedBuilderId || undefined,
+      contractor: event.parsedBuilderName || 'Unknown',
+      status: 'scheduled',
+      inspectionType: event.parsedJobType || 'other',
+      scheduledDate: event.eventDate,
+      assignedTo: inspectorId,
+      assignedBy: userId,
+      assignedAt: new Date(),
+      createdBy: userId,
+      sourceGoogleEventId: event.googleEventId,
+      notes: event.rawDescription || undefined,
+    });
+    
+    // Update event status
+    const updatedEvent = await db.update(pendingCalendarEvents)
+      .set({
+        status: 'assigned',
+        assignedJobId: job.id,
+        processedAt: new Date(),
+        processedBy: userId,
+      })
+      .where(eq(pendingCalendarEvents.id, eventId))
+      .returning();
+    
+    if (!updatedEvent[0]) {
+      throw new Error('Failed to update event status');
+    }
+    
+    return { event: updatedEvent[0], job };
+  }
+
+  async bulkAssignEvents(eventIds: string[], inspectorId: string, userId: string): Promise<{ events: PendingCalendarEvent[], jobs: Job[] }> {
+    const events: PendingCalendarEvent[] = [];
+    const jobs: Job[] = [];
+    
+    // Process each event
+    for (const eventId of eventIds) {
+      try {
+        const result = await this.assignEventToInspector(eventId, inspectorId, userId);
+        events.push(result.event);
+        jobs.push(result.job);
+      } catch (error) {
+        // Log error but continue with other events
+        console.error(`Failed to assign event ${eventId}:`, error);
+      }
+    }
+    
+    return { events, jobs };
+  }
+
+  async rejectEvent(eventId: string, userId: string): Promise<PendingCalendarEvent | undefined> {
+    const result = await db.update(pendingCalendarEvents)
+      .set({
+        status: 'rejected',
+        processedAt: new Date(),
+        processedBy: userId,
+      })
+      .where(eq(pendingCalendarEvents.id, eventId))
+      .returning();
+    
+    return result[0];
+  }
+
+  async getWeeklyWorkload(startDate: Date, endDate: Date): Promise<Array<{
+    inspectorId: string;
+    inspectorName: string;
+    date: string;
+    jobCount: number;
+    scheduledMinutes: number;
+  }>> {
+    // Query jobs grouped by inspector and date
+    const workload = await db.select({
+      inspectorId: jobs.assignedTo,
+      date: sql<string>`DATE(${jobs.scheduledDate})`,
+      jobCount: sql<number>`count(*)::int`,
+      // Assume 2 hours (120 minutes) per job as default duration
+      scheduledMinutes: sql<number>`count(*) * 120`,
+    })
+      .from(jobs)
+      .where(
+        and(
+          gte(jobs.scheduledDate, startDate),
+          lte(jobs.scheduledDate, endDate),
+          sql`${jobs.assignedTo} IS NOT NULL`,
+          sql`${jobs.isCancelled} = false OR ${jobs.isCancelled} IS NULL`
+        )
+      )
+      .groupBy(jobs.assignedTo, sql`DATE(${jobs.scheduledDate})`);
+    
+    // Enrich with inspector names
+    const result = [];
+    for (const item of workload) {
+      if (!item.inspectorId) continue;
+      
+      const inspector = await this.getUser(item.inspectorId);
+      result.push({
+        inspectorId: item.inspectorId,
+        inspectorName: inspector 
+          ? `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown'
+          : 'Unknown',
+        date: item.date,
+        jobCount: item.jobCount,
+        scheduledMinutes: item.scheduledMinutes,
+      });
+    }
+    
+    return result;
   }
 
   // Blower Door Tests Implementation
