@@ -934,7 +934,8 @@ export default function Schedule() {
               </div>
               <div className="flex gap-4 overflow-x-auto">
                 {inspectorWorkloads.map((workload: any) => {
-                  const loadPercentage = Math.min((workload.currentLoad / 8) * 100, 100);
+                  const currentLoad = workload.currentLoad ?? 0;
+                  const loadPercentage = Math.min((currentLoad / 8) * 100, 100);
                   const loadColor = loadPercentage > 80 ? 'text-destructive' : loadPercentage > 60 ? 'text-yellow-600' : 'text-green-600';
                   
                   return (
@@ -947,23 +948,23 @@ export default function Schedule() {
                             'bg-green-600'
                           }`} />
                           <span className="font-medium text-sm">
-                            {workload.inspectorName}
+                            {workload.inspectorName || 'Unknown Inspector'}
                           </span>
                         </div>
                         <Badge variant="outline" className="text-xs">
-                          {workload.todayJobs} today
+                          {workload.todayJobs ?? 0} today
                         </Badge>
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Load</span>
                           <span className={loadColor}>
-                            {workload.currentLoad.toFixed(1)} hrs
+                            {currentLoad.toFixed(1)} hrs
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Week</span>
-                          <span>{workload.weekJobs} jobs</span>
+                          <span>{workload.weekJobs ?? 0} jobs</span>
                         </div>
                         <div className="w-full bg-secondary rounded-full h-1.5 mt-2">
                           <div
