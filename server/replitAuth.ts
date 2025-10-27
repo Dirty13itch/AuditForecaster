@@ -83,7 +83,6 @@ function updateUserSession(
 
 async function upsertUser(claims: any) {
   const roleFromClaims = claims["role"];
-  serverLogger.info(`[ReplitAuth] Upserting user: ${claims["sub"]}${roleFromClaims ? ` with role from claims: ${roleFromClaims}` : ' (preserving existing DB role)'}`);
   
   // Build user data object - only include role if provided in OIDC claims
   // This allows storage.upsertUser to preserve existing database role when claims don't include it
@@ -99,9 +98,13 @@ async function upsertUser(claims: any) {
   // Otherwise, storage.upsertUser will preserve existing DB role
   if (roleFromClaims) {
     userData.role = roleFromClaims;
+    serverLogger.info(`[ReplitAuth] Upserting user: ${claims["sub"]} with explicit role from claims: ${roleFromClaims}`);
+  } else {
+    serverLogger.info(`[ReplitAuth] Upserting user: ${claims["sub"]} without role in claims (will preserve existing DB role if present)`);
   }
   
-  await storage.upsertUser(userData);
+  const user = await storage.upsertUser(userData);
+  serverLogger.info(`[ReplitAuth] User ${user.id} upserted with final role: ${user.role}`);
 }
 
 export async function setupAuth(app: Express) {

@@ -384,27 +384,24 @@ export default function Jobs() {
   // Start job from calendar event mutation
   const startJobMutation = useMutation({
     mutationFn: async (eventId: string) => {
-      // Use fetch directly instead of apiRequest to handle 409 before throwing
-      const response = await fetch("/api/jobs/from-event", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ eventId }),
-      });
-
-      const data = await response.json();
-
-      // Handle 409 Conflict - job already exists
-      if (response.status === 409) {
-        return { isDuplicate: true, existingJob: data.job };
-      }
-
-      // Handle other errors
+      // Use apiRequest which handles CSRF tokens properly
+      const response = await apiRequest("POST", "/api/jobs/from-event", { eventId });
+      
+      // Check the response status
       if (!response.ok) {
+        const data = await response.json();
+        
+        // Handle 409 Conflict - job already exists
+        if (response.status === 409) {
+          return { isDuplicate: true, existingJob: data.job };
+        }
+        
+        // Handle other errors
         throw new Error(data.message || "Failed to create job");
       }
-
+      
       // Success - return the newly created job
+      const data = await response.json();
       return { isDuplicate: false, job: data };
     },
     onSuccess: (data: { isDuplicate: boolean; existingJob?: Job; job?: Job }) => {
@@ -526,7 +523,7 @@ export default function Jobs() {
                       <CardHeader className="flex flex-row items-start justify-between space-y-0">
                         <div className="flex-1">
                           <CardTitle className="text-base" data-testid="text-event-title">
-                            {event.summary || "Untitled Event"}
+                            {event.title || event.summary || "Untitled Event"}
                           </CardTitle>
                           <div className="flex flex-col gap-1 mt-2 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1">

@@ -450,6 +450,7 @@ export interface IStorage {
   getGoogleEventByGoogleId(googleEventId: string, calendarId: string): Promise<GoogleEvent | undefined>;
   getGoogleEventsByDateRange(startDate: Date, endDate: Date): Promise<GoogleEvent[]>;
   getTodaysUnconvertedGoogleEvents(): Promise<GoogleEvent[]>;
+  getUnconvertedGoogleEvents(startDate: Date, endDate: Date): Promise<GoogleEvent[]>;
   updateGoogleEvent(id: string, event: Partial<InsertGoogleEvent>): Promise<GoogleEvent | undefined>;
   deleteGoogleEvent(id: string): Promise<boolean>;
   markGoogleEventAsConverted(id: string, jobId: string): Promise<GoogleEvent | undefined>;
@@ -848,19 +849,42 @@ export class DatabaseStorage implements IStorage {
     // Check if user already exists to preserve role if not provided in userData
     const existingUser = await this.getUser(userData.id);
     
+    // Build the update set object
+    const updateSet: any = {
+      ...userData,
+      updatedAt: new Date(),
+    };
+    
+    // Only include role in the update if:
+    // 1. It's explicitly provided in userData, OR
+    // 2. We need to preserve existing role or set default
+    if ('role' in userData && userData.role) {
+      // Role explicitly provided - use it
+      updateSet.role = userData.role;
+      console.log(`[Storage] User ${userData.id}: Setting explicit role to ${userData.role}`);
+    } else if (existingUser?.role) {
+      // No role provided but user exists - preserve existing role
+      updateSet.role = existingUser.role;
+      console.log(`[Storage] User ${userData.id}: Preserving existing role ${existingUser.role}`);
+    } else {
+      // New user with no role specified - set default
+      updateSet.role = 'inspector';
+      console.log(`[Storage] User ${userData.id}: New user, setting default role to 'inspector'`);
+    }
+    
     const [user] = await db
       .insert(users)
-      .values(userData)
+      .values({
+        ...userData,
+        role: updateSet.role, // Ensure role is set for inserts
+      })
       .onConflictDoUpdate({
         target: users.id,
-        set: {
-          ...userData,
-          // Preserve existing role if userData.role is not provided (OIDC doesn't include role)
-          role: userData.role || existingUser?.role || 'inspector',
-          updatedAt: new Date(),
-        },
+        set: updateSet,
       })
       .returning();
+    
+    console.log(`[Storage] User ${user.id} final role: ${user.role}`);
     return user;
   }
 
@@ -3010,6 +3034,18 @@ export class DatabaseStorage implements IStorage {
         and(
           gte(googleEvents.startTime, startOfDay),
           lte(googleEvents.startTime, endOfDay),
+          eq(googleEvents.isConverted, false)
+        )
+      )
+      .orderBy(asc(googleEvents.startTime));
+  }
+
+  async getUnconvertedGoogleEvents(startDate: Date, endDate: Date): Promise<GoogleEvent[]> {
+    return await db.select().from(googleEvents)
+      .where(
+        and(
+          gte(googleEvents.startTime, startDate),
+          lte(googleEvents.startTime, endDate),
           eq(googleEvents.isConverted, false)
         )
       )

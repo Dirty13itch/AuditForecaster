@@ -2034,19 +2034,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { eventId } = schema.parse(req.body);
       
+      serverLogger.info('[API] Creating job from event:', { eventId });
+      
       // Fetch the Google event
       const googleEvent = await storage.getGoogleEvent(eventId);
       if (!googleEvent) {
+        serverLogger.warn('[API] Google event not found:', { eventId });
         return res.status(404).json({ message: "Calendar event not found" });
       }
 
       if (googleEvent.isConverted) {
+        serverLogger.warn('[API] Google event already converted:', { 
+          eventId, 
+          convertedJobId: googleEvent.convertedToJobId 
+        });
         return res.status(400).json({ message: "This calendar event has already been converted to a job" });
       }
 
       // Check for existing job with same sourceGoogleEventId to prevent duplicates
       const existingJob = await storage.getJobBySourceEventId(googleEvent.id);
       if (existingJob) {
+        serverLogger.info('[API] Job already exists for event:', { 
+          eventId: googleEvent.id, 
+          jobId: existingJob.id 
+        });
         return res.status(409).json({
           message: "Job already created from this event",
           job: existingJob
@@ -2059,12 +2070,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Detect inspection type from event title
       const inspectionType = detectInspectionTypeFromTitle(googleEvent.title) || "Other";
 
+      // Validate and handle dates properly
+      let scheduledDate: Date;
+      try {
+        scheduledDate = googleEvent.startTime instanceof Date 
+          ? googleEvent.startTime 
+          : new Date(googleEvent.startTime);
+        
+        if (isNaN(scheduledDate.getTime())) {
+          throw new Error('Invalid date');
+        }
+      } catch (dateError) {
+        serverLogger.error('[API] Invalid date in Google event:', { 
+          eventId: googleEvent.id,
+          startTime: googleEvent.startTime,
+          error: dateError 
+        });
+        return res.status(400).json({ 
+          message: "Invalid date in calendar event. Please check the event dates." 
+        });
+      }
+
       // Generate job name using event date and location
       const jobName = generateJobName(
-        googleEvent.startTime,
+        scheduledDate,
         inspectionType,
         googleEvent.location || "No location"
       );
+
+      serverLogger.info('[API] Creating job with details:', {
+        name: jobName,
+        inspectionType,
+        scheduledDate: scheduledDate.toISOString(),
+        googleEventId: googleEvent.id
+      });
 
       // Create the job
       const newJob = await storage.createJob({
@@ -2073,24 +2112,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contractor: "To be assigned",
         status: "scheduled",
         inspectionType: inspectionType,
-        scheduledDate: googleEvent.startTime,
+        scheduledDate: scheduledDate,
         priority: "medium",
         sourceGoogleEventId: googleEvent.id,
-        originalScheduledDate: googleEvent.startTime,
+        originalScheduledDate: scheduledDate,
         notes: googleEvent.description || "",
       });
 
       // Mark the Google event as converted
       await storage.markGoogleEventAsConverted(googleEvent.id, newJob.id);
+      
+      serverLogger.info('[API] Successfully created job from event:', { 
+        jobId: newJob.id, 
+        eventId: googleEvent.id 
+      });
 
       res.status(201).json(newJob);
     } catch (error) {
       if (error instanceof ZodError) {
         const { status, message } = handleValidationError(error);
+        serverLogger.error('[API] Validation error in job creation:', { 
+          error: error.errors,
+          body: req.body 
+        });
         return res.status(status).json({ message });
       }
-      logError('CreateJobFromEvent', error);
-      res.status(500).json({ message: "Failed to create job from calendar event" });
+      
+      serverLogger.error('[API] Error creating job from event:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        body: req.body
+      });
+      
+      res.status(500).json({ 
+        message: error instanceof Error 
+          ? `Failed to create job: ${error.message}` 
+          : "Failed to create job from calendar event" 
+      });
     }
   });
 
@@ -2235,6 +2293,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       serverLogger.error('[API] Error fetching Google events:', error);
       res.status(500).json({ message: 'Failed to fetch Google events', error: error.message });
+    }
+  });
+
+  // Get today's Google Calendar events that haven't been converted to jobs yet
+  app.get("/api/google-events/today", isAuthenticated, async (req, res) => {
+    try {
+      // Get today's date range
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      // Get unconverted events from database
+      const events = await storage.getUnconvertedGoogleEvents(today, tomorrow);
+      
+      // Add calendarName field for display and ensure summary field exists
+      const eventsWithCalendarName = events.map(event => ({
+        ...event,
+        calendarName: 'Building Knowledge', // Default calendar name
+        summary: event.title // Ensure summary field exists for compatibility
+      }));
+      
+      serverLogger.info(`[API] Fetched ${events.length} unconverted Google events for today`);
+      res.json(eventsWithCalendarName);
+    } catch (error: any) {
+      serverLogger.error('[API] Error fetching today\'s Google events:', error);
+      res.status(500).json({ 
+        message: 'Failed to fetch today\'s Google events', 
+        error: error.message 
+      });
     }
   });
 
@@ -2702,24 +2791,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { startDate, endDate } = req.query;
 
-        // Validate input
-        if (!startDate || !endDate) {
+        // Default to today if no dates provided
+        let parsedStartDate: Date;
+        let parsedEndDate: Date;
+        
+        if (!startDate && !endDate) {
+          // Default to today
+          parsedStartDate = new Date();
+          parsedStartDate.setHours(0, 0, 0, 0);
+          parsedEndDate = new Date();
+          parsedEndDate.setHours(23, 59, 59, 999);
+        } else if (!startDate || !endDate) {
           return res.status(400).json({ 
             success: false,
-            message: 'startDate and endDate query parameters are required' 
+            message: 'Both startDate and endDate query parameters are required when specifying a date range' 
           });
-        }
-
-        // Parse and validate dates
-        const parsedStartDate = new Date(startDate as string);
-        const parsedEndDate = new Date(endDate as string);
-
-        // Check if dates are valid
-        if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid date format. Please provide valid ISO 8601 dates.'
-          });
+        } else {
+          // Parse provided dates
+          parsedStartDate = new Date(startDate as string);
+          parsedEndDate = new Date(endDate as string);
+          
+          // Check if dates are valid
+          if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+            return res.status(400).json({
+              success: false,
+              message: 'Invalid date format. Please provide valid ISO 8601 dates.'
+            });
+          }
         }
 
         serverLogger.info('[API] Fetching inspector workload:', { 
@@ -2727,12 +2825,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
           endDate: parsedEndDate.toISOString() 
         });
 
-        const workload = await storage.getInspectorWorkload({
-          startDate: parsedStartDate,
-          endDate: parsedEndDate,
-        });
+        // Get all inspectors
+        const inspectors = await storage.getUsersByRole('inspector');
+        
+        // Get workload for each inspector in the date range
+        const workloadData = await Promise.all(
+          inspectors.map(async (inspector) => {
+            try {
+              // Get workload for this inspector in the date range
+              const workloadEntries = await storage.getInspectorWorkloadRange(
+                inspector.id, 
+                parsedStartDate, 
+                parsedEndDate
+              );
+              
+              // Calculate summary for the range
+              const totalJobs = workloadEntries.reduce((sum, entry) => sum + (entry.jobCount || 0), 0);
+              const totalMinutes = workloadEntries.reduce((sum, entry) => sum + (entry.scheduledMinutes || 0), 0);
+              
+              // Determine overall workload level
+              let overallLevel: 'light' | 'moderate' | 'heavy' | 'overbooked' = 'light';
+              if (totalJobs === 0) {
+                overallLevel = 'light';
+              } else if (totalJobs <= 3) {
+                overallLevel = 'moderate';
+              } else if (totalJobs <= 5) {
+                overallLevel = 'heavy';
+              } else {
+                overallLevel = 'overbooked';
+              }
+              
+              return {
+                inspectorId: inspector.id,
+                inspectorName: `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown',
+                totalJobs,
+                totalMinutes,
+                workloadLevel: overallLevel,
+                entries: workloadEntries
+              };
+            } catch (error) {
+              serverLogger.error(`[API] Error fetching workload for inspector ${inspector.id}:`, error);
+              return {
+                inspectorId: inspector.id,
+                inspectorName: `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown',
+                totalJobs: 0,
+                totalMinutes: 0,
+                workloadLevel: 'light' as const,
+                entries: []
+              };
+            }
+          })
+        );
 
-        res.json(workload);
+        res.json(workloadData);
       } catch (error: any) {
         serverLogger.error('[API] Error fetching inspector workload:', error);
         const errorResponse = handleDatabaseError(error, 'getInspectorWorkload');
