@@ -82,13 +82,14 @@ function updateUserSession(
 }
 
 async function upsertUser(claims: any) {
-  serverLogger.info(`[ReplitAuth] Upserting user: ${claims["sub"]}`);
+  serverLogger.info(`[ReplitAuth] Upserting user: ${claims["sub"]} with role: ${claims["role"] || 'inspector'}`);
   await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
+    role: claims["role"] || 'inspector', // Use role from OIDC claims, default to inspector
   });
 }
 

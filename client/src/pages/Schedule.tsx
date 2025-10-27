@@ -866,8 +866,8 @@ export default function Schedule() {
         </div>
         
         <div className="flex flex-1 overflow-hidden">
-          {/* Left sidebar: Unscheduled Jobs (only on desktop when not admin, or always show for all users) */}
-          {!isMobile && (
+          {/* Left sidebar: Unscheduled Jobs (only for non-admin users on desktop) */}
+          {!authLoading && !isAdmin && !isMobile && (
             <div className="w-80 border-r bg-background p-4 overflow-y-auto">
               {/* Unscheduled Jobs section */}
               <div className="mb-4">
@@ -1006,25 +1006,27 @@ export default function Schedule() {
                   </span>
                 )}
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGoogleCalendarSync}
-                  disabled={isSyncing}
-                  data-testid="button-sync"
-                >
-                  {isSyncing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    <>
-                      <Cloud className="mr-2 h-4 w-4" />
-                      Sync Google Calendar
-                    </>
-                  )}
-                </Button>
+                {!authLoading && isAdmin === true && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGoogleCalendarSync}
+                    disabled={isSyncing}
+                    data-testid="button-sync"
+                  >
+                    {isSyncing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <Cloud className="mr-2 h-4 w-4" />
+                        Sync Google Calendar
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
 
