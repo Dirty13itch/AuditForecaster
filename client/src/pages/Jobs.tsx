@@ -304,7 +304,7 @@ export default function Jobs() {
     queryKey: ["/api/builders"],
   });
 
-  // Fetch all inspectors for assignment
+  // Fetch all inspectors for assignment (admin only)
   const { data: inspectors = [] } = useQuery<Array<{
     id: string;
     firstName: string | null;
@@ -312,10 +312,11 @@ export default function Jobs() {
     email: string | null;
     role: string;
   }>>({
-    queryKey: ["/api/inspectors"],
+    queryKey: ["/api/users/inspectors"],
+    enabled: userRole === 'admin',
   });
 
-  // Fetch inspector workload (next 30 days)
+  // Fetch inspector workload (next 30 days - admin only)
   const { data: inspectorWorkload = [] } = useQuery<Array<{
     inspectorId: string;
     inspectorName: string;
@@ -342,6 +343,7 @@ export default function Jobs() {
       
       return response.json();
     },
+    enabled: userRole === 'admin',
   });
 
   // Assign job to inspector mutation
