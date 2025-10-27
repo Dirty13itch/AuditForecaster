@@ -3159,18 +3159,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Inspector Assignment API Endpoints
-  
-  // Get all inspector workloads for a specific date
-  app.get("/api/inspectors/workload", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
-    try {
-      const dateParam = req.query.date ? new Date(req.query.date) : new Date();
-      const results = await storage.getAllInspectorWorkloads(dateParam);
-      res.json(results);
-    } catch (error) {
-      const { status, message } = handleDatabaseError(error, 'get all inspector workloads');
-      res.status(status).json({ message });
-    }
-  });
+  // NOTE: Main /api/inspectors/workload endpoint is defined above (line 2698)
+  // Removed duplicate definition to prevent routing conflicts
 
   // Get workload for a specific inspector
   app.get("/api/inspectors/:id/workload", isAuthenticated, async (req: any, res) => {
@@ -3478,16 +3468,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all inspectors (admin and inspector roles)
-  app.get("/api/users/inspectors", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
-    try {
-      const inspectors = await storage.getUsersByRoles(['admin', 'inspector']);
-      res.json(inspectors);
-    } catch (error) {
-      const { status, message } = handleDatabaseError(error, 'get inspectors');
-      res.status(status).json({ message });
-    }
-  });
+  // NOTE: /api/users/inspectors endpoint is defined above (line 153)
+  // Removed duplicate definition to prevent routing conflicts
 
   app.get("/api/expenses", isAuthenticated, async (req, res) => {
     try {

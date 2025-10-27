@@ -146,8 +146,19 @@ export default function Schedule() {
   });
 
   const { data: inspectorWorkloads = [], isLoading: workloadsLoading } = useQuery<any[]>({
-    queryKey: ['/api/inspectors/workload'],
-    enabled: true,
+    queryKey: ['/api/inspectors/workload', startDate.toISOString(), endDate.toISOString()],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+      const response = await fetch(`/api/inspectors/workload?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch inspector workload');
+      }
+      return response.json();
+    },
+    enabled: isAdmin,
   });
 
   const { data: scheduleEvents = [], isLoading: eventsLoading } = useQuery<ScheduleEvent[]>({
