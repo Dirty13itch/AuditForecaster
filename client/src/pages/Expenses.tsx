@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -69,6 +69,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { format } from "date-fns";
+import { ReceiptUpload } from "@/components/expenses/ReceiptUpload";
 
 const expenseCategories = [
   { value: "fuel", label: "Fuel" },
@@ -107,6 +108,35 @@ export default function Expenses() {
     },
   });
 
+  // Sync form state when dialog opens/closes or selectedExpense changes
+  useEffect(() => {
+    if (showAddDialog) {
+      if (selectedExpense) {
+        // Editing existing expense - populate form
+        form.reset({
+          category: selectedExpense.category,
+          amount: parseFloat(selectedExpense.amount),
+          date: new Date(selectedExpense.date),
+          description: selectedExpense.description || "",
+          jobId: selectedExpense.jobId || undefined,
+          receiptUrl: selectedExpense.receiptUrl || "",
+          isDeductible: selectedExpense.isDeductible,
+        });
+      } else {
+        // Creating new expense - reset to defaults
+        form.reset({
+          category: "supplies",
+          amount: 0,
+          date: new Date(),
+          description: "",
+          jobId: undefined,
+          receiptUrl: "",
+          isDeductible: true,
+        });
+      }
+    }
+  }, [showAddDialog, selectedExpense, form]);
+
   // Fetch expenses
   const { data: expenses, isLoading } = useQuery({
     queryKey: ["/api/expenses"],
@@ -125,10 +155,7 @@ export default function Expenses() {
   // Create expense mutation
   const createMutation = useMutation({
     mutationFn: async (data: InsertExpense) => {
-      return apiRequest("/api/expenses", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", "/api/expenses", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
@@ -151,10 +178,7 @@ export default function Expenses() {
   // Update expense mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertExpense> }) => {
-      return apiRequest(`/api/expenses/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("PUT", `/api/expenses/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
@@ -162,15 +186,16 @@ export default function Expenses() {
         title: "Success",
         description: "Expense updated",
       });
+      setShowAddDialog(false);
+      setSelectedExpense(null);
+      form.reset();
     },
   });
 
   // Delete expense mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/expenses/${id}`, {
-        method: "DELETE",
-      });
+      return apiRequest("DELETE", `/api/expenses/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
@@ -210,7 +235,13 @@ export default function Expenses() {
   })).filter(stat => stat.total > 0);
 
   const onSubmit = (data: InsertExpense) => {
-    createMutation.mutate(data);
+    console.log('[EXPENSE FORM] Submitting data:', data);
+    console.log('[EXPENSE FORM] Form state:', form.getValues());
+    if (selectedExpense) {
+      updateMutation.mutate({ id: selectedExpense.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
   };
 
   const exportToCSV = () => {
@@ -239,7 +270,11 @@ export default function Expenses() {
               <Download className="h-4 w-4 mr-1" />
               Export
             </Button>
-            <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-expense">
+            <Button onClick={() => {
+              setSelectedExpense(null);
+              form.reset();
+              setShowAddDialog(true);
+            }} data-testid="button-add-expense">
               <Plus className="h-4 w-4 mr-1" />
               Add Expense
             </Button>
@@ -352,6 +387,7 @@ export default function Expenses() {
                           <TableHead>Date</TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead>Category</TableHead>
+                          <TableHead>Receipt</TableHead>
                           <TableHead>Job</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Deductible</TableHead>
@@ -371,6 +407,15 @@ export default function Expenses() {
                               <Badge variant="secondary">
                                 {expenseCategories.find(c => c.value === expense.category)?.label}
                               </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {expense.receiptUrl ? (
+                                <a href={expense.receiptUrl} target="_blank" rel="noopener noreferrer" data-testid={`link-receipt-${expense.id}`}>
+                                  <Receipt className="h-5 w-5 text-green-600" />
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground" data-testid={`no-receipt-${expense.id}`}>—</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               {expense.jobId ? (
@@ -400,7 +445,6 @@ export default function Expenses() {
                                   size="sm"
                                   onClick={() => {
                                     setSelectedExpense(expense);
-                                    form.reset(expense as any);
                                     setShowAddDialog(true);
                                   }}
                                   data-testid={`button-edit-${expense.id}`}
@@ -428,7 +472,11 @@ export default function Expenses() {
                     <p>No expenses found</p>
                     <Button 
                       className="mt-4" 
-                      onClick={() => setShowAddDialog(true)}
+                      onClick={() => {
+                        setSelectedExpense(null);
+                        form.reset();
+                        setShowAddDialog(true);
+                      }}
                       data-testid="button-create-first"
                     >
                       Add your first expense
@@ -514,7 +562,7 @@ export default function Expenses() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-expense-category">
                             <SelectValue />
@@ -559,7 +607,7 @@ export default function Expenses() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Link to Job (Optional)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-job">
                             <SelectValue placeholder="Select a job" />
@@ -593,6 +641,27 @@ export default function Expenses() {
                         data-testid="input-description"
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="receiptUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Receipt Photo</FormLabel>
+                    <FormControl>
+                      <ReceiptUpload
+                        value={field.value || undefined}
+                        onChange={(url) => field.onChange(url)}
+                        disabled={createMutation.isPending || updateMutation.isPending}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Take a photo or upload an image of your receipt
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

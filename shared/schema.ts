@@ -446,7 +446,7 @@ export const expenses = pgTable("expenses", {
   description: text("description"),
   receiptUrl: text("receipt_url"),
   date: timestamp("date").notNull(),
-  isWorkRelated: boolean("is_work_related").default(true),
+  isDeductible: boolean("is_deductible").default(true),
 }, (table) => [
   index("idx_expenses_job_id").on(table.jobId),
   index("idx_expenses_date").on(table.date),
@@ -1538,6 +1538,7 @@ export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit
 });
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true }).extend({
   date: z.coerce.date(),
+  amount: z.union([z.string(), z.number()]).pipe(z.coerce.string()),
 });
 export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true }).extend({
   date: z.coerce.date(),
