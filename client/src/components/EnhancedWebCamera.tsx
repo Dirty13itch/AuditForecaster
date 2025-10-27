@@ -512,7 +512,7 @@ export function EnhancedWebCamera({
         <div className="relative">
           <img
             src={previewUrl || ""}
-            alt="Preview"
+            alt={`Captured photo preview${capturedFilename ? ` - ${capturedFilename}` : ''}${isDuplicate ? ' (duplicate filename detected)' : ', ready for upload'}`}
             className="w-full aspect-[4/3] object-cover"
             data-testid="img-photo-preview"
           />

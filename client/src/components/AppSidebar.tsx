@@ -295,8 +295,8 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex items-center gap-3 p-2" data-testid="user-profile">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.profileImageUrl} alt={getUserName()} />
-                <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                <AvatarImage src={user?.profileImageUrl} alt={`${getUserName()} profile picture, ${userRole} role`} />
+                <AvatarFallback aria-label={`${getUserName()}, ${userRole}`}>{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">

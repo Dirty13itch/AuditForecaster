@@ -160,8 +160,8 @@ export function Leaderboard({
       </div>
 
       <Avatar className="h-10 w-10">
-        <AvatarImage src={entry.profileImageUrl} alt={entry.userName} />
-        <AvatarFallback>
+        <AvatarImage src={entry.profileImageUrl} alt={`${entry.userName} profile picture, rank ${entry.rank}, level ${entry.level}, ${entry.totalXP.toLocaleString()} XP`} />
+        <AvatarFallback aria-label={`${entry.userName}, rank ${entry.rank}`}>
           {entry.userName.split(' ').map(n => n[0]).join('').toUpperCase()}
         </AvatarFallback>
       </Avatar>

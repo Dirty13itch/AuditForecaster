@@ -408,7 +408,7 @@ export function GalleryPhotoPicker({
                   >
                     <img
                       src={photo.preview}
-                      alt={`Selected ${index + 1}`}
+                      alt={`Selected photo ${index + 1} of ${selectedPhotos.length}: ${photo.file.name}${photo.isDuplicate ? ' (duplicate filename detected)' : ''}`}
                       className="w-full h-full object-cover"
                     />
                     {photo.isDuplicate && (

@@ -570,7 +570,7 @@ export function PhotoOCR({ open, photoUrl, photoId, jobId, onClose, onAutoFill, 
             <div className="relative">
               <img
                 src={photoUrl}
-                alt="OCR Photo"
+                alt="Photo being processed for text extraction using Optical Character Recognition (OCR)"
                 className="w-full max-h-64 object-contain rounded-md border"
                 data-testid="img-ocr-photo"
               />

@@ -173,7 +173,7 @@ function ComparisonPane({
       >
         <img
           src={photo.filePath}
-          alt={photo.caption || "Photo"}
+          alt={`Comparison photo ${index + 1}: ${photo.caption || (photo.location ? `taken at ${photo.location}` : 'Photo')}${photo.tags && photo.tags.length > 0 ? `, tagged: ${photo.tags.slice(0, 3).join(', ')}` : ''}`}
           className="max-h-full max-w-full object-contain"
           style={{
             transform: `scale(${viewState.zoom}) rotate(${viewState.rotation}deg) translate(${viewState.position.x / viewState.zoom}px, ${viewState.position.y / viewState.zoom}px)`,

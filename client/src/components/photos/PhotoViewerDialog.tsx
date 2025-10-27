@@ -311,7 +311,10 @@ export function PhotoViewerDialog({ photo: initialPhoto, photos, onClose }: Phot
           >
             <img
               src={currentPhoto.filePath}
-              alt={currentPhoto.caption || "Photo"}
+              alt={currentPhoto.caption || 
+                   (currentPhoto.location ? `Photo taken at ${currentPhoto.location}` : 
+                   `Photo ${currentIndex + 1} of ${photos.length}`) + 
+                   (currentPhoto.tags && currentPhoto.tags.length > 0 ? `, tagged: ${currentPhoto.tags.join(', ')}` : '')}
               className="max-h-full max-w-full object-contain transition-transform"
               style={{
                 transform: `scale(${zoom}) rotate(${rotation}deg) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
@@ -420,7 +423,7 @@ export function PhotoViewerDialog({ photo: initialPhoto, photos, onClose }: Phot
                 >
                   <img
                     src={photo.thumbnailPath || photo.filePath}
-                    alt=""
+                    alt={`Thumbnail ${index + 1}: ${photo.caption || 'Photo'}`}
                     className="h-full w-full object-cover"
                   />
                   {photo.isFavorite && (

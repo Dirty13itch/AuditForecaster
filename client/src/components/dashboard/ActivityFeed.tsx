@@ -142,8 +142,8 @@ export function ActivityFeed({
                         {item.user && (
                           <div className="flex items-center gap-2 mt-2">
                             <Avatar className="h-5 w-5">
-                              <AvatarImage src={item.user.avatar} />
-                              <AvatarFallback className="text-xs">
+                              <AvatarImage src={item.user.avatar} alt={`${item.user.name} profile picture`} />
+                              <AvatarFallback className="text-xs" aria-label={item.user.name}>
                                 {item.user.name.split(' ').map(n => n[0]).join('')}
                               </AvatarFallback>
                             </Avatar>

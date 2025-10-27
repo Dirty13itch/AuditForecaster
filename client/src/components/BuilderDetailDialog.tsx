@@ -108,7 +108,7 @@ export function BuilderDetailDialog({
         <DialogHeader>
           <div className="flex items-start gap-4">
             <Avatar className="h-16 w-16 flex-shrink-0" data-testid="avatar-detail">
-              <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xl">
+              <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xl" aria-label={`${builder.name}, ${builder.companyName}${builder.tradeSpecialization ? `, ${builder.tradeSpecialization}` : ''}${builder.rating ? `, rated ${builder.rating} stars` : ''}`}>
                 {getInitials(builder.name)}
               </AvatarFallback>
             </Avatar>

@@ -114,7 +114,7 @@ export function PhotoComparison({ photo1, photo2, onClose }: PhotoComparisonProp
         <img
           ref={image1Ref}
           src={photo1.fullUrl || photo1.filePath}
-          alt="Photo 1"
+          alt={`Before photo: ${photo1.caption || (photo1.location ? `taken at ${photo1.location}` : 'First comparison photo')}${photo1.tags && photo1.tags.length > 0 ? `, tagged: ${photo1.tags.slice(0, 3).join(', ')}` : ''}`}
           className="w-full h-full object-contain"
           style={{
             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
@@ -134,7 +134,7 @@ export function PhotoComparison({ photo1, photo2, onClose }: PhotoComparisonProp
         <img
           ref={image2Ref}
           src={photo2.fullUrl || photo2.filePath}
-          alt="Photo 2"
+          alt={`After photo: ${photo2.caption || (photo2.location ? `taken at ${photo2.location}` : 'Second comparison photo')}${photo2.tags && photo2.tags.length > 0 ? `, tagged: ${photo2.tags.slice(0, 3).join(', ')}` : ''}`}
           className="w-full h-full object-contain"
           style={{
             transform: `scale(${zoom}) translate(${syncControls ? pan.x / zoom : 0}px, ${syncControls ? pan.y / zoom : 0}px)`,
@@ -157,7 +157,7 @@ export function PhotoComparison({ photo1, photo2, onClose }: PhotoComparisonProp
     <div className="relative h-full overflow-hidden border rounded-lg" ref={containerRef}>
       <img
         src={photo1.fullUrl || photo1.filePath}
-        alt="Photo 1"
+        alt={`Base layer photo: ${photo1.caption || (photo1.location ? `taken at ${photo1.location}` : 'First photo in overlay')}${photo1.tags && photo1.tags.length > 0 ? `, tagged: ${photo1.tags.slice(0, 3).join(', ')}` : ''}`}
         className="absolute inset-0 w-full h-full object-contain"
         style={{
           transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
@@ -171,7 +171,7 @@ export function PhotoComparison({ photo1, photo2, onClose }: PhotoComparisonProp
       />
       <img
         src={photo2.fullUrl || photo2.filePath}
-        alt="Photo 2"
+        alt={`Overlay photo: ${photo2.caption || (photo2.location ? `taken at ${photo2.location}` : 'Second photo in overlay')}${photo2.tags && photo2.tags.length > 0 ? `, tagged: ${photo2.tags.slice(0, 3).join(', ')}` : ''}`}
         className="absolute inset-0 w-full h-full object-contain"
         style={{
           opacity: overlayOpacity,
@@ -198,7 +198,7 @@ export function PhotoComparison({ photo1, photo2, onClose }: PhotoComparisonProp
     >
       <img
         src={photo1.fullUrl || photo1.filePath}
-        alt="Photo 1"
+        alt={`Swipe base photo: ${photo1.caption || (photo1.location ? `taken at ${photo1.location}` : 'Left side of swipe comparison')}${photo1.tags && photo1.tags.length > 0 ? `, tagged: ${photo1.tags.slice(0, 3).join(', ')}` : ''}`}
         className="absolute inset-0 w-full h-full object-contain"
         style={{
           transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
@@ -214,7 +214,7 @@ export function PhotoComparison({ photo1, photo2, onClose }: PhotoComparisonProp
       >
         <img
           src={photo2.fullUrl || photo2.filePath}
-          alt="Photo 2"
+          alt={`Swipe reveal photo: ${photo2.caption || (photo2.location ? `taken at ${photo2.location}` : 'Right side of swipe comparison')}${photo2.tags && photo2.tags.length > 0 ? `, tagged: ${photo2.tags.slice(0, 3).join(', ')}` : ''}`}
           className="absolute inset-0 w-full h-full object-contain"
           style={{
             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,

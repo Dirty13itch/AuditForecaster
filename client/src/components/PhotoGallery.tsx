@@ -85,7 +85,7 @@ export default function PhotoGallery({
               {!hasFailed && (
                 <img
                   src={photo.thumbnailPath || photo.url}
-                  alt={`Inspection photo ${photo.id}`}
+                  alt={`${photo.itemNumber ? `Checklist item ${photo.itemNumber} photo` : 'Inspection photo'} captured on ${photo.timestamp}`}
                   className={`w-full h-full object-cover transition-opacity duration-300 ${
                     isLoaded ? 'opacity-100' : 'opacity-0'
                   }`}

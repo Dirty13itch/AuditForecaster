@@ -51,7 +51,7 @@ export function BuilderCard({ builder, onEdit, onDelete, onViewDetails }: Builde
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-4">
         <div className="flex items-start gap-4 flex-1 min-w-0">
           <Avatar className="h-12 w-12 flex-shrink-0" data-testid={`avatar-${builder.id}`}>
-            <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
+            <AvatarFallback className="bg-primary text-primary-foreground font-semibold" aria-label={`${builder.name}, ${builder.companyName}${builder.tradeSpecialization ? `, ${builder.tradeSpecialization}` : ''}`}>
               {getInitials(builder.name)}
             </AvatarFallback>
           </Avatar>

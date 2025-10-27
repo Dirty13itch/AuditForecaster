@@ -125,7 +125,7 @@ function SortablePhoto({ photo, isSelected, onToggle, onView, onQuickAction, vie
         
         <img
           src={photo.thumbnailPath || photo.filePath}
-          alt={photo.caption || "Photo"}
+          alt={photo.caption || `Photo from ${format(new Date(photo.uploadedAt), "PPp")}${photo.tags && photo.tags.length > 0 ? `, tagged: ${photo.tags.slice(0, 3).join(', ')}` : ''}`}
           className="h-16 w-16 object-cover rounded"
         />
         
@@ -201,7 +201,7 @@ function SortablePhoto({ photo, isSelected, onToggle, onView, onQuickAction, vie
     >
       <img
         src={photo.thumbnailPath || photo.filePath}
-        alt={photo.caption || "Photo"}
+        alt={photo.caption || `Photo from ${format(new Date(photo.uploadedAt), "PPp")}${photo.tags && photo.tags.length > 0 ? `, tagged: ${photo.tags.slice(0, 3).join(', ')}` : ''}`}
         className="h-full w-full object-cover"
         loading="lazy"
       />
