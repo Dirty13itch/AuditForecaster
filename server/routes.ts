@@ -30,6 +30,8 @@ import {
   insertScheduleEventSchema,
   insertExpenseSchema,
   insertMileageLogSchema,
+  insertMileageRoutePointSchema,
+  autoTripSchema,
   insertReportTemplateSchema,
   insertReportInstanceSchema,
   insertPhotoAlbumSchema,
@@ -3979,6 +3981,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete mileage log');
+      res.status(status).json({ message });
+    }
+  });
+
+  // GPS-tracked mileage routes
+  app.post("/api/mileage-logs/auto", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      // Validate request body with Zod schema
+      const validated = autoTripSchema.parse(req.body);
+      const { purpose, jobId, startTime, endTime, distanceMeters, durationSeconds, points } = validated;
+      
+      const logData: any = {
+        date: new Date(startTime),
+        purpose,
+        isWorkRelated: purpose === 'business',
+        jobId: jobId || null,
+        trackingSource: 'gps_auto',
+        vehicleState: 'completed',
+        startTimestamp: new Date(startTime),
+        endTimestamp: new Date(endTime),
+        distanceMeters,
+        durationSeconds,
+        distance: String((distanceMeters * 0.000621371).toFixed(2)),
+        averageSpeed: durationSeconds > 0 ? String((distanceMeters / durationSeconds).toFixed(2)) : '0',
+        startLatitude: points[0]?.latitude || null,
+        startLongitude: points[0]?.longitude || null,
+        endLatitude: points[points.length - 1]?.latitude || null,
+        endLongitude: points[points.length - 1]?.longitude || null,
+        routeSummary: {
+          totalDistance: distanceMeters,
+          totalTime: durationSeconds,
+          pointCount: points.length,
+          startCoords: points[0] ? { lat: points[0].latitude, lon: points[0].longitude } : null,
+          endCoords: points[points.length - 1] ? { lat: points[points.length - 1].latitude, lon: points[points.length - 1].longitude } : null,
+        },
+      };
+
+      const log = await storage.createMileageLogWithRoute(logData, points);
+      res.status(201).json(log);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create GPS mileage log');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/mileage-logs/:id/route", isAuthenticated, async (req, res) => {
+    try {
+      const points = await storage.getMileageLogRoute(req.params.id);
+      res.json(points);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch route points');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/mileage-logs/:id/points", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const routePointsSchema = z.object({
+        points: z.array(insertMileageRoutePointSchema)
+      });
+      
+      const validated = routePointsSchema.parse(req.body);
+      await storage.updateMileageLogRoute(req.params.id, validated.points);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update route points');
       res.status(status).json({ message });
     }
   });

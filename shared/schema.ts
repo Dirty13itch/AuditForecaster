@@ -467,7 +467,45 @@ export const mileageLogs = pgTable("mileage_logs", {
   startLongitude: real("start_longitude"),
   endLatitude: real("end_latitude"),
   endLongitude: real("end_longitude"),
-});
+  // Manual odometer fields (legacy, still used for manual entries)
+  startOdometer: integer("start_odometer"),
+  endOdometer: integer("end_odometer"),
+  rate: decimal("rate", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+  // GPS auto-tracking fields
+  startTimestamp: timestamp("start_timestamp"),
+  endTimestamp: timestamp("end_timestamp"),
+  distanceMeters: integer("distance_meters"), // Calculated from GPS points
+  durationSeconds: integer("duration_seconds"),
+  averageSpeed: decimal("average_speed", { precision: 10, scale: 2 }), // m/s
+  businessProbability: decimal("business_probability", { precision: 3, scale: 2 }), // 0-1 AI score
+  routeSummary: jsonb("route_summary"), // { totalDistance, totalTime, startCoords, endCoords, waypoints }
+  trackingSource: text("tracking_source", { 
+    enum: ["manual", "gps_auto", "gps_manual"] 
+  }).default("manual"),
+  vehicleState: text("vehicle_state", { 
+    enum: ["idle", "monitoring", "recording", "completed"] 
+  }).default("completed"),
+}, (table) => [
+  index("idx_mileage_logs_date").on(table.date),
+  index("idx_mileage_logs_tracking_source").on(table.trackingSource),
+  index("idx_mileage_logs_vehicle_state").on(table.vehicleState),
+  index("idx_mileage_logs_date_source").on(table.date, table.trackingSource),
+]);
+
+export const mileageRoutePoints = pgTable("mileage_route_points", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  logId: varchar("log_id").notNull().references(() => mileageLogs.id, { onDelete: 'cascade' }),
+  timestamp: timestamp("timestamp").notNull(),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  speed: real("speed"), // m/s
+  accuracy: real("accuracy"), // meters
+  source: text("source", { enum: ["gps", "network", "cached"] }).default("gps"),
+}, (table) => [
+  index("idx_mileage_route_points_log_id").on(table.logId),
+  index("idx_mileage_route_points_log_timestamp").on(table.logId, table.timestamp),
+]);
 
 // Report Templates - Enhanced for iAuditor-style inspection system with visual designer
 export const reportTemplates = pgTable("report_templates", {
@@ -1503,6 +1541,28 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true 
 });
 export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true }).extend({
   date: z.coerce.date(),
+  startTimestamp: z.coerce.date().nullable().optional(),
+  endTimestamp: z.coerce.date().nullable().optional(),
+});
+export const insertMileageRoutePointSchema = createInsertSchema(mileageRoutePoints).omit({ id: true }).extend({
+  timestamp: z.coerce.date(),
+});
+export const autoTripSchema = z.object({
+  purpose: z.enum(['business', 'personal']),
+  jobId: z.string().optional().nullable(),
+  tripId: z.string(),
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+  distanceMeters: z.number().positive(),
+  durationSeconds: z.number().nonnegative(),
+  points: z.array(z.object({
+    timestamp: z.coerce.date(),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    speed: z.number().nonnegative().nullable().optional(),
+    accuracy: z.number().nonnegative().nullable().optional(),
+    source: z.enum(['gps', 'network', 'cached']).optional(),
+  })).min(1),
 });
 // Report template schemas
 export const insertReportTemplateSchema = createInsertSchema(reportTemplates).omit({ id: true, createdAt: true, updatedAt: true }).extend({
@@ -1835,6 +1895,7 @@ export type Job = typeof jobs.$inferSelect;
 export type ScheduleEvent = typeof scheduleEvents.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
 export type MileageLog = typeof mileageLogs.$inferSelect;
+export type MileageRoutePoint = typeof mileageRoutePoints.$inferSelect;
 export type ReportTemplate = typeof reportTemplates.$inferSelect;
 export type TemplateSection = typeof templateSections.$inferSelect;
 export type TemplateField = typeof templateFields.$inferSelect;
@@ -1867,6 +1928,7 @@ export type InsertJob = z.infer<typeof insertJobSchema>;
 export type InsertScheduleEvent = z.infer<typeof insertScheduleEventSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type InsertMileageLog = z.infer<typeof insertMileageLogSchema>;
+export type InsertMileageRoutePoint = z.infer<typeof insertMileageRoutePointSchema>;
 export type InsertReportTemplate = z.infer<typeof insertReportTemplateSchema>;
 export type InsertTemplateSection = z.infer<typeof insertTemplateSectionSchema>;
 export type InsertTemplateField = z.infer<typeof insertTemplateFieldSchema>;

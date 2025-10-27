@@ -143,6 +143,7 @@ import {
   scheduleEvents,
   expenses,
   mileageLogs,
+  mileageRoutePoints,
   reportTemplates,
   templateSections,
   templateFields,
@@ -293,6 +294,9 @@ export interface IStorage {
   getMileageLogsByDateRange(startDate: Date, endDate: Date): Promise<MileageLog[]>;
   updateMileageLog(id: string, log: Partial<InsertMileageLog>): Promise<MileageLog | undefined>;
   deleteMileageLog(id: string): Promise<boolean>;
+  createMileageLogWithRoute(log: InsertMileageLog, routePoints: any[]): Promise<MileageLog>;
+  getMileageLogRoute(logId: string): Promise<any[]>;
+  updateMileageLogRoute(logId: string, points: any[]): Promise<void>;
 
   // Report Templates - Enhanced for visual designer
   createReportTemplate(template: InsertReportTemplate): Promise<ReportTemplate>;
@@ -1688,6 +1692,55 @@ export class DatabaseStorage implements IStorage {
   async deleteMileageLog(id: string): Promise<boolean> {
     const result = await db.delete(mileageLogs).where(eq(mileageLogs.id, id)).returning();
     return result.length > 0;
+  }
+
+  async createMileageLogWithRoute(insertLog: InsertMileageLog, routePoints: any[]): Promise<MileageLog> {
+    const [log] = await db.insert(mileageLogs).values(insertLog).returning();
+    
+    if (routePoints && routePoints.length > 0) {
+      const pointsToInsert = routePoints.map(point => ({
+        logId: log.id,
+        timestamp: point.timestamp,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        speed: point.speed,
+        accuracy: point.accuracy,
+        source: point.source || 'gps',
+      }));
+      
+      await db.insert(mileageRoutePoints).values(pointsToInsert);
+    }
+    
+    return log;
+  }
+
+  async getMileageLogRoute(logId: string): Promise<any[]> {
+    return await db.select().from(mileageRoutePoints)
+      .where(eq(mileageRoutePoints.logId, logId))
+      .orderBy(asc(mileageRoutePoints.timestamp));
+  }
+
+  async updateMileageLogRoute(logId: string, points: any[]): Promise<void> {
+    // Use transaction to atomically delete old points and insert new ones
+    await db.transaction(async (tx) => {
+      // Delete all existing points for this logId
+      await tx.delete(mileageRoutePoints).where(eq(mileageRoutePoints.logId, logId));
+      
+      // Insert new points if provided
+      if (points && points.length > 0) {
+        const pointsToInsert = points.map(point => ({
+          logId,
+          timestamp: point.timestamp,
+          latitude: point.latitude,
+          longitude: point.longitude,
+          speed: point.speed,
+          accuracy: point.accuracy,
+          source: point.source || 'gps',
+        }));
+        
+        await tx.insert(mileageRoutePoints).values(pointsToInsert);
+      }
+    });
   }
 
   async createReportTemplate(insertTemplate: InsertReportTemplate): Promise<ReportTemplate> {

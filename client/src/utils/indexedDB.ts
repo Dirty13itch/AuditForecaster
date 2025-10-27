@@ -569,6 +569,91 @@ class IndexedDBManager {
     };
   }
 
+  // Mileage trip methods (stored in metadata for now to avoid schema migration)
+  async saveMileageTrip(trip: any): Promise<void> {
+    const db = await this.init();
+    await db.put('metadata', {
+      key: `mileage_trip_${trip.id}`,
+      value: trip,
+      timestamp: new Date(),
+    });
+  }
+
+  async getMileageTrips(): Promise<any[]> {
+    const db = await this.init();
+    const tx = db.transaction('metadata', 'readonly');
+    const store = tx.objectStore('metadata');
+    const allKeys = await store.getAllKeys();
+    const tripKeys = allKeys.filter(key => typeof key === 'string' && key.startsWith('mileage_trip_'));
+    
+    const trips = [];
+    for (const key of tripKeys) {
+      const record = await store.get(key);
+      if (record) {
+        trips.push(record.value);
+      }
+    }
+    
+    return trips;
+  }
+
+  async saveMileagePoint(tripId: string, point: any): Promise<void> {
+    const db = await this.init();
+    const pointKey = `mileage_point_${tripId}_${point.timestamp.getTime()}`;
+    await db.put('metadata', {
+      key: pointKey,
+      value: { tripId, ...point },
+      timestamp: new Date(),
+    });
+  }
+
+  async getMileagePoints(tripId: string): Promise<any[]> {
+    const db = await this.init();
+    const tx = db.transaction('metadata', 'readonly');
+    const store = tx.objectStore('metadata');
+    const allKeys = await store.getAllKeys();
+    const pointKeys = allKeys.filter(key => 
+      typeof key === 'string' && key.startsWith(`mileage_point_${tripId}_`)
+    );
+    
+    const points = [];
+    for (const key of pointKeys) {
+      const record = await store.get(key);
+      if (record) {
+        points.push(record.value);
+      }
+    }
+    
+    return points.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+  }
+
+  async markMileageTripSynced(tripId: string): Promise<void> {
+    const db = await this.init();
+    const trip = await db.get('metadata', `mileage_trip_${tripId}`);
+    if (trip) {
+      trip.value.synced = true;
+      await db.put('metadata', trip);
+    }
+  }
+
+  async deleteMileageTrip(tripId: string): Promise<void> {
+    const db = await this.init();
+    const tx = db.transaction('metadata', 'readwrite');
+    const store = tx.objectStore('metadata');
+    const allKeys = await store.getAllKeys();
+    
+    for (const key of allKeys) {
+      if (typeof key === 'string' && 
+          (key === `mileage_trip_${tripId}` || key.startsWith(`mileage_point_${tripId}_`))) {
+        await store.delete(key);
+      }
+    }
+    
+    await tx.done;
+  }
+
   // Close database connection
   close(): void {
     if (this.db) {

@@ -67,6 +67,7 @@ import {
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Link } from "wouter";
+import { TripController } from "@/components/mileage/TripController";
 
 const IRS_RATE = 0.67; // 2024 IRS standard mileage rate
 
@@ -284,6 +285,9 @@ export default function Mileage() {
             </Button>
           </div>
         </div>
+
+        {/* GPS Trip Controller */}
+        <TripController />
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
