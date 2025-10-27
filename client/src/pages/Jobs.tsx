@@ -170,6 +170,7 @@ export default function Jobs() {
 
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [jobToEdit, setJobToEdit] = useState<Job | null>(null);
   
   // Pagination state for different sections
   const todaysPagination = usePagination('today', 25);
@@ -681,10 +682,20 @@ export default function Jobs() {
       {/* Job Dialog */}
       {canCreateJobs && (
         <JobDialog
-          isOpen={isJobDialogOpen}
-          onClose={() => setIsJobDialogOpen(false)}
-          onSubmit={createJobMutation.mutate}
-          isSubmitting={createJobMutation.isPending}
+          open={isJobDialogOpen}
+          onOpenChange={setIsJobDialogOpen}
+          job={jobToEdit}
+          builders={builders}
+          onSave={async (data) => {
+            if (jobToEdit) {
+              // For future editing functionality
+              // await updateJobMutation.mutateAsync({ id: jobToEdit.id, ...data });
+            } else {
+              await createJobMutation.mutateAsync(data);
+            }
+            setJobToEdit(null);
+          }}
+          isPending={createJobMutation.isPending}
         />
       )}
 

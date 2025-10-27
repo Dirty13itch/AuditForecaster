@@ -205,7 +205,7 @@ export default function JobDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-job">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-new-job">
         <DialogHeader>
           <div className="flex items-center justify-between gap-4">
             <DialogTitle data-testid="text-dialog-title">
@@ -222,7 +222,7 @@ export default function JobDialog({
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4" data-testid="form-create-job">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
