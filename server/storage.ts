@@ -192,6 +192,7 @@ import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count } from "d
 export interface IStorage {
   // User operations for Replit Auth
   getUser(id: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>; // Alias for getUser, used by audit logger
   getAllUsers(): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>;
 
@@ -773,6 +774,11 @@ export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0];
+  }
+  
+  // Alias for getUser, used by audit logger
+  async getUserById(id: string): Promise<User | undefined> {
+    return this.getUser(id);
   }
 
   async getAllUsers(): Promise<User[]> {

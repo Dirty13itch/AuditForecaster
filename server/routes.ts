@@ -2236,6 +2236,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+  
+  // Alias endpoint for test-connection (backward compatibility)
+  app.get('/api/google-calendar/test-connection', isAuthenticated, requireRole('admin'), async (req, res) => {
+    try {
+      serverLogger.info('[API] Testing Google Calendar connection via /test-connection endpoint');
+      
+      // Import the extended service
+      const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+      
+      const testResult = await extendedService.testConnection();
+      
+      // Log the result for debugging
+      serverLogger.info('[API] Google Calendar test result:', testResult);
+      
+      res.json(testResult);
+    } catch (error: any) {
+      serverLogger.error('[API] Error testing Google Calendar connection:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to test Google Calendar connection', 
+        error: error.message 
+      });
+    }
+  });
 
   // Sync Google Calendar events (admin only)
   app.post('/api/google-calendar/sync', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
