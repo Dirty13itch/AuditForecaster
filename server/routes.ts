@@ -1754,34 +1754,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set createdBy to current user
       validated.createdBy = req.user.claims.sub;
       
-      const job = await storage.createJob(validated);
+      serverLogger.info('[API] Attempting to create job:', {
+        name: validated.name,
+        address: validated.address,
+        builderId: validated.builderId,
+        status: validated.status,
+        userId: req.user.claims.sub,
+      });
+      
+      // CRITICAL: createJob MUST succeed or throw an error
+      // Never return success if database insert fails
+      let job;
+      try {
+        job = await storage.createJob(validated);
+      } catch (storageError) {
+        // Log the critical error
+        serverLogger.error('[API] CRITICAL: Job creation failed in storage layer:', {
+          error: storageError instanceof Error ? storageError.message : String(storageError),
+          stack: storageError instanceof Error ? storageError.stack : undefined,
+          jobData: {
+            name: validated.name,
+            address: validated.address,
+            builderId: validated.builderId,
+          },
+        });
+        
+        // CRITICAL: Ensure we return 500, not 201
+        // Re-throw to be caught by outer error handler
+        throw storageError;
+      }
+      
+      // Verify job has an ID before proceeding
+      if (!job || !job.id) {
+        const errorMsg = 'CRITICAL: Job created but has no ID - database persistence failed';
+        serverLogger.error('[API] ' + errorMsg, { job });
+        throw new Error(errorMsg);
+      }
+      
+      serverLogger.info('[API] Job created successfully:', {
+        id: job.id,
+        name: job.name,
+        address: job.address,
+      });
       
       // Auto-generate checklist items from template based on inspection type
       if (job.inspectionType) {
         try {
           await storage.generateChecklistFromTemplate(job.id, job.inspectionType);
-          serverLogger.info(`[Jobs] Auto-generated checklist for ${job.inspectionType} inspection (Job ${job.id})`);
+          serverLogger.info(`[API] Auto-generated checklist for ${job.inspectionType} inspection (Job ${job.id})`);
         } catch (error) {
           // Log but don't fail job creation if checklist generation fails
-          serverLogger.error('[Jobs] Failed to auto-generate checklist:', error);
+          serverLogger.error('[API] Failed to auto-generate checklist:', error);
         }
       }
       
-      // Audit log: Job creation
-      await createAuditLog(req, {
-        userId: req.user.claims.sub,
-        action: 'job.create',
-        resourceType: 'job',
-        resourceId: job.id,
-        metadata: { jobName: job.name, address: job.address, status: job.status, inspectionType: job.inspectionType },
-      }, storage);
+      // Audit log: Job creation (only if job was successfully created)
+      try {
+        await createAuditLog(req, {
+          userId: req.user.claims.sub,
+          action: 'job.create',
+          resourceType: 'job',
+          resourceId: job.id,
+          metadata: { jobName: job.name, address: job.address, status: job.status, inspectionType: job.inspectionType },
+        }, storage);
+      } catch (auditError) {
+        // Log audit error but don't fail the request since job was created
+        serverLogger.error('[API] Failed to create audit log for job creation:', auditError);
+      }
       
+      // Only return 201 if job was actually created and persisted
       res.status(201).json(job);
     } catch (error) {
+      // Handle validation errors
       if (error instanceof ZodError) {
         const { status, message } = handleValidationError(error);
+        serverLogger.error('[API] Job creation validation error:', {
+          validationErrors: error.errors,
+          requestBody: req.body,
+        });
         return res.status(status).json({ message });
       }
+      
+      // Handle all database/storage errors
+      serverLogger.error('[API] Job creation failed:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      
+      // CRITICAL: Always return 500 for database errors, never 201
       const { status, message } = handleDatabaseError(error, 'create job');
       res.status(status).json({ message });
     }

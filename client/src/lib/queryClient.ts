@@ -29,7 +29,7 @@ export async function apiRequest(
 
     const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
     if (csrfToken && method !== 'GET' && method !== 'HEAD') {
-      headers['X-CSRF-Token'] = csrfToken;
+      headers['x-csrf-token'] = csrfToken;  // Use lowercase to match server expectation
     }
 
     const res = await fetch(url, {
@@ -49,7 +49,7 @@ export async function apiRequest(
         
         const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
         if (csrfToken && method !== 'GET' && method !== 'HEAD') {
-          headers['X-CSRF-Token'] = csrfToken;
+          headers['x-csrf-token'] = csrfToken;  // Use lowercase to match server expectation
         }
 
         const retryRes = await fetch(url, {
@@ -76,7 +76,7 @@ export async function apiRequest(
         const csrfToken = getCsrfToken();
         const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
         if (csrfToken) {
-          headers['X-CSRF-Token'] = csrfToken;
+          headers['x-csrf-token'] = csrfToken;  // Use lowercase to match server expectation
         }
 
         await syncQueue.queueRequest({

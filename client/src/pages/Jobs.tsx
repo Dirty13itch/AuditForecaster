@@ -352,14 +352,16 @@ export default function Jobs() {
       return apiRequest("POST", `/api/jobs/${jobId}/assign`, { inspectorId });
     },
     onSuccess: async (data) => {
+      // Invalidate all job-related queries with improved predicate
       await Promise.all([
         queryClient.invalidateQueries({ 
-          predicate: (query) => query.queryKey[0] === "/api/jobs",
-          refetchType: 'active'
-        }),
-        queryClient.invalidateQueries({ 
-          queryKey: ["/api/jobs/today"],
-          refetchType: 'active'
+          predicate: (query) => {
+            const key = query.queryKey[0];
+            return key === "/api/jobs" || 
+                   key === "/api/jobs/today" || 
+                   key === "/api/jobs/completed-today";
+          },
+          refetchType: 'active' // Force immediate refetch
         }),
         queryClient.invalidateQueries({ 
           queryKey: ["/api/inspectors/workload"],
@@ -404,11 +406,36 @@ export default function Jobs() {
       const data = await response.json();
       return { isDuplicate: false, job: data };
     },
-    onSuccess: (data: { isDuplicate: boolean; existingJob?: Job; job?: Job }) => {
-      // Invalidate cache for both new and duplicate jobs
-      queryClient.invalidateQueries({ queryKey: ["/api/google-events/today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs/today"] });
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
+    onSuccess: async (data: { isDuplicate: boolean; existingJob?: Job; job?: Job }) => {
+      // Invalidate cache for Google events FIRST to immediately remove the converted event
+      // This ensures the UI updates to remove the event from "Planned Events"
+      await Promise.all([
+        // Force refetch of today's Google calendar events
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/google-events/today"],
+          exact: true,
+          refetchType: 'active' // Force immediate refetch
+        }),
+        // Also invalidate any other potential google events queries
+        queryClient.invalidateQueries({ 
+          predicate: (query) => {
+            const key = query.queryKey[0] as string;
+            return key?.includes("/api/google-events");
+          },
+          refetchType: 'active'
+        })
+      ]);
+      
+      // Then invalidate all job-related queries to show the new job
+      await queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return key === "/api/jobs" || 
+                 key === "/api/jobs/today" || 
+                 key === "/api/jobs/completed-today";
+        },
+        refetchType: 'active' // Force immediate refetch
+      });
       
       if (data.isDuplicate && data.existingJob) {
         toast({
@@ -436,12 +463,28 @@ export default function Jobs() {
   // Create job mutation
   const createJobMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("POST", "/api/jobs", data);
+      const response = await apiRequest("POST", "/api/jobs", data);
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || "Failed to create job");
+      }
+      return response.json();
     },
-    onSuccess: async () => {
-      // Force immediate refetch of job queries to show newly created job
-      await queryClient.refetchQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
-      await queryClient.refetchQueries({ queryKey: ["/api/jobs/today"] });
+    onSuccess: async (newJob) => {
+      // Invalidate and refetch all job-related queries immediately
+      // This ensures the cache is marked stale and fetches fresh data
+      
+      // Invalidate all variations of the /api/jobs query (with different pagination params)
+      await queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return key === "/api/jobs" || 
+                 key === "/api/jobs/today" || 
+                 key === "/api/jobs/completed-today";
+        },
+        refetchType: 'active' // Force immediate refetch of active queries
+      });
+      
       toast({
         title: "Success",
         description: "Job created successfully",

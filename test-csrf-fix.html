@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CSRF Token Test</title>
+</head>
+<body>
+  <h1>Testing CSRF Token Fix</h1>
+  <div id="results"></div>
+  
+  <script>
+    const resultsDiv = document.getElementById('results');
+    
+    async function testCSRF() {
+      resultsDiv.innerHTML = '<p>Starting test...</p>';
+      
+      try {
+        // First, login as admin
+        resultsDiv.innerHTML += '<p>1. Logging in as test-admin...</p>';
+        await fetch('/api/dev-login/test-admin', { credentials: 'include' });
+        
+        // Wait a moment for session to establish
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Get CSRF token
+        resultsDiv.innerHTML += '<p>2. Fetching CSRF token...</p>';
+        const csrfResponse = await fetch('/api/csrf-token', { 
+          credentials: 'include' 
+        });
+        const csrfData = await csrfResponse.json();
+        const csrfToken = csrfData.csrfToken;
+        resultsDiv.innerHTML += `<p style="color: green">✓ Got CSRF token: ${csrfToken.substring(0, 20)}...</p>`;
+        
+        // Test job creation
+        resultsDiv.innerHTML += '<p>3. Creating test job with CSRF token...</p>';
+        const jobData = {
+          name: 'Test Job - CSRF Fix',
+          address: '123 Test Street',
+          contractor: 'Test Builder',
+          builderName: 'Test Builder Corp',
+          inspectionType: 'pre-drywall'
+        };
+        
+        const createResponse = await fetch('/api/jobs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken  // Using lowercase as per fix
+          },
+          body: JSON.stringify(jobData),
+          credentials: 'include'
+        });
+        
+        if (createResponse.ok) {
+          const newJob = await createResponse.json();
+          resultsDiv.innerHTML += `<p style="color: green; font-weight: bold">✅ SUCCESS! Job created with ID: ${newJob.id}</p>`;
+          resultsDiv.innerHTML += `<p style="color: green">Job Name: ${newJob.name}</p>`;
+          resultsDiv.innerHTML += `<p style="color: green">CSRF token validation is working correctly!</p>`;
+        } else {
+          const errorText = await createResponse.text();
+          resultsDiv.innerHTML += `<p style="color: red">❌ Failed to create job: ${createResponse.status} ${errorText}</p>`;
+        }
+        
+      } catch (error) {
+        resultsDiv.innerHTML += `<p style="color: red">❌ Error: ${error.message}</p>`;
+      }
+    }
+    
+    // Run test automatically
+    testCSRF();
+  </script>
+</body>
+</html>

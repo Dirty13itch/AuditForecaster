@@ -192,6 +192,7 @@ import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, ty
 import { type UserRole } from "./permissions";
 import { db } from "./db";
 import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count, isNull } from "drizzle-orm";
+import { serverLogger } from "./logger";
 
 export interface IStorage {
   // User operations for Replit Auth
@@ -1257,8 +1258,96 @@ export class DatabaseStorage implements IStorage {
       houseVolume: insertJob.houseVolume != null ? String(insertJob.houseVolume) : null,
       stories: insertJob.stories != null ? String(insertJob.stories) : null,
     };
-    const result = await db.insert(jobs).values(values as any).returning();
-    return result[0];
+    
+    serverLogger.info('[Storage] Creating job with values:', {
+      name: values.name,
+      address: values.address,
+      status: values.status,
+      builderId: values.builderId,
+      inspectionType: values.inspectionType,
+      createdBy: values.createdBy,
+      scheduledDate: values.scheduledDate,
+    });
+    
+    // CRITICAL: NO try-catch block that returns fallback jobs
+    // Database errors MUST propagate to return 500 status
+    let result;
+    try {
+      result = await db.insert(jobs).values(values as any).returning();
+    } catch (error) {
+      // Log the error but RE-THROW it - never swallow database errors
+      serverLogger.error('[Storage] CRITICAL: Database insert failed for job:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        values: {
+          name: values.name,
+          address: values.address,
+          builderId: values.builderId,
+          status: values.status,
+        },
+        dbError: error, // Log full database error for debugging
+      });
+      
+      // CRITICAL: Re-throw the error to ensure API returns 500, not 201
+      throw new Error(`Database insert failed: ${error instanceof Error ? error.message : 'Unknown database error'}`);
+    }
+    
+    // Verify we got a result from the insert
+    if (!result || result.length === 0) {
+      const errorMsg = 'CRITICAL: Job insertion returned no results - database insert failed silently';
+      serverLogger.error('[Storage] ' + errorMsg);
+      throw new Error(errorMsg);
+    }
+    
+    const createdJob = result[0];
+    
+    // Double-check the job has an ID (critical for persistence)
+    if (!createdJob.id) {
+      const errorMsg = 'CRITICAL: Created job has no ID - database insert failed';
+      serverLogger.error('[Storage] ' + errorMsg, { createdJob });
+      throw new Error(errorMsg);
+    }
+    
+    serverLogger.info('[Storage] Job created with ID:', {
+      id: createdJob.id,
+      name: createdJob.name,
+      status: createdJob.status,
+    });
+    
+    // CRITICAL VERIFICATION: Ensure job actually exists in database
+    try {
+      const verification = await db.select().from(jobs).where(eq(jobs.id, createdJob.id)).limit(1);
+      
+      if (!verification || verification.length === 0) {
+        // CRITICAL ERROR: Job not found after creation - database persistence failed
+        const errorMsg = `CRITICAL: Job with ID ${createdJob.id} not found in database after creation - persistence failed`;
+        serverLogger.error('[Storage] ' + errorMsg);
+        throw new Error(errorMsg);
+      }
+      
+      serverLogger.info('[Storage] Job persistence verified successfully:', {
+        id: verification[0].id,
+        name: verification[0].name,
+        address: verification[0].address,
+      });
+      
+      // Return the verified job from database, not the insert result
+      // This ensures we're returning what's actually persisted
+      return verification[0];
+      
+    } catch (verifyError) {
+      if (verifyError instanceof Error && verifyError.message.includes('CRITICAL')) {
+        // Re-throw critical verification errors
+        throw verifyError;
+      }
+      
+      // Log verification query errors but still fail
+      serverLogger.error('[Storage] Failed to verify job persistence:', {
+        jobId: createdJob.id,
+        error: verifyError instanceof Error ? verifyError.message : String(verifyError),
+      });
+      throw new Error(`Job persistence verification failed: ${verifyError instanceof Error ? verifyError.message : 'Unknown error'}`);
+    }
   }
 
   async getJob(id: string): Promise<Job | undefined> {
