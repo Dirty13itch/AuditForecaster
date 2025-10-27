@@ -845,6 +845,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
+    // Check if user already exists to preserve role if not provided in userData
+    const existingUser = await this.getUser(userData.id);
+    
     const [user] = await db
       .insert(users)
       .values(userData)
@@ -852,6 +855,8 @@ export class DatabaseStorage implements IStorage {
         target: users.id,
         set: {
           ...userData,
+          // Preserve existing role if userData.role is not provided (OIDC doesn't include role)
+          role: userData.role || existingUser?.role || 'inspector',
           updatedAt: new Date(),
         },
       })
