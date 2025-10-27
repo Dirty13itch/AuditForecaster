@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -289,6 +290,7 @@ function TemplateSection({
 export default function ReportTemplatesPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const { showConfirm, ConfirmDialog } = useConfirmDialog();
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newTemplate, setNewTemplate] = useState<Partial<InsertReportTemplate>>({
@@ -588,8 +590,17 @@ export default function ReportTemplatesPage() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        if (confirm("Are you sure you want to delete this template?")) {
+                      onClick={async () => {
+                        const confirmed = await showConfirm(
+                          "Delete Template",
+                          "Are you sure you want to delete this template? This action cannot be undone.",
+                          {
+                            confirmText: "Delete",
+                            cancelText: "Cancel",
+                            variant: "destructive"
+                          }
+                        );
+                        if (confirmed) {
                           deleteTemplate.mutate(selectedTemplate.id);
                         }
                       }}
@@ -751,6 +762,7 @@ export default function ReportTemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog />
     </div>
   );
 }

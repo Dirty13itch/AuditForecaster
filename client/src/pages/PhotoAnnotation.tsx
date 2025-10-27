@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Stage, Layer, Line, Rect, Circle, Text, Arrow, Transformer } from "react-konva";
 import { useParams, useLocation } from "wouter";
+import { useInputDialog } from "@/components/InputDialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +66,7 @@ export default function PhotoAnnotation() {
   const [, setLocation] = useLocation();
   const { photoId } = useParams();
   const { toast } = useToast();
+  const { showInput, InputDialog } = useInputDialog();
 
   // Canvas state
   const [tool, setTool] = useState<Tool>("select");
@@ -164,7 +166,7 @@ export default function PhotoAnnotation() {
     }
   }, [selectedId]);
 
-  const handleMouseDown = (e: any) => {
+  const handleMouseDown = async (e: any) => {
     if (tool === "select") {
       const clickedOnEmpty = e.target === e.target.getStage();
       if (clickedOnEmpty) {
@@ -199,7 +201,12 @@ export default function PhotoAnnotation() {
         newShape.radius = 0;
         break;
       case "text":
-        const text = prompt("Enter text:");
+        const text = await showInput("Add Text Annotation", {
+          description: "Enter the text to display on the image",
+          placeholder: "Enter text...",
+          confirmText: "Add",
+          required: true
+        });
         if (text) {
           newShape.x = pos.x;
           newShape.y = pos.y;
@@ -620,6 +627,7 @@ export default function PhotoAnnotation() {
       </div>
 
       <BottomNav />
+      <InputDialog />
     </div>
   );
 }

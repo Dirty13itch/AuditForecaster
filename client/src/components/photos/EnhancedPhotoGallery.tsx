@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useConfirmDialog } from "@/components/ConfirmDialog";
 import {
   DndContext,
   closestCenter,
@@ -316,6 +317,7 @@ export function EnhancedPhotoGallery({
   showFilters = true,
 }: EnhancedPhotoGalleryProps) {
   const { toast } = useToast();
+  const { showConfirm, ConfirmDialog } = useConfirmDialog();
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'albums'>(initialView);
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'size'>('date');
   const [filterTag, setFilterTag] = useState<string>('');
@@ -403,7 +405,16 @@ export function EnhancedPhotoGallery({
         break;
       
       case 'delete':
-        if (confirm('Are you sure you want to delete this photo?')) {
+        const confirmed = await showConfirm(
+          'Delete Photo',
+          'Are you sure you want to delete this photo? This action cannot be undone.',
+          {
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            variant: 'destructive'
+          }
+        );
+        if (confirmed) {
           try {
             await apiRequest(`/api/photos/${photo.id}`, { method: 'DELETE' });
             queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
@@ -624,6 +635,7 @@ export function EnhancedPhotoGallery({
           onClose={() => setSelectedPhoto(null)}
         />
       )}
+      <ConfirmDialog />
     </div>
   );
 }

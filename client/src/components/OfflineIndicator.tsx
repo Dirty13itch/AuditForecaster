@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useConfirmDialog } from '@/components/ConfirmDialog';
 import { 
   WifiOff, 
   Wifi, 
@@ -42,6 +43,7 @@ interface SyncQueueItem {
 
 export function OfflineIndicator() {
   const { toast } = useToast();
+  const { showConfirm, ConfirmDialog } = useConfirmDialog();
   
   // State
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -197,7 +199,16 @@ export function OfflineIndicator() {
   };
   
   const handleClearQueue = async () => {
-    if (!confirm('Are you sure you want to clear the sync queue? This will delete all pending changes.')) {
+    const confirmed = await showConfirm(
+      'Clear Sync Queue',
+      'Are you sure you want to clear the sync queue? This will delete all pending changes.',
+      {
+        confirmText: 'Clear Queue',
+        cancelText: 'Cancel',
+        variant: 'destructive'
+      }
+    );
+    if (!confirmed) {
       return;
     }
     
@@ -218,7 +229,16 @@ export function OfflineIndicator() {
   };
   
   const handleClearCache = async () => {
-    if (!confirm('Are you sure you want to clear all cached data? This may affect offline functionality.')) {
+    const confirmed = await showConfirm(
+      'Clear All Cached Data',
+      'Are you sure you want to clear all cached data? This may affect offline functionality.',
+      {
+        confirmText: 'Clear Cache',
+        cancelText: 'Cancel',
+        variant: 'destructive'
+      }
+    );
+    if (!confirmed) {
       return;
     }
     
@@ -517,6 +537,7 @@ export function OfflineIndicator() {
           </div>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog />
     </div>
   );
 }

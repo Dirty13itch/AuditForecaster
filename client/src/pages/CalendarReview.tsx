@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,7 @@ interface Builder {
 
 export default function CalendarReview() {
   const { toast } = useToast();
+  const { showConfirm, ConfirmDialog } = useConfirmDialog();
   const [selectedStatus, setSelectedStatus] = useState<string>("pending");
   const [page, setPage] = useState(0);
   const limit = 20;
@@ -505,8 +507,17 @@ export default function CalendarReview() {
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to reject this event?')) {
+                                onClick={async () => {
+                                  const confirmed = await showConfirm(
+                                    'Reject Event',
+                                    'Are you sure you want to reject this event? This action cannot be undone.',
+                                    {
+                                      confirmText: 'Reject',
+                                      cancelText: 'Cancel',
+                                      variant: 'destructive'
+                                    }
+                                  );
+                                  if (confirmed) {
                                     rejectMutation.mutate({ eventId: event.id });
                                   }
                                 }}
@@ -645,6 +656,7 @@ export default function CalendarReview() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog />
     </div>
   );
 }

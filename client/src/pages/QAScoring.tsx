@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useInputDialog } from "@/components/InputDialog";
 import {
   AlertCircle,
   CheckCircle2,
@@ -59,6 +60,7 @@ export default function QAScoring() {
   const { jobId } = useParams();
   const { toast } = useToast();
   const [selectedJobId, setSelectedJobId] = useState(jobId || "");
+  const { showInput, InputDialog } = useInputDialog();
   
   const [categories, setCategories] = useState<ScoringCategory[]>([
     {
@@ -521,8 +523,13 @@ export default function QAScoring() {
                 variant="outline"
                 size="sm"
                 className="w-full mt-3"
-                onClick={() => {
-                  const issue = prompt("Add critical issue:");
+                onClick={async () => {
+                  const issue = await showInput("Add Critical Issue", {
+                    description: "Describe the critical issue that needs attention",
+                    placeholder: "Enter the critical issue...",
+                    confirmText: "Add",
+                    required: true
+                  });
                   if (issue) addCriticalIssue(issue);
                 }}
               >
@@ -556,8 +563,13 @@ export default function QAScoring() {
                 variant="outline"
                 size="sm"
                 className="w-full mt-3"
-                onClick={() => {
-                  const improvement = prompt("Add improvement suggestion:");
+                onClick={async () => {
+                  const improvement = await showInput("Add Improvement Suggestion", {
+                    description: "Suggest an improvement for this inspection",
+                    placeholder: "Enter your improvement suggestion...",
+                    confirmText: "Add",
+                    required: true
+                  });
                   if (improvement) addImprovement(improvement);
                 }}
               >
@@ -618,5 +630,6 @@ export default function QAScoring() {
         </div>
       </div>
     </div>
+    <InputDialog />
   );
 }

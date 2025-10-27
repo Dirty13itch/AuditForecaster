@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ export default function Reports() {
   const [selectedReport, setSelectedReport] = useState<ReportInstance | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ReportTemplate | null>(null);
   const [conditionalFormData, setConditionalFormData] = useState<Record<string, any>>({});
+  const { showConfirm, ConfirmDialog } = useConfirmDialog();
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery<ReportTemplate[]>({
     queryKey: ["/api/report-templates"],
@@ -131,8 +133,17 @@ export default function Reports() {
     setTemplateDialogOpen(true);
   };
 
-  const handleDeleteTemplate = (id: string) => {
-    if (confirm("Are you sure you want to delete this template?")) {
+  const handleDeleteTemplate = async (id: string) => {
+    const confirmed = await showConfirm(
+      "Delete Template",
+      "Are you sure you want to delete this template? This action cannot be undone.",
+      {
+        confirmText: "Delete",
+        cancelText: "Cancel",
+        variant: "destructive"
+      }
+    );
+    if (confirmed) {
       deleteTemplateMutation.mutate(id);
     }
   };
@@ -549,6 +560,7 @@ export default function Reports() {
           </DialogContent>
         </Dialog>
       )}
+      <ConfirmDialog />
     </div>
   );
 }
