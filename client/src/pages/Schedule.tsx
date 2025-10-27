@@ -207,6 +207,15 @@ export default function Schedule() {
   // Fetch pending calendar events (admin only)
   const { data: pendingEvents = [], isLoading: pendingEventsLoading } = useQuery<PendingCalendarEvent[]>({
     queryKey: ['/api/pending-events'],
+    queryFn: async () => {
+      const response = await fetch('/api/pending-events');
+      if (!response.ok) {
+        throw new Error('Failed to fetch pending events');
+      }
+      const data = await response.json();
+      // Backend returns { success: true, events: [], total: X }
+      return data.events || [];
+    },
     enabled: isAdmin,
   });
 
