@@ -32,6 +32,11 @@ const menuItems = [
     icon: ClipboardList,
   },
   {
+    title: "Photos",
+    url: "/photos",
+    icon: Camera,
+  },
+  {
     title: "Schedule",
     url: "/schedule",
     icon: Calendar,
