@@ -186,9 +186,19 @@ function Router() {
           <ReportFillout />
         </RouteErrorBoundary>
       )} />
+      <Route path="/blower-door-test" component={() => (
+        <RouteErrorBoundary>
+          <BlowerDoorTest />
+        </RouteErrorBoundary>
+      )} />
       <Route path="/blower-door/:jobId" component={() => (
         <RouteErrorBoundary>
           <BlowerDoorTest />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/duct-leakage-test" component={() => (
+        <RouteErrorBoundary>
+          <DuctLeakageTest />
         </RouteErrorBoundary>
       )} />
       <Route path="/duct-leakage/:jobId" component={() => (
