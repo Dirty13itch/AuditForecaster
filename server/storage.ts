@@ -882,7 +882,10 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(builders).limit(limit).offset(offset),
+      db.select().from(builders)
+        .orderBy(desc(builders.id))  // Order by ID descending to show newest builders first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(builders)
     ]);
     
@@ -1261,7 +1264,10 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(jobs).limit(limit).offset(offset),
+      db.select().from(jobs)
+        .orderBy(desc(jobs.id))  // Order by ID descending to show newest jobs first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(jobs)
     ]);
     
@@ -1448,7 +1454,10 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(expenses).limit(limit).offset(offset),
+      db.select().from(expenses)
+        .orderBy(desc(expenses.id))  // Order by ID descending to show newest expenses first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(expenses)
     ]);
     
@@ -1473,7 +1482,11 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(expenses).where(eq(expenses.jobId, jobId)).limit(limit).offset(offset),
+      db.select().from(expenses)
+        .where(eq(expenses.jobId, jobId))
+        .orderBy(desc(expenses.id))  // Order by ID descending to show newest expenses first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(expenses).where(eq(expenses.jobId, jobId))
     ]);
     
@@ -1521,7 +1534,10 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(mileageLogs).limit(limit).offset(offset),
+      db.select().from(mileageLogs)
+        .orderBy(desc(mileageLogs.date))  // Order by date descending to show newest logs first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(mileageLogs)
     ]);
     
@@ -1946,7 +1962,10 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(reportInstances).limit(limit).offset(offset),
+      db.select().from(reportInstances)
+        .orderBy(desc(reportInstances.id))  // Order by ID descending to show newest reports first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(reportInstances)
     ]);
     
@@ -2100,7 +2119,10 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(photos).limit(limit).offset(offset),
+      db.select().from(photos)
+        .orderBy(desc(photos.uploadedAt))  // Order by upload time descending to show newest photos first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(photos)
     ]);
     
@@ -2121,7 +2143,11 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(photos).where(eq(photos.jobId, jobId)).limit(limit).offset(offset),
+      db.select().from(photos)
+        .where(eq(photos.jobId, jobId))
+        .orderBy(desc(photos.uploadedAt))  // Order by upload time descending to show newest photos first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(photos).where(eq(photos.jobId, jobId))
     ]);
     
@@ -2142,7 +2168,11 @@ export class DatabaseStorage implements IStorage {
     const { limit, offset } = params;
     
     const [data, totalResult] = await Promise.all([
-      db.select().from(photos).where(eq(photos.checklistItemId, checklistItemId)).limit(limit).offset(offset),
+      db.select().from(photos)
+        .where(eq(photos.checklistItemId, checklistItemId))
+        .orderBy(desc(photos.uploadedAt))  // Order by upload time descending to show newest photos first
+        .limit(limit)
+        .offset(offset),
       db.select({ count: count() }).from(photos).where(eq(photos.checklistItemId, checklistItemId))
     ]);
     

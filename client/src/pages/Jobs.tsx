@@ -441,9 +441,10 @@ export default function Jobs() {
     mutationFn: async (data: any) => {
       return apiRequest("POST", "/api/jobs", data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs/today"] });
+    onSuccess: async () => {
+      // Force immediate refetch of job queries to show newly created job
+      await queryClient.refetchQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
+      await queryClient.refetchQueries({ queryKey: ["/api/jobs/today"] });
       toast({
         title: "Success",
         description: "Job created successfully",
