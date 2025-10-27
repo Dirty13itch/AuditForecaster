@@ -31,6 +31,15 @@ Key technical implementations and design decisions include:
 - **Gamification & Achievements System**: Tracks predefined achievements with automated criteria evaluation, performance optimizations (batch queries, strategic indexes), and a UI for progress tracking and notifications.
 - **Database Optimization**: Over 35 strategic database indexes are implemented across key tables (Jobs, Builders, Photos, etc.) for enhanced query performance and efficient data retrieval.
 - **Enterprise Hardening**: Includes **Sentry** integration for error monitoring, multi-layered security (CSRF, rate limiting, Helmet, secure sessions), and comprehensive operational documentation.
+- **WebSocket Notifications**: Production-ready real-time notification system with exponential backoff reconnection strategy (1s → 30s), automatic fallback to 30-second HTTP polling when WebSocket unavailable, and comprehensive error handling for database failures.
+- **Database Schema Integrity**: Comprehensive database column audit and fixes across 15+ tables to ensure complete alignment with Drizzle schema definitions, including:
+  - Jobs table: assignment tracking columns (assigned_to, assigned_at, assigned_by, estimated_duration, territory)
+  - Photos table: Complete OCR integration (12 columns for text extraction, confidence scores, language detection)
+  - Blower Door & Duct Leakage Tests: Reporting integration (report_instance_id, test_time, conditioned_area)
+  - Tax Credits: Audit trail columns (updated_at) across 3 tables
+  - Financial System: Complete invoice tracking (amount, tax, total, paid_date, payment_method, payment_reference, terms, items)
+  - Notification Preferences: User control columns (enabled, in_app_enabled)
+  - QA Inspection Scores: Full table implementation for quality assurance tracking
 
 ## External Dependencies
 

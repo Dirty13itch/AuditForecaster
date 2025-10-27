@@ -7660,11 +7660,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
         totalXP: xp,
         level: Math.floor(xp / 100) + 1, // Simple level calculation
-        achievements: achievements.map(a => a.achievementType),
+        achievements: achievements.map(a => a.achievementId),
         stats: userStats,
         recentAchievements: stats.recentUnlocks.slice(0, 5).map(a => ({
-          achievementId: a.achievementType,
-          unlockedAt: a.unlockedAt
+          achievementId: a.achievementId,
+          unlockedAt: a.earnedAt
         })),
         categoryProgress: stats.byCategory
       });

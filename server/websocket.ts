@@ -7,6 +7,7 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 import * as cookie from "cookie";
 import * as signature from "cookie-signature";
+import { getConfig } from "./config";
 
 interface WebSocketClient {
   ws: WebSocket;
@@ -41,11 +42,19 @@ export function setupWebSocket(server: Server) {
     const userId = await extractUserIdFromRequest(req);
     
     if (!userId) {
-      ws.close(1008, "User not authenticated");
+      // Provide a more informative close reason
+      const config = getConfig();
+      if (!config.databaseUrl) {
+        serverLogger.info('[WebSocket] Rejecting connection: Database not configured for session validation');
+        ws.close(1011, "Service unavailable: WebSocket requires database");
+      } else {
+        serverLogger.debug('[WebSocket] Rejecting connection: Authentication failed');
+        ws.close(1008, "Authentication required");
+      }
       return;
     }
 
-    serverLogger.info(`WebSocket connection established for user: ${userId}`);
+    serverLogger.info(`[WebSocket] Connection established for user: ${userId}`);
 
     const client: WebSocketClient = {
       ws,
@@ -73,13 +82,19 @@ export function setupWebSocket(server: Server) {
       }
     });
 
-    ws.on("close", () => {
-      serverLogger.info(`WebSocket connection closed for user: ${userId}`);
+    ws.on("close", (code, reason) => {
+      serverLogger.info(`[WebSocket] Connection closed for user: ${userId}`, {
+        code,
+        reason: reason.toString() || 'No reason provided',
+      });
       clients.delete(userId);
     });
 
     ws.on("error", (error) => {
-      serverLogger.error(`WebSocket error for user ${userId}:`, error);
+      serverLogger.error(`[WebSocket] Error for user ${userId}:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     });
 
     // Send initial connection success message
@@ -101,12 +116,14 @@ async function extractUserIdFromRequest(req: any): Promise<string | null> {
   // Extract session cookie and validate authentication
   // This uses the same session store as the Express app
   try {
+    const config = getConfig();
+    
     // Parse cookies from the request
     const cookies = cookie.parse(req.headers.cookie || '');
     const sessionCookie = cookies['connect.sid'];
     
     if (!sessionCookie) {
-      serverLogger.debug('WebSocket connection attempt without session cookie');
+      serverLogger.debug('[WebSocket] Connection attempt without session cookie');
       return null;
     }
     
@@ -116,21 +133,52 @@ async function extractUserIdFromRequest(req: any): Promise<string | null> {
     
     // If the cookie starts with "s:", it's signed and we need to verify it
     if (sessionId.startsWith('s:')) {
-      const unsigned = signature.unsign(sessionId.slice(2), process.env.SESSION_SECRET!);
+      const unsigned = signature.unsign(sessionId.slice(2), config.sessionSecret);
       if (!unsigned) {
-        serverLogger.warn('WebSocket connection attempt with invalid session signature');
+        serverLogger.warn('[WebSocket] Connection attempt with invalid session signature');
         return null;
       }
       sessionId = unsigned;
     }
     
+    // Check if database is available for session storage
+    // In development mode, sessions might be in-memory instead of database
+    if (!config.databaseUrl) {
+      serverLogger.warn('[WebSocket] Database not configured - cannot validate session from database');
+      serverLogger.warn('[WebSocket] WebSocket authentication requires PostgreSQL session store');
+      serverLogger.warn('[WebSocket] Set DATABASE_URL to enable WebSocket real-time notifications');
+      
+      // In development, we could allow connections but they won't be authenticated
+      // This prevents the app from breaking in dev mode
+      if (config.isDevelopment) {
+        serverLogger.debug('[WebSocket] Development mode: allowing anonymous connection (notifications disabled)');
+        // Return null to reject connection - client will fall back to polling
+        return null;
+      }
+      
+      return null;
+    }
+    
     // Query the sessions table to get the session data
-    const sessionResult = await db.execute(
-      sql`SELECT sess FROM sessions WHERE sid = ${sessionId} AND expire > NOW()`
-    );
+    // Wrap in try-catch to handle database errors gracefully
+    let sessionResult;
+    try {
+      sessionResult = await db.execute(
+        sql`SELECT sess FROM sessions WHERE sid = ${sessionId} AND expire > NOW()`
+      );
+    } catch (dbError) {
+      serverLogger.error('[WebSocket] Database error while querying session:', {
+        error: dbError instanceof Error ? dbError.message : String(dbError),
+        sessionId: sessionId.substring(0, 8) + '...',
+      });
+      
+      // Database error - don't reject connection, let it try again
+      // This could be a temporary database issue
+      return null;
+    }
     
     if (!sessionResult.rows || sessionResult.rows.length === 0) {
-      serverLogger.debug('WebSocket connection attempt with expired or invalid session');
+      serverLogger.debug('[WebSocket] Connection attempt with expired or invalid session');
       return null;
     }
     
@@ -140,17 +188,17 @@ async function extractUserIdFromRequest(req: any): Promise<string | null> {
     // Extract the user ID from the passport session
     if (sessionData?.passport?.user?.claims?.sub) {
       const userId = sessionData.passport.user.claims.sub;
-      serverLogger.debug(`WebSocket authentication successful for user: ${userId}`);
+      serverLogger.debug(`[WebSocket] Authentication successful for user: ${userId}`);
       return userId;
     }
     
     // Fallback for development mode testing with authorization header
-    if (process.env.NODE_ENV === 'development' && req.headers.authorization) {
+    if (config.isDevelopment && req.headers.authorization) {
       const auth = req.headers.authorization.split(' ')[1];
       if (auth) {
         try {
           const decoded = Buffer.from(auth, 'base64').toString('utf-8');
-          serverLogger.debug(`WebSocket auth via header (dev mode): ${decoded}`);
+          serverLogger.debug(`[WebSocket] Auth via header (dev mode): ${decoded}`);
           return decoded;
         } catch {
           return null;
@@ -158,10 +206,13 @@ async function extractUserIdFromRequest(req: any): Promise<string | null> {
       }
     }
     
-    serverLogger.debug('WebSocket authentication failed: No user data in session');
+    serverLogger.debug('[WebSocket] Authentication failed: No user data in session');
     return null;
   } catch (error) {
-    serverLogger.error('Error extracting user from WebSocket request:', error);
+    serverLogger.error('[WebSocket] Error extracting user from request:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return null;
   }
 }

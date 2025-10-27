@@ -47,6 +47,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const pollIntervalRef = useRef<NodeJS.Timeout>();
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
+  const wsUnavailableRef = useRef(false);
 
   // Fetch notifications
   const { data: notifications = [], refetch: refetchNotifications } = useQuery<Notification[]>({
@@ -160,64 +163,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     showDesktopNotification(notification);
   }, [showToastNotification, showDesktopNotification]);
 
-  // WebSocket connection management
-  const connectWebSocket = useCallback(() => {
-    if (!user || wsRef.current?.readyState === WebSocket.OPEN) return;
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/notifications`;
-
-    try {
-      const ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        // WebSocket connected successfully
-        setIsConnected(true);
-        // Clear any existing reconnect timeout
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === "notification") {
-            handleNotification(data.notification);
-          } else if (data.type === "ping") {
-            // Respond to ping
-            ws.send(JSON.stringify({ type: "pong" }));
-          }
-        } catch (error) {
-          // Error parsing WebSocket message - ignore invalid messages
-        }
-      };
-
-      ws.onerror = (error) => {
-        // WebSocket error occurred - will attempt reconnect on close
-      };
-
-      ws.onclose = () => {
-        // WebSocket disconnected - attempting reconnect
-        setIsConnected(false);
-        wsRef.current = null;
-        
-        // Attempt to reconnect after 5 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connectWebSocket();
-        }, 5000);
-      };
-
-      wsRef.current = ws;
-    } catch (error) {
-      // Failed to create WebSocket connection - falling back to polling
-      setIsConnected(false);
-      
-      // Fall back to polling
-      startPolling();
-    }
-  }, [user, handleNotification]);
-
   // Polling fallback
   const startPolling = useCallback(() => {
     if (pollIntervalRef.current) return;
@@ -233,6 +178,104 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       pollIntervalRef.current = undefined;
     }
   }, []);
+
+  // WebSocket connection management with exponential backoff
+  const connectWebSocket = useCallback(() => {
+    if (!user || wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    // If WebSocket is permanently unavailable, don't try to connect
+    if (wsUnavailableRef.current) {
+      startPolling();
+      return;
+    }
+
+    // Check if we've exceeded max reconnect attempts
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.warn('[WebSocket] Max reconnect attempts reached, falling back to polling');
+      wsUnavailableRef.current = true;
+      startPolling();
+      return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/notifications`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('[WebSocket] Connection established');
+        setIsConnected(true);
+        reconnectAttemptsRef.current = 0;
+        wsUnavailableRef.current = false;
+        
+        // Clear any existing reconnect timeout
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+        
+        // Stop polling when WebSocket is connected
+        stopPolling();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "notification") {
+            handleNotification(data.notification);
+          } else if (data.type === "ping") {
+            // Respond to ping
+            ws.send(JSON.stringify({ type: "pong" }));
+          } else if (data.type === "connected") {
+            console.log('[WebSocket] Connection acknowledged by server');
+          }
+        } catch (error) {
+          console.error('[WebSocket] Error parsing message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('[WebSocket] Connection error:', error);
+      };
+
+      ws.onclose = (event) => {
+        console.log('[WebSocket] Connection closed', { code: event.code, reason: event.reason });
+        setIsConnected(false);
+        wsRef.current = null;
+        
+        // Check if server indicates service is unavailable (code 1011)
+        if (event.code === 1011) {
+          console.warn('[WebSocket] Service unavailable, falling back to polling');
+          wsUnavailableRef.current = true;
+          startPolling();
+          return;
+        }
+        
+        // Increment reconnect attempts
+        reconnectAttemptsRef.current++;
+        
+        // Calculate exponential backoff delay
+        // First attempt: 1s, then 2s, 4s, 8s, 16s
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000);
+        
+        console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+        
+        // Attempt to reconnect with exponential backoff
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectWebSocket();
+        }, delay);
+      };
+
+      wsRef.current = ws;
+    } catch (error) {
+      console.error('[WebSocket] Failed to create connection:', error);
+      setIsConnected(false);
+      wsUnavailableRef.current = true;
+      
+      // Fall back to polling
+      startPolling();
+    }
+  }, [user, handleNotification, startPolling, stopPolling]);
 
   // Initialize connection
   useEffect(() => {
