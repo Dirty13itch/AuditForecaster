@@ -347,11 +347,15 @@ export default function Schedule() {
       const response = await apiRequest('POST', '/api/pending-events/assign', { eventId, inspectorId });
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/pending-events'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/inspectors/workload'] });
+    onSuccess: async () => {
+      // Invalidate and refetch all related queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/pending-events'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/jobs'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/inspectors/workload'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/google-events'], refetchType: 'active' }),
+      ]);
       toast({ title: 'Event assigned successfully' });
     },
     onError: (error: any) => {
@@ -369,11 +373,15 @@ export default function Schedule() {
       const response = await apiRequest('POST', '/api/pending-events/bulk-assign', { eventIds, inspectorId });
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/pending-events'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/inspectors/workload'] });
+    onSuccess: async () => {
+      // Invalidate and refetch all related queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/pending-events'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/jobs'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/inspectors/workload'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['/api/google-events'], refetchType: 'active' }),
+      ]);
       toast({ title: 'Events assigned successfully' });
     },
     onError: (error: any) => {
