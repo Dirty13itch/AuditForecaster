@@ -53,24 +53,28 @@ interface GoogleCalendarEventRaw {
 
 export class ExtendedGoogleCalendarService {
   private buildingKnowledgeCalendarId: string | null = null;
-  private buildingKnowledgeCalendarName = 'BKI Test & SV';
+  private buildingKnowledgeCalendarName = process.env.BUILDING_KNOWLEDGE_CALENDAR_NAME || 'Building Knowledge';
   
   /**
    * Find and cache the Building Knowledge calendar ID
    */
   async getBuildingKnowledgeCalendarId(): Promise<string | null> {
     if (this.buildingKnowledgeCalendarId) {
+      serverLogger.debug(`[GoogleCalendarService] Using cached calendar ID: ${this.buildingKnowledgeCalendarId}`);
       return this.buildingKnowledgeCalendarId;
     }
 
     try {
+      serverLogger.info(`[GoogleCalendarService] Searching for calendar: "${this.buildingKnowledgeCalendarName}"`);
+      
       // First try to find by name
       this.buildingKnowledgeCalendarId = await baseService.findCalendarByName(this.buildingKnowledgeCalendarName);
       
       // If not found, log available calendars to help debug
       if (!this.buildingKnowledgeCalendarId) {
         const calendars = await baseService.fetchCalendarList();
-        serverLogger.warn('[GoogleCalendarService] Building Knowledge calendar not found. Available calendars:', 
+        serverLogger.warn(`[GoogleCalendarService] Calendar "${this.buildingKnowledgeCalendarName}" not found.`);
+        serverLogger.warn('[GoogleCalendarService] Available calendars:', 
           calendars.map(c => ({ id: c.id, name: c.summary }))
         );
         
@@ -82,12 +86,15 @@ export class ExtendedGoogleCalendarService {
         );
         
         if (possibleMatch) {
-          serverLogger.info(`[GoogleCalendarService] Found possible match: ${possibleMatch.summary} (${possibleMatch.id})`);
+          serverLogger.info(`[GoogleCalendarService] Found possible match: "${possibleMatch.summary}" (ID: ${possibleMatch.id})`);
+          serverLogger.info(`[GoogleCalendarService] Using this calendar instead of configured name "${this.buildingKnowledgeCalendarName}"`);
           this.buildingKnowledgeCalendarId = possibleMatch.id;
           this.buildingKnowledgeCalendarName = possibleMatch.summary;
+        } else {
+          serverLogger.error(`[GoogleCalendarService] No calendar found matching "${this.buildingKnowledgeCalendarName}" or related keywords`);
         }
       } else {
-        serverLogger.info(`[GoogleCalendarService] Found Building Knowledge calendar: ${this.buildingKnowledgeCalendarId}`);
+        serverLogger.info(`[GoogleCalendarService] ✓ Successfully found calendar: "${this.buildingKnowledgeCalendarName}" (ID: ${this.buildingKnowledgeCalendarId})`);
       }
       
       return this.buildingKnowledgeCalendarId;
@@ -107,15 +114,22 @@ export class ExtendedGoogleCalendarService {
     includeDeleted = false
   ): Promise<GoogleEvent[]> {
     try {
+      serverLogger.info(`[GoogleCalendarService] Fetching Building Knowledge events from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      
       const calendarId = await this.getBuildingKnowledgeCalendarId();
       
       if (!calendarId) {
-        serverLogger.warn('[GoogleCalendarService] Building Knowledge calendar not configured, using primary calendar');
+        serverLogger.warn('[GoogleCalendarService] Building Knowledge calendar not configured, falling back to primary calendar');
         // Fallback to primary calendar if Building Knowledge calendar not found
-        return this.fetchEventsAsGoogleEvents(startDate, endDate, ['primary'], includeDeleted);
+        const events = await this.fetchEventsAsGoogleEvents(startDate, endDate, ['primary'], includeDeleted);
+        serverLogger.info(`[GoogleCalendarService] Fetched ${events.length} events from primary calendar (fallback)`);
+        return events;
       }
       
-      return this.fetchEventsAsGoogleEvents(startDate, endDate, [calendarId], includeDeleted);
+      serverLogger.info(`[GoogleCalendarService] Using Building Knowledge calendar: ${this.buildingKnowledgeCalendarName} (${calendarId})`);
+      const events = await this.fetchEventsAsGoogleEvents(startDate, endDate, [calendarId], includeDeleted);
+      serverLogger.info(`[GoogleCalendarService] ✓ Successfully fetched ${events.length} events from Building Knowledge calendar`);
+      return events;
     } catch (error) {
       serverLogger.error('[GoogleCalendarService] Error fetching Building Knowledge events:', error);
       throw error;
@@ -152,6 +166,17 @@ export class ExtendedGoogleCalendarService {
           
           const events = response.data.items || [];
           serverLogger.info(`[GoogleCalendarService] Retrieved ${events.length} events from calendar ${calendarId}`);
+          
+          // Log sample of events for debugging (first 3 events)
+          if (events.length > 0) {
+            const sampleEvents = events.slice(0, 3).map(e => ({
+              id: e.id,
+              summary: e.summary,
+              start: e.start?.dateTime || e.start?.date,
+              status: e.status
+            }));
+            serverLogger.debug(`[GoogleCalendarService] Sample events from ${calendarId}:`, sampleEvents);
+          }
           
           // Convert to GoogleEvent format
           for (const event of events) {
