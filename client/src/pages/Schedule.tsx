@@ -866,8 +866,8 @@ export default function Schedule() {
         </div>
         
         <div className="flex flex-1 overflow-hidden">
-          {/* Left sidebar: Unscheduled Jobs (only for non-admin users on desktop) */}
-          {!authLoading && !isAdmin && !isMobile && (
+          {/* Left sidebar: Unscheduled Jobs (for all users on desktop) */}
+          {!isMobile && (
             <div className="w-80 border-r bg-background p-4 overflow-y-auto">
               {/* Unscheduled Jobs section */}
               <div className="mb-4">

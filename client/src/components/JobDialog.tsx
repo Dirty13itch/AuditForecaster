@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import { generateJobName } from "@shared/jobNameGenerator";
-import type { Job, Builder, Plan, Development, Lot } from "@shared/schema";
+import { insertJobSchema, type Job, type Builder, type Plan, type Development, type Lot } from "@shared/schema";
 
 const JOB_TYPES = [
   'Pre-Drywall Inspection',
@@ -41,25 +41,25 @@ function getDefaultPricing(inspectionType: string): number | undefined {
   return pricingMap[inspectionType];
 }
 
-const jobFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  address: z.string().min(1, "Address is required"),
-  builderId: z.string().optional(),
-  planId: z.string().optional(),
-  lotId: z.string().optional(),
-  contractor: z.string().min(1, "Contractor is required"),
-  inspectionType: z.string().min(1, "Inspection type is required"),
-  pricing: z.number().optional(),
-  scheduledDate: z.date().optional(),
-  priority: z.enum(["low", "medium", "high"]).default("medium"),
-  status: z.string().default("pending"),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
-  floorArea: z.number().optional(),
-  surfaceArea: z.number().optional(),
-  houseVolume: z.number().optional(),
-  stories: z.number().optional(),
-  notes: z.string().optional(),
+const jobFormSchema = insertJobSchema.pick({
+  name: true,
+  address: true,
+  builderId: true,
+  planId: true,
+  lotId: true,
+  contractor: true,
+  inspectionType: true,
+  scheduledDate: true,
+  priority: true,
+  status: true,
+  latitude: true,
+  longitude: true,
+  floorArea: true,
+  surfaceArea: true,
+  houseVolume: true,
+  stories: true,
+  notes: true,
+  pricing: true,
 });
 
 type JobFormValues = z.infer<typeof jobFormSchema>;

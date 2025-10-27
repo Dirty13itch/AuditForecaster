@@ -1,4 +1,4 @@
-import { MapPin, Calendar, Building2, ArrowRight, ExternalLink, FileText } from "lucide-react";
+import { MapPin, Calendar, Building2, ArrowRight, ExternalLink, FileText, UserCheck } from "lucide-react";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Builder } from "@shared/schema";
 import { getComplianceBadgeVariant, getComplianceBadgeClassName, getComplianceBadgeText } from "@/lib/compliance";
+
+interface Inspector {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  role: string;
+}
+
+interface InspectorWorkload {
+  inspectorId: string;
+  inspectorName: string;
+  jobCount: number;
+}
 
 interface JobCardProps {
   id: string;
@@ -29,8 +43,12 @@ interface JobCardProps {
   totalItems: number;
   isSelected?: boolean;
   complianceStatus?: string | null;
+  assignedTo?: string | null;
+  inspectors?: Inspector[];
+  inspectorWorkload?: InspectorWorkload[];
   onSelect?: (id: string) => void;
   onBuilderChange?: (jobId: string, builderId: string) => void;
+  onAssign?: (inspectorId: string) => void;
   onClick?: () => void;
   onViewCompliance?: () => void;
 }
@@ -56,8 +74,12 @@ export default function JobCard({
   totalItems,
   isSelected = false,
   complianceStatus,
+  assignedTo,
+  inspectors = [],
+  inspectorWorkload = [],
   onSelect,
   onBuilderChange,
+  onAssign,
   onClick,
   onViewCompliance
 }: JobCardProps) {
@@ -213,6 +235,55 @@ export default function JobCard({
             ) : (
               <span className="font-medium" data-testid="text-builder">{builder.name}</span>
             )}
+          </div>
+        )}
+
+        {onAssign && inspectors.length > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <UserCheck className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            <span className="text-muted-foreground">Assigned to:</span>
+            <Select
+              value={assignedTo || ""}
+              onValueChange={(value) => {
+                if (value && onAssign) {
+                  onAssign(value);
+                }
+              }}
+            >
+              <SelectTrigger 
+                className="h-8 text-sm flex-1"
+                onClick={(e) => e.stopPropagation()}
+                data-testid={`select-inspector-${id}`}
+              >
+                <SelectValue placeholder="Select inspector">
+                  {assignedTo ? (
+                    (() => {
+                      const inspector = inspectors.find(i => i.id === assignedTo);
+                      const workload = inspectorWorkload.find(w => w.inspectorId === assignedTo);
+                      const name = inspector 
+                        ? `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown'
+                        : 'Unknown';
+                      return workload ? `${name} (${workload.jobCount} jobs)` : name;
+                    })()
+                  ) : (
+                    "Unassigned"
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {inspectors.map((inspector) => {
+                  const workload = inspectorWorkload.find(w => w.inspectorId === inspector.id);
+                  const name = `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown';
+                  const displayName = workload ? `${name} (${workload.jobCount} jobs)` : name;
+                  
+                  return (
+                    <SelectItem key={inspector.id} value={inspector.id} data-testid={`option-inspector-${inspector.id}`}>
+                      {displayName}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
           </div>
         )}
 

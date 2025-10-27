@@ -304,6 +304,69 @@ export default function Jobs() {
     queryKey: ["/api/builders"],
   });
 
+  // Fetch all inspectors for assignment
+  const { data: inspectors = [] } = useQuery<Array<{
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    role: string;
+  }>>({
+    queryKey: ["/api/inspectors"],
+  });
+
+  // Fetch inspector workload (next 30 days)
+  const { data: inspectorWorkload = [] } = useQuery<Array<{
+    inspectorId: string;
+    inspectorName: string;
+    jobCount: number;
+  }>>({
+    queryKey: ["/api/inspectors/workload"],
+    queryFn: async () => {
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 30);
+      
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+      
+      const response = await fetch(`/api/inspectors/workload?${params.toString()}`, {
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch inspector workload");
+      }
+      
+      return response.json();
+    },
+  });
+
+  // Assign job to inspector mutation
+  const assignJobMutation = useMutation({
+    mutationFn: async ({ jobId, inspectorId }: { jobId: string; inspectorId: string }) => {
+      return apiRequest("POST", `/api/jobs/${jobId}/assign`, { inspectorId });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/jobs" });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inspectors/workload"] });
+      toast({
+        title: "Job Assigned",
+        description: `Job assigned successfully`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Assignment Failed",
+        description: error.message || "Failed to assign job",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Start job from calendar event mutation
   const startJobMutation = useMutation({
     mutationFn: async (eventId: string) => {
@@ -543,6 +606,9 @@ export default function Jobs() {
                       <JobCard
                         {...job}
                         builders={builders}
+                        inspectors={inspectors}
+                        inspectorWorkload={inspectorWorkload}
+                        onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                         onClick={() => navigate(`/inspection/${job.id}`)}
                       />
                     </StaggerItem>
@@ -602,6 +668,9 @@ export default function Jobs() {
                       key={job.id}
                       {...job}
                       builders={builders}
+                      inspectors={inspectors}
+                      inspectorWorkload={inspectorWorkload}
+                      onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                       onClick={() => navigate(`/inspection/${job.id}`)}
                     />
                   ))}
@@ -660,6 +729,9 @@ export default function Jobs() {
                       key={job.id}
                       {...job}
                       builders={builders}
+                      inspectors={inspectors}
+                      inspectorWorkload={inspectorWorkload}
+                      onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                       onClick={() => navigate(`/inspection/${job.id}`)}
                     />
                   ))}
