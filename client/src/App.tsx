@@ -256,6 +256,11 @@ function Router() {
           <CalendarImportHistory />
         </RouteErrorBoundary>
       )} />
+      <Route path="/tax-credit/45l" component={() => (
+        <RouteErrorBoundary>
+          <TaxCredit45L />
+        </RouteErrorBoundary>
+      )} />
       <Route path="/tax-credits" component={() => (
         <RouteErrorBoundary>
           <TaxCredit45L />
