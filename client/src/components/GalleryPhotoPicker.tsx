@@ -1,13 +1,17 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { X, Check, ImageIcon, Loader2, AlertTriangle } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { X, Check, ImageIcon, Loader2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import { addToSyncQueue } from "@/lib/syncQueue";
 import { clientLogger } from "@/lib/logger";
 import { generateHash } from "@/lib/utils";
+import { SmartTagSelector } from "./SmartTagSelector";
+import type { PhotoTag } from "@shared/photoTags";
 import type { Photo } from "@shared/schema";
 
 /**
@@ -115,8 +119,37 @@ export function GalleryPhotoPicker({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [skipDuplicates, setSkipDuplicates] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<PhotoTag[]>([]);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const userManuallyClosed = useRef(false);
+  const hasAutoExpanded = useRef(false);
   const { toast } = useToast();
+
+  // Fetch job data to get inspection type
+  const { data: job } = useQuery({
+    queryKey: ['/api/jobs', jobId],
+    enabled: !!jobId,
+  });
+
+  // Fetch recent photos for this job to power tag suggestions
+  const { data: recentPhotos = [] } = useQuery<Photo[]>({
+    queryKey: ['/api/jobs', jobId, 'photos'],
+    enabled: !!jobId,
+  });
+
+  // Auto-expand tags section ONCE when first photo is selected (unless user manually closed it)
+  useEffect(() => {
+    if (selectedPhotos.length > 0 && !tagsOpen && !hasAutoExpanded.current && !userManuallyClosed.current) {
+      setTagsOpen(true);
+      hasAutoExpanded.current = true;
+    }
+    // Reset when all photos are cleared
+    if (selectedPhotos.length === 0) {
+      hasAutoExpanded.current = false;
+      userManuallyClosed.current = false;
+    }
+  }, [selectedPhotos.length, tagsOpen]);
 
   // Extract filenames from existing photos
   const existingFilenames = new Set(
@@ -172,9 +205,19 @@ export function GalleryPhotoPicker({
     });
   };
 
+  const handleTagsToggle = (open: boolean) => {
+    setTagsOpen(open);
+    // Track when user manually closes the section
+    if (!open && selectedPhotos.length > 0) {
+      userManuallyClosed.current = true;
+    }
+  };
+
   const clearAll = () => {
     selectedPhotos.forEach(photo => URL.revokeObjectURL(photo.preview));
     setSelectedPhotos([]);
+    setSelectedTags([]);
+    setTagsOpen(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -252,7 +295,7 @@ export function GalleryPhotoPicker({
           filePath,
           hash,
           caption: "",
-          tags: [],
+          tags: selectedTags,
         };
 
         try {
@@ -452,6 +495,44 @@ export function GalleryPhotoPicker({
               </label>
             </div>
           )}
+
+          {/* Smart Tag Selector */}
+          <Collapsible
+            open={tagsOpen}
+            onOpenChange={handleTagsToggle}
+            className="border rounded-md"
+            data-testid="section-smart-tags"
+          >
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                className="w-full justify-between min-h-12 px-4"
+                disabled={isUploading}
+                data-testid="button-toggle-tags"
+              >
+                <span className="text-sm font-medium">
+                  Tag Photos (Optional){selectedTags.length > 0 ? ` (${selectedTags.length} selected)` : ''}
+                </span>
+                {tagsOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <p className="text-xs text-muted-foreground mb-4">
+                Smart tags based on your inspection type - tap to select
+              </p>
+              <SmartTagSelector
+                inspectionType={job?.inspectionType || ''}
+                recentPhotos={recentPhotos}
+                selectedTags={selectedTags}
+                onTagsChange={setSelectedTags}
+                maxTags={5}
+              />
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Action buttons */}
           <div className="flex gap-2">
