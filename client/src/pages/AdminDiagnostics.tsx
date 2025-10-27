@@ -83,11 +83,22 @@ interface DiagnosticsData {
   }>;
   environment: {
     NODE_ENV: string;
-    REPL_ID: string;
+    REPL_ID: {
+      present: boolean;
+      masked: string;
+      length: number;
+    };
     ISSUER_URL: string;
     REPLIT_DOMAINS: string[];
-    DATABASE_URL: string | null;
-    SESSION_SECRET: string | null;
+    DATABASE_URL: {
+      present: boolean;
+      masked: string | null;
+      length: number;
+    };
+    SESSION_SECRET: {
+      present: boolean;
+      length: number;
+    };
   };
 }
 
@@ -342,7 +353,9 @@ export default function AdminDiagnostics() {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Repl ID</Label>
-                    <p className="font-mono text-sm" data-testid="text-repl-id">{diagnostics.environment.REPL_ID}</p>
+                    <p className="font-mono text-sm" data-testid="text-repl-id">
+                      {diagnostics.environment.REPL_ID.present ? diagnostics.environment.REPL_ID.masked : 'Not configured'}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Issuer URL</Label>
@@ -351,13 +364,15 @@ export default function AdminDiagnostics() {
                   <div>
                     <Label className="text-xs text-muted-foreground">Database</Label>
                     <p className="font-mono text-sm" data-testid="text-database-status">
-                      {diagnostics.environment.DATABASE_URL || 'Not configured'}
+                      {diagnostics.environment.DATABASE_URL.present ? diagnostics.environment.DATABASE_URL.masked : 'Not configured'}
                     </p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Session Secret</Label>
                     <p className="font-mono text-sm" data-testid="text-session-secret">
-                      {diagnostics.environment.SESSION_SECRET || 'Not configured'}
+                      {diagnostics.environment.SESSION_SECRET.present 
+                        ? `Configured (${diagnostics.environment.SESSION_SECRET.length} chars)` 
+                        : 'Not configured'}
                     </p>
                   </div>
                   <div>
