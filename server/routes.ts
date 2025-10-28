@@ -139,31 +139,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Replit Auth route - get authenticated user
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const userEmail = req.user.claims.email;
+      // CRITICAL FIX: Use the session user directly (already contains database data)
+      const sessionUser = req.user;
       
-      serverLogger.info(`[API/Auth/User] Fetching user - ID: ${userId}, Email: ${userEmail}`);
+      serverLogger.info(`[API/Auth/User] SESSION CONTAINS: ${JSON.stringify({
+        id: sessionUser.id,
+        email: sessionUser.email,
+        role: sessionUser.role,
+        firstName: sessionUser.firstName,
+        lastName: sessionUser.lastName,
+        hasDbData: !!sessionUser.id && !!sessionUser.role,
+        claimsSubPresent: !!sessionUser.claims?.sub
+      })}`);
       
-      // First try by ID
-      let user = await storage.getUser(userId);
-      
-      // If not found by ID, try by email (handles OIDC sub mismatch)
-      if (!user && userEmail) {
-        serverLogger.warn(`[API/Auth/User] User ${userId} not found by ID, trying email: ${userEmail}`);
-        const userByEmail = await storage.getUserByEmail(userEmail);
-        if (userByEmail) {
-          user = userByEmail;
-          serverLogger.info(`[API/Auth/User] Found user by email fallback: ${userByEmail.id} with role: ${userByEmail.role}`);
-        }
-      }
-      
-      if (!user) {
-        serverLogger.error(`[API/Auth/User] User not found - ID: ${userId}, Email: ${userEmail}`);
+      // The session now contains the full database user (fixed in verify function)
+      if (!sessionUser.id || !sessionUser.email) {
+        serverLogger.error(`[API/Auth/User] Invalid session user - missing core fields`);
         return res.status(404).json({ message: "User not found" });
       }
       
-      serverLogger.info(`[API/Auth/User] Returning user ${user.id} (${user.email}) with role: ${user.role}`);
-      res.json(user);
+      // Return the user data from session (no database query needed!)
+      serverLogger.info(`[API/Auth/User] Returning user ${sessionUser.id} (${sessionUser.email}) with role: ${sessionUser.role}`);
+      res.json({
+        id: sessionUser.id,
+        email: sessionUser.email,
+        firstName: sessionUser.firstName,
+        lastName: sessionUser.lastName,
+        role: sessionUser.role || 'inspector', // Fallback for safety
+        profileImageUrl: sessionUser.profileImageUrl,
+        createdAt: sessionUser.createdAt,
+        updatedAt: sessionUser.updatedAt
+      });
     } catch (error) {
       logError('Auth/GetUser', error);
       res.status(500).json({ message: "Failed to fetch user" });
