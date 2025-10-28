@@ -2349,14 +2349,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(userId);
       
       if (!user) {
+        serverLogger.error(`[API/schedule-events] User not found in database for OIDC ID: ${userId}`);
         return res.status(401).json({ message: "User not authenticated" });
       }
       
       const userRole = (user.role as UserRole) || 'inspector';
       const { startDate, endDate, jobId } = req.query;
 
+      serverLogger.info(`[API/schedule-events] Request from user ${user.id} (${user.email}) with role: ${userRole}`);
+
       if (jobId && typeof jobId === "string") {
         const events = await storage.getScheduleEventsByJob(jobId);
+        serverLogger.info(`[API/schedule-events] Returning ${events.length} events for job ${jobId}`);
         return res.json(events);
       }
 
@@ -2364,11 +2368,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const start = new Date(startDate as string);
         const end = new Date(endDate as string);
         const events = await storage.getScheduleEventsByDateRange(start, end, user.id, userRole);
+        serverLogger.info(`[API/schedule-events] Returning ${events.length} events for ${userRole} user ${user.email} (${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]})`);
         return res.json(events);
       }
 
       res.status(400).json({ message: "Please provide either a job ID or date range to view schedule events" });
     } catch (error) {
+      serverLogger.error(`[API/schedule-events] Error:`, error);
       const { status, message } = handleDatabaseError(error, 'fetch schedule events');
       res.status(status).json({ message });
     }
