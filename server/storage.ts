@@ -199,6 +199,7 @@ export interface IStorage {
   // User operations for Replit Auth
   getUser(id: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>; // Alias for getUser, used by audit logger
+  getUserByEmail(email: string): Promise<User | undefined>; // Get user by email address
   getAllUsers(): Promise<User[]>;
   getUsersByRole(role: UserRole): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>;
@@ -865,6 +866,21 @@ export class DatabaseStorage implements IStorage {
   // Alias for getUser, used by audit logger
   async getUserById(id: string): Promise<User | undefined> {
     return this.getUser(id);
+  }
+  
+  // Get user by email address
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    
+    if (result[0]) {
+      serverLogger.info(`[Storage/getUserByEmail] Found user: ${result[0].id} - ${result[0].email} with role: ${result[0].role}`);
+      return result[0];
+    }
+    
+    serverLogger.warn(`[Storage/getUserByEmail] No user found with email: ${email}`);
+    return undefined;
   }
 
   async getAllUsers(): Promise<User[]> {

@@ -140,13 +140,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      serverLogger.info(`[API/Auth/User] Fetching user ${userId}`);
-      const user = await storage.getUser(userId);
+      const userEmail = req.user.claims.email;
+      
+      serverLogger.info(`[API/Auth/User] Fetching user - ID: ${userId}, Email: ${userEmail}`);
+      
+      // First try by ID
+      let user = await storage.getUser(userId);
+      
+      // If not found by ID, try by email (handles OIDC sub mismatch)
+      if (!user && userEmail) {
+        serverLogger.warn(`[API/Auth/User] User ${userId} not found by ID, trying email: ${userEmail}`);
+        const userByEmail = await storage.getUserByEmail(userEmail);
+        if (userByEmail) {
+          user = userByEmail;
+          serverLogger.info(`[API/Auth/User] Found user by email fallback: ${userByEmail.id} with role: ${userByEmail.role}`);
+        }
+      }
+      
       if (!user) {
-        serverLogger.error(`[API/Auth/User] User ${userId} not found in database`);
+        serverLogger.error(`[API/Auth/User] User not found - ID: ${userId}, Email: ${userEmail}`);
         return res.status(404).json({ message: "User not found" });
       }
-      serverLogger.info(`[API/Auth/User] Returning user ${userId} with role: ${user.role}, email: ${user.email}`);
+      
+      serverLogger.info(`[API/Auth/User] Returning user ${user.id} (${user.email}) with role: ${user.role}`);
       res.json(user);
     } catch (error) {
       logError('Auth/GetUser', error);
@@ -162,6 +178,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logError('Users/GetInspectors', error);
       res.status(500).json({ message: "Failed to fetch inspectors" });
+    }
+  });
+  
+  // TEMPORARY: Manual admin role override (development only)
+  // This endpoint allows manually setting a user's role to admin by email
+  app.post("/api/dev/set-admin-role", async (req: any, res) => {
+    // Only allow in development mode
+    if (!isDevelopment()) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email required" });
+      }
+      
+      serverLogger.warn(`[DEV] Manual admin role override requested for: ${email}`);
+      
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: `User with email ${email} not found` });
+      }
+      
+      // Update user role to admin using raw SQL
+      await db.update(users)
+        .set({ role: 'admin', updatedAt: new Date() })
+        .where(eq(users.email, email));
+      
+      // Get updated user
+      const updatedUser = await storage.getUserByEmail(email);
+      
+      serverLogger.warn(`[DEV] ✅ Admin role set for user: ${updatedUser?.id} (${email})`);
+      res.json({ 
+        message: "Admin role set successfully", 
+        user: updatedUser 
+      });
+    } catch (error) {
+      logError('Dev/SetAdminRole', error);
+      res.status(500).json({ message: "Failed to set admin role" });
     }
   });
 
