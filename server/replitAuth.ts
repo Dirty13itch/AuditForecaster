@@ -203,7 +203,21 @@ export async function setupAuth(app: Express) {
     passport.authenticate(`replitauth:${req.hostname}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
-    })(req, res, next);
+    })(req, res, (err) => {
+      // Add logging after authentication completes
+      if (!err && req.user) {
+        serverLogger.info(`[ReplitAuth/callback] ✅ Authentication successful - Session user: ${JSON.stringify({
+          id: (req.user as any).id,
+          email: (req.user as any).email,
+          role: (req.user as any).role,
+          hasDbFields: !!(req.user as any).id && !!(req.user as any).role,
+          hasClaims: !!(req.user as any).claims
+        })}`);
+      } else if (err) {
+        serverLogger.error(`[ReplitAuth/callback] ❌ Authentication failed:`, err);
+      }
+      next(err);
+    });
   });
 
   // Logout route
