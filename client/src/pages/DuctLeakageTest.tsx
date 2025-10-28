@@ -159,7 +159,7 @@ function DuctLeakageTestPage() {
     }
 
     const cfm25 = calculateCFM25(testData.totalFanPressure || 0, testData.totalRingConfiguration || "Open");
-    const cfmPerSqFt = (cfm25 / testData.conditionedArea) * 100; // CFM25 per 100 sq ft
+    const cfmPerSqFt = (cfm25 * 100) / testData.conditionedArea; // CFM25 per 100 sq ft
     const percentOfFlow = testData.systemAirflow && testData.systemAirflow > 0 
       ? (cfm25 / testData.systemAirflow) * 100 
       : 0;
@@ -203,7 +203,7 @@ function DuctLeakageTestPage() {
     }
 
     const cfm25 = calculateCFM25(testData.outsideFanPressure || 0, testData.outsideRingConfiguration || "Open");
-    const cfmPerSqFt = (cfm25 / testData.conditionedArea) * 100; // CFM25 per 100 sq ft
+    const cfmPerSqFt = (cfm25 * 100) / testData.conditionedArea; // CFM25 per 100 sq ft
     const percentOfFlow = testData.systemAirflow && testData.systemAirflow > 0 
       ? (cfm25 / testData.systemAirflow) * 100 
       : 0;
