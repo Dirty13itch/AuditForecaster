@@ -47,10 +47,16 @@ app.use(cors({
     
     // Check if origin is a valid .replit.dev subdomain (must END with .replit.dev, not just contain it)
     // This prevents attacks like https://preview.replit.dev.attacker.com
-    const url = new URL(origin);
-    const hostname = url.hostname;
-    if (hostname.endsWith('.replit.dev') || hostname === 'replit.dev') {
-      return callback(null, true);
+    try {
+      const url = new URL(origin);
+      const hostname = url.hostname;
+      if (hostname.endsWith('.replit.dev') || hostname === 'replit.dev') {
+        return callback(null, true);
+      }
+    } catch (err) {
+      // Malformed origin URL - reject it
+      serverLogger.warn(`[CORS] Malformed origin: ${origin}`, { error: err });
+      return callback(new Error('Not allowed by CORS'));
     }
     
     serverLogger.warn(`[CORS] Blocked origin: ${origin}`);
