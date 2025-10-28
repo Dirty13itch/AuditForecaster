@@ -790,36 +790,64 @@ export async function setupAuth(app: Express) {
     }
   };
 
-  // Register strategies for each domain
-  // NOTE: redirect_uri is NOT set here - it will be passed dynamically per request
-  for (const domain of process.env.REPLIT_DOMAINS.split(",")) {
-    const trimmedDomain = domain.trim();
-    const strategyName = `replitauth:${trimmedDomain}`;
+  // Track registered strategies to avoid duplicates
+  const registeredStrategies = new Set<string>();
+
+  /**
+   * Dynamically register a strategy for a given domain/host
+   * This allows preview deploys to work since strategies are created on-demand
+   */
+  const ensureStrategy = (host: string) => {
+    if (!isTrustedHost(host)) {
+      throw new Error(`Untrusted host: ${host}`);
+    }
     
-    // Log configuration for debugging
-    serverLogger.info(`[Auth] Registering strategy: ${strategyName}`, {
-      domain: trimmedDomain,
-      client_id: process.env.REPL_ID,
-      issuer_url: issuerUrl,
-      note: 'redirect_uri will be computed dynamically per request',
-    });
+    // Extract hostname (remove port if present)
+    const hostname = host.split(':')[0];
+    const strategyName = `replitauth:${hostname}`;
     
-    passport.use(
-      strategyName,
-      new Strategy(
+    if (!registeredStrategies.has(strategyName)) {
+      // Determine protocol based on environment
+      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      const callbackURL = `${protocol}://${host}/api/callback`;
+      
+      serverLogger.info(`[Auth] Registering new strategy dynamically`, {
+        strategyName,
+        host,
+        callbackURL,
+        client_id: process.env.REPL_ID,
+        issuer_url: issuerUrl,
+      });
+      
+      const strategy = new Strategy(
         {
           config,
           client_id: process.env.REPL_ID!,
+          callbackURL, // Set callback URL in constructor (not as runtime param)
           params: {
-            // Remove redirect_uri from here - will be passed dynamically
             scope: "openid email profile",
           },
         },
         verify
-      )
-    );
+      );
+      
+      passport.use(strategyName, strategy);
+      registeredStrategies.add(strategyName);
+      
+      serverLogger.info(`[Auth] Successfully registered strategy: ${strategyName}`);
+    }
     
-    serverLogger.info(`[Auth] Successfully registered strategy: ${strategyName} (dynamic redirect_uri)`);
+    return strategyName;
+  };
+
+  // Pre-register strategies for known domains
+  for (const domain of process.env.REPLIT_DOMAINS.split(",")) {
+    const trimmedDomain = domain.trim();
+    try {
+      ensureStrategy(trimmedDomain);
+    } catch (error) {
+      serverLogger.error(`[Auth] Failed to register strategy for domain: ${trimmedDomain}`, { error });
+    }
   }
 
   // Serialize/deserialize user for session with comprehensive validation
@@ -1109,59 +1137,59 @@ export async function setupAuth(app: Express) {
 
   // Auth routes
   app.get("/api/login", (req, res, next) => {
-    const redirectUri = buildValidatedRedirectUri(req);
-    
-    if (!redirectUri) {
-      serverLogger.error('[Auth] Login rejected: invalid redirect_uri');
+    try {
+      const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || '';
+      
+      serverLogger.info(`[Auth] Login initiated`, {
+        host,
+        hostname: req.hostname,
+        forwardedProto: req.headers['x-forwarded-proto'],
+        forwardedHost: req.headers['x-forwarded-host'],
+      });
+      
+      // Dynamically register strategy for this host (or use existing one)
+      const strategyName = ensureStrategy(host);
+      
+      serverLogger.info(`[Auth] Using strategy: ${strategyName}`);
+      
+      // Authenticate using the dynamically registered strategy
+      passport.authenticate(strategyName, {
+        prompt: "login consent",
+        scope: ["openid", "email", "profile"],
+      })(req, res, next);
+    } catch (error) {
+      serverLogger.error('[Auth] Login failed:', {
+        error: error instanceof Error ? error.message : error,
+        host: req.get('host'),
+      });
       return res.status(400).send('Invalid redirect configuration');
     }
-    
-    const hostname = req.hostname;
-    const strategy = `replitauth:${hostname}`;
-    
-    serverLogger.info(`[Auth] Login initiated with validated redirect_uri`, {
-      domain: hostname,
-      strategy,
-      redirectUri,
-      forwardedProto: req.headers['x-forwarded-proto'],
-      forwardedHost: req.headers['x-forwarded-host'],
-    });
-    
-    // Pass validated redirect_uri dynamically to support preview deploys
-    passport.authenticate(strategy, {
-      redirect_uri: redirectUri,
-      scope: "openid email profile"
-    })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    const redirectUri = buildValidatedRedirectUri(req);
-    
-    if (!redirectUri) {
-      serverLogger.error('[Auth] Callback rejected: invalid redirect_uri');
-      return res.redirect('/?error=invalid_redirect');
-    }
-    
-    const hostname = req.hostname;
-    const strategy = `replitauth:${hostname}`;
-    
-    // Log callback invocation for debugging
-    serverLogger.info(`[Auth] Callback invoked with validated redirect_uri`, {
-      domain: hostname,
-      strategy,
-      redirectUri,
-      queryParams: Object.keys(req.query),
-      hasCode: !!req.query.code,
-      hasState: !!req.query.state,
-      forwardedProto: req.headers['x-forwarded-proto'],
-      forwardedHost: req.headers['x-forwarded-host'],
-    });
-    
-    // Pass validated redirect_uri dynamically to support preview deploys
-    passport.authenticate(strategy, {
-      redirect_uri: redirectUri,
-      failureRedirect: "/?error=auth_failed",
-    }, async (err: any, user: any) => {
+    try {
+      const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || '';
+      
+      serverLogger.info(`[Auth] Callback invoked`, {
+        host,
+        hostname: req.hostname,
+        queryParams: Object.keys(req.query),
+        hasCode: !!req.query.code,
+        hasState: !!req.query.state,
+        forwardedProto: req.headers['x-forwarded-proto'],
+        forwardedHost: req.headers['x-forwarded-host'],
+      });
+      
+      // Dynamically register strategy for this host (or use existing one)
+      const strategyName = ensureStrategy(host);
+      
+      serverLogger.info(`[Auth] Using strategy for callback: ${strategyName}`);
+      
+      // Authenticate using the dynamically registered strategy
+      passport.authenticate(strategyName, {
+        successReturnToOrRedirect: "/",
+        failureRedirect: "/?error=auth_failed",
+      }, async (err: any, user: any) => {
       if (err || !user) {
         serverLogger.error('[Auth] Callback authentication failed:', {
           error: err?.message || err,
@@ -1192,6 +1220,13 @@ export async function setupAuth(app: Express) {
         });
       });
     })(req, res, next);
+    } catch (error) {
+      serverLogger.error('[Auth] Callback failed:', {
+        error: error instanceof Error ? error.message : error,
+        host: req.get('host'),
+      });
+      return res.redirect('/?error=invalid_redirect');
+    }
   });
 
   app.post("/api/logout", (req, res) => {
