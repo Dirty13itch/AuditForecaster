@@ -141,9 +141,28 @@ export async function setupAuth(app: Express) {
     tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
     verified: passport.AuthenticateCallback
   ) => {
-    const user = {};
-    updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
+    // CRITICAL FIX: Store the actual database user, not an empty object!
+    const dbUser = await upsertUser(tokens.claims());
+    
+    // Combine database user data with OIDC tokens
+    const user = {
+      // Include ALL database fields (id, email, role, etc.)
+      ...dbUser,
+      // Add OIDC session data
+      claims: tokens.claims(),
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: tokens.claims()?.exp,
+    };
+    
+    serverLogger.info(`[ReplitAuth/verify] Session will contain user: ${JSON.stringify({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName
+    })}`);
+    
     verified(null, user);
   };
 
