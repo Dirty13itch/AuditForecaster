@@ -860,21 +860,24 @@ export class DatabaseStorage implements IStorage {
       updatedAt: new Date(),
     };
     
-    // Only include role in the update if:
-    // 1. It's explicitly provided in userData, OR
-    // 2. We need to preserve existing role or set default
-    if ('role' in userData && userData.role) {
-      // Role explicitly provided - use it
+    // PRODUCTION SAFETY: NEVER downgrade existing admins
+    // This ensures admin roles are always preserved regardless of what OIDC claims provide
+    if (existingUser?.role === 'admin') {
+      // CRITICAL: Preserve admin role - never downgrade
+      updateSet.role = 'admin';
+      serverLogger.info(`[Storage/upsertUser] PROTECTED: Preserving admin role for user ${userData.id} (${userData.email})`);
+    } else if ('role' in userData && userData.role) {
+      // Role explicitly provided in userData - use it
       updateSet.role = userData.role;
-      console.log(`[Storage] User ${userData.id}: Setting explicit role to ${userData.role}`);
+      serverLogger.info(`[Storage/upsertUser] User ${userData.id}: Setting explicit role to ${userData.role}`);
     } else if (existingUser?.role) {
       // No role provided but user exists - preserve existing role
       updateSet.role = existingUser.role;
-      console.log(`[Storage] User ${userData.id}: Preserving existing role ${existingUser.role}`);
+      serverLogger.info(`[Storage/upsertUser] User ${userData.id}: Preserving existing role ${existingUser.role}`);
     } else {
       // New user with no role specified - set default
       updateSet.role = 'inspector';
-      console.log(`[Storage] User ${userData.id}: New user, setting default role to 'inspector'`);
+      serverLogger.info(`[Storage/upsertUser] User ${userData.id}: New user, setting default role to 'inspector'`);
     }
     
     const [user] = await db
@@ -889,7 +892,7 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     
-    console.log(`[Storage] User ${user.id} final role: ${user.role}`);
+    serverLogger.info(`[Storage/upsertUser] FINAL - User ${user.id} (${user.email}) has role: ${user.role}`);
     return user;
   }
 
