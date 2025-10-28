@@ -1938,6 +1938,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/jobs/:id/status", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const existingJob = await storage.getJob(req.params.id);
+      if (!existingJob) {
+        return res.status(404).json({ message: "Job not found. It may have been deleted." });
+      }
+
+      // RBAC: Inspectors can only update jobs they created OR jobs assigned to them
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.claims.sub;
+      if (userRole === 'inspector') {
+        const canUpdate = existingJob.createdBy === userId || existingJob.assignedTo === userId;
+        if (!canUpdate) {
+          return res.status(403).json({ message: 'Forbidden: You can only update status for your own jobs or jobs assigned to you' });
+        }
+      }
+
+      const statusSchema = z.object({
+        status: z.enum(['pending', 'scheduled', 'in-progress', 'completed', 'review']),
+      });
+
+      const { status: newStatus } = statusSchema.parse(req.body);
+
+      if (existingJob.status === newStatus) {
+        return res.json(existingJob);
+      }
+
+      const isCompletingNow = newStatus === 'completed' && existingJob.status !== 'completed';
+
+      const updateData: any = { status: newStatus };
+      if (isCompletingNow && !existingJob.completedDate) {
+        updateData.completedDate = new Date();
+      }
+
+      const job = await storage.updateJob(req.params.id, updateData);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found. It may have been deleted." });
+      }
+
+      await createAuditLog(req, {
+        userId: req.user.claims.sub,
+        action: 'job.status_changed',
+        resourceType: 'job',
+        resourceId: req.params.id,
+        changes: { from: existingJob.status, to: newStatus },
+        metadata: { 
+          jobName: existingJob.name, 
+          address: existingJob.address,
+          source: 'calendar_quick_update'
+        },
+      }, storage);
+
+      res.json(job);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update job status');
+      res.status(status).json({ message });
+    }
+  });
+
   app.delete("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const job = await storage.getJob(req.params.id);

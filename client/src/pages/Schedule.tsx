@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
@@ -348,6 +349,37 @@ export default function Schedule() {
     },
     onError: () => {
       toast({ title: 'Failed to delete event', variant: 'destructive' });
+    },
+  });
+
+  // Quick status update mutation
+  const updateJobStatusMutation = useMutation({
+    mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
+      const response = await apiRequest('PATCH', `/api/jobs/${jobId}/status`, { status });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: 'Job status updated successfully' });
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+      // Update the selectedEvent to reflect the new status
+      if (selectedEvent && data) {
+        setSelectedEvent({
+          ...selectedEvent,
+          resource: {
+            ...selectedEvent.resource,
+            status: data.status,
+            job: data,
+          }
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to update status', 
+        description: error?.message || 'An error occurred',
+        variant: 'destructive' 
+      });
     },
   });
 
@@ -1183,11 +1215,51 @@ export default function Schedule() {
                 </p>
               </div>
 
-              <div>
-                <Label className="font-semibold">Status</Label>
-                <Badge className="ml-2" data-testid="badge-event-status">
-                  {selectedEvent.resource.status}
-                </Badge>
+              <div className="space-y-2">
+                <Label htmlFor="status-select">Status</Label>
+                <Select
+                  value={selectedEvent.resource.status}
+                  onValueChange={(newStatus) => {
+                    if (selectedEvent.resource.job) {
+                      updateJobStatusMutation.mutate({ 
+                        jobId: selectedEvent.resource.job.id, 
+                        status: newStatus 
+                      });
+                    }
+                  }}
+                  disabled={updateJobStatusMutation.isPending || user?.role === 'viewer' || user?.role === 'manager'}
+                >
+                  <SelectTrigger 
+                    id="status-select" 
+                    className="min-h-12 w-full"
+                    data-testid="select-event-status"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending" data-testid="option-status-pending">
+                      Pending
+                    </SelectItem>
+                    <SelectItem value="scheduled" data-testid="option-status-scheduled">
+                      Scheduled
+                    </SelectItem>
+                    <SelectItem value="in-progress" data-testid="option-status-in-progress">
+                      In Progress
+                    </SelectItem>
+                    <SelectItem value="completed" data-testid="option-status-completed">
+                      Completed
+                    </SelectItem>
+                    <SelectItem value="review" data-testid="option-status-review">
+                      Review
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {updateJobStatusMutation.isPending && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Updating status...</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
