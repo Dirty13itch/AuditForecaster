@@ -36,7 +36,9 @@ Key technical implementations and design decisions include:
 - **Database Schema Integrity**: Comprehensive database column audit and fixes across 15+ tables to ensure complete alignment with Drizzle schema definitions, including:
   - Jobs table: assignment tracking columns (assigned_to, assigned_at, assigned_by, estimated_duration, territory)
   - Photos table: Complete OCR integration (12 columns for text extraction, confidence scores, language detection)
-  - Blower Door & Duct Leakage Tests: Reporting integration (report_instance_id, test_time, conditioned_area)
+  - Blower Door Tests: Complete schema synchronization (added 11 missing columns: surface_area, number_of_stories, basement_type, outdoor_temp, indoor_temp, outdoor_humidity, indoor_humidity, code_year, meets_code, weather_correction_applied, created_by) plus reporting integration (report_instance_id, test_time, conditioned_area)
+  - Duct Leakage Tests: Reporting integration (report_instance_id, test_time, conditioned_area)
+  - Report Templates: Visual designer columns (is_active, components, layout, conditional_rules, calculations, metadata, parent_template_id, version_notes, published_at)
   - Tax Credits: Audit trail columns (updated_at) across 3 tables
   - Financial System: Complete invoice tracking (amount, tax, total, paid_date, payment_method, payment_reference, terms, items)
   - Notification Preferences: User control columns (enabled, in_app_enabled)
