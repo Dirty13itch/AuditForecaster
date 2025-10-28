@@ -213,6 +213,33 @@ async function startServer() {
       }
     }
     
+    // Run critical user integrity check
+    serverLogger.info('╔════════════════════════════════════════════════════════════════╗');
+    serverLogger.info('║  Running Critical User Integrity Check                        ║');
+    serverLogger.info('╚════════════════════════════════════════════════════════════════╝');
+    
+    try {
+      const integrityCheck = await storage.verifyCriticalUsersIntegrity();
+      if (!integrityCheck.success) {
+        serverLogger.error('[Server] Critical user integrity check failed:');
+        integrityCheck.errors.forEach(error => serverLogger.error(`  - ${error}`));
+        
+        if (process.env.NODE_ENV === 'production') {
+          serverLogger.error('╔════════════════════════════════════════════════════════════════╗');
+          serverLogger.error('║  CRITICAL: User integrity check failed in production!         ║');
+          serverLogger.error('║  Admin access may be compromised.                             ║');
+          serverLogger.error('╚════════════════════════════════════════════════════════════════╝');
+        }
+      } else {
+        serverLogger.info('╔════════════════════════════════════════════════════════════════╗');
+        serverLogger.info('║  ✓ Critical User Integrity Check Passed                       ║');
+        serverLogger.info('╚════════════════════════════════════════════════════════════════╝');
+      }
+    } catch (error) {
+      serverLogger.error('[Server] Failed to run critical user integrity check:', error);
+      // Don't stop the server, but log the error
+    }
+    
     // Register main API routes (this creates the HTTP server)
     const server = await registerRoutes(app);
     

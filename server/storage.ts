@@ -195,6 +195,94 @@ import { db } from "./db";
 import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count, isNull } from "drizzle-orm";
 import { serverLogger } from "./logger";
 
+// ID Validation function for robust user ID handling
+function validateUserId(id: any): { valid: boolean; error?: string } {
+  // Check for null/undefined
+  if (id === null || id === undefined) {
+    return { valid: false, error: "User ID is null or undefined" };
+  }
+  
+  // Check if it's a string
+  if (typeof id !== 'string') {
+    return { valid: false, error: `User ID must be a string, got ${typeof id}` };
+  }
+  
+  // Check for empty string
+  const trimmedId = id.trim();
+  if (trimmedId === '') {
+    return { valid: false, error: "User ID is an empty string" };
+  }
+  
+  // Check for reasonable length (1-255 characters)
+  if (trimmedId.length < 1 || trimmedId.length > 255) {
+    return { valid: false, error: `User ID length ${trimmedId.length} is outside valid range (1-255)` };
+  }
+  
+  // Check for potentially problematic characters
+  // Allow alphanumeric, hyphens, underscores, and dots (common in OIDC subs)
+  const validPattern = /^[a-zA-Z0-9\-_.]+$/;
+  if (!validPattern.test(trimmedId)) {
+    return { valid: false, error: `User ID contains invalid characters: ${trimmedId}` };
+  }
+  
+  return { valid: true };
+}
+
+// Critical user integrity check
+async function verifyCriticalUsersIntegrity(db: any): Promise<{ success: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  
+  try {
+    // Define critical users that must exist with correct roles
+    const criticalUsers = [
+      { email: 'shaun.ulrich@ulrichenergyauditing.com', expectedRole: 'admin', expectedId: '3pve-s' }
+    ];
+    
+    for (const criticalUser of criticalUsers) {
+      // Check by email first
+      const [userByEmail] = await db.select().from(users)
+        .where(eq(users.email, criticalUser.email))
+        .limit(1);
+      
+      if (!userByEmail) {
+        errors.push(`CRITICAL: User with email ${criticalUser.email} not found in database`);
+        continue;
+      }
+      
+      // Verify ID matches expected
+      if (userByEmail.id !== criticalUser.expectedId) {
+        errors.push(`WARNING: User ${criticalUser.email} has ID ${userByEmail.id}, expected ${criticalUser.expectedId}`);
+      }
+      
+      // Verify role is correct
+      if (userByEmail.role !== criticalUser.expectedRole) {
+        errors.push(`CRITICAL: User ${criticalUser.email} has role ${userByEmail.role}, expected ${criticalUser.expectedRole}`);
+        
+        // Attempt to fix the role
+        await db.update(users)
+          .set({ role: criticalUser.expectedRole })
+          .where(eq(users.id, userByEmail.id));
+        
+        serverLogger.warn(`[UserIntegrity] Fixed role for ${criticalUser.email} to ${criticalUser.expectedRole}`);
+      } else {
+        serverLogger.info(`[UserIntegrity] Verified ${criticalUser.email} - ID: ${userByEmail.id}, Role: ${userByEmail.role}`);
+      }
+    }
+    
+    if (errors.length > 0) {
+      errors.forEach(error => serverLogger.error(`[UserIntegrity] ${error}`));
+      return { success: false, errors };
+    }
+    
+    serverLogger.info('[UserIntegrity] All critical users verified successfully');
+    return { success: true, errors: [] };
+  } catch (error) {
+    const errorMsg = `Failed to verify critical users: ${error}`;
+    serverLogger.error(`[UserIntegrity] ${errorMsg}`);
+    return { success: false, errors: [errorMsg] };
+  }
+}
+
 export interface IStorage {
   // User operations for Replit Auth
   getUser(id: string): Promise<User | undefined>;
@@ -203,6 +291,7 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   getUsersByRole(role: UserRole): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>;
+  verifyCriticalUsersIntegrity(): Promise<{ success: boolean; errors: string[] }>;
 
   createBuilder(builder: InsertBuilder): Promise<Builder>;
   getBuilder(id: string): Promise<Builder | undefined>;
@@ -838,9 +927,10 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    // CRITICAL: Check for null/undefined/empty id to prevent crashes
-    if (!id || typeof id !== 'string' || id.trim() === '') {
-      serverLogger.warn(`[Storage/getUser] Invalid id parameter: ${id === null ? 'null' : id === undefined ? 'undefined' : `'${id}'`} - returning undefined`);
+    // Use comprehensive ID validation
+    const validation = validateUserId(id);
+    if (!validation.valid) {
+      serverLogger.warn(`[Storage/getUser] ID validation failed: ${validation.error} - ID: ${id}`);
       return undefined;
     }
     
@@ -879,6 +969,12 @@ export class DatabaseStorage implements IStorage {
   
   // Alias for getUser, used by audit logger
   async getUserById(id: string): Promise<User | undefined> {
+    // Use the same validation as getUser
+    const validation = validateUserId(id);
+    if (!validation.valid) {
+      serverLogger.warn(`[Storage/getUserById] ID validation failed: ${validation.error} - ID: ${id}`);
+      return undefined;
+    }
     return this.getUser(id);
   }
   
@@ -902,6 +998,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
+    // First validate the incoming ID
+    const validation = validateUserId(userData.id);
+    if (!validation.valid) {
+      serverLogger.error(`[Storage/upsertUser] Invalid ID provided: ${validation.error} - ID: ${userData.id}`);
+      // For critical admin user, attempt recovery
+      if (userData.email === 'shaun.ulrich@ulrichenergyauditing.com') {
+        serverLogger.warn('[Storage/upsertUser] Critical admin user with invalid ID - attempting recovery by email');
+        userData.id = '3pve-s'; // Use known good ID for this critical user
+      } else {
+        throw new Error(`Cannot upsert user with invalid ID: ${validation.error}`);
+      }
+    }
+    
+    // Sanitize the ID
+    userData.id = userData.id.trim();
+    
     // Check if user already exists - try by ID first, then by email
     let existingUser = await this.getUser(userData.id);
     
@@ -916,10 +1028,18 @@ export class DatabaseStorage implements IStorage {
       if (userByEmail[0]) {
         existingUser = userByEmail[0];
         serverLogger.warn(`[Storage/upsertUser] Found existing user by email with different ID. DB ID: ${existingUser.id}, OIDC ID: ${userData.id}`);
-        // Update the userData.id to match the existing database ID
-        // This ensures consistency and prevents duplicate users
-        userData.id = existingUser.id;
-        serverLogger.info(`[Storage/upsertUser] Using existing database ID: ${userData.id} for user ${userData.email}`);
+        
+        // Special handling for critical admin user
+        if (userData.email === 'shaun.ulrich@ulrichenergyauditing.com') {
+          // For the critical admin, we trust the database ID
+          userData.id = existingUser.id;
+          serverLogger.info(`[Storage/upsertUser] Critical admin user - using database ID: ${userData.id}`);
+        } else {
+          // For other users, update the userData.id to match the existing database ID
+          // This ensures consistency and prevents duplicate users
+          userData.id = existingUser.id;
+          serverLogger.info(`[Storage/upsertUser] Using existing database ID: ${userData.id} for user ${userData.email}`);
+        }
       }
     }
     
@@ -929,10 +1049,17 @@ export class DatabaseStorage implements IStorage {
       updatedAt: new Date(),
     };
     
+    // CRITICAL: Special handling for admin user email
+    const isAdminEmail = userData.email === 'shaun.ulrich@ulrichenergyauditing.com';
+    
     // PRODUCTION SAFETY: NEVER downgrade existing admins
     // This ensures admin roles are always preserved regardless of what OIDC claims provide
-    if (existingUser?.role === 'admin') {
-      // CRITICAL: Preserve admin role - never downgrade
+    if (isAdminEmail || userData.id === '3pve-s') {
+      // CRITICAL: Force admin role for the critical admin user
+      updateSet.role = 'admin';
+      serverLogger.info(`[Storage/upsertUser] CRITICAL ADMIN: Forcing admin role for user ${userData.id} (${userData.email})`);
+    } else if (existingUser?.role === 'admin') {
+      // CRITICAL: Preserve admin role - never downgrade any existing admin
       updateSet.role = 'admin';
       serverLogger.info(`[Storage/upsertUser] PROTECTED: Preserving admin role for user ${userData.id} (${userData.email})`);
     } else if ('role' in userData && userData.role) {
@@ -6162,6 +6289,12 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(eq(users.role, role))
       .orderBy(asc(users.firstName), asc(users.lastName));
+  }
+  
+  // Critical user integrity check
+  async verifyCriticalUsersIntegrity(): Promise<{ success: boolean; errors: string[] }> {
+    serverLogger.info('[UserIntegrity] Starting critical users integrity check...');
+    return verifyCriticalUsersIntegrity(db);
   }
 
   // Analytics Dashboard Implementation Methods
