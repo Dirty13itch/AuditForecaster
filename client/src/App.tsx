@@ -1,7 +1,7 @@
 import { initSentry } from "@/lib/sentry";
 initSentry();
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { fetchCsrfToken } from "@/lib/csrfToken";
+import { useIsMobile } from "@/hooks/use-mobile";
 import Dashboard from "@/pages/Dashboard";
 import Inspection from "@/pages/Inspection";
 import Photos from "@/pages/Photos";
@@ -400,6 +401,24 @@ function Router() {
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
+  const isMobile = useIsMobile();
+  
+  // Control sidebar state explicitly based on viewport
+  // Mobile-first: default to collapsed (false) when isMobile is undefined or true
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Update sidebar state when viewport changes
+  useEffect(() => {
+    // Only open sidebar on desktop (isMobile === false)
+    if (isMobile === false) {
+      setSidebarOpen(true);
+    } else if (isMobile === true) {
+      // Explicitly close sidebar on mobile
+      setSidebarOpen(false);
+    }
+    // Keep collapsed when isMobile is undefined (initial render)
+  }, [isMobile]);
+  
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
@@ -437,7 +456,11 @@ function AppContent() {
   return (
     <>
       <DevModeBanner />
-      <SidebarProvider style={style as React.CSSProperties}>
+      <SidebarProvider 
+        style={style as React.CSSProperties} 
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
+      >
         <div className="flex h-screen w-full">
           <AppSidebar />
           <div className="flex flex-col flex-1">
