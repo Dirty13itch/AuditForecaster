@@ -1,4 +1,4 @@
-import { MapPin, Calendar, Building2, ArrowRight, ExternalLink, FileText, UserCheck } from "lucide-react";
+import { MapPin, Calendar, Building2, ArrowRight, ExternalLink, FileText, UserCheck, FileSignature } from "lucide-react";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,7 @@ interface JobCardProps {
   onAssign?: (inspectorId: string) => void;
   onClick?: () => void;
   onViewCompliance?: () => void;
+  onGenerateReport?: () => void;
 }
 
 export default function JobCard({
@@ -81,7 +82,8 @@ export default function JobCard({
   onBuilderChange,
   onAssign,
   onClick,
-  onViewCompliance
+  onViewCompliance,
+  onGenerateReport
 }: JobCardProps) {
   const statusConfig: Record<string, { label: string; className: string }> = {
     pending: { label: "Pending", className: "bg-muted text-muted-foreground" },
@@ -324,6 +326,20 @@ export default function JobCard({
           Continue Inspection
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
+        {onGenerateReport && (
+          <Button 
+            variant="outline"
+            className="flex-1 min-h-[48px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onGenerateReport();
+            }}
+            data-testid={`button-generate-report-${id}`}
+          >
+            <FileSignature className="h-4 w-4 mr-2" />
+            Generate Report
+          </Button>
+        )}
         {complianceStatus === "non-compliant" && onViewCompliance && (
           <Button 
             variant="outline"

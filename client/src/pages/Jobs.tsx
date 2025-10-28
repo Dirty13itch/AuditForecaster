@@ -24,6 +24,7 @@ import type { PaginatedResult } from "@shared/pagination";
 import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
 import ExportDialog from "@/components/ExportDialog";
+import { QuickReportDialog } from "@/components/QuickReportDialog";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
 import { indexedDB } from "@/utils/indexedDB";
 import { syncQueue } from "@/utils/syncQueue";
@@ -171,6 +172,7 @@ export default function Jobs() {
   const [isJobDialogOpen, setIsJobDialogOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [jobToEdit, setJobToEdit] = useState<Job | null>(null);
+  const [selectedJobForReport, setSelectedJobForReport] = useState<Job | null>(null);
   
   // Pagination state for different sections
   const todaysPagination = usePagination('today', 25);
@@ -665,6 +667,7 @@ export default function Jobs() {
                         inspectorWorkload={inspectorWorkload}
                         onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                         onClick={() => navigate(`/inspection/${job.id}`)}
+                        onGenerateReport={() => setSelectedJobForReport(job)}
                       />
                     </StaggerItem>
                   ))}
@@ -727,6 +730,7 @@ export default function Jobs() {
                       inspectorWorkload={inspectorWorkload}
                       onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                       onClick={() => navigate(`/inspection/${job.id}`)}
+                      onGenerateReport={() => setSelectedJobForReport(job)}
                     />
                   ))}
                 </div>
@@ -788,6 +792,7 @@ export default function Jobs() {
                       inspectorWorkload={inspectorWorkload}
                       onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                       onClick={() => navigate(`/inspection/${job.id}`)}
+                      onGenerateReport={() => setSelectedJobForReport(job)}
                     />
                   ))}
                 </div>
@@ -848,6 +853,15 @@ export default function Jobs() {
         ]}
         defaultFileName={`jobs-export-${format(new Date(), 'yyyy-MM-dd')}`}
       />
+
+      {/* Quick Report Dialog */}
+      {selectedJobForReport && (
+        <QuickReportDialog
+          open={!!selectedJobForReport}
+          onOpenChange={(open) => !open && setSelectedJobForReport(null)}
+          job={selectedJobForReport}
+        />
+      )}
     </div>
   );
 }
