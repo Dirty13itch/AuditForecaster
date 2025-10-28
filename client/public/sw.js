@@ -1,5 +1,5 @@
 // Enhanced Service Worker with comprehensive offline capabilities
-const VERSION = 'v6';
+const VERSION = 'v7';
 const CACHE_NAME = `field-inspection-${VERSION}`;
 const API_CACHE_NAME = `field-inspection-api-${VERSION}`;
 const STATIC_CACHE_NAME = `field-inspection-static-${VERSION}`;
@@ -241,7 +241,8 @@ self.addEventListener('fetch', event => {
     }
     // Mutable API routes - network only (no cache) to prevent stale data
     else if (url.pathname.match(/^\/api\/(expenses|jobs|builders|photos|mileage|reports|pending-events)/)) {
-      event.respondWith(fetch(request));
+      // Force network request with no HTTP caching to prevent 304 stale responses
+      event.respondWith(fetch(request, { cache: 'no-cache' }));
     }
     // Other API calls - network first with cache fallback
     else if (url.pathname.startsWith('/api/')) {
