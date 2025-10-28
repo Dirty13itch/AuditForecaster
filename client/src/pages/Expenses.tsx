@@ -69,7 +69,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { format } from "date-fns";
-import { ReceiptUpload } from "@/components/expenses/ReceiptUpload";
+import { ReceiptUpload, type OcrResult } from "@/components/expenses/ReceiptUpload";
 
 const expenseCategories = [
   { value: "fuel", label: "Fuel" },
@@ -87,6 +87,23 @@ const expenseCategories = [
   { value: "other", label: "Other" },
 ];
 
+// Default form values (reused for creating new expenses and resetting)
+const defaultExpenseFormValues: Partial<InsertExpense> = {
+  category: "supplies",
+  amount: 0,
+  date: new Date(),
+  description: "",
+  jobId: undefined,
+  receiptUrl: "",
+  isDeductible: true,
+  ocrText: undefined,
+  ocrConfidence: undefined,
+  ocrAmount: undefined,
+  ocrVendor: undefined,
+  ocrDate: undefined,
+  ocrMetadata: undefined,
+};
+
 export default function Expenses() {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -97,22 +114,64 @@ export default function Expenses() {
 
   const form = useForm<InsertExpense>({
     resolver: zodResolver(insertExpenseSchema),
-    defaultValues: {
-      category: "supplies",
-      amount: 0,
-      date: new Date(),
-      description: "",
-      jobId: undefined,
-      receiptUrl: "",
-      isDeductible: true,
-    },
+    defaultValues: defaultExpenseFormValues,
   });
+
+  // Handle OCR completion - auto-populate form fields
+  const handleOcrComplete = (ocrData: OcrResult) => {
+    // Auto-populate amount if extracted
+    if (ocrData.amount && ocrData.amount > 0) {
+      form.setValue('amount', ocrData.amount);
+    }
+
+    // Auto-populate description with vendor if extracted
+    if (ocrData.vendor) {
+      const currentDescription = form.getValues('description');
+      if (!currentDescription || currentDescription.trim() === '') {
+        form.setValue('description', ocrData.vendor);
+      }
+    }
+
+    // Auto-populate date if extracted
+    if (ocrData.date) {
+      try {
+        const parsedDate = new Date(ocrData.date);
+        if (!isNaN(parsedDate.getTime())) {
+          form.setValue('date', parsedDate);
+        }
+      } catch (error) {
+        console.error('Failed to parse OCR date:', error);
+      }
+    }
+
+    // Store OCR metadata for database
+    form.setValue('ocrText', ocrData.rawText);
+    form.setValue('ocrConfidence', ocrData.confidence.toString());
+    form.setValue('ocrAmount', ocrData.amount?.toString());
+    form.setValue('ocrVendor', ocrData.vendor);
+    if (ocrData.date) {
+      try {
+        const parsedDate = new Date(ocrData.date);
+        if (!isNaN(parsedDate.getTime())) {
+          form.setValue('ocrDate', parsedDate);
+        }
+      } catch (error) {
+        console.error('Failed to set OCR date:', error);
+      }
+    }
+    form.setValue('ocrMetadata', {
+      confidence: ocrData.confidence,
+      extractedAmount: ocrData.amount,
+      extractedVendor: ocrData.vendor,
+      extractedDate: ocrData.date,
+    });
+  };
 
   // Sync form state when dialog opens/closes or selectedExpense changes
   useEffect(() => {
     if (showAddDialog) {
       if (selectedExpense) {
-        // Editing existing expense - populate form
+        // Editing existing expense - populate form INCLUDING OCR fields
         form.reset({
           category: selectedExpense.category,
           amount: parseFloat(selectedExpense.amount),
@@ -121,18 +180,17 @@ export default function Expenses() {
           jobId: selectedExpense.jobId || undefined,
           receiptUrl: selectedExpense.receiptUrl || "",
           isDeductible: selectedExpense.isDeductible,
+          // Preserve OCR data to prevent data loss on edit
+          ocrText: selectedExpense.ocrText || undefined,
+          ocrConfidence: selectedExpense.ocrConfidence || undefined,
+          ocrAmount: selectedExpense.ocrAmount || undefined,
+          ocrVendor: selectedExpense.ocrVendor || undefined,
+          ocrDate: selectedExpense.ocrDate ? new Date(selectedExpense.ocrDate) : undefined,
+          ocrMetadata: selectedExpense.ocrMetadata || undefined,
         });
       } else {
         // Creating new expense - reset to defaults
-        form.reset({
-          category: "supplies",
-          amount: 0,
-          date: new Date(),
-          description: "",
-          jobId: undefined,
-          receiptUrl: "",
-          isDeductible: true,
-        });
+        form.reset(defaultExpenseFormValues);
       }
     }
   }, [showAddDialog, selectedExpense, form]);
@@ -164,7 +222,7 @@ export default function Expenses() {
         description: "Expense added successfully",
       });
       setShowAddDialog(false);
-      form.reset();
+      form.reset(defaultExpenseFormValues);
     },
     onError: (error: Error) => {
       toast({
@@ -188,7 +246,7 @@ export default function Expenses() {
       });
       setShowAddDialog(false);
       setSelectedExpense(null);
-      form.reset();
+      form.reset(defaultExpenseFormValues);
     },
   });
 
@@ -272,7 +330,7 @@ export default function Expenses() {
             </Button>
             <Button onClick={() => {
               setSelectedExpense(null);
-              form.reset();
+              form.reset(defaultExpenseFormValues);
               setShowAddDialog(true);
             }} data-testid="button-add-expense">
               <Plus className="h-4 w-4 mr-1" />
@@ -474,7 +532,7 @@ export default function Expenses() {
                       className="mt-4" 
                       onClick={() => {
                         setSelectedExpense(null);
-                        form.reset();
+                        form.reset(defaultExpenseFormValues);
                         setShowAddDialog(true);
                       }}
                       data-testid="button-create-first"
@@ -656,11 +714,12 @@ export default function Expenses() {
                       <ReceiptUpload
                         value={field.value || undefined}
                         onChange={(url) => field.onChange(url)}
+                        onOcrComplete={handleOcrComplete}
                         disabled={createMutation.isPending || updateMutation.isPending}
                       />
                     </FormControl>
                     <FormDescription>
-                      Take a photo or upload an image of your receipt
+                      Take a photo or upload an image of your receipt. Data will be extracted automatically.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -696,7 +755,7 @@ export default function Expenses() {
                   onClick={() => {
                     setShowAddDialog(false);
                     setSelectedExpense(null);
-                    form.reset();
+                    form.reset(defaultExpenseFormValues);
                   }}
                 >
                   Cancel

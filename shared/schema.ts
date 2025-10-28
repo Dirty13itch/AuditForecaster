@@ -447,6 +447,12 @@ export const expenses = pgTable("expenses", {
   receiptUrl: text("receipt_url"),
   date: timestamp("date").notNull(),
   isDeductible: boolean("is_deductible").default(true),
+  ocrText: text("ocr_text"),
+  ocrConfidence: decimal("ocr_confidence", { precision: 5, scale: 2 }),
+  ocrAmount: decimal("ocr_amount", { precision: 10, scale: 2 }),
+  ocrVendor: text("ocr_vendor"),
+  ocrDate: timestamp("ocr_date"),
+  ocrMetadata: jsonb("ocr_metadata"),
 }, (table) => [
   index("idx_expenses_job_id").on(table.jobId),
   index("idx_expenses_date").on(table.date),
@@ -1539,6 +1545,9 @@ export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true }).extend({
   date: z.coerce.date(),
   amount: z.union([z.string(), z.number()]).pipe(z.coerce.string()),
+  ocrDate: z.coerce.date().nullable().optional(),
+  ocrAmount: z.union([z.string(), z.number()]).pipe(z.coerce.string()).nullable().optional(),
+  ocrConfidence: z.union([z.string(), z.number()]).pipe(z.coerce.string()).nullable().optional(),
 });
 export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true }).extend({
   date: z.coerce.date(),

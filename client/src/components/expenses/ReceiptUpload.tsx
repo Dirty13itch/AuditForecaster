@@ -1,17 +1,27 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, Upload, X, Loader2 } from "lucide-react";
+import { Camera, Upload, X, Loader2, Scan } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+
+export interface OcrResult {
+  amount?: number;
+  vendor?: string;
+  date?: string;
+  confidence: number;
+  rawText: string;
+}
 
 interface ReceiptUploadProps {
   value?: string;
   onChange: (receiptUrl: string | null) => void;
+  onOcrComplete?: (ocrData: OcrResult) => void;
   disabled?: boolean;
 }
 
-export function ReceiptUpload({ value, onChange, disabled }: ReceiptUploadProps) {
+export function ReceiptUpload({ value, onChange, onOcrComplete, disabled }: ReceiptUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(value || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -74,6 +84,70 @@ export function ReceiptUpload({ value, onChange, disabled }: ReceiptUploadProps)
     });
   };
 
+  // Parse OCR text to extract receipt data
+  const parseReceiptData = (text: string): { amount?: number; vendor?: string; date?: string } => {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    // Extract amount - look for currency patterns: $XX.XX or XX.XX
+    let amount: number | undefined;
+    const amountRegex = /\$?\s*(\d+[.,]\d{2})\b/g;
+    const amounts: number[] = [];
+    let match;
+    while ((match = amountRegex.exec(text)) !== null) {
+      const parsedAmount = parseFloat(match[1].replace(',', '.'));
+      if (parsedAmount > 0) {
+        amounts.push(parsedAmount);
+      }
+    }
+    // Use the largest amount as it's likely the total
+    if (amounts.length > 0) {
+      amount = Math.max(...amounts);
+    }
+
+    // Extract vendor - use first non-empty line as vendor name
+    const vendor = lines.length > 0 ? lines[0].substring(0, 100) : undefined;
+
+    // Extract date - look for common date patterns
+    let date: string | undefined;
+    const datePatterns = [
+      /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/,  // MM/DD/YYYY or MM-DD-YYYY
+      /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,    // YYYY/MM/DD or YYYY-MM-DD
+    ];
+    
+    for (const pattern of datePatterns) {
+      const dateMatch = text.match(pattern);
+      if (dateMatch) {
+        date = dateMatch[0];
+        break;
+      }
+    }
+
+    return { amount, vendor, date };
+  };
+
+  // Process OCR on receipt image
+  const processOcr = async (blob: Blob): Promise<OcrResult> => {
+    try {
+      // Lazy load tesseract.js to minimize bundle size
+      const { createWorker } = await import('tesseract.js');
+      
+      const worker = await createWorker('eng');
+      const { data } = await worker.recognize(blob);
+      await worker.terminate();
+
+      const parsedData = parseReceiptData(data.text);
+      
+      return {
+        rawText: data.text,
+        confidence: data.confidence,
+        ...parsedData,
+      };
+    } catch (error) {
+      console.error('OCR processing error:', error);
+      throw error;
+    }
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -132,6 +206,34 @@ export function ReceiptUpload({ value, onChange, disabled }: ReceiptUploadProps)
         title: "Receipt uploaded",
         description: "Receipt photo uploaded successfully",
       });
+
+      // Process OCR if callback provided
+      if (onOcrComplete) {
+        setProcessing(true);
+        toast({
+          title: "Processing receipt",
+          description: "Extracting text from receipt...",
+        });
+
+        try {
+          const ocrResult = await processOcr(compressedBlob);
+          onOcrComplete(ocrResult);
+          
+          toast({
+            title: "Receipt processed",
+            description: `Extracted data with ${Math.round(ocrResult.confidence)}% confidence`,
+          });
+        } catch (ocrError) {
+          console.error('OCR error:', ocrError);
+          toast({
+            title: "OCR processing failed",
+            description: "Could not extract text from receipt. You can enter data manually.",
+            variant: "destructive",
+          });
+        } finally {
+          setProcessing(false);
+        }
+      }
     } catch (error) {
       toast({
         title: "Upload failed",
@@ -232,10 +334,12 @@ export function ReceiptUpload({ value, onChange, disabled }: ReceiptUploadProps)
         </div>
       )}
 
-      {uploading && (
-        <p className="text-sm text-muted-foreground text-center" data-testid="text-uploading">
-          Uploading receipt...
-        </p>
+      {(uploading || processing) && (
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground" data-testid="text-status">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {uploading && "Uploading receipt..."}
+          {processing && <><Scan className="h-4 w-4" /> Processing receipt text...</>}
+        </div>
       )}
     </div>
   );
