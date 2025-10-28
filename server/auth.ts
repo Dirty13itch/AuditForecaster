@@ -17,12 +17,27 @@ export const getOidcConfig = memoize(
     if (oidcConfigCache) return oidcConfigCache;
     
     const issuerUrl = process.env.ISSUER_URL || "https://replit.com/oidc";
-    serverLogger.info(`[Auth] Discovering OIDC configuration from ${issuerUrl}`);
+    const replId = process.env.REPL_ID;
+    
+    serverLogger.info(`[Auth] Discovering OIDC configuration`, {
+      issuerUrl,
+      replId,
+      hasReplId: !!replId,
+    });
+    
+    if (!replId) {
+      throw new Error("REPL_ID environment variable is required for OIDC discovery");
+    }
     
     oidcConfigCache = await client.discovery(
       new URL(issuerUrl),
-      process.env.REPL_ID!
+      replId
     );
+    
+    serverLogger.info(`[Auth] OIDC configuration discovered`, {
+      authorizationEndpoint: oidcConfigCache.serverMetadata().authorization_endpoint,
+      tokenEndpoint: oidcConfigCache.serverMetadata().token_endpoint,
+    });
     
     return oidcConfigCache;
   },
@@ -143,6 +158,14 @@ export async function setupAuth(app: Express) {
     throw new Error("Environment variable SESSION_SECRET not provided");
   }
 
+  // Log environment configuration for debugging
+  serverLogger.info(`[Auth] Initializing authentication system`, {
+    domains: process.env.REPLIT_DOMAINS.split(",").map(d => d.trim()),
+    replId: process.env.REPL_ID,
+    hasSessionSecret: !!process.env.SESSION_SECRET,
+    issuerUrl: process.env.ISSUER_URL || "https://replit.com/oidc",
+  });
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
@@ -150,10 +173,21 @@ export async function setupAuth(app: Express) {
 
   // OIDC discovery
   const issuerUrl = process.env.ISSUER_URL || "https://replit.com/oidc";
+  serverLogger.info(`[Auth] Starting OIDC discovery`, {
+    issuerUrl,
+    replId: process.env.REPL_ID,
+  });
+  
   const config = await client.discovery(
     new URL(issuerUrl),
     process.env.REPL_ID!
   );
+  
+  serverLogger.info(`[Auth] OIDC discovery completed`, {
+    authEndpoint: config.serverMetadata().authorization_endpoint,
+    tokenEndpoint: config.serverMetadata().token_endpoint,
+    jwksUri: config.serverMetadata().jwks_uri,
+  });
 
   const verify: VerifyFunction = async (
     tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
@@ -192,6 +226,15 @@ export async function setupAuth(app: Express) {
   for (const domain of process.env.REPLIT_DOMAINS.split(",")) {
     const trimmedDomain = domain.trim();
     const strategyName = `replitauth:${trimmedDomain}`;
+    const redirectUri = `https://${trimmedDomain}/api/callback`;
+    
+    // Log configuration for debugging
+    serverLogger.info(`[Auth] Registering strategy: ${strategyName}`, {
+      domain: trimmedDomain,
+      redirect_uri: redirectUri,
+      client_id: process.env.REPL_ID,
+      issuer_url: issuerUrl,
+    });
     
     passport.use(
       strategyName,
@@ -200,7 +243,7 @@ export async function setupAuth(app: Express) {
           config,
           client_id: process.env.REPL_ID!,
           params: {
-            redirect_uri: `https://${trimmedDomain}/api/callback`,
+            redirect_uri: redirectUri,
             scope: "openid email profile",
           },
         },
@@ -208,7 +251,7 @@ export async function setupAuth(app: Express) {
       )
     );
     
-    serverLogger.info(`[Auth] Registered strategy: ${strategyName}`);
+    serverLogger.info(`[Auth] Successfully registered strategy: ${strategyName} with redirect_uri: ${redirectUri}`);
   }
 
   // Serialize/deserialize user for session
@@ -272,26 +315,37 @@ export async function setupAuth(app: Express) {
   });
 
   // Auth routes
-  app.get("/api/login", (req, res) => {
+  app.get("/api/login", (req, res, next) => {
     const hostname = req.hostname;
     const strategy = `replitauth:${hostname}`;
     
-    serverLogger.info(`[Auth] Login initiated for domain: ${hostname}`);
+    serverLogger.info(`[Auth] Login initiated for domain: ${hostname} using strategy: ${strategy}`);
     
-    // Pass redirect_uri explicitly in the authentication options
-    passport.authenticate(strategy, {
-      redirect_uri: `https://${hostname}/api/callback`,
-      scope: "openid email profile",
-    })(req, res);
+    // Let the Strategy handle all OAuth parameters from its initialization
+    // DO NOT pass additional options here as they conflict with Strategy params
+    passport.authenticate(strategy)(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
     const hostname = req.hostname;
     const strategy = `replitauth:${hostname}`;
     
+    // Log callback invocation for debugging
+    serverLogger.info(`[Auth] Callback invoked for domain: ${hostname}`, {
+      strategy,
+      queryParams: Object.keys(req.query),
+      hasCode: !!req.query.code,
+      hasState: !!req.query.state,
+    });
+    
+    // Let the Strategy handle the callback without additional options
     passport.authenticate(strategy, async (err: any, user: any) => {
       if (err || !user) {
-        serverLogger.error('[Auth] Callback error:', err);
+        serverLogger.error('[Auth] Callback authentication failed:', {
+          error: err?.message || err,
+          hasUser: !!user,
+          hostname,
+        });
         return res.redirect("/?error=authentication_failed");
       }
       
