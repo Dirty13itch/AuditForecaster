@@ -8,6 +8,18 @@ import { storage } from "./storage";
 import { serverLogger } from "./logger";
 import memoize from "memoizee";
 
+/**
+ * Required Environment Variables:
+ * - REPL_ID: Replit application ID (OAuth client_id)
+ * - SESSION_SECRET: Secret for session encryption
+ * - REPLIT_DOMAINS: Comma-separated list of allowed domains
+ * 
+ * Optional:
+ * - ENABLE_AUTH_DIAG: Enable /__auth/diag endpoint (default: false)
+ * - ISSUER_URL: OIDC issuer URL (default: https://replit.com/oidc)
+ * - NODE_ENV: Environment mode (development/production)
+ */
+
 // =============================================================================
 // SESSION MANAGEMENT TYPES & VALIDATION
 // =============================================================================
@@ -438,9 +450,10 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: sessionTtl,
+      path: '/',
     },
   });
 }
@@ -778,17 +791,17 @@ export async function setupAuth(app: Express) {
   };
 
   // Register strategies for each domain
+  // NOTE: redirect_uri is NOT set here - it will be passed dynamically per request
   for (const domain of process.env.REPLIT_DOMAINS.split(",")) {
     const trimmedDomain = domain.trim();
     const strategyName = `replitauth:${trimmedDomain}`;
-    const redirectUri = `https://${trimmedDomain}/api/callback`;
     
     // Log configuration for debugging
     serverLogger.info(`[Auth] Registering strategy: ${strategyName}`, {
       domain: trimmedDomain,
-      redirect_uri: redirectUri,
       client_id: process.env.REPL_ID,
       issuer_url: issuerUrl,
+      note: 'redirect_uri will be computed dynamically per request',
     });
     
     passport.use(
@@ -798,7 +811,7 @@ export async function setupAuth(app: Express) {
           config,
           client_id: process.env.REPL_ID!,
           params: {
-            redirect_uri: redirectUri,
+            // Remove redirect_uri from here - will be passed dynamically
             scope: "openid email profile",
           },
         },
@@ -806,7 +819,7 @@ export async function setupAuth(app: Express) {
       )
     );
     
-    serverLogger.info(`[Auth] Successfully registered strategy: ${strategyName} with redirect_uri: ${redirectUri}`);
+    serverLogger.info(`[Auth] Successfully registered strategy: ${strategyName} (dynamic redirect_uri)`);
   }
 
   // Serialize/deserialize user for session with comprehensive validation
@@ -1038,32 +1051,117 @@ export async function setupAuth(app: Express) {
     }
   });
 
+  /**
+   * Validates that a host is trusted (either in REPLIT_DOMAINS or a valid .replit.dev subdomain)
+   * Prevents host header injection attacks
+   */
+  function isTrustedHost(host: string | undefined): boolean {
+    if (!host) return false;
+    
+    // Extract just the hostname (remove port if present)
+    const hostname = host.split(':')[0];
+    
+    // Check if host is in explicitly configured domains
+    const configuredDomains = process.env.REPLIT_DOMAINS?.split(',').map(d => d.trim()) || [];
+    if (configuredDomains.includes(hostname)) {
+      return true;
+    }
+    
+    // Check if host is a valid .replit.dev subdomain (must END with .replit.dev, not just contain it)
+    if (hostname.endsWith('.replit.dev') || hostname === 'replit.dev') {
+      return true;
+    }
+    
+    // Allow localhost for development
+    if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Safely constructs redirect_uri from request headers with validation
+   * Returns null if host validation fails
+   */
+  function buildValidatedRedirectUri(req: any): string | null {
+    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+    const host = (req.headers['x-forwarded-host'] as string) || req.get('host');
+    
+    // Validate host is trusted
+    if (!isTrustedHost(host)) {
+      serverLogger.error('[Auth] Untrusted host detected in redirect_uri construction', {
+        host,
+        forwardedHost: req.headers['x-forwarded-host'],
+        actualHost: req.get('host'),
+      });
+      return null;
+    }
+    
+    // Validate protocol is https in production
+    if (process.env.NODE_ENV === 'production' && protocol !== 'https') {
+      serverLogger.error('[Auth] Non-HTTPS protocol in production', { protocol });
+      return null;
+    }
+    
+    return `${protocol}://${host}/api/callback`;
+  }
+
   // Auth routes
   app.get("/api/login", (req, res, next) => {
+    const redirectUri = buildValidatedRedirectUri(req);
+    
+    if (!redirectUri) {
+      serverLogger.error('[Auth] Login rejected: invalid redirect_uri');
+      return res.status(400).send('Invalid redirect configuration');
+    }
+    
     const hostname = req.hostname;
     const strategy = `replitauth:${hostname}`;
     
-    serverLogger.info(`[Auth] Login initiated for domain: ${hostname} using strategy: ${strategy}`);
+    serverLogger.info(`[Auth] Login initiated with validated redirect_uri`, {
+      domain: hostname,
+      strategy,
+      redirectUri,
+      forwardedProto: req.headers['x-forwarded-proto'],
+      forwardedHost: req.headers['x-forwarded-host'],
+    });
     
-    // Let the Strategy handle all OAuth parameters from its initialization
-    // DO NOT pass additional options here as they conflict with Strategy params
-    passport.authenticate(strategy)(req, res, next);
+    // Pass validated redirect_uri dynamically to support preview deploys
+    passport.authenticate(strategy, {
+      redirect_uri: redirectUri,
+      scope: "openid email profile"
+    })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
+    const redirectUri = buildValidatedRedirectUri(req);
+    
+    if (!redirectUri) {
+      serverLogger.error('[Auth] Callback rejected: invalid redirect_uri');
+      return res.redirect('/?error=invalid_redirect');
+    }
+    
     const hostname = req.hostname;
     const strategy = `replitauth:${hostname}`;
     
     // Log callback invocation for debugging
-    serverLogger.info(`[Auth] Callback invoked for domain: ${hostname}`, {
+    serverLogger.info(`[Auth] Callback invoked with validated redirect_uri`, {
+      domain: hostname,
       strategy,
+      redirectUri,
       queryParams: Object.keys(req.query),
       hasCode: !!req.query.code,
       hasState: !!req.query.state,
+      forwardedProto: req.headers['x-forwarded-proto'],
+      forwardedHost: req.headers['x-forwarded-host'],
     });
     
-    // Let the Strategy handle the callback without additional options
-    passport.authenticate(strategy, async (err: any, user: any) => {
+    // Pass validated redirect_uri dynamically to support preview deploys
+    passport.authenticate(strategy, {
+      redirect_uri: redirectUri,
+      failureRedirect: "/?error=auth_failed",
+    }, async (err: any, user: any) => {
       if (err || !user) {
         serverLogger.error('[Auth] Callback authentication failed:', {
           error: err?.message || err,

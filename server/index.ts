@@ -3,6 +3,7 @@ initSentry();
 
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
+import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -27,6 +28,41 @@ app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
   crossOriginEmbedderPolicy: false,
 }));
+
+// CORS configuration for preview deploys
+const allowedOrigins = [
+  ...process.env.REPLIT_DOMAINS?.split(',').map(d => `https://${d.trim()}`) || [],
+  'http://localhost:5000' // Dev mode
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is explicitly allowed
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is a valid .replit.dev subdomain (must END with .replit.dev, not just contain it)
+    // This prevents attacks like https://preview.replit.dev.attacker.com
+    const url = new URL(origin);
+    const hostname = url.hostname;
+    if (hostname.endsWith('.replit.dev') || hostname === 'replit.dev') {
+      return callback(null, true);
+    }
+    
+    serverLogger.warn(`[CORS] Blocked origin: ${origin}`);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
+
+serverLogger.info('[Server] CORS configured', {
+  allowedOrigins,
+  allowPreviewDeploys: true,
+});
 
 // Rate limiting for authentication endpoints
 // In development: very lenient to allow testing/debugging
