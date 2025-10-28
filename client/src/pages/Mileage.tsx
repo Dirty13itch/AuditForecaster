@@ -50,6 +50,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import {
   Car,
   Plus,
@@ -89,7 +90,7 @@ export default function Mileage() {
       date: new Date(),
       startOdometer: 0,
       endOdometer: 0,
-      distance: 0,
+      distance: "0",
       purpose: "business",
       startLocation: "",
       endLocation: "",
@@ -106,8 +107,8 @@ export default function Mileage() {
   // Auto-calculate distance when odometers change
   if (startOdometer && endOdometer && endOdometer > startOdometer) {
     const calculatedDistance = endOdometer - startOdometer;
-    if (form.getValues("distance") !== calculatedDistance) {
-      form.setValue("distance", calculatedDistance);
+    if (form.getValues("distance") !== calculatedDistance.toString()) {
+      form.setValue("distance", calculatedDistance.toString());
     }
   }
 
@@ -705,7 +706,7 @@ export default function Mileage() {
                           step="0.1"
                           placeholder="0"
                           {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                          onChange={(e) => field.onChange(e.target.value)}
                           data-testid="input-distance"
                         />
                       </FormControl>
@@ -767,10 +768,10 @@ export default function Mileage() {
                 <div className="p-4 rounded-lg bg-muted">
                   <p className="text-sm font-medium mb-1">Estimated Deduction</p>
                   <p className="text-2xl font-bold text-green-600">
-                    {formatCurrency((form.watch("distance") || 0) * IRS_RATE)}
+                    {formatCurrency(parseFloat(form.watch("distance") || "0") * IRS_RATE)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Based on {form.watch("distance") || 0} miles × ${IRS_RATE}/mile
+                    Based on {form.watch("distance") || "0"} miles × ${IRS_RATE}/mile
                   </p>
                 </div>
               )}
