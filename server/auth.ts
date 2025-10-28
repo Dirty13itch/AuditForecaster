@@ -794,27 +794,25 @@ export async function setupAuth(app: Express) {
   const registeredStrategies = new Set<string>();
 
   /**
-   * Dynamically register a strategy for a given domain/host
+   * Dynamically register a strategy for a given hostname
    * This allows preview deploys to work since strategies are created on-demand
    */
-  const ensureStrategy = (host: string) => {
-    if (!isTrustedHost(host)) {
-      throw new Error(`Untrusted host: ${host}`);
+  const ensureStrategy = (hostname: string) => {
+    if (!isTrustedHost(hostname)) {
+      throw new Error(`Untrusted hostname: ${hostname}`);
     }
     
-    // Extract hostname (remove port if present)
-    const hostname = host.split(':')[0];
     const strategyName = `replitauth:${hostname}`;
     
     if (!registeredStrategies.has(strategyName)) {
       // Determine protocol - use HTTPS for all Replit domains, HTTP for localhost
       const isLocalhost = hostname === 'localhost' || hostname.startsWith('127.0.0.1');
       const protocol = isLocalhost ? 'http' : 'https';
-      const callbackURL = `${protocol}://${host}/api/callback`;
+      const callbackURL = `${protocol}://${hostname}/api/callback`;
       
       serverLogger.info(`[Auth] Registering new strategy dynamically`, {
         strategyName,
-        host,
+        hostname,
         callbackURL,
         protocol,
         isLocalhost,
@@ -1141,17 +1139,20 @@ export async function setupAuth(app: Express) {
   // Auth routes
   app.get("/api/login", (req, res, next) => {
     try {
-      const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || '';
+      // Use req.hostname which Express parses correctly from headers
+      const hostname = req.hostname;
       
       serverLogger.info(`[Auth] Login initiated`, {
-        host,
-        hostname: req.hostname,
+        hostname,
+        protocol: req.protocol,
+        secure: req.secure,
         forwardedProto: req.headers['x-forwarded-proto'],
         forwardedHost: req.headers['x-forwarded-host'],
       });
       
-      // Dynamically register strategy for this host (or use existing one)
-      const strategyName = ensureStrategy(host);
+      // Dynamically register strategy for this hostname (or use existing one)
+      ensureStrategy(hostname);
+      const strategyName = `replitauth:${hostname}`;
       
       serverLogger.info(`[Auth] Using strategy: ${strategyName}`);
       
@@ -1163,7 +1164,7 @@ export async function setupAuth(app: Express) {
     } catch (error) {
       serverLogger.error('[Auth] Login failed:', {
         error: error instanceof Error ? error.message : error,
-        host: req.get('host'),
+        hostname: req.hostname,
       });
       return res.status(400).send('Invalid redirect configuration');
     }
@@ -1171,11 +1172,13 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/callback", (req, res, next) => {
     try {
-      const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || '';
+      // Use req.hostname which Express parses correctly from headers
+      const hostname = req.hostname;
       
       serverLogger.info(`[Auth] Callback invoked`, {
-        host,
-        hostname: req.hostname,
+        hostname,
+        protocol: req.protocol,
+        secure: req.secure,
         queryParams: Object.keys(req.query),
         hasCode: !!req.query.code,
         hasState: !!req.query.state,
@@ -1183,8 +1186,9 @@ export async function setupAuth(app: Express) {
         forwardedHost: req.headers['x-forwarded-host'],
       });
       
-      // Dynamically register strategy for this host (or use existing one)
-      const strategyName = ensureStrategy(host);
+      // Dynamically register strategy for this hostname (or use existing one)
+      ensureStrategy(hostname);
+      const strategyName = `replitauth:${hostname}`;
       
       serverLogger.info(`[Auth] Using strategy for callback: ${strategyName}`);
       
