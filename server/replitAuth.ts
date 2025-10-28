@@ -84,7 +84,15 @@ function updateUserSession(
 async function upsertUser(claims: any) {
   const roleFromClaims = claims["role"];
   
-  serverLogger.info(`[ReplitAuth/upsertUser] Processing claims for user: ${claims["sub"]}, email: ${claims["email"]}`);
+  // Log ALL OIDC claims for debugging
+  serverLogger.info(`[ReplitAuth/upsertUser] ====== FULL OIDC CLAIMS RECEIVED ======`);
+  serverLogger.info(`[ReplitAuth/upsertUser] sub: ${claims["sub"]}`);
+  serverLogger.info(`[ReplitAuth/upsertUser] email: ${claims["email"]}`);
+  serverLogger.info(`[ReplitAuth/upsertUser] first_name: ${claims["first_name"]}`);
+  serverLogger.info(`[ReplitAuth/upsertUser] last_name: ${claims["last_name"]}`);
+  serverLogger.info(`[ReplitAuth/upsertUser] role: ${claims["role"] || "NOT PROVIDED"}`);
+  serverLogger.info(`[ReplitAuth/upsertUser] All claims: ${JSON.stringify(claims, null, 2)}`);
+  serverLogger.info(`[ReplitAuth/upsertUser] ========================================`);
   
   // Build user data object - only include role if provided in OIDC claims
   // This allows storage.upsertUser to preserve existing database role when claims don't include it
