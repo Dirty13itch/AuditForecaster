@@ -252,7 +252,11 @@ export async function setupAuth(app: Express) {
     
     serverLogger.info(`[Auth] Login initiated for domain: ${hostname}`);
     
-    passport.authenticate(strategy)(req, res);
+    // Pass redirect_uri explicitly in the authentication options
+    passport.authenticate(strategy, {
+      redirect_uri: `https://${hostname}/api/callback`,
+      scope: "openid email profile",
+    })(req, res);
   });
 
   app.get("/api/callback", (req, res, next) => {
