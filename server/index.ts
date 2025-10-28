@@ -32,7 +32,8 @@ app.use(helmet({
 // CORS configuration for preview deploys
 const allowedOrigins = [
   ...process.env.REPLIT_DOMAINS?.split(',').map(d => `https://${d.trim()}`) || [],
-  'http://localhost:5000' // Dev mode
+  'http://localhost:5000', // Dev mode
+  'http://127.0.0.1:5000'  // Dev mode (some browsers use IP instead of localhost)
 ];
 
 app.use(cors({
