@@ -838,29 +838,43 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    // First try to get by ID (OIDC sub claim)
-    const resultById = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    
-    if (resultById[0]) {
-      serverLogger.info(`[Storage/getUser] Found user by ID: ${id} - ${resultById[0].email} with role: ${resultById[0].role}`);
-      return resultById[0];
+    // CRITICAL: Check for null/undefined/empty id to prevent crashes
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      serverLogger.warn(`[Storage/getUser] Invalid id parameter: ${id === null ? 'null' : id === undefined ? 'undefined' : `'${id}'`} - returning undefined`);
+      return undefined;
     }
     
-    // ID lookup failed - this might be an email instead of ID, or OIDC sub doesn't match DB ID
-    // Try to find by email as fallback
-    serverLogger.warn(`[Storage/getUser] No user found with ID: ${id} - attempting email fallback`);
+    // Sanitize the id by trimming whitespace
+    const sanitizedId = id.trim();
     
-    // Check if the ID looks like an email
-    if (id.includes('@')) {
-      const resultByEmail = await db.select().from(users).where(eq(users.email, id)).limit(1);
-      if (resultByEmail[0]) {
-        serverLogger.info(`[Storage/getUser] Found user by email fallback: ${resultByEmail[0].email} with role: ${resultByEmail[0].role}`);
-        return resultByEmail[0];
+    try {
+      // First try to get by ID (OIDC sub claim)
+      const resultById = await db.select().from(users).where(eq(users.id, sanitizedId)).limit(1);
+      
+      if (resultById[0]) {
+        serverLogger.info(`[Storage/getUser] Found user by ID: ${sanitizedId} - ${resultById[0].email} with role: ${resultById[0].role}`);
+        return resultById[0];
       }
+      
+      // ID lookup failed - this might be an email instead of ID, or OIDC sub doesn't match DB ID
+      // Try to find by email as fallback
+      serverLogger.warn(`[Storage/getUser] No user found with ID: ${sanitizedId} - attempting email fallback`);
+      
+      // Check if the ID looks like an email (DEFENSIVE: check string exists first)
+      if (sanitizedId.includes('@')) {
+        const resultByEmail = await db.select().from(users).where(eq(users.email, sanitizedId)).limit(1);
+        if (resultByEmail[0]) {
+          serverLogger.info(`[Storage/getUser] Found user by email fallback: ${resultByEmail[0].email} with role: ${resultByEmail[0].role}`);
+          return resultByEmail[0];
+        }
+      }
+      
+      serverLogger.error(`[Storage/getUser] User not found by ID or email: ${sanitizedId}`);
+      return undefined;
+    } catch (error) {
+      serverLogger.error(`[Storage/getUser] Database error while fetching user:`, error);
+      return undefined;
     }
-    
-    serverLogger.error(`[Storage/getUser] User not found by ID or email: ${id}`);
-    return undefined;
   }
   
   // Alias for getUser, used by audit logger

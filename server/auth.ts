@@ -219,6 +219,27 @@ export async function setupAuth(app: Express) {
 
   passport.deserializeUser(async (sessionUser: any, done) => {
     try {
+      // CRITICAL: Check if sessionUser exists and is valid
+      if (!sessionUser) {
+        serverLogger.error('[Auth] deserializeUser called with null/undefined sessionUser - clearing session');
+        return done(null, null); // Return null to clear the session
+      }
+      
+      // Validate sessionUser has required fields
+      if (!sessionUser.id || typeof sessionUser.id !== 'string') {
+        serverLogger.error('[Auth] deserializeUser: sessionUser missing valid id field', {
+          sessionUser: JSON.stringify(sessionUser).substring(0, 200), // Log truncated session for debugging
+        });
+        return done(null, null); // Return null to clear the corrupt session
+      }
+      
+      // Log session structure for debugging
+      serverLogger.debug('[Auth] deserializeUser attempting to refresh user data', {
+        id: sessionUser.id,
+        email: sessionUser.email || 'undefined',
+        hasRole: !!sessionUser.role,
+      });
+      
       // Refresh user data from database to ensure role is current
       const currentUser = await storage.getUser(sessionUser.id);
       
@@ -236,12 +257,17 @@ export async function setupAuth(app: Express) {
         }
         
         serverLogger.debug(`[Auth] Deserialized user with role: ${sessionUser.role}`);
+      } else {
+        // User not found in database - this might be a stale session
+        serverLogger.warn(`[Auth] User ${sessionUser.id} not found in database during deserialization - session may be stale`);
+        // Still return the sessionUser to preserve the session, but log the issue
       }
       
       done(null, sessionUser);
     } catch (error) {
       serverLogger.error('[Auth] Error deserializing user:', error);
-      done(error);
+      // Return null instead of error to clear the corrupt session and allow recovery
+      done(null, null);
     }
   });
 
