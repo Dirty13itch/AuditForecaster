@@ -242,7 +242,7 @@ const troubleshootingGuides: Record<string, TroubleshootingGuide> = {
       },
       {
         step: 2,
-        instruction: 'To increase session duration, modify sessionTtl in server/replitAuth.ts',
+        instruction: 'To increase session duration, modify sessionTtl in server/auth.ts',
       },
       {
         step: 3,
@@ -304,7 +304,7 @@ const troubleshootingGuides: Record<string, TroubleshootingGuide> = {
       },
       {
         step: 4,
-        instruction: 'Review cookie settings in server/replitAuth.ts getSession() function',
+        instruction: 'Review cookie settings in server/auth.ts getSession() function',
       },
       {
         step: 5,

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { googleCalendarService, getUncachableGoogleCalendarClient, allDayDateToUTC } from "./googleCalendar";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated, setupForceAdminEndpoint, getOidcConfig, getRegisteredStrategies } from "./auth";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { generateReportPDF } from "./pdfGenerator.tsx";
@@ -75,7 +75,6 @@ import { processCalendarEvents, type CalendarEvent } from './calendarImportServi
 import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
-import { getOidcConfig, getRegisteredStrategies } from "./replitAuth";
 import { getConfig, isDevelopment } from "./config";
 import { getTroubleshootingGuide, getAllTroubleshootingGuides, suggestTroubleshootingGuide } from "./auth/troubleshooting";
 import { db } from "./db";
@@ -124,6 +123,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Setup Replit Auth middleware
   await setupAuth(app);
+  
+  // Setup force admin endpoint (for emergency admin role assignment)
+  await setupForceAdminEndpoint(app);
 
   // CSRF token generation endpoint (must be authenticated)
   app.get("/api/csrf-token", isAuthenticated, (req, res) => {

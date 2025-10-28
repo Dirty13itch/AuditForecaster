@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "./storage";
-import { isAuthenticated } from "./replitAuth";
+import { isAuthenticated } from "./auth";
 import { csrfSynchronisedProtection } from "./csrf";
 import { insertNotificationSchema, insertNotificationPreferenceSchema } from "@shared/schema";
 import { serverLogger } from "./logger";
