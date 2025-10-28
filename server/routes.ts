@@ -627,7 +627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Audit log: Builder creation
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder.create',
         resourceType: 'builder',
         resourceId: builder.id,
@@ -668,7 +668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Audit log: Builder update
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder.update',
         resourceType: 'builder',
         resourceId: req.params.id,
@@ -698,7 +698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Audit log: Builder deletion
       if (builder) {
         await createAuditLog(req, {
-          userId: req.user.claims.sub,
+          userId: req.user.id,
           action: 'builder.delete',
           resourceType: 'builder',
           resourceId: req.params.id,
@@ -734,7 +734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_contact.create',
         resourceType: 'builder_contact',
         resourceId: contact.id,
@@ -792,7 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_contact.update',
         resourceType: 'builder_contact',
         resourceId: req.params.id,
@@ -832,7 +832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_contact.delete',
         resourceType: 'builder_contact',
         resourceId: req.params.id,
@@ -864,7 +864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_contact.set_primary',
         resourceType: 'builder_contact',
         resourceId: req.params.id,
@@ -900,7 +900,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_agreement.create',
         resourceType: 'builder_agreement',
         resourceId: agreement.id,
@@ -953,7 +953,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_agreement.update',
         resourceType: 'builder_agreement',
         resourceId: req.params.id,
@@ -989,7 +989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_agreement.delete',
         resourceType: 'builder_agreement',
         resourceId: req.params.id,
@@ -1024,7 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_program.create',
         resourceType: 'builder_program',
         resourceId: program.id,
@@ -1077,7 +1077,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_program.update',
         resourceType: 'builder_program',
         resourceId: req.params.id,
@@ -1113,7 +1113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_program.delete',
         resourceType: 'builder_program',
         resourceId: req.params.id,
@@ -1146,13 +1146,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertBuilderInteractionSchema.parse({ 
         ...req.body, 
         builderId: req.params.builderId,
-        createdBy: req.user.claims.sub,
+        createdBy: req.user.id,
       });
       const interaction = await storage.createBuilderInteraction(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_interaction.create',
         resourceType: 'builder_interaction',
         resourceId: interaction.id,
@@ -1205,7 +1205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_interaction.update',
         resourceType: 'builder_interaction',
         resourceId: req.params.id,
@@ -1241,7 +1241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_interaction.delete',
         resourceType: 'builder_interaction',
         resourceId: req.params.id,
@@ -1276,7 +1276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'development.create',
         resourceType: 'development',
         resourceId: development.id,
@@ -1329,7 +1329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'development.update',
         resourceType: 'development',
         resourceId: req.params.id,
@@ -1365,7 +1365,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.getBuilder(req.params.builderId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'development.delete',
         resourceType: 'development',
         resourceId: req.params.id,
@@ -1405,7 +1405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const abbreviation = await storage.createBuilderAbbreviation(validatedData);
 
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_abbreviation.create',
         resourceType: 'builder_abbreviation',
         resourceId: abbreviation.id,
@@ -1439,7 +1439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_abbreviation.update',
         resourceType: 'builder_abbreviation',
         resourceId: id,
@@ -1469,7 +1469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'builder_abbreviation.delete',
         resourceType: 'builder_abbreviation',
         resourceId: id,
@@ -1499,7 +1499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.setPrimaryBuilderAbbreviation(builderId, id);
 
       // Audit log
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (userId) {
         await createAuditLog(req, {
           userId,
@@ -1539,7 +1539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const development = await storage.getDevelopment(req.params.developmentId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'lot.create',
         resourceType: 'lot',
         resourceId: lot.id,
@@ -1592,7 +1592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const development = await storage.getDevelopment(req.params.developmentId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'lot.update',
         resourceType: 'lot',
         resourceId: req.params.id,
@@ -1628,7 +1628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const development = await storage.getDevelopment(req.params.developmentId);
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'lot.delete',
         resourceType: 'lot',
         resourceId: req.params.id,
@@ -1687,7 +1687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Audit log: Plan creation
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'plan.create',
         resourceType: 'plan',
         resourceId: plan.id,
@@ -1728,7 +1728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Audit log: Plan update
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'plan.update',
         resourceType: 'plan',
         resourceId: req.params.id,
@@ -1758,7 +1758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Audit log: Plan deletion
       if (plan) {
         await createAuditLog(req, {
-          userId: req.user.claims.sub,
+          userId: req.user.id,
           action: 'plan.delete',
           resourceType: 'plan',
           resourceId: req.params.id,
@@ -1776,7 +1776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/jobs", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Inspectors only see their own jobs
       if (userRole === 'inspector') {
@@ -1820,14 +1820,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validated.builderId = undefined;
       }
       // Set createdBy to current user
-      validated.createdBy = req.user.claims.sub;
+      validated.createdBy = req.user.id;
       
       serverLogger.info('[API] Attempting to create job:', {
         name: validated.name,
         address: validated.address,
         builderId: validated.builderId,
         status: validated.status,
-        userId: req.user.claims.sub,
+        userId: req.user.id,
       });
       
       // CRITICAL: createJob MUST succeed or throw an error
@@ -1879,7 +1879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Audit log: Job creation (only if job was successfully created)
       try {
         await createAuditLog(req, {
-          userId: req.user.claims.sub,
+          userId: req.user.id,
           action: 'job.create',
           resourceType: 'job',
           resourceId: job.id,
@@ -1924,7 +1924,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check ownership for inspectors
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (userRole === 'inspector' && job.createdBy !== userId) {
         return res.status(403).json({ message: 'Forbidden: You can only view your own jobs' });
       }
@@ -1946,7 +1946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check ownership for inspectors
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (userRole === 'inspector' && existingJob.createdBy !== userId) {
         return res.status(403).json({ message: 'Forbidden: You can only edit your own jobs' });
       }
@@ -1974,7 +1974,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Audit log: Track job status changes
       if (validated.status && existingJob.status !== validated.status) {
         await createAuditLog(req, {
-          userId: req.user.claims.sub,
+          userId: req.user.id,
           action: 'job.status_changed',
           resourceType: 'job',
           resourceId: req.params.id,
@@ -1984,7 +1984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (Object.keys(validated).length > 0) {
         // Log general job updates
         await createAuditLog(req, {
-          userId: req.user.claims.sub,
+          userId: req.user.id,
           action: 'job.update',
           resourceType: 'job',
           resourceId: req.params.id,
@@ -2013,7 +2013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // RBAC: Inspectors can only update jobs they created OR jobs assigned to them
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (userRole === 'inspector') {
         const canUpdate = existingJob.createdBy === userId || existingJob.assignedTo === userId;
         if (!canUpdate) {
@@ -2044,7 +2044,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'job.status_changed',
         resourceType: 'job',
         resourceId: req.params.id,
@@ -2076,7 +2076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check ownership for inspectors
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (userRole === 'inspector' && job.createdBy !== userId) {
         return res.status(403).json({ message: 'Forbidden: You can only delete your own jobs' });
       }
@@ -2088,7 +2088,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Audit log: Job deletion
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'job.delete',
         resourceType: 'job',
         resourceId: req.params.id,
@@ -2408,18 +2408,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/schedule-events", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (!user) {
-        serverLogger.error(`[API/schedule-events] User not found in database for OIDC ID: ${userId}`);
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-      
+      // CRITICAL FIX: Use session user directly instead of re-fetching
+      const user = req.user;
+      const userId = user.id;
       const userRole = (user.role as UserRole) || 'inspector';
+      
       const { startDate, endDate, jobId } = req.query;
 
-      serverLogger.info(`[API/schedule-events] Request from user ${user.id} (${user.email}) with role: ${userRole}`);
+      serverLogger.info(`[API/schedule-events] Request from user ${user.id} (${user.email}) with role: ${userRole} (from session)`);
 
       if (jobId && typeof jobId === "string") {
         const events = await storage.getScheduleEventsByJob(jobId);
@@ -2575,7 +2571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'startDate and endDate are required' });
       }
       
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Import the extended service
       const { googleCalendarService: extendedService } = await import('./googleCalendarService');
@@ -2608,7 +2604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sync Building Knowledge calendar to pending events (instant on-demand sync)
   app.post('/api/calendar/sync-now', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       serverLogger.info('[API] Starting on-demand Building Knowledge calendar sync', { userId });
       
@@ -2683,7 +2679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { inspectorId } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       if (!inspectorId) {
         return res.status(400).json({ message: 'inspectorId is required' });
@@ -2726,7 +2722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/pending-events/bulk-assign', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { eventIds, inspectorId } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
         return res.status(400).json({ message: 'eventIds array is required' });
@@ -2780,7 +2776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/pending-events/:id/reject', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       serverLogger.info('[API] Rejecting pending event:', { eventId: id, userId });
       
@@ -2858,7 +2854,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: any, res) => {
       try {
         const { eventId, inspectorId } = req.body;
-        const adminId = req.user.claims.sub;
+        const adminId = req.user.id;
 
         // Validate input
         if (!eventId || !inspectorId) {
@@ -2919,7 +2915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: any, res) => {
       try {
         const { eventIds, inspectorId } = req.body;
-        const adminId = req.user.claims.sub;
+        const adminId = req.user.id;
 
         // Validate input
         if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
@@ -3524,7 +3520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       // Inspectors can only see their own workload
       if (userRole === 'inspector' && inspectorId !== userId) {
@@ -3557,7 +3553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       // Inspectors can only see their own workload
       if (userRole === 'inspector' && inspectorId !== userId) {
@@ -3603,7 +3599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       // Inspectors can only see their own preferences
       if (userRole === 'inspector' && inspectorId !== userId) {
@@ -3638,7 +3634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       // Inspectors can only update their own preferences, admin can update anyone's
       if (userRole === 'inspector' && inspectorId !== userId) {
@@ -3692,7 +3688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/jobs/:id/assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const jobId = req.params.id;
-      const assignedBy = req.user.claims.sub;
+      const assignedBy = req.user.id;
       
       const assignmentSchema = z.object({
         inspectorId: z.string().min(1, "Inspector ID is required"),
@@ -3745,7 +3741,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bulk assign jobs
   app.post("/api/jobs/bulk-assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const assignedBy = req.user.claims.sub;
+      const assignedBy = req.user.id;
       
       const bulkAssignSchema = z.object({
         assignments: z.array(z.object({
@@ -4198,7 +4194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Invoices
   app.get("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { status, builderId, jobId, limit, offset } = req.query;
 
       if (limit !== undefined || offset !== undefined) {
@@ -4231,7 +4227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/invoices", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Generate invoice number if not provided
       let invoiceData = req.body;
@@ -4360,7 +4356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Financial Settings
   app.get("/api/financial-settings", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       let settings = await storage.getFinancialSettings(userId);
       
       // Create default settings if none exist
@@ -4383,7 +4379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/financial-settings", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const validated = insertFinancialSettingsSchema.partial().parse(req.body);
       
       let settings = await storage.getFinancialSettings(userId);
@@ -4411,7 +4407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Financial Reports
   app.get("/api/financial-summary", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { startDate, endDate } = req.query;
       
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -4427,7 +4423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/revenue-by-period", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { period = 'month' } = req.query;
       
       if (!['day', 'week', 'month', 'quarter', 'year'].includes(period as string)) {
@@ -4444,7 +4440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/expenses-by-category", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { startDate, endDate } = req.query;
       
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -4460,7 +4456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/mileage-summary", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { startDate, endDate } = req.query;
       
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -4780,7 +4776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Audit log: Report generation
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'report.generate',
         resourceType: 'report',
         resourceId: instance.id,
@@ -5477,7 +5473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Audit log: Photo deletion
       await createAuditLog(req, {
-        userId: req.user.claims.sub,
+        userId: req.user.id,
         action: 'photo.delete',
         resourceType: 'photo',
         resourceId: req.params.id,
@@ -7322,7 +7318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Email Preferences API
   app.get("/api/email-preferences", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       let prefs = await storage.getEmailPreferences(userId);
       
       // Create default preferences if they don't exist
@@ -7339,7 +7335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/email-preferences", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const validated = insertEmailPreferenceSchema.partial().parse(req.body);
       
       let prefs = await storage.getEmailPreferences(userId);
@@ -7391,7 +7387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/email-preferences/test", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (!user || !user.email) {
@@ -7619,7 +7615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tax-credit-projects", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const validated = insertTaxCreditProjectSchema.parse({
         ...req.body,
         createdBy: userId,
@@ -7754,7 +7750,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tax-credit-documents", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const validated = insertTaxCreditDocumentSchema.parse({
         ...req.body,
         uploadedBy: userId,
@@ -8492,7 +8488,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { userId } = req.params;
       
       // Check if user can access this data
-      if (userId !== req.user.claims.sub && req.user.role !== 'admin') {
+      if (userId !== req.user.id && req.user.role !== 'admin') {
         return res.status(403).json({ message: "You can only view your own achievements" });
       }
 
@@ -8522,7 +8518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get achievement progress for current user
   app.get("/api/achievements/progress", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const achievements = await storage.getUserAchievements(userId);
       const stats = await storage.getUserStatistics(userId);
       
@@ -8555,7 +8551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { userId, achievementId, achievementType, xpReward } = schema.parse(req.body);
 
       // Check if user can unlock achievements (only for themselves or admin)
-      if (userId !== req.user.claims.sub && req.user.role !== 'admin') {
+      if (userId !== req.user.id && req.user.role !== 'admin') {
         return res.status(403).json({ message: "Cannot unlock achievements for other users" });
       }
 
@@ -8643,7 +8639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const { period, category, mode, userId } = schema.parse(req.query);
-      const targetUserId = userId || req.user.claims.sub;
+      const targetUserId = userId || req.user.id;
 
       const position = await storage.getUserLeaderboardPosition(targetUserId, period);
       res.json(position);
@@ -8660,7 +8656,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's XP and level
   app.get("/api/stats/xp", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const xp = await storage.getUserXP(userId);
       const level = Math.floor(xp / 100) + 1;
       const xpForCurrentLevel = (level - 1) * 100;
@@ -8686,7 +8682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { userId } = req.params;
 
       // Check if user can access this data
-      if (userId !== req.user.claims.sub && req.user.role !== 'admin') {
+      if (userId !== req.user.id && req.user.role !== 'admin') {
         return res.status(403).json({ message: "You can only view your own streaks" });
       }
 
@@ -8705,7 +8701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { type, current, best, lastDate } = req.body;
 
       // Only the user themselves can update their streaks
-      if (userId !== req.user.claims.sub) {
+      if (userId !== req.user.id) {
         return res.status(403).json({ message: "Cannot update streaks for other users" });
       }
 
@@ -8750,7 +8746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/challenges/:challengeId/join", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { challengeId } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       await storage.joinChallenge(userId, challengeId);
       
@@ -9078,7 +9074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/custom-reports", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { name, type, config } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       const report = {
         id: `report_${Date.now()}`,
@@ -9138,7 +9134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/kpi-settings", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { selectedKpis, layout, refreshRate, thresholds } = req.body;
       
       // Save KPI settings (mock for demo)
@@ -9162,7 +9158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/qa/performance/:userId/:period", isAuthenticated, async (req: any, res) => {
     try {
       const { userId, period } = req.params;
-      const currentUser = req.user.claims.sub;
+      const currentUser = req.user.id;
       
       // Users can only view their own performance unless they're admin/manager
       const user = await storage.getUser(currentUser);
@@ -9344,7 +9340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/qa/performance/export", isAuthenticated, async (req: any, res) => {
     try {
       const { format, period, userId } = req.body;
-      const currentUser = req.user.claims.sub;
+      const currentUser = req.user.id;
       
       // Check permissions
       const user = await storage.getUser(currentUser);
