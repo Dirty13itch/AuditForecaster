@@ -837,8 +837,29 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
+    // First try to get by ID (OIDC sub claim)
+    const resultById = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    
+    if (resultById[0]) {
+      serverLogger.info(`[Storage/getUser] Found user by ID: ${id} - ${resultById[0].email} with role: ${resultById[0].role}`);
+      return resultById[0];
+    }
+    
+    // ID lookup failed - this might be an email instead of ID, or OIDC sub doesn't match DB ID
+    // Try to find by email as fallback
+    serverLogger.warn(`[Storage/getUser] No user found with ID: ${id} - attempting email fallback`);
+    
+    // Check if the ID looks like an email
+    if (id.includes('@')) {
+      const resultByEmail = await db.select().from(users).where(eq(users.email, id)).limit(1);
+      if (resultByEmail[0]) {
+        serverLogger.info(`[Storage/getUser] Found user by email fallback: ${resultByEmail[0].email} with role: ${resultByEmail[0].role}`);
+        return resultByEmail[0];
+      }
+    }
+    
+    serverLogger.error(`[Storage/getUser] User not found by ID or email: ${id}`);
+    return undefined;
   }
   
   // Alias for getUser, used by audit logger
@@ -851,8 +872,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    // Check if user already exists to preserve role if not provided in userData
-    const existingUser = await this.getUser(userData.id);
+    // Check if user already exists - try by ID first, then by email
+    let existingUser = await this.getUser(userData.id);
+    
+    // If not found by ID but we have an email, check if user exists with that email
+    // This handles OIDC sub claim mismatches
+    if (!existingUser && userData.email) {
+      serverLogger.info(`[Storage/upsertUser] No user found with ID ${userData.id}, checking by email ${userData.email}`);
+      const userByEmail = await db.select().from(users)
+        .where(eq(users.email, userData.email))
+        .limit(1);
+      
+      if (userByEmail[0]) {
+        existingUser = userByEmail[0];
+        serverLogger.warn(`[Storage/upsertUser] Found existing user by email with different ID. DB ID: ${existingUser.id}, OIDC ID: ${userData.id}`);
+        // Update the userData.id to match the existing database ID
+        // This ensures consistency and prevents duplicate users
+        userData.id = existingUser.id;
+        serverLogger.info(`[Storage/upsertUser] Using existing database ID: ${userData.id} for user ${userData.email}`);
+      }
+    }
     
     // Build the update set object
     const updateSet: any = {
