@@ -807,14 +807,17 @@ export async function setupAuth(app: Express) {
     const strategyName = `replitauth:${hostname}`;
     
     if (!registeredStrategies.has(strategyName)) {
-      // Determine protocol based on environment
-      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      // Determine protocol - use HTTPS for all Replit domains, HTTP for localhost
+      const isLocalhost = hostname === 'localhost' || hostname.startsWith('127.0.0.1');
+      const protocol = isLocalhost ? 'http' : 'https';
       const callbackURL = `${protocol}://${host}/api/callback`;
       
       serverLogger.info(`[Auth] Registering new strategy dynamically`, {
         strategyName,
         host,
         callbackURL,
+        protocol,
+        isLocalhost,
         client_id: process.env.REPL_ID,
         issuer_url: issuerUrl,
       });
