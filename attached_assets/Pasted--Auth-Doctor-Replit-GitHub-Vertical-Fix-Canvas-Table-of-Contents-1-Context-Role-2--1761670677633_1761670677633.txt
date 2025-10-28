@@ -1,0 +1,250 @@
+# Auth Doctor — Replit + GitHub Vertical Fix Canvas
+
+## Table of Contents
+
+1. Context & Role
+2. Inventory Phase
+3. Diagnostic Instruments
+4. Active Probes
+5. Universal Hardening
+6. Replit-Specific Enhancements
+7. GitHub Integration
+8. Testing & Verification
+9. Deployment & Validation
+10. Release & Rollback
+11. Definition of Done
+
+---
+
+## 1. Context & Role
+
+**Role:** Autonomous full-stack SRE + finisher operating inside Replit.
+
+**Mission:** Debug and fully fix broken login/authentication in Preview Deploys. Detect the stack, run diagnostics, fix root causes (cookies, proxy trust, redirects, CORS, sessions, PKCE, secrets), and prove working login end-to-end in a new Preview.
+
+**Environment:**
+
+* Replit project linked to GitHub
+* Uses Replit Preview Deploys (dynamic hostnames, proxy)
+* Code commits and PRs made through GitHub branch workflow
+
+**Requirements:**
+
+* Minimal, reversible fixes
+* Stack-agnostic (Node/Express, Next.js, FastAPI, etc.)
+* Fully preview-safe + production-safe
+
+---
+
+## 2. Inventory Phase
+
+1. **Scan Repo**
+
+   * Detect framework (Express, NextAuth, Flask, etc.)
+   * Identify login and callback endpoints
+   * Locate session or JWT setup
+   * Find any hard-coded redirect URIs, origins, or domains
+
+2. **Redacted Env Dump**
+
+   * List auth-related variables: issuer, client ID/secret, JWT/SESSION secrets, redirect URIs, cookie flags, CORS origins
+
+3. **Initialize Branch**
+
+   ```bash
+   git checkout -b auth-triage-$(date +%Y%m%d-%H%M%S)
+   ```
+
+4. **Create `/vertical/active.md`**
+
+   ```markdown
+   Feature: Fix login end-to-end in Preview
+   Checklist:
+   - API/Auth ✅
+   - Cookies/CORS/Proxy ✅
+   - UI Redirect/Fetch ✅
+   - Tests ✅
+   - Preview Verify ✅
+   - Release Notes ✅
+   ```
+
+---
+
+## 3. Diagnostic Instruments
+
+Add diagnostics (enabled only with `ENABLE_AUTH_DIAG=true`):
+
+* Endpoint `/__auth/diag` returning:
+
+  * Request: secure flag, x-forwarded-*, origin, host, cookiesPresent
+  * Environment: hashed JWT/SESSION secrets, detected provider, UTC server time
+  * CORS allowlist and proxy trust state
+
+Add structured error logging for login/callback:
+
+* Include reason codes (redirect_uri_mismatch, state_missing, pkce_missing, invalid_scope, cookie_blocked, csrf_blocked)
+* Never log secrets
+
+---
+
+## 4. Active Probes
+
+Create `scripts/auth-triage.sh` (with npm alias `"triage:auth"`):
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf "\n=== AUTH TRIAGE ===\n"
+for v in APP_ORIGIN PREVIEW_ORIGIN JWT_SECRET SESSION_SECRET; do
+  if [ -z "${!v:-}" ]; then echo "MISSING: $v"; else echo "OK: $v"; fi
+done
+
+echo "\n[Diag] /__auth/diag"
+curl -fsS "$PREVIEW_ORIGIN/__auth/diag" || echo "diag unavailable"
+
+echo "\n[CORS Preflight]"
+curl -i -X OPTIONS "$PREVIEW_ORIGIN/api/auth/login" \
+  -H "Origin: $APP_ORIGIN" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type" | sed -n '1,20p'
+
+echo "\n[Server Clock vs UTC]"
+date -u
+curl -fsS "$PREVIEW_ORIGIN/__auth/diag" | jq '.time'
+```
+
+Outputs show CORS, cookies, proxy, and clock skew.
+
+---
+
+## 5. Universal Hardening
+
+**A) Proxy & TLS**
+
+* Set trust proxy (`app.set('trust proxy', 1)`) or framework equivalent.
+
+**B) Dynamic Origins & Redirects**
+
+* Compute redirect URI dynamically from `x-forwarded-proto` + `x-forwarded-host` + callback path.
+* Remove static hostnames.
+* Build dynamic CORS allowlist from `APP_ORIGIN`, `PREVIEW_ORIGIN`, and request origin.
+
+**C) Cookies & Sessions**
+
+* HttpOnly, Secure, `SameSite:'none'` for cross-site (else 'lax')
+* Omit domain, use `path:'/'`
+* Persist `state` + `code_verifier` securely between redirects.
+
+**D) OAuth/OIDC (if used)**
+
+* Use Authorization Code + PKCE flow.
+* Include `scope=openid email profile`, `code_challenge_method=S256`.
+* Validate `state` and `code_verifier` in callback.
+
+**E) JWT Verify**
+
+* Use one JWT/SESSION secret in preview.
+* Allow small clock tolerance (~10s).
+
+**F) CSRF & CORS**
+
+* If cookies used, client must `fetch(..., { credentials: 'include' })`.
+* Align CSRF token name/header.
+
+---
+
+## 6. Replit-Specific Enhancements
+
+* Ensure `TRUST_PROXY=1` env in Replit Secrets.
+* Avoid hardcoded `redirect_uri`; recompute each preview.
+* Use `COOKIE_SAMESITE=none`, `COOKIE_SECURE=true` for preview.
+* Verify `/__auth/diag` shows `secure:true`, correct `x-forwarded-proto:https`.
+* If Replit OIDC is detected (`https://replit.com/oidc`):
+
+  * Fetch metadata from `.well-known/openid-configuration`.
+  * Ensure `redirect_uri` matches preview host + callback path.
+  * Add fallback `PREVIEW_REDIRECT_URI` env to override if fixed URIs are required.
+
+---
+
+## 7. GitHub Integration
+
+* Branch workflow: `main` (prod), `ai-dev` (feature), `auth-triage-*` (temporary).
+* Commit atomic diffs per phase: Diagnostics → Probes → Fixes → Tests → Docs.
+* Push and open PR with `.github/pull_request_template.md` checklist.
+
+Sample PR Template:
+
+```
+### Auth Doctor PR Checklist
+- [ ] API/Auth fixed
+- [ ] Cookies/CORS/Proxy hardened
+- [ ] Redirect/PKCE verified
+- [ ] Tests passing
+- [ ] Preview login works
+- [ ] Release notes updated
+```
+
+---
+
+## 8. Testing & Verification
+
+* Integration test: successful login sets auth cookie and `/api/me` returns 200.
+* Negative test: bad state/verifier fails safely.
+* Check `/healthz` responds 200.
+
+Run locally:
+
+```bash
+npm test || pnpm test
+npm run triage:auth
+```
+
+In preview shell:
+
+```bash
+npm run db:deploy && npm run db:seed
+npm run triage:auth
+```
+
+Confirm:
+
+* Cookies set (HttpOnly, Secure)
+* Redirects valid (matching preview hostname)
+* `/__auth/diag` reports correct proxy and CORS
+
+---
+
+## 9. Deployment & Validation
+
+1. Create new Preview Deploy.
+2. Run diagnostics & triage script.
+3. Login in browser → check `Set-Cookie` and `Location` headers.
+4. Run e2e tests.
+5. Merge PR when all ✅.
+
+---
+
+## 10. Release & Rollback
+
+* Create `docs/auth-preview-hardening.md` summarizing:
+
+  * Root cause(s)
+  * Fixes
+  * Env updates
+* Rollback = `git revert <sha>` + restore previous env vars.
+* Disable diagnostics (`ENABLE_AUTH_DIAG=false`).
+
+---
+
+## 11. Definition of Done
+
+* Login works in Preview and Production.
+* No CORS errors.
+* Cookies persist across redirects.
+* Authenticated API calls succeed.
+* Redirect URIs computed dynamically.
+* All tests passing.
+* Diagnostics off by default.
+* PR merged and documented.

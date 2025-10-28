@@ -563,6 +563,87 @@ export async function setupAuth(app: Express) {
   });
 
   app.set("trust proxy", 1);
+  
+  // Add diagnostic endpoint (feature-flagged)
+  if (process.env.ENABLE_AUTH_DIAG === 'true') {
+    serverLogger.info('[Auth] Diagnostic endpoint enabled at /__auth/diag');
+    
+    app.get("/__auth/diag", (req, res) => {
+      try {
+        // Get session configuration
+        const sessionConfig = getSession();
+        
+        // Safely extract cookie settings without exposing secrets
+        const cookieSettings = {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'lax',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        };
+        
+        // Build diagnostic response
+        const diagnostics = {
+          request: {
+            secure: req.secure,
+            protocol: req.protocol,
+            hostname: req.hostname,
+            origin: req.get('origin') || 'not set',
+            forwardedProto: req.get('x-forwarded-proto') || 'not set',
+            forwardedHost: req.get('x-forwarded-host') || 'not set',
+            forwardedFor: req.get('x-forwarded-for') || 'not set',
+            cookiesPresent: Object.keys(req.cookies || {}),
+            userAgent: req.get('user-agent') || 'not set',
+            path: req.path,
+            method: req.method,
+          },
+          environment: {
+            nodeEnv: process.env.NODE_ENV || 'development',
+            hasSessionSecret: !!process.env.SESSION_SECRET,
+            hasReplId: !!process.env.REPL_ID,
+            hasDatabaseUrl: !!process.env.DATABASE_URL,
+            issuerUrl: process.env.ISSUER_URL || 'https://replit.com/oidc',
+            domains: process.env.REPLIT_DOMAINS?.split(',').map(d => d.trim()) || [],
+            serverTime: new Date().toISOString(),
+            replIdPrefix: process.env.REPL_ID ? process.env.REPL_ID.substring(0, 8) + '...' : 'not set',
+          },
+          config: {
+            trustProxy: app.get('trust proxy'),
+            corsOrigins: [], // Will be populated when CORS is configured
+            cookieSettings: {
+              httpOnly: cookieSettings.httpOnly,
+              secure: cookieSettings.secure,
+              sameSite: cookieSettings.sameSite,
+            },
+            sessionStore: process.env.DATABASE_URL ? 'postgresql' : 'in-memory',
+          },
+          session: {
+            exists: !!req.session,
+            authenticated: !!(req as any).user,
+            userId: (req as any).user?.id || 'not authenticated',
+            userEmail: (req as any).user?.email || 'not authenticated',
+            sessionId: req.sessionID ? req.sessionID.substring(0, 8) + '...' : 'no session',
+          },
+          timestamp: new Date().toISOString(),
+          version: '1.0.0',
+        };
+        
+        serverLogger.info('[Auth Diagnostics] Diagnostic request', {
+          hostname: req.hostname,
+          secure: req.secure,
+          forwardedProto: req.get('x-forwarded-proto'),
+        });
+        
+        res.json(diagnostics);
+      } catch (error) {
+        serverLogger.error('[Auth Diagnostics] Error generating diagnostics:', error);
+        res.status(500).json({
+          error: 'Failed to generate diagnostics',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    });
+  }
+  
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
@@ -590,37 +671,67 @@ export async function setupAuth(app: Express) {
     verified: passport.AuthenticateCallback
   ) => {
     try {
+      // Validate OIDC token response
+      const claims = tokens.claims();
+      
+      if (!claims) {
+        const errorCode = 'invalid_token_response';
+        serverLogger.error(`[Auth] ${errorCode}: No claims in token response`, {
+          reasonCode: errorCode,
+          hasAccessToken: !!tokens.access_token,
+          hasRefreshToken: !!tokens.refresh_token,
+        });
+        return verified(new Error('Invalid token response: no claims'));
+      }
+      
+      if (!claims.sub) {
+        const errorCode = 'missing_subject_claim';
+        serverLogger.error(`[Auth] ${errorCode}: Missing sub claim in token`, {
+          reasonCode: errorCode,
+          claimsPresent: Object.keys(claims),
+        });
+        return verified(new Error('Invalid token: missing subject claim'));
+      }
+      
       // Get the full user from database with their correct role
-      const dbUser = await upsertUserAndStoreInSession(tokens.claims());
+      const dbUser = await upsertUserAndStoreInSession(claims);
       
       // Add OIDC tokens to session
       const sessionUser: SessionUser = {
         ...dbUser,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
-        expires_at: tokens.claims()?.exp || Math.floor(Date.now() / 1000) + 86400,
+        expires_at: claims?.exp || Math.floor(Date.now() / 1000) + 86400,
       };
       
       // Validate the complete session
       const validation = validateSessionUser(sessionUser);
       
       if (!validation.valid) {
-        serverLogger.error(`[Auth] Session validation failed during login:`, {
+        const errorCode = 'session_validation_failed';
+        serverLogger.error(`[Auth] ${errorCode}: Session validation failed during login`, {
+          reasonCode: errorCode,
           errors: validation.errors,
           warnings: validation.warnings,
+          userId: sessionUser.id,
+          recoverable: validation.recoverable,
         });
         
         // If recoverable, attempt to fix
         if (validation.recoverable) {
           const recovered = await recoverSession(sessionUser);
           if (recovered) {
-            serverLogger.info(`[Auth] Session recovered during login`);
+            serverLogger.info(`[Auth] Session recovered during login`, {
+              userId: recovered.id,
+              email: recovered.email,
+            });
             return verified(null, recovered);
           }
         }
         
         // Session is not recoverable
-        throw new Error(`Invalid session: ${validation.errors.join(', ')}`);
+        const error = new Error(`Invalid session: ${validation.errors.join(', ')}`);
+        return verified(error);
       }
       
       serverLogger.info(`[Auth] Session user authenticated successfully`, {
@@ -634,7 +745,34 @@ export async function setupAuth(app: Express) {
       
       return verified(null, sessionUser);
     } catch (error) {
-      serverLogger.error('[Auth] Error in verify function:', error);
+      // Determine error reason code
+      let reasonCode = 'unknown_auth_error';
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      if (errorMessage.includes('redirect_uri')) {
+        reasonCode = 'redirect_uri_mismatch';
+      } else if (errorMessage.includes('state')) {
+        reasonCode = 'state_missing';
+      } else if (errorMessage.includes('PKCE') || errorMessage.includes('code_verifier')) {
+        reasonCode = 'pkce_missing';
+      } else if (errorMessage.includes('cookie')) {
+        reasonCode = 'cookie_blocked';
+      } else if (errorMessage.includes('csrf') || errorMessage.includes('CSRF')) {
+        reasonCode = 'csrf_blocked';
+      } else if (errorMessage.includes('scope')) {
+        reasonCode = 'invalid_scope';
+      } else if (errorMessage.includes('database') || errorMessage.includes('storage')) {
+        reasonCode = 'database_error';
+      }
+      
+      serverLogger.error('[Auth] Error in verify function', {
+        reasonCode,
+        errorMessage: errorMessage.substring(0, 200), // Limit message length
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        // Never log secrets - only log if claims exist and redact sensitive fields
+        hasClaims: !!(error as any).claims,
+      });
+      
       return verified(error as Error);
     }
   };
