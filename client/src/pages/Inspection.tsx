@@ -7,10 +7,12 @@ import TopBar from "@/components/TopBar";
 import ChecklistItem from "@/components/ChecklistItem";
 import BottomNav from "@/components/BottomNav";
 import { FinalTestingMeasurements } from "@/components/FinalTestingMeasurements";
+import { EnhancedPhotoGallery } from "@/components/photos/EnhancedPhotoGallery";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { clientLogger } from "@/lib/logger";
@@ -372,60 +374,110 @@ export default function Inspection() {
             <Progress value={progress} className="h-3" data-testid="progress-inspection" />
           </div>
 
-          {/* Final Testing Measurements Section - Only show for Final Testing jobs */}
-          {job?.inspectionType === 'Final Testing' && (
-            <FinalTestingMeasurements jobId={jobId!} />
-          )}
-
-          {checklistItems.length === 0 ? (
-            <div className="bg-card rounded-md border border-card-border p-8 text-center">
-              <p className="text-muted-foreground">No checklist items found for this job.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {checklistItems.map((item) => (
-                <ChecklistItem
-                  key={item.id}
-                  id={item.id}
-                  itemNumber={item.itemNumber}
-                  title={item.title}
-                  completed={item.completed ?? false}
-                  notes={item.notes || ""}
-                  photoCount={item.photoCount ?? 0}
-                  voiceNoteUrl={item.voiceNoteUrl}
-                  voiceNoteDuration={item.voiceNoteDuration}
-                  onToggle={handleToggle}
-                  onNotesChange={handleNotesChange}
-                  onPhotoAdd={handlePhotoAdd}
-                  onVoiceNoteAdd={handleVoiceNoteAdd}
-                  onVoiceNoteDelete={handleVoiceNoteDelete}
-                />
-              ))}
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-4">
-            <Button 
-              variant="outline" 
-              className="flex-1"
-              onClick={handleSave}
-              data-testid="button-save-draft"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              Save Draft
-            </Button>
-            <Button 
-              className="flex-1 bg-success text-success-foreground hover:bg-success/90"
-              disabled={completedCount < totalCount || updateChecklistItemMutation.isPending}
-              data-testid="button-complete"
-            >
-              {updateChecklistItemMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          {/* Tab Content Switching */}
+          {activeTab === "inspection" && (
+            <>
+              {/* Final Testing Measurements Section - Only show for Final Testing jobs */}
+              {job?.inspectionType === 'Final Testing' && (
+                <FinalTestingMeasurements jobId={jobId!} />
               )}
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Complete Inspection
-            </Button>
-          </div>
+
+              {checklistItems.length === 0 ? (
+                <div className="bg-card rounded-md border border-card-border p-8 text-center">
+                  <p className="text-muted-foreground">No checklist items found for this job.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {checklistItems.map((item) => (
+                    <ChecklistItem
+                      key={item.id}
+                      id={item.id}
+                      itemNumber={item.itemNumber}
+                      title={item.title}
+                      completed={item.completed ?? false}
+                      notes={item.notes || ""}
+                      photoCount={item.photoCount ?? 0}
+                      voiceNoteUrl={item.voiceNoteUrl}
+                      voiceNoteDuration={item.voiceNoteDuration}
+                      onToggle={handleToggle}
+                      onNotesChange={handleNotesChange}
+                      onPhotoAdd={handlePhotoAdd}
+                      onVoiceNoteAdd={handleVoiceNoteAdd}
+                      onVoiceNoteDelete={handleVoiceNoteDelete}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={handleSave}
+                  data-testid="button-save-draft"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Draft
+                </Button>
+                <Button 
+                  className="flex-1 bg-success text-success-foreground hover:bg-success/90"
+                  disabled={completedCount < totalCount || updateChecklistItemMutation.isPending}
+                  data-testid="button-complete"
+                >
+                  {updateChecklistItemMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Complete Inspection
+                </Button>
+              </div>
+            </>
+          )}
+
+          {activeTab === "photos" && jobId && (
+            <EnhancedPhotoGallery
+              jobId={jobId}
+              inspectionType={job?.inspectionType || "General Inspection"}
+              enableCapture={true}
+              showUploadButton={true}
+              data-testid="photo-gallery-inspection"
+            />
+          )}
+
+          {activeTab === "dashboard" && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Inspection Overview</CardTitle>
+                  <CardDescription>Quick stats and summary</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Progress</p>
+                      <p className="text-2xl font-bold">{progress.toFixed(0)}%</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Completed</p>
+                      <p className="text-2xl font-bold">{completedCount}/{totalCount}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Status</p>
+                    <Badge variant={job?.status === 'completed' ? 'default' : 'secondary'}>
+                      {job?.status || 'In Progress'}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {activeTab === "forecast" && (
+            <div className="bg-card rounded-md border border-card-border p-8 text-center">
+              <p className="text-muted-foreground">Forecast feature coming soon</p>
+            </div>
+          )}
         </div>
       </main>
 
