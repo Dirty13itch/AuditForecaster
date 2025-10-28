@@ -935,12 +935,16 @@ export class DatabaseStorage implements IStorage {
       serverLogger.info(`[Storage/upsertUser] User ${userData.id}: New user, setting default role to 'inspector'`);
     }
     
+    // CRITICAL FIX: Use the corrected ID (after email lookup) for BOTH insert and conflict target
+    const finalUserData = {
+      ...userData,
+      id: userData.id, // This is now the corrected ID if we found user by email
+      role: updateSet.role, // Ensure role is set for inserts
+    };
+    
     const [user] = await db
       .insert(users)
-      .values({
-        ...userData,
-        role: updateSet.role, // Ensure role is set for inserts
-      })
+      .values(finalUserData)
       .onConflictDoUpdate({
         target: users.id,
         set: updateSet,
