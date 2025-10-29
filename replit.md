@@ -11,6 +11,40 @@ The application uses a **React** and **TypeScript** frontend, built with **Vite*
 
 The backend is built with **Express.js** and **Node.js** in **TypeScript**. **PostgreSQL** (Neon serverless) is the primary database, accessed via **Drizzle ORM**. The API is RESTful, with **Zod** schemas for validation. **Replit Auth** (OpenID Connect) handles authentication, with sessions stored in PostgreSQL.
 
+## Planned Features
+
+### **MileIQ-Style Mileage Tracking (Vertical Slice - In Progress)**
+**User Story**: As a field inspector, I can have my drives automatically detected and quickly classify them with a swipe gesture (business/personal) so that I can effortlessly track tax-deductible mileage without manual start/stop actions.
+
+**Scope**:
+- ✅ 24/7 automatic GPS trip detection (service worker + background geolocation)
+- ✅ Unclassified drives queue (card-based feed)
+- ✅ Swipe gesture classification (right=business, left=personal)
+- ✅ Smooth animations (card fly-off, color feedback using framer-motion)
+- ✅ Offline persistence (IndexedDB queue)
+- ✅ Monthly summary dashboard (total/business/personal miles + tax deduction at $0.70/mile)
+- ✅ CSV export for tax reporting
+
+**API Contract**:
+- `GET /api/mileage/unclassified` - Fetch drives awaiting classification
+- `PUT /api/mileage/:id/classify` - Classify drive as business/personal
+- `GET /api/mileage/summary?month=YYYY-MM` - Monthly statistics
+- `GET /api/mileage/export?month=YYYY-MM&format=csv` - IRS-compliant export
+
+**Technical Architecture**:
+- **Background Detection**: Enhanced TripTrackerService with auto-start/stop based on speed thresholds (>5 m/s start, <1.5 m/s stop)
+- **State Machine**: `vehicleState` enum progression: `idle → monitoring → recording → unclassified → classified`
+- **Swipe Gestures**: Custom hook `useSwipeGesture` with 40% width threshold, spring physics for bounce-back
+- **Visual Feedback**: Green glow (business) / Blue glow (personal) during drag, smooth card exit animations
+- **Query Optimization**: JSON aggregation for route points, compound indexes on (vehicleState, date)
+
+**Out of Scope (Next Slices)**:
+- AI pattern learning / frequent routes auto-classification
+- Work hours feature
+- Push notifications
+- PDF report generation
+- Custom purposes (medical, charity)
+
 Core architectural decisions and features include:
 -   **Comprehensive Error Prevention**: Centralized logging, extensive type safety, and a two-layer Error Boundary system.
 -   **Bulletproof Authentication System**: Robust session management with health monitoring, triple-layer admin protection, and enhanced security measures like host validation and CORS tightening.
