@@ -43,6 +43,7 @@ import ReportTemplates from "@/pages/ReportTemplates";
 import ReportTemplateDetail from "@/pages/ReportTemplateDetail";
 import ReportTemplateDesigner from "@/pages/ReportTemplateDesigner";
 import ReportFillout from "@/pages/ReportFillout";
+import ScheduledExports from "@/pages/ScheduledExports";
 import BlowerDoorTest from "@/pages/BlowerDoorTest";
 import DuctLeakageTest from "@/pages/DuctLeakageTest";
 import Analytics from "@/pages/Analytics";
@@ -169,6 +170,11 @@ function Router() {
       <Route path="/reports" component={() => (
         <RouteErrorBoundary>
           <Reports />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/scheduled-exports" component={() => (
+        <RouteErrorBoundary>
+          <ScheduledExports />
         </RouteErrorBoundary>
       )} />
       <Route path="/reports/:id" component={() => (
