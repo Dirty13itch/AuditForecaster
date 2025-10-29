@@ -1,166 +1,20 @@
 # Energy Auditing Field Application
 
 ## Overview
-This full-stack energy auditing field application empowers field inspectors to manage inspections, track jobs, schedule events, and generate reports. Its core purpose is to optimize energy auditing workflows, enhance data accuracy via photo documentation and OCR, and provide robust analytics. Key capabilities include outdoor readability, offline-first operation, and rapid data entry. The project aims to revolutionize field operations with a comprehensive, user-friendly, and powerful mobile solution, enhancing efficiency and data integrity in field operations.
+This full-stack energy auditing field application optimizes energy auditing workflows for field inspectors. It enables management of inspections, job tracking, event scheduling, and report generation. Key capabilities include outdoor readability, offline-first operation, rapid data entry, enhanced data accuracy via photo documentation and OCR, and robust analytics. The project aims to provide a comprehensive, user-friendly, and powerful mobile solution for field operations.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application uses a **React** and **TypeScript** frontend, built with **Vite**, and **Wouter** for routing. UI components leverage **shadcn/ui** (Radix UI) and **Tailwind CSS**, with a custom color system for outdoor readability. **TanStack Query** manages server state, while a **Service Worker**, **IndexedDB**, and a custom sync queue provide offline-first functionality.
+The application features a **React** and **TypeScript** frontend, built with **Vite** and utilizing **Wouter** for routing. UI components are developed with **shadcn/ui** (Radix UI) and **Tailwind CSS**, incorporating a custom color system for outdoor readability. **TanStack Query** manages server state, while a **Service Worker**, **IndexedDB**, and a custom sync queue provide offline-first functionality.
 
-The backend is built with **Express.js** and **Node.js** in **TypeScript**. **PostgreSQL** (Neon serverless) is the primary database, accessed via **Drizzle ORM**. The API is RESTful, with **Zod** schemas for validation. **Replit Auth** (OpenID Connect) handles authentication, with sessions stored in PostgreSQL.
-
-## Planned Features
-
-### **MileIQ-Style Mileage Tracking (Vertical Slice - ✅ COMPLETE)**
-**User Story**: As a field inspector, I can have my drives automatically detected and quickly classify them with a swipe gesture (business/personal) so that I can effortlessly track tax-deductible mileage without manual start/stop actions.
-
-**Completed Features** (October 2025):
-- ✅ Backend API (4 production-ready endpoints with N+1 optimization, rate limiting, RBAC)
-- ✅ Swipe-to-classify UI with framer-motion animations and dual accessibility buttons
-- ✅ Enhanced monthly summary with updated IRS rate ($0.70/mile for 2025)
-- ✅ CSV export for tax reporting (IRS-compliant format)
-- ✅ Comprehensive error handling (useEffect toasts, retry buttons, truthful error states)
-- ✅ E2E testing completed (all scenarios passing)
-- ✅ Sidebar navigation link added for feature discoverability
-
-**Production Artifacts**:
-- ✅ MILEAGE_SLICE.md (1,200+ line runbook)
-- ✅ scripts/smoke-test.sh (7-step automated verification)
-- ✅ db/seed-mileage.sql (6 sample drives)
-- ✅ 40/40 vertical slice compliance
-- ✅ Health endpoint enhanced with commit SHA tracking
-
-### **Expenses Tracking with OCR Receipt Processing (Vertical Slice - ✅ COMPLETE)**
-**User Story**: As a field inspector managing multiple job sites, I can log business expenses via receipt photo upload with OCR, so that I can accurately track tax-deductible costs without manual data entry.
-
-**Completed Features** (October 2025):
-- ✅ Backend API (7 production-ready endpoints: CRUD + bulk delete + CSV export)
-- ✅ Receipt upload with Tesseract.js OCR auto-fill (vendor, amount, date extraction)
-- ✅ 13 expense categories (fuel, equipment, supplies, meals, lodging, tools, etc.)
-- ✅ Monthly statistics dashboard with category breakdown
-- ✅ CSV export for accounting (QuickBooks/Excel-ready format)
-- ✅ Job linking (associate expenses with specific inspections)
-- ✅ Tax-deductible tracking and reporting
-- ✅ Bulk operations (delete up to 200 expenses at once)
-- ✅ Comprehensive error handling with retry logic
-
-**Production Artifacts**:
-- ✅ EXPENSES_SLICE.md (1,200+ line comprehensive runbook)
-- ✅ scripts/smoke-test-expenses.sh (10-test automated verification)
-- ✅ db/seed-expenses.sql (13 sample expenses with realistic OCR data)
-- ✅ EXPENSES_COMPLIANCE.md (40/40 vertical slice compliance checklist)
-- ✅ Full API documentation with curl examples
-
-**API Contract**:
-- `GET /api/expenses` - List expenses (with pagination and job filter)
-- `POST /api/expenses` - Create expense with validation
-- `GET /api/expenses/:id` - Fetch single expense
-- `PUT /api/expenses/:id` - Update expense (partial updates supported)
-- `DELETE /api/expenses/:id` - Delete single expense
-- `DELETE /api/expenses/bulk` - Bulk delete (max 200)
-- `POST /api/expenses/export` - Export CSV/JSON (max 1000)
-- `GET /api/expenses-by-category` - Monthly stats aggregation
-
-**Technical Architecture**:
-- **Backend Optimization**: Database indexes on (job_id, date, date+category) for sub-50ms aggregations
-- **OCR Processing**: Client-side Tesseract.js with 70-95% typical confidence scores
-- **Image Optimization**: Sharp library compresses receipts by 60-80% (max 1920x1920)
-- **Security**: CSRF protection, rate limiting (100 req/15min), Zod validation, parameterized queries
-- **Performance**: P95 < 200ms for list/stats endpoints, bulk operation limits prevent timeouts
-- **Observability**: JSON structured logs, correlation IDs, duration tracking, health endpoints
-
-**Out of Scope (Future Enhancements)**:
-- Recurring expense templates
-- Budget limits and alerts  
-- Credit card transaction import
-- Expense approval workflow
-- Multi-currency support
-
-### **Report Template System (Vertical Slice - ✅ COMPLETE)**
-**User Story**: As a RESNET energy auditor, I can create custom inspection report templates with a visual designer, generate standalone reports (without requiring a job), fill out reports with field data, and have all values persisted to the database.
-
-**Completed Features** (October 2025):
-- ✅ Backend API (8 production-ready endpoints: CRUD + clone + archive + instances + field values)
-- ✅ Visual template designer with drag-drop component palette
-- ✅ Standalone report creation (job linkage optional, not required)
-- ✅ Dynamic form rendering from template components
-- ✅ Field value persistence with multi-type support (text, number, date, boolean, JSON)
-- ✅ Template cloning and archiving
-- ✅ Version tracking for templates
-- ✅ Component-based architecture (text, number, date, checkbox, select, textarea)
-
-**Production Artifacts**:
-- ✅ REPORT_TEMPLATE_SLICE.md (650+ line comprehensive runbook)
-- ✅ scripts/smoke-test-report-templates.sh (12-test automated verification)
-- ✅ db/seed-report-templates.sql (5 RESNET templates: Pre-Drywall, Final Audit, HVAC, Insulation, Air Sealing)
-- ✅ REPORT_TEMPLATES_COMPLIANCE.md (40/40 vertical slice compliance checklist)
-- ✅ Full API documentation with curl examples
-
-**API Contract**:
-- `GET /api/report-templates` - List all active templates
-- `POST /api/report-templates` - Create new template with components
-- `GET /api/report-templates/:id` - Fetch single template
-- `PUT /api/report-templates/:id` - Update template (partial updates supported)
-- `DELETE /api/report-templates/:id` - Delete template
-- `POST /api/report-templates/:id/clone` - Clone template with new name
-- `POST /api/report-templates/:id/archive` - Archive template (set isActive=false)
-- `POST /api/report-instances` - Create report instance (standalone or job-linked)
-- `GET /api/report-instances/:id` - Fetch report instance
-- `POST /api/report-field-values` - Save field values for report
-- `GET /api/report-instances/:id/field-values` - Retrieve all field values
-
-**Technical Architecture**:
-- **JSON-Only Storage**: Pure JSONB architecture for templates (components, layout, metadata)
-- **Component Types**: text, number, date, checkbox, select, textarea with configurable properties
-- **Multi-Value Storage**: Dedicated columns for text, number, boolean, date, JSON, and photo arrays
-- **Standalone Reports**: Report instances can exist without job linkage (jobId nullable)
-- **Template Versioning**: Version tracking for template evolution
-- **Security**: CSRF protection, rate limiting, Zod validation, parameterized queries
-- **Performance**: Sub-50ms template queries, efficient JSONB indexing
-- **Observability**: JSON structured logs, health endpoints, correlation IDs
-
-**Out of Scope (Future Enhancements)**:
-- Conditional logic/field dependencies (basic framework exists)
-- PDF generation from report instances
-- Template sharing/marketplace
-- Multi-language support
-- Advanced layout options (grid positioning, custom CSS)
-- Template import/export (JSON format)
-
-**API Contract** (Mileage):
-- `GET /api/mileage/unclassified` - Fetch drives awaiting classification (returns {drives: MileageLog[]})
-- `PUT /api/mileage/:id/classify` - Classify drive as business/personal
-- `GET /api/mileage/summary?month=YYYY-MM` - Monthly statistics (totalDrives, businessMiles, personalMiles, taxDeduction)
-- `GET /api/mileage/export?month=YYYY-MM&format=csv` - IRS-compliant export
-
-**Technical Architecture**:
-- **Backend Optimization**: JSON aggregation eliminates N+1 queries, compound indexes on (vehicleState, date)
-- **State Machine**: `vehicleState` enum progression: `idle → monitoring → recording → unclassified → classified` (409 responses enforce state transitions)
-- **Swipe Gestures**: Custom hook `useSwipeGesture` with 40% width threshold, spring physics for bounce-back
-- **Accessibility**: Dual input methods (swipe gestures + explicit Personal/Business buttons)
-- **Visual Feedback**: Green glow (business) / Blue glow (personal) during drag, smooth card exit animations
-- **Error Resilience**: Toast spam prevention via useEffect, explicit error states with retry invalidation
-- **Data Normalization**: Custom queryFn extracts drives array from API response object
-
-**Production Readiness**:
-- Three complete vertical slices implemented (Backend → Swipe UI → Summary)
-- All slices passed architect review for production quality
-- Critical bugs fixed (runtime crash, toast spam, misleading zero values)
-- Comprehensive testing validates all user flows
-
-**Out of Scope (Future Enhancements)**:
-- AI pattern learning / frequent routes auto-classification
-- Work hours auto-classification feature
-- Push notifications for drive detection
-- PDF report generation
-- Custom purposes (medical, charity)
+The backend is developed with **Express.js** and **Node.js** in **TypeScript**, with **PostgreSQL** (Neon serverless) as the primary database, accessed via **Drizzle ORM**. The API is RESTful, with **Zod** schemas for validation. **Replit Auth** (OpenID Connect) handles authentication, with sessions stored in PostgreSQL.
 
 Core architectural decisions and features include:
 -   **Comprehensive Error Prevention**: Centralized logging, extensive type safety, and a two-layer Error Boundary system.
--   **Bulletproof Authentication System**: Robust session management with health monitoring, triple-layer admin protection, and enhanced security measures like host validation and CORS tightening.
--   **Builder Hierarchy System**: Manages builder contacts, agreements, programs, and interactions, including a geographic hierarchy (Development → Lot → Job).
+-   **Bulletproof Authentication System**: Robust session management with health monitoring, triple-layer admin protection, and enhanced security measures.
+-   **Builder Hierarchy System**: Manages contacts, agreements, programs, and interactions, including a geographic hierarchy (Development → Lot → Job).
 -   **Bulk Operations**: Multi-select functionality for Photos, Jobs, and Expenses with bulk actions.
 -   **Search & Filtering**: Advanced search across Jobs, Builders, and Photos with real-time filtering and pagination.
 -   **Analytics Dashboard**: Provides metrics on inspection volume, photo tag analysis, and builder performance.
@@ -176,7 +30,7 @@ Core architectural decisions and features include:
 -   **Enterprise Hardening**: Includes **Sentry** integration for error monitoring, multi-layered security (CSRF, rate limiting, Helmet), and secure sessions.
 -   **WebSocket Notifications**: Real-time notification system with exponential backoff and HTTP polling fallback.
 -   **Database Schema Integrity**: Comprehensive schema synchronization across all tables, including dedicated columns for assignment tracking, OCR, financial tracking, and notification preferences.
--   **Report Template System - JSON-Only Architecture**: Complete migration to a pure JSON architecture for report templates, supporting standalone reports and version tracking, with comprehensive testing and documentation.
+-   **Report Template System - JSON-Only Architecture**: Complete migration to a pure JSON architecture for report templates, supporting standalone reports and version tracking.
 
 ## External Dependencies
 
