@@ -34,6 +34,7 @@ Core architectural decisions and features include:
 -   **Blower Door Testing System**: Production-grade multi-point pressure testing with automated ACH50 calculations, weather/altitude corrections, and Minnesota 2020 Energy Code compliance verification (≤3.0 ACH50 limit). Features 59-column database schema, multi-point regression analysis, ring configuration support (Open, Ring A-D), ELA calculations, and automated compliance checking. Complete with comprehensive runbook, 12-test smoke suite, and 8 realistic seed scenarios.
 -   **Duct Leakage Testing System**: Production-grade duct airtightness testing supporting Total Duct Leakage (TDL) and Duct Leakage to Outside (DLO) per Minnesota 2020 Energy Code. Features 60-column database schema, automated calculations with Minneapolis Duct Blaster calibration factors, pressure pan diagnostic testing, real-time compliance verification (TDL ≤4.0, DLO ≤3.0 CFM25/100 sq ft), and job compliance status updates. Complete with comprehensive runbook, 12-test smoke suite, and 10 realistic test scenarios covering pass/fail conditions.
 -   **Equipment Management System**: Production-grade equipment inventory, calibration tracking, maintenance scheduling, and checkout workflows for RESNET-certified field equipment. Features 4-table architecture (equipment, calibrations, maintenance, checkouts), 23 API endpoints, 9 equipment types (blower doors, duct testers, manometers, cameras, etc.), QR code generation, automatic due date calculations, checkout/check-in workflows, and comprehensive alerts. Supports RESNET annual calibration requirements and Minnesota Energy Code compliance verification. Complete with comprehensive runbook, 17-test smoke suite, and 10 realistic equipment scenarios.
+-   **Scheduled Exports System**: Production-grade automated data export system with cron scheduling, multi-format support (CSV, JSON), and email delivery. Features 17-column database schema, 8 API endpoints with multi-tenant security, conditional email delivery, timezone-aware cron parsing (America/Chicago), test run capabilities, and dynamic export generation (jobs, financial, photos). Supports daily/weekly/monthly schedules with comprehensive next-run calculations. Complete with runbook, 15-test smoke suite, and 8 realistic scheduling scenarios.
 
 ## Production-Ready Features (Vertical Slice Completion)
 
@@ -83,6 +84,13 @@ The following features have completed vertical development with full production 
    - Seed Data: `db/seed-equipment.sql` (10 scenarios)
    - Compliance: `EQUIPMENT_COMPLIANCE.md`
    - Technical Details: 4 tables (equipment, equipmentCalibrations, equipmentMaintenance, equipmentCheckouts), 23 API endpoints, 9 equipment types, calibration/maintenance tracking, checkout system, QR codes, RESNET compliance
+
+8. **Scheduled Exports** (40/40 ✅)
+   - Runbook: `SCHEDULED_EXPORTS_SLICE.md` (750+ lines)
+   - Smoke Tests: `scripts/smoke-test-scheduled-exports.sh` (15 tests)
+   - Seed Data: `db/seed-scheduled-exports.sql` (8 scenarios)
+   - Compliance: `SCHEDULED_EXPORTS_COMPLIANCE.md`
+   - Technical Details: 17-column schema with 5 indexes, 8 API endpoints with userId verification, cron scheduling (America/Chicago timezone), multi-format export (CSV/JSON), conditional email delivery, test run capability, next-run calculation, multi-tenant security (updateScheduledExportSchema prevents ownership reassignment)
 
 ## External Dependencies
 
