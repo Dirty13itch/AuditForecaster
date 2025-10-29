@@ -9,6 +9,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
   DragStartEvent,
   DragEndEvent,
   DragOverEvent,
@@ -302,6 +303,11 @@ export default function ReportTemplateDesigner() {
     })
   );
 
+  // Canvas droppable area
+  const { setNodeRef: setCanvasRef } = useDroppable({
+    id: 'canvas',
+  });
+
   // Form for save dialog
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateFormSchema),
@@ -336,9 +342,9 @@ export default function ReportTemplateDesigner() {
   const saveTemplateMutation = useMutation({
     mutationFn: async (data: TemplateData) => {
       if (isEditMode) {
-        return apiRequest(`/api/report-templates/${templateId}`, "PUT", data);
+        return apiRequest("PUT", `/api/report-templates/${templateId}`, data);
       } else {
-        return apiRequest("/api/report-templates", "POST", data);
+        return apiRequest("POST", "/api/report-templates", data);
       }
     },
     onSuccess: () => {
@@ -353,7 +359,7 @@ export default function ReportTemplateDesigner() {
 
   const cloneTemplateMutation = useMutation({
     mutationFn: async (name: string) => {
-      return apiRequest(`/api/report-templates/${templateId}/clone`, "POST", { name });
+      return apiRequest("POST", `/api/report-templates/${templateId}/clone`, { name });
     },
     onSuccess: (cloned: ReportTemplate) => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
@@ -367,7 +373,7 @@ export default function ReportTemplateDesigner() {
 
   const archiveTemplateMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest(`/api/report-templates/${templateId}/archive`, "POST");
+      return apiRequest("POST", `/api/report-templates/${templateId}/archive`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
@@ -804,7 +810,24 @@ export default function ReportTemplateDesigner() {
                                     active: { id: component.id, data: { current: component } },
                                   } as DragStartEvent);
                                 }}
-                                className="p-2 border rounded-md cursor-move hover:bg-accent hover:border-primary/50 transition-colors"
+                                onClick={() => {
+                                  // Click to add component to canvas
+                                  pushToUndoStack();
+                                  const newComponent: TemplateComponent = {
+                                    id: `${component.type}_${Date.now()}`,
+                                    type: component.type,
+                                    properties: {
+                                      label: component.label,
+                                      ...component.defaultProperties,
+                                    },
+                                  };
+                                  setTemplateData((prev) => ({
+                                    ...prev,
+                                    components: [...prev.components, newComponent],
+                                  }));
+                                  setSelectedComponentId(newComponent.id);
+                                }}
+                                className="p-2 border rounded-md cursor-pointer hover:bg-accent hover:border-primary/50 transition-colors"
                                 data-testid={`palette-${component.type}`}
                               >
                                 <div className="flex items-center gap-2">
@@ -851,6 +874,7 @@ export default function ReportTemplateDesigner() {
               </div>
               <ScrollArea className="flex-1">
                 <div
+                  ref={setCanvasRef}
                   className={`min-h-full p-6 ${
                     showGrid ? "bg-grid-pattern" : ""
                   } ${
@@ -867,6 +891,7 @@ export default function ReportTemplateDesigner() {
                       : undefined,
                     backgroundSize: showGrid ? "24px 24px" : undefined,
                   }}
+                  data-testid="canvas-droppable"
                 >
                   {templateData.components.length === 0 ? (
                     <div className="h-96 flex items-center justify-center">

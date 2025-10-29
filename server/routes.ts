@@ -4523,6 +4523,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get template sections
   app.get("/api/report-templates/:id/sections", isAuthenticated, async (req, res) => {
     try {
+      // Check if template exists first
+      const template = await storage.getReportTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      // New templates use components (JSON), legacy templates use sections table
+      // If components exist, return empty sections array (new designer doesn't use sections table)
+      if (template.components && Array.isArray(template.components) && template.components.length > 0) {
+        return res.json([]);
+      }
+      
+      // Otherwise query legacy sections table
       const sections = await storage.getTemplateSections(req.params.id);
       res.json(sections);
     } catch (error) {
@@ -4534,6 +4547,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get template fields
   app.get("/api/report-templates/:id/fields", isAuthenticated, async (req, res) => {
     try {
+      // Check if template exists first
+      const template = await storage.getReportTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      // New templates use components (JSON), legacy templates use fields table
+      // If components exist, return empty fields array (new designer doesn't use fields table)
+      if (template.components && Array.isArray(template.components) && template.components.length > 0) {
+        return res.json([]);
+      }
+      
+      // Otherwise query legacy fields table
       const fields = await storage.getTemplateFieldsByTemplateId(req.params.id);
       res.json(fields);
     } catch (error) {

@@ -40,7 +40,7 @@ Key technical implementations and design decisions include:
   - Expenses table: **Receipt OCR fully implemented** (6 columns) - tesseract.js integration in ReceiptUpload component with text extraction, confidence scoring, smart parsing of amount/vendor/date from receipt images
   - Blower Door Tests: Complete schema synchronization (added 11 missing columns: surface_area, number_of_stories, basement_type, outdoor_temp, indoor_temp, outdoor_humidity, indoor_humidity, code_year, meets_code, weather_correction_applied, created_by) plus reporting integration (report_instance_id, test_time, conditioned_area)
   - Duct Leakage Tests: Reporting integration (report_instance_id, test_time, conditioned_area)
-  - Report Templates: Visual designer columns (is_active, components, layout, conditional_rules, calculations, metadata, parent_template_id, version_notes, published_at)
+  - Report Templates: Visual designer columns (is_active, components, layout, conditional_rules, calculations, metadata, parent_template_id, version_notes, published_at). **Schema Migration (Oct 2025)**: Removed legacy `sections text NOT NULL` column - schema now uses `components jsonb` for storing component definitions. Migration applied via `ALTER TABLE report_templates DROP COLUMN sections` to align database with Drizzle schema.
   - Tax Credits: Audit trail columns (updated_at) across 3 tables
   - Financial System: Complete invoice tracking (amount, tax, total, paid_date, payment_method, payment_reference, terms, items)
   - Notification Preferences: User control columns (enabled, in_app_enabled)
