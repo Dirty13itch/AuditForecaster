@@ -4944,13 +4944,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const photos = await storage.getPhotosByJob(reportInstance.jobId);
       const forecasts = await storage.getForecastsByJob(reportInstance.jobId);
 
-      // Parse template sections
+      // Get template sections (handle both component-based and legacy templates)
       const template = await storage.getReportTemplate(reportInstance.templateId);
       if (!template) {
         return res.status(404).json({ message: "Template not found" });
       }
 
-      const templateSections = JSON.parse(template.sections);
+      // Check if template uses new component-based structure
+      let templateSections;
+      if (template.components && Array.isArray(template.components) && template.components.length > 0) {
+        // Convert components to simple sections format for PDF generator
+        templateSections = template.components.map((component, index) => ({
+          id: component.id,
+          title: component.properties?.label || `Field ${index + 1}`,
+          type: "Text", // Default to Text for now
+          order: index,
+        }));
+      } else {
+        // Legacy template - query sections table
+        const sections = await storage.getTemplateSections(reportInstance.templateId);
+        templateSections = sections.map((section, index) => ({
+          id: section.id,
+          title: section.title,
+          type: "Text",
+          order: section.orderIndex || index,
+        }));
+      }
 
       // Generate PDF
       const pdfBuffer = await generateReportPDF({
