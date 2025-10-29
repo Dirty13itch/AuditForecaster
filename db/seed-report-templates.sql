@@ -11,13 +11,12 @@ BEGIN;
 -- 1. Pre-Drywall Inspection Template
 -- ============================================================================
 
-INSERT INTO report_templates (id, name, description, category, inspection_type, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
+INSERT INTO report_templates (id, name, description, category, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Pre-Drywall Inspection',
   'RESNET-compliant pre-drywall inspection checklist for new construction',
-  'Inspection',
-  'Pre-Drywall',
+  'pre_drywall',
   1,
   'published',
   true,
@@ -95,13 +94,12 @@ VALUES (
 -- 2. Final Inspection Template
 -- ============================================================================
 
-INSERT INTO report_templates (id, name, description, category, inspection_type, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
+INSERT INTO report_templates (id, name, description, category, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Final Energy Audit',
   'Comprehensive final energy audit for HERS rating certification',
-  'Inspection',
-  'Final',
+  'final',
   1,
   'published',
   true,
@@ -207,13 +205,12 @@ VALUES (
 -- 3. HVAC Performance Test Template
 -- ============================================================================
 
-INSERT INTO report_templates (id, name, description, category, inspection_type, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
+INSERT INTO report_templates (id, name, description, category, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'HVAC Performance Test',
   'Detailed HVAC system performance testing and diagnostics',
-  'Testing',
-  'HVAC Performance',
+  'energy_audit',
   1,
   'published',
   true,
@@ -297,13 +294,12 @@ VALUES (
 -- 4. Insulation Verification Template
 -- ============================================================================
 
-INSERT INTO report_templates (id, name, description, category, inspection_type, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
+INSERT INTO report_templates (id, name, description, category, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Insulation Verification',
   'Thermal insulation installation quality verification',
-  'Inspection',
-  'Insulation',
+  'post_insulation',
   1,
   'published',
   true,
@@ -382,13 +378,12 @@ VALUES (
 -- 5. Air Sealing Checklist Template
 -- ============================================================================
 
-INSERT INTO report_templates (id, name, description, category, inspection_type, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
+INSERT INTO report_templates (id, name, description, category, version, status, is_active, components, layout, metadata, created_by, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Air Sealing Checklist',
   'Comprehensive air sealing inspection for building envelope',
-  'Checklist',
-  'Air Sealing',
+  'blower_door',
   1,
   'draft',
   true,
