@@ -404,22 +404,6 @@ export interface IStorage {
   archiveReportTemplate(id: string): Promise<ReportTemplate | undefined>;
   getTemplateVersions(parentTemplateId: string): Promise<ReportTemplate[]>;
 
-  // Template Sections
-  createTemplateSection(section: InsertTemplateSection): Promise<TemplateSection>;
-  getTemplateSection(id: string): Promise<TemplateSection | undefined>;
-  getTemplateSections(templateId: string): Promise<TemplateSection[]>;
-  updateTemplateSection(id: string, section: Partial<InsertTemplateSection>): Promise<TemplateSection | undefined>;
-  deleteTemplateSection(id: string): Promise<boolean>;
-  reorderTemplateSections(templateId: string, sectionIds: string[]): Promise<boolean>;
-
-  // Template Fields
-  createTemplateField(field: InsertTemplateField): Promise<TemplateField>;
-  getTemplateField(id: string): Promise<TemplateField | undefined>;
-  getTemplateFields(sectionId: string): Promise<TemplateField[]>;
-  updateTemplateField(id: string, field: Partial<InsertTemplateField>): Promise<TemplateField | undefined>;
-  deleteTemplateField(id: string): Promise<boolean>;
-  reorderTemplateFields(sectionId: string, fieldIds: string[]): Promise<boolean>;
-
   // Field Dependencies for Conditional Logic
   createFieldDependency(dependency: InsertFieldDependency): Promise<FieldDependency>;
   getFieldDependency(id: string): Promise<FieldDependency | undefined>;
@@ -2012,39 +1996,6 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     
-    // Duplicate sections and fields
-    const sections = await this.getTemplateSections(id);
-    for (const section of sections) {
-      const newSection = await this.createTemplateSection({
-        templateId: duplicate[0].id,
-        parentSectionId: section.parentSectionId as string | null,
-        title: section.title,
-        description: section.description,
-        orderIndex: section.orderIndex,
-        isRepeatable: section.isRepeatable,
-        minRepetitions: section.minRepetitions,
-        maxRepetitions: section.maxRepetitions,
-      });
-      
-      const fields = await this.getTemplateFields(section.id);
-      for (const field of fields) {
-        await this.createTemplateField({
-          sectionId: newSection.id,
-          fieldType: field.fieldType,
-          label: field.label,
-          description: field.description,
-          placeholder: field.placeholder,
-          orderIndex: field.orderIndex,
-          isRequired: field.isRequired,
-          isVisible: field.isVisible,
-          defaultValue: field.defaultValue,
-          configuration: field.configuration as any,
-          validationRules: field.validationRules as any,
-          conditionalLogic: field.conditionalLogic as any,
-        });
-      }
-    }
-    
     return duplicate[0];
   }
 
@@ -2117,125 +2068,6 @@ export class DatabaseStorage implements IStorage {
         eq(reportTemplates.parentTemplateId, parentTemplateId)
       ))
       .orderBy(desc(reportTemplates.version));
-  }
-
-  // Template Sections
-  async createTemplateSection(section: InsertTemplateSection): Promise<TemplateSection> {
-    const result = await db.insert(templateSections).values(section as any).returning();
-    return result[0];
-  }
-
-  async getTemplateSection(id: string): Promise<TemplateSection | undefined> {
-    const result = await db.select().from(templateSections).where(eq(templateSections.id, id)).limit(1);
-    return result[0];
-  }
-
-  async getTemplateSections(templateId: string): Promise<TemplateSection[]> {
-    return await db.select()
-      .from(templateSections)
-      .where(eq(templateSections.templateId, templateId))
-      .orderBy(asc(templateSections.orderIndex));
-  }
-
-  async updateTemplateSection(id: string, updates: Partial<InsertTemplateSection>): Promise<TemplateSection | undefined> {
-    const result = await db.update(templateSections)
-      .set(updates)
-      .where(eq(templateSections.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async deleteTemplateSection(id: string): Promise<boolean> {
-    const result = await db.delete(templateSections).where(eq(templateSections.id, id)).returning();
-    return result.length > 0;
-  }
-
-  async reorderTemplateSections(templateId: string, sectionIds: string[]): Promise<boolean> {
-    const updates = sectionIds.map((sectionId, index) => 
-      db.update(templateSections)
-        .set({ orderIndex: index })
-        .where(and(
-          eq(templateSections.id, sectionId),
-          eq(templateSections.templateId, templateId)
-        ))
-    );
-    
-    await Promise.all(updates);
-    return true;
-  }
-
-  // Template Fields
-  async createTemplateField(field: InsertTemplateField): Promise<TemplateField> {
-    const result = await db.insert(templateFields).values(field).returning();
-    return result[0];
-  }
-
-  async getTemplateFieldById(id: string): Promise<TemplateField | undefined> {
-    const result = await db.select().from(templateFields).where(eq(templateFields.id, id)).limit(1);
-    return result[0];
-  }
-
-  async getTemplateFieldsByTemplateId(templateId: string): Promise<TemplateField[]> {
-    return await db.select({
-      id: templateFields.id,
-      sectionId: templateFields.sectionId,
-      fieldType: templateFields.fieldType,
-      label: templateFields.label,
-      description: templateFields.description,
-      placeholder: templateFields.placeholder,
-      orderIndex: templateFields.orderIndex,
-      isRequired: templateFields.isRequired,
-      isVisible: templateFields.isVisible,
-      defaultValue: templateFields.defaultValue,
-      configuration: templateFields.configuration,
-      validationRules: templateFields.validationRules,
-      dependsOn: templateFields.dependsOn,
-      createdAt: templateFields.createdAt,
-      updatedAt: templateFields.updatedAt,
-    })
-      .from(templateFields)
-      .innerJoin(templateSections, eq(templateFields.sectionId, templateSections.id))
-      .where(eq(templateSections.templateId, templateId))
-      .orderBy(asc(templateSections.orderIndex), asc(templateFields.orderIndex));
-  }
-
-  async getTemplateField(id: string): Promise<TemplateField | undefined> {
-    const result = await db.select().from(templateFields).where(eq(templateFields.id, id)).limit(1);
-    return result[0];
-  }
-
-  async getTemplateFields(sectionId: string): Promise<TemplateField[]> {
-    return await db.select()
-      .from(templateFields)
-      .where(eq(templateFields.sectionId, sectionId))
-      .orderBy(asc(templateFields.orderIndex));
-  }
-
-  async updateTemplateField(id: string, updates: Partial<InsertTemplateField>): Promise<TemplateField | undefined> {
-    const result = await db.update(templateFields)
-      .set(updates)
-      .where(eq(templateFields.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async deleteTemplateField(id: string): Promise<boolean> {
-    const result = await db.delete(templateFields).where(eq(templateFields.id, id)).returning();
-    return result.length > 0;
-  }
-
-  async reorderTemplateFields(sectionId: string, fieldIds: string[]): Promise<boolean> {
-    const updates = fieldIds.map((fieldId, index) => 
-      db.update(templateFields)
-        .set({ orderIndex: index })
-        .where(and(
-          eq(templateFields.id, fieldId),
-          eq(templateFields.sectionId, sectionId)
-        ))
-    );
-    
-    await Promise.all(updates);
-    return true;
   }
 
   // Field Dependencies for Conditional Logic
