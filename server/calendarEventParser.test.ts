@@ -27,7 +27,9 @@ class MockStorage implements IStorage {
   async getUserByUsername(): Promise<any> { return undefined; }
   async upsertUser(): Promise<any> { return {}; }
   async createBuilder(): Promise<any> { return {}; }
-  async getBuilder(): Promise<any> { return undefined; }
+  async getBuilder(id: string): Promise<Builder | undefined> {
+    return this.builders.get(id);
+  }
   async getAllBuilders(): Promise<any[]> { return []; }
   async getBuildersPaginated(): Promise<any> { return { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }; }
   async updateBuilder(): Promise<any> { return undefined; }
@@ -766,7 +768,7 @@ describe('parseCalendarEvent', () => {
         }
       ]);
       
-      storage.getBuilderById = async () => {
+      storage.getBuilder = async () => {
         throw new Error('Builder lookup failed');
       };
       
