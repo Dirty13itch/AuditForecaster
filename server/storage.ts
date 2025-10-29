@@ -116,6 +116,8 @@ import {
   type InsertNotification,
   type NotificationPreference,
   type InsertNotificationPreference,
+  type ScheduledExport,
+  type InsertScheduledExport,
   type InspectorWorkload,
   type InsertInspectorWorkload,
   type AssignmentHistory,
@@ -126,6 +128,7 @@ import {
   type InsertPendingCalendarEvent,
   notifications,
   notificationPreferences,
+  scheduledExports,
   inspectorWorkload,
   assignmentHistory,
   inspectorPreferences,
@@ -7858,6 +7861,65 @@ export class DatabaseStorage implements IStorage {
       .where(eq(qaChecklistResponses.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  // Scheduled Exports Implementation
+  async createScheduledExport(scheduledExport: InsertScheduledExport): Promise<ScheduledExport> {
+    const result = await db.insert(scheduledExports).values(scheduledExport).returning();
+    return result[0];
+  }
+
+  async getScheduledExport(id: string): Promise<ScheduledExport | undefined> {
+    const result = await db.select()
+      .from(scheduledExports)
+      .where(eq(scheduledExports.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async listScheduledExports(userId: string): Promise<ScheduledExport[]> {
+    return await db.select()
+      .from(scheduledExports)
+      .where(eq(scheduledExports.userId, userId))
+      .orderBy(desc(scheduledExports.createdAt));
+  }
+
+  async updateScheduledExport(id: string, updates: Partial<InsertScheduledExport>): Promise<ScheduledExport> {
+    const result = await db.update(scheduledExports)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(scheduledExports.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteScheduledExport(id: string): Promise<void> {
+    await db.delete(scheduledExports).where(eq(scheduledExports.id, id));
+  }
+
+  async updateScheduledExportLastRun(id: string, lastRun: Date, nextRun: Date | null, failureLog?: any): Promise<void> {
+    await db.update(scheduledExports)
+      .set({ 
+        lastRun, 
+        nextRun,
+        failureLog: failureLog || null,
+        updatedAt: new Date() 
+      })
+      .where(eq(scheduledExports.id, id));
+  }
+
+  async updateScheduledExportEnabled(id: string, enabled: boolean): Promise<ScheduledExport> {
+    const result = await db.update(scheduledExports)
+      .set({ enabled, updatedAt: new Date() })
+      .where(eq(scheduledExports.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async listEnabledScheduledExports(): Promise<ScheduledExport[]> {
+    return await db.select()
+      .from(scheduledExports)
+      .where(eq(scheduledExports.enabled, true))
+      .orderBy(asc(scheduledExports.nextRun));
   }
 }
 

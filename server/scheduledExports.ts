@@ -57,9 +57,7 @@ class ScheduledExportService {
   }
 
   private async loadScheduledExports(): Promise<ScheduledExport[]> {
-    // TODO: Load from database when the schema is added
-    // For now, return empty array
-    return [];
+    return await storage.listEnabledScheduledExports();
   }
 
   private getCronExpression(exp: ScheduledExport): string {
@@ -177,11 +175,13 @@ class ScheduledExportService {
       }
 
       // Update last run time
-      exp.lastRun = new Date();
-      exp.nextRun = this.calculateNextRun(exp);
+      const lastRun = new Date();
+      const nextRun = this.calculateNextRun(exp);
+      exp.lastRun = lastRun;
+      exp.nextRun = nextRun;
       this.exports.set(exp.id, exp);
       
-      // TODO: Update in database
+      await storage.updateScheduledExportLastRun(exp.id, lastRun, nextRun);
       
     } catch (error) {
       serverLogger.error('[ScheduledExports] Export execution failed', {
@@ -189,7 +189,13 @@ class ScheduledExportService {
         error,
       });
       
-      // TODO: Store error in database for user visibility
+      // Store error in database for user visibility
+      const failureLog = {
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+        attemptCount: 1,
+      };
+      await storage.updateScheduledExportLastRun(exp.id, new Date(), exp.nextRun || null, [failureLog]);
     }
   }
 
@@ -225,7 +231,7 @@ class ScheduledExportService {
       this.executeExport(exp);
     }, {
       scheduled: true,
-      timezone: 'America/New_York', // TODO: Make this configurable
+      timezone: 'America/Chicago', // Minneapolis/St Paul timezone
     });
 
     this.jobs.set(exp.id, job);
@@ -241,15 +247,13 @@ class ScheduledExportService {
     });
   }
 
-  public async createScheduledExport(data: Omit<ScheduledExport, 'id' | 'createdAt' | 'updatedAt'>): Promise<ScheduledExport> {
-    const exp: ScheduledExport = {
+  public async createScheduledExport(data: Omit<ScheduledExport, 'id' | 'createdAt' | 'updatedAt' | 'lastRun' | 'nextRun' | 'failureLog'>): Promise<ScheduledExport> {
+    const nextRun = data.enabled ? this.calculateNextRun({ ...data, time: data.time } as ScheduledExport) : null;
+    
+    const exp = await storage.createScheduledExport({
       ...data,
-      id: `sched_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    // TODO: Save to database
+      nextRun,
+    });
     
     if (exp.enabled) {
       this.scheduleExport(exp);
@@ -259,19 +263,12 @@ class ScheduledExportService {
   }
 
   public async updateScheduledExport(id: string, updates: Partial<ScheduledExport>): Promise<ScheduledExport | null> {
-    const exp = this.exports.get(id);
+    const exp = await storage.getScheduledExport(id);
     if (!exp) {
       return null;
     }
 
-    const updated: ScheduledExport = {
-      ...exp,
-      ...updates,
-      id: exp.id, // Ensure ID doesn't change
-      updatedAt: new Date(),
-    };
-
-    // TODO: Update in database
+    const updated = await storage.updateScheduledExport(id, updates);
     
     // Reschedule if necessary
     this.scheduleExport(updated);
@@ -288,7 +285,7 @@ class ScheduledExportService {
     
     this.exports.delete(id);
     
-    // TODO: Delete from database
+    await storage.deleteScheduledExport(id);
     
     return true;
   }

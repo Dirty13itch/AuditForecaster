@@ -1319,6 +1319,39 @@ export const notificationPreferences = pgTable("notification_preferences", {
   index("idx_notification_preferences_type").on(table.notificationType),
 ]);
 
+// Scheduled Exports Table
+export const scheduledExports = pgTable("scheduled_exports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  dataType: text("data_type", {
+    enum: ["jobs", "financial", "equipment", "qa-scores", "analytics", "photos"]
+  }).notNull(),
+  format: text("format", {
+    enum: ["csv", "xlsx", "pdf", "json"]
+  }).notNull(),
+  frequency: text("frequency", {
+    enum: ["daily", "weekly", "monthly"]
+  }).notNull(),
+  time: text("time").notNull(), // Format: "HH:mm"
+  dayOfWeek: integer("day_of_week"), // 0-6 for weekly exports (0=Sunday)
+  dayOfMonth: integer("day_of_month"), // 1-31 for monthly exports
+  recipients: jsonb("recipients").notNull(), // Array of email addresses
+  options: jsonb("options"), // Export-specific options (filters, date ranges, etc.)
+  enabled: boolean("enabled").default(true),
+  lastRun: timestamp("last_run"),
+  nextRun: timestamp("next_run"),
+  failureLog: jsonb("failure_log"), // Array of {timestamp, error, attemptCount}
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_scheduled_exports_user_id").on(table.userId),
+  index("idx_scheduled_exports_user_enabled").on(table.userId, table.enabled),
+  index("idx_scheduled_exports_frequency").on(table.frequency),
+  index("idx_scheduled_exports_next_run").on(table.nextRun),
+  index("idx_scheduled_exports_enabled_next_run").on(table.enabled, table.nextRun),
+]);
+
 // 45L Tax Credit Tables
 export const taxCreditProjects = pgTable("tax_credit_projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1768,6 +1801,20 @@ export const insertNotificationPreferenceSchema = createInsertSchema(notificatio
   updatedAt: true 
 });
 
+export const insertScheduledExportSchema = createInsertSchema(scheduledExports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastRun: true,
+  nextRun: true,
+  failureLog: true,
+}).extend({
+  recipients: z.array(z.string().email()),
+  time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Time must be in HH:mm format"),
+  dayOfWeek: z.number().min(0).max(6).nullable().optional(),
+  dayOfMonth: z.number().min(1).max(31).nullable().optional(),
+});
+
 // Inspector Assignment Insert Schemas
 export const insertInspectorWorkloadSchema = createInsertSchema(inspectorWorkload).omit({ 
   id: true, 
@@ -1961,6 +2008,16 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
+
+// Scheduled Export Schemas
+export const updateScheduledExportSchema = insertScheduledExportSchema.omit({
+  userId: true,
+}).partial();
+
+// Scheduled Export Types
+export type ScheduledExport = typeof scheduledExports.$inferSelect;
+export type InsertScheduledExport = z.infer<typeof insertScheduledExportSchema>;
+export type UpdateScheduledExport = z.infer<typeof updateScheduledExportSchema>;
 
 // QA Types
 export type QaInspectionScore = typeof qaInspectionScores.$inferSelect;

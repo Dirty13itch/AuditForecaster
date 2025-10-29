@@ -59,6 +59,8 @@ import {
   insertEquipmentMaintenanceSchema,
   insertEquipmentCheckoutSchema,
   insertReportFieldValueSchema,
+  insertScheduledExportSchema,
+  updateScheduledExportSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -73,6 +75,7 @@ import {
   updateReportComplianceStatus,
 } from "./complianceService";
 import { processCalendarEvents, type CalendarEvent } from './calendarImportService';
+import { scheduledExportService } from './scheduledExports';
 import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
@@ -8399,6 +8402,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch equipment alerts');
+      res.status(status).json({ message });
+    }
+  });
+
+  // ==============================================================
+  // Scheduled Exports API Endpoints
+  // ==============================================================
+
+  app.get("/api/scheduled-exports", isAuthenticated, async (req: any, res) => {
+    try {
+      const exports = await storage.listScheduledExports(req.user.id);
+      res.json(exports);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'list scheduled exports');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/scheduled-exports/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const exp = await storage.getScheduledExport(req.params.id);
+      if (!exp) {
+        return res.status(404).json({ message: "Scheduled export not found" });
+      }
+      
+      // Verify ownership
+      if (exp.userId !== req.user.id) {
+        return res.status(403).json({ message: "You don't have permission to access this export" });
+      }
+      
+      res.json(exp);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get scheduled export');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/scheduled-exports", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertScheduledExportSchema.parse({
+        ...req.body,
+        userId: req.user.id,
+      });
+
+      const exp = await scheduledExportService.createScheduledExport(validated);
+      res.status(201).json(exp);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create scheduled export');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/scheduled-exports/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      // Verify ownership before update
+      const existing = await storage.getScheduledExport(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Scheduled export not found" });
+      }
+      
+      if (existing.userId !== req.user.id) {
+        return res.status(403).json({ message: "You don't have permission to update this export" });
+      }
+      
+      // Use updateScheduledExportSchema which omits userId to prevent ownership reassignment
+      const updates = updateScheduledExportSchema.parse(req.body);
+      const exp = await scheduledExportService.updateScheduledExport(req.params.id, updates);
+      
+      if (!exp) {
+        return res.status(404).json({ message: "Scheduled export not found" });
+      }
+      
+      res.json(exp);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update scheduled export');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/scheduled-exports/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      // Verify ownership before delete
+      const existing = await storage.getScheduledExport(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Scheduled export not found" });
+      }
+      
+      if (existing.userId !== req.user.id) {
+        return res.status(403).json({ message: "You don't have permission to delete this export" });
+      }
+      
+      await scheduledExportService.deleteScheduledExport(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete scheduled export');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/scheduled-exports/:id/enable", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      // Verify ownership before enable
+      const existing = await storage.getScheduledExport(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Scheduled export not found" });
+      }
+      
+      if (existing.userId !== req.user.id) {
+        return res.status(403).json({ message: "You don't have permission to enable this export" });
+      }
+      
+      const exp = await storage.updateScheduledExportEnabled(req.params.id, true);
+      scheduledExportService.scheduleExport(exp);
+      res.json(exp);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'enable scheduled export');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/scheduled-exports/:id/disable", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      // Verify ownership before disable
+      const existing = await storage.getScheduledExport(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Scheduled export not found" });
+      }
+      
+      if (existing.userId !== req.user.id) {
+        return res.status(403).json({ message: "You don't have permission to disable this export" });
+      }
+      
+      const exp = await storage.updateScheduledExportEnabled(req.params.id, false);
+      res.json(exp);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'disable scheduled export');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/scheduled-exports/:id/test", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      // Verify ownership before test run
+      const existing = await storage.getScheduledExport(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Scheduled export not found" });
+      }
+      
+      if (existing.userId !== req.user.id) {
+        return res.status(403).json({ message: "You don't have permission to test this export" });
+      }
+      
+      await scheduledExportService.runExportNow(req.params.id);
+      res.json({ message: "Export test started" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'test scheduled export');
       res.status(status).json({ message });
     }
   });
