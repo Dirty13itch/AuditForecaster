@@ -13,35 +13,43 @@ The backend is built with **Express.js** and **Node.js** in **TypeScript**. **Po
 
 ## Planned Features
 
-### **MileIQ-Style Mileage Tracking (Vertical Slice - In Progress)**
+### **MileIQ-Style Mileage Tracking (Vertical Slice - ✅ COMPLETE)**
 **User Story**: As a field inspector, I can have my drives automatically detected and quickly classify them with a swipe gesture (business/personal) so that I can effortlessly track tax-deductible mileage without manual start/stop actions.
 
-**Scope**:
-- ✅ 24/7 automatic GPS trip detection (service worker + background geolocation)
-- ✅ Unclassified drives queue (card-based feed)
-- ✅ Swipe gesture classification (right=business, left=personal)
-- ✅ Smooth animations (card fly-off, color feedback using framer-motion)
-- ✅ Offline persistence (IndexedDB queue)
-- ✅ Monthly summary dashboard (total/business/personal miles + tax deduction at $0.70/mile)
-- ✅ CSV export for tax reporting
+**Completed Features** (October 2025):
+- ✅ Backend API (4 production-ready endpoints with N+1 optimization, rate limiting, RBAC)
+- ✅ Swipe-to-classify UI with framer-motion animations and dual accessibility buttons
+- ✅ Enhanced monthly summary with updated IRS rate ($0.70/mile for 2025)
+- ✅ CSV export for tax reporting (IRS-compliant format)
+- ✅ Comprehensive error handling (useEffect toasts, retry buttons, truthful error states)
+- ✅ E2E testing completed (all scenarios passing)
+- ✅ Sidebar navigation link added for feature discoverability
 
 **API Contract**:
-- `GET /api/mileage/unclassified` - Fetch drives awaiting classification
+- `GET /api/mileage/unclassified` - Fetch drives awaiting classification (returns {drives: MileageLog[]})
 - `PUT /api/mileage/:id/classify` - Classify drive as business/personal
-- `GET /api/mileage/summary?month=YYYY-MM` - Monthly statistics
+- `GET /api/mileage/summary?month=YYYY-MM` - Monthly statistics (totalDrives, businessMiles, personalMiles, taxDeduction)
 - `GET /api/mileage/export?month=YYYY-MM&format=csv` - IRS-compliant export
 
 **Technical Architecture**:
-- **Background Detection**: Enhanced TripTrackerService with auto-start/stop based on speed thresholds (>5 m/s start, <1.5 m/s stop)
-- **State Machine**: `vehicleState` enum progression: `idle → monitoring → recording → unclassified → classified`
+- **Backend Optimization**: JSON aggregation eliminates N+1 queries, compound indexes on (vehicleState, date)
+- **State Machine**: `vehicleState` enum progression: `idle → monitoring → recording → unclassified → classified` (409 responses enforce state transitions)
 - **Swipe Gestures**: Custom hook `useSwipeGesture` with 40% width threshold, spring physics for bounce-back
+- **Accessibility**: Dual input methods (swipe gestures + explicit Personal/Business buttons)
 - **Visual Feedback**: Green glow (business) / Blue glow (personal) during drag, smooth card exit animations
-- **Query Optimization**: JSON aggregation for route points, compound indexes on (vehicleState, date)
+- **Error Resilience**: Toast spam prevention via useEffect, explicit error states with retry invalidation
+- **Data Normalization**: Custom queryFn extracts drives array from API response object
 
-**Out of Scope (Next Slices)**:
+**Production Readiness**:
+- Three complete vertical slices implemented (Backend → Swipe UI → Summary)
+- All slices passed architect review for production quality
+- Critical bugs fixed (runtime crash, toast spam, misleading zero values)
+- Comprehensive testing validates all user flows
+
+**Out of Scope (Future Enhancements)**:
 - AI pattern learning / frequent routes auto-classification
-- Work hours feature
-- Push notifications
+- Work hours auto-classification feature
+- Push notifications for drive detection
 - PDF report generation
 - Custom purposes (medical, charity)
 

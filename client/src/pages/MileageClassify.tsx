@@ -17,6 +17,12 @@ export default function MileageClassify() {
 
   const { data: unclassifiedDrives, isLoading } = useQuery<MileageLog[]>({
     queryKey: ['/api/mileage/unclassified'],
+    queryFn: async () => {
+      const response = await fetch('/api/mileage/unclassified');
+      if (!response.ok) throw new Error('Failed to fetch unclassified drives');
+      const data = await response.json();
+      return data.drives; // Extract drives array from response
+    },
   });
 
   const classifyMutation = useMutation({
