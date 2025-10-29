@@ -26,13 +26,53 @@ import type {
   ReportFieldValue,
   TemplateSection,
   TemplateField,
-  FieldDependency
+  FieldDependency,
+  ReportTemplate
 } from "@shared/schema";
 
 interface SectionInstanceData {
   sectionId: string;
   instanceIndex: number;
   fieldValues: Record<string, any>;
+}
+
+type ComponentType = 
+  | "text" 
+  | "textarea" 
+  | "richtext"
+  | "number"
+  | "decimal"
+  | "calculated"
+  | "date"
+  | "datetime"
+  | "time"
+  | "select"
+  | "multiselect"
+  | "checkbox"
+  | "radio"
+  | "photo"
+  | "signature";
+
+interface TemplateComponent {
+  id: string;
+  type: ComponentType;
+  properties: {
+    label?: string;
+    placeholder?: string;
+    required?: boolean;
+    description?: string;
+    defaultValue?: any;
+    validation?: {
+      min?: number;
+      max?: number;
+      pattern?: string;
+      custom?: string;
+    };
+    options?: Array<{ value: string; label: string }>;
+    formula?: string;
+    dependencies?: string[];
+    rows?: number;
+  };
 }
 
 function FieldInput({ 
@@ -278,6 +318,241 @@ function FieldInput({
   }
 }
 
+function ComponentInput({ 
+  component, 
+  value, 
+  onChange, 
+  disabled = false 
+}: { 
+  component: TemplateComponent;
+  value: any;
+  onChange: (value: any) => void;
+  disabled?: boolean;
+}) {
+  const [date, setDate] = useState<Date | undefined>(value ? new Date(value) : undefined);
+  const props = component.properties;
+
+  switch (component.type) {
+    case "text":
+      return (
+        <Input
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={props.placeholder || ""}
+          disabled={disabled}
+          data-testid={`input-component-${component.id}`}
+        />
+      );
+
+    case "textarea":
+      return (
+        <Textarea
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={props.placeholder || ""}
+          disabled={disabled}
+          rows={props.rows || 4}
+          data-testid={`textarea-component-${component.id}`}
+        />
+      );
+
+    case "number":
+    case "decimal":
+      return (
+        <Input
+          type="number"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : null)}
+          placeholder={props.placeholder || ""}
+          disabled={disabled}
+          min={props.validation?.min}
+          max={props.validation?.max}
+          step={component.type === "decimal" ? "0.01" : "1"}
+          data-testid={`input-number-${component.id}`}
+        />
+      );
+
+    case "select":
+      return (
+        <Select
+          value={value || ""}
+          onValueChange={onChange}
+          disabled={disabled}
+        >
+          <SelectTrigger data-testid={`select-component-${component.id}`}>
+            <SelectValue placeholder={props.placeholder || "Select an option"} />
+          </SelectTrigger>
+          <SelectContent>
+            {props.options?.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+
+    case "multiselect":
+      const selectedValues = value ? (Array.isArray(value) ? value : [value]) : [];
+      return (
+        <div className="space-y-2">
+          {props.options?.map((option) => (
+            <label key={option.value} className="flex items-center gap-2">
+              <Checkbox
+                checked={selectedValues.includes(option.value)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    onChange([...selectedValues, option.value]);
+                  } else {
+                    onChange(selectedValues.filter((v: string) => v !== option.value));
+                  }
+                }}
+                disabled={disabled}
+                data-testid={`checkbox-option-${component.id}-${option.value}`}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+      );
+
+    case "radio":
+      return (
+        <RadioGroup
+          value={value || ""}
+          onValueChange={onChange}
+          disabled={disabled}
+        >
+          <div className="space-y-2">
+            {props.options?.map((option) => (
+              <label key={option.value} className="flex items-center gap-2">
+                <RadioGroupItem value={option.value} />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </RadioGroup>
+      );
+
+    case "checkbox":
+      return (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={!!value}
+            onCheckedChange={(checked) => onChange(!!checked)}
+            disabled={disabled}
+            data-testid={`checkbox-component-${component.id}`}
+          />
+          <span className="text-sm">{props.label || "Check this option"}</span>
+        </div>
+      );
+
+    case "date":
+      return (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full justify-start text-left font-normal"
+              disabled={disabled}
+              data-testid={`button-date-${component.id}`}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {date ? format(date, "PPP") : <span>Pick a date</span>}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0">
+            <Calendar
+              mode="single"
+              selected={date}
+              onSelect={(newDate) => {
+                setDate(newDate);
+                onChange(newDate?.toISOString());
+              }}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+      );
+
+    case "time":
+      return (
+        <Input
+          type="time"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          data-testid={`input-time-${component.id}`}
+        />
+      );
+
+    case "datetime":
+      return (
+        <Input
+          type="datetime-local"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          data-testid={`input-datetime-${component.id}`}
+        />
+      );
+
+    case "photo":
+      return (
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={disabled}
+            data-testid={`button-photo-${component.id}`}
+          >
+            <Camera className="mr-2 h-4 w-4" />
+            Capture/Upload Photo
+          </Button>
+          {value && (
+            <div className="text-sm text-muted-foreground">
+              {Array.isArray(value) ? `${value.length} photos attached` : "1 photo attached"}
+            </div>
+          )}
+        </div>
+      );
+
+    case "signature":
+      return (
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={disabled}
+            data-testid={`button-signature-${component.id}`}
+          >
+            <Signature className="mr-2 h-4 w-4" />
+            Add Signature
+          </Button>
+          {value && (
+            <div className="text-sm text-muted-foreground">
+              Signature captured
+            </div>
+          )}
+        </div>
+      );
+
+    case "calculated":
+      return (
+        <div className="p-3 bg-muted rounded-md">
+          <span className="font-mono">{value || "—"}</span>
+        </div>
+      );
+
+    default:
+      return (
+        <div className="text-muted-foreground">
+          Unsupported component type: {component.type}
+        </div>
+      );
+  }
+}
+
 function SectionInstance({
   section,
   fields,
@@ -386,16 +661,27 @@ export default function ReportFilloutPage() {
     enabled: !!id,
   });
 
-  // Fetch template sections
-  const { data: sections = [], isLoading: isLoadingSections } = useQuery<TemplateSection[]>({
-    queryKey: ["/api/report-templates", reportInstance?.templateId, "sections"],
+  // Fetch full template (for component-based templates)
+  const { data: template, isLoading: isLoadingTemplate } = useQuery<ReportTemplate>({
+    queryKey: ["/api/report-templates", reportInstance?.templateId],
     enabled: !!reportInstance?.templateId,
   });
 
-  // Fetch template fields
+  // Check if this is a component-based template
+  const isComponentBasedTemplate = template?.components && 
+    Array.isArray(template.components) && 
+    (template.components as any[]).length > 0;
+
+  // Fetch template sections (legacy templates only)
+  const { data: sections = [], isLoading: isLoadingSections } = useQuery<TemplateSection[]>({
+    queryKey: ["/api/report-templates", reportInstance?.templateId, "sections"],
+    enabled: !!reportInstance?.templateId && !isComponentBasedTemplate,
+  });
+
+  // Fetch template fields (legacy templates only)
   const { data: fields = [], isLoading: isLoadingFields } = useQuery<TemplateField[]>({
     queryKey: ["/api/report-templates", reportInstance?.templateId, "fields"],
-    enabled: !!reportInstance?.templateId,
+    enabled: !!reportInstance?.templateId && !isComponentBasedTemplate,
   });
 
   // Fetch field dependencies
@@ -558,6 +844,52 @@ export default function ReportFilloutPage() {
     loadOfflineData();
   }, [id, isOnline, toast]);
 
+  // Handle component value changes (for component-based templates)
+  const handleComponentChange = (componentId: string, value: any) => {
+    // Update local state
+    const newFieldValues = {
+      ...fieldValues,
+      [componentId]: value
+    };
+    setFieldValues(newFieldValues);
+    setUnsavedChanges(true);
+    
+    // Save to backend (will be queued if offline)
+    const fieldData: any = {
+      reportInstanceId: id,
+      templateFieldId: componentId, // Use component.id as templateFieldId for compatibility
+    };
+    
+    // Set the appropriate value field based on component type
+    const components = (template?.components as any[]) || [];
+    const component = components.find((c: any) => c.id === componentId);
+    if (component) {
+      switch (component.type) {
+        case "number":
+        case "decimal":
+        case "calculated":
+          fieldData.numberValue = value;
+          break;
+        case "date":
+        case "datetime":
+          fieldData.dateValue = value;
+          break;
+        case "multiselect":
+        case "photo":
+          fieldData.jsonValue = value;
+          break;
+        case "checkbox":
+          fieldData.booleanValue = !!value;
+          fieldData.textValue = value ? "yes" : "no";
+          break;
+        default:
+          fieldData.textValue = value;
+      }
+    }
+    
+    saveFieldValue.mutate(fieldData);
+  };
+
   const handleFieldChange = (sectionId: string, instanceIndex: number, fieldId: string, value: any) => {
     // Update local state
     const newFieldValues = {
@@ -632,7 +964,7 @@ export default function ReportFilloutPage() {
     updateStatus.mutate("completed");
   };
 
-  if (isLoadingInstance || isLoadingSections || isLoadingFields) {
+  if (isLoadingInstance || isLoadingTemplate || (isLoadingSections && !isComponentBasedTemplate) || (isLoadingFields && !isComponentBasedTemplate)) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center space-y-4">
@@ -693,7 +1025,7 @@ export default function ReportFilloutPage() {
     }
   };
 
-  // Group fields by section
+  // Group fields by section (for legacy templates)
   const fieldsBySection: Record<string, TemplateField[]> = {};
   fields.forEach((field) => {
     if (!fieldsBySection[field.sectionId]) {
@@ -701,6 +1033,9 @@ export default function ReportFilloutPage() {
     }
     fieldsBySection[field.sectionId].push(field);
   });
+
+  // Get components for component-based templates
+  const components = (template?.components as any[]) || [];
 
   return (
     <div className="container mx-auto p-6">
@@ -710,9 +1045,16 @@ export default function ReportFilloutPage() {
             <h1 className="text-3xl font-bold">Report #{reportInstance.id.slice(0, 8)}</h1>
             <p className="text-muted-foreground mt-1">
               Job: {reportInstance.jobId} | Template: v{reportInstance.templateVersion}
+              {isComponentBasedTemplate && <Badge variant="outline" className="ml-2">New Designer</Badge>}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!isOnline && (
+              <Badge variant="outline" className="bg-orange-100 dark:bg-orange-900">
+                <WifiOff className="h-3 w-3 mr-1" />
+                Offline
+              </Badge>
+            )}
             <Badge variant={getStatusVariant(reportInstance.status)}>
               <span className="mr-1">{getStatusIcon(reportInstance.status)}</span>
               {reportInstance.status}
@@ -739,23 +1081,72 @@ export default function ReportFilloutPage() {
       </div>
 
       <ScrollArea className="h-[calc(100vh-180px)]">
-        {sections.map((section) => {
-          const sectionFields = fieldsBySection[section.id] || [];
-          const instances = sectionInstances.filter(inst => inst.sectionId === section.id);
-          
-          return instances.map((instance, idx) => (
-            <SectionInstance
-              key={`${section.id}-${idx}`}
-              section={section}
-              fields={sectionFields}
-              instanceData={instance}
-              fieldStates={fieldStates}
-              onFieldChange={handleFieldChange}
-              isExpanded={expandedSections.has(section.id)}
-              onToggleExpanded={() => toggleSection(section.id)}
-            />
-          ));
-        })}
+        {isComponentBasedTemplate ? (
+          // Render component-based template
+          <div className="space-y-6">
+            {components.length === 0 ? (
+              <Card>
+                <CardContent className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No components found</h3>
+                    <p className="text-muted-foreground">
+                      This template has no components. Please edit the template in the designer.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              components.map((component: TemplateComponent) => {
+                const props = component.properties;
+                const isRequired = props.required || false;
+                
+                return (
+                  <Card key={component.id} className="mb-4">
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor={`component-${component.id}`} className="flex items-center gap-2">
+                            {props.label || component.type}
+                            {isRequired && <span className="text-destructive">*</span>}
+                          </Label>
+                          {props.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{props.description}</p>
+                          )}
+                        </div>
+                        <ComponentInput
+                          component={component}
+                          value={fieldValues[component.id]}
+                          onChange={(value) => handleComponentChange(component.id, value)}
+                          disabled={component.type === "calculated"}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          // Render legacy section-based template
+          sections.map((section) => {
+            const sectionFields = fieldsBySection[section.id] || [];
+            const instances = sectionInstances.filter(inst => inst.sectionId === section.id);
+            
+            return instances.map((instance, idx) => (
+              <SectionInstance
+                key={`${section.id}-${idx}`}
+                section={section}
+                fields={sectionFields}
+                instanceData={instance}
+                fieldStates={fieldStates}
+                onFieldChange={handleFieldChange}
+                isExpanded={expandedSections.has(section.id)}
+                onToggleExpanded={() => toggleSection(section.id)}
+              />
+            ));
+          })
+        )}
       </ScrollArea>
     </div>
   );
