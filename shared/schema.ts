@@ -546,61 +546,6 @@ export const reportTemplates = pgTable("report_templates", {
   index("idx_report_templates_parent_id").on(table.parentTemplateId),
 ]);
 
-// Template Sections - Hierarchical sections within templates
-export const templateSections = pgTable("template_sections", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  templateId: varchar("template_id").notNull().references(() => reportTemplates.id, { onDelete: 'cascade' }),
-  parentSectionId: varchar("parent_section_id"),
-  title: text("title").notNull(),
-  description: text("description"),
-  orderIndex: integer("order_index").notNull(),
-  isRepeatable: boolean("is_repeatable").default(false),
-  minRepetitions: integer("min_repetitions").default(1),
-  maxRepetitions: integer("max_repetitions"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("idx_template_sections_template_id").on(table.templateId),
-  index("idx_template_sections_parent_id").on(table.parentSectionId),
-  index("idx_template_sections_order").on(table.templateId, table.orderIndex),
-]);
-
-// Template Fields - Various field types with configuration
-export const templateFields = pgTable("template_fields", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  sectionId: varchar("section_id").notNull().references(() => templateSections.id, { onDelete: 'cascade' }),
-  fieldType: text("field_type", {
-    enum: ["text", "textarea", "number", "checkbox", "select", "multiselect", "yes_no_na", "scale", "date", "time", "datetime", "photo", "photo_group", "signature", "calculation", "conditional_calculation"]
-  }).notNull(),
-  label: text("label").notNull(),
-  description: text("description"),
-  placeholder: text("placeholder"),
-  orderIndex: integer("order_index").notNull(),
-  isRequired: boolean("is_required").default(false),
-  isVisible: boolean("is_visible").default(true),
-  defaultValue: text("default_value"),
-  // Field-specific configuration stored as JSONB
-  configuration: jsonb("configuration"),
-  /* Configuration examples:
-   * number: { min: 0, max: 100, decimals: 2, unit: "kg" }
-   * select/multiselect: { options: [{ value: "opt1", label: "Option 1" }] }
-   * scale: { min: 1, max: 5, labels: { 1: "Poor", 5: "Excellent" } }
-   * photo: { minCount: 1, maxCount: 10, allowAnnotations: true }
-   * calculation: { formula: "field1 + field2", dependencies: ["field1", "field2"] }
-   */
-  // Enhanced conditional logic fields
-  conditions: jsonb("conditions"), // Array of condition objects for show/hide logic
-  calculation: jsonb("calculation"), // Formula and dependent field references for calculated fields
-  validationRules: jsonb("validation_rules"), // Custom validation based on other fields
-  conditionalLogic: jsonb("conditional_logic"), // Legacy field - kept for compatibility
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("idx_template_fields_section_id").on(table.sectionId),
-  index("idx_template_fields_field_type").on(table.fieldType),
-  index("idx_template_fields_order").on(table.sectionId, table.orderIndex),
-]);
-
 // Report Instances - Enhanced for storing actual reports created from templates
 export const reportInstances = pgTable("report_instances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -636,7 +581,7 @@ export const reportInstances = pgTable("report_instances", {
 export const reportSectionInstances = pgTable("report_section_instances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   reportInstanceId: varchar("report_instance_id").notNull().references(() => reportInstances.id, { onDelete: 'cascade' }),
-  templateSectionId: varchar("template_section_id").notNull().references(() => templateSections.id, { onDelete: 'restrict' }),
+  templateSectionId: varchar("template_section_id").notNull(), // No FK constraint - migrated to component-based templates
   parentInstanceId: varchar("parent_instance_id"),
   repetitionIndex: integer("repetition_index").default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -671,8 +616,8 @@ export const reportFieldValues = pgTable("report_field_values", {
 // Field Dependencies - Tracks relationships and conditional logic between fields
 export const fieldDependencies = pgTable("field_dependencies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  fieldId: varchar("field_id").notNull().references(() => templateFields.id, { onDelete: 'cascade' }),
-  dependsOnFieldId: varchar("depends_on_field_id").notNull().references(() => templateFields.id, { onDelete: 'cascade' }),
+  fieldId: varchar("field_id").notNull(), // No FK constraint - migrated to component-based templates
+  dependsOnFieldId: varchar("depends_on_field_id").notNull(), // No FK constraint - migrated to component-based templates
   conditionType: text("condition_type", {
     enum: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equals", "less_than_or_equals", "contains", "not_contains", "empty", "not_empty", "in", "not_in"]
   }).notNull(),
@@ -1574,8 +1519,6 @@ export const autoTripSchema = z.object({
 export const insertReportTemplateSchema = createInsertSchema(reportTemplates).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   publishedAt: z.coerce.date().nullable().optional(),
 });
-export const insertTemplateSectionSchema = createInsertSchema(templateSections).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertTemplateFieldSchema = createInsertSchema(templateFields).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertReportInstanceSchema = createInsertSchema(reportInstances).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   startedAt: z.coerce.date().nullable().optional(),
   completedAt: z.coerce.date().nullable().optional(),
@@ -1904,8 +1847,6 @@ export type Expense = typeof expenses.$inferSelect;
 export type MileageLog = typeof mileageLogs.$inferSelect;
 export type MileageRoutePoint = typeof mileageRoutePoints.$inferSelect;
 export type ReportTemplate = typeof reportTemplates.$inferSelect;
-export type TemplateSection = typeof templateSections.$inferSelect;
-export type TemplateField = typeof templateFields.$inferSelect;
 export type FieldDependency = typeof fieldDependencies.$inferSelect;
 export type ReportInstance = typeof reportInstances.$inferSelect;
 export type ReportSectionInstance = typeof reportSectionInstances.$inferSelect;
@@ -1937,8 +1878,6 @@ export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type InsertMileageLog = z.infer<typeof insertMileageLogSchema>;
 export type InsertMileageRoutePoint = z.infer<typeof insertMileageRoutePointSchema>;
 export type InsertReportTemplate = z.infer<typeof insertReportTemplateSchema>;
-export type InsertTemplateSection = z.infer<typeof insertTemplateSectionSchema>;
-export type InsertTemplateField = z.infer<typeof insertTemplateFieldSchema>;
 export type InsertFieldDependency = z.infer<typeof insertFieldDependencySchema>;
 export type InsertReportInstance = z.infer<typeof insertReportInstanceSchema>;
 export type InsertReportSectionInstance = z.infer<typeof insertReportSectionInstanceSchema>;
