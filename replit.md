@@ -32,6 +32,7 @@ Core architectural decisions and features include:
 -   **Database Schema Integrity**: Comprehensive schema synchronization across all tables, including dedicated columns for assignment tracking, OCR, financial tracking, and notification preferences.
 -   **Report Template System - JSON-Only Architecture**: Complete migration to a pure JSON architecture for report templates, supporting standalone reports and version tracking.
 -   **Blower Door Testing System**: Production-grade multi-point pressure testing with automated ACH50 calculations, weather/altitude corrections, and Minnesota 2020 Energy Code compliance verification (≤3.0 ACH50 limit). Features 59-column database schema, multi-point regression analysis, ring configuration support (Open, Ring A-D), ELA calculations, and automated compliance checking. Complete with comprehensive runbook, 12-test smoke suite, and 8 realistic seed scenarios.
+-   **Duct Leakage Testing System**: Production-grade duct airtightness testing supporting Total Duct Leakage (TDL) and Duct Leakage to Outside (DLO) per Minnesota 2020 Energy Code. Features 60-column database schema, automated calculations with Minneapolis Duct Blaster calibration factors, pressure pan diagnostic testing, real-time compliance verification (TDL ≤4.0, DLO ≤3.0 CFM25/100 sq ft), and job compliance status updates. Complete with comprehensive runbook, 12-test smoke suite, and 10 realistic test scenarios covering pass/fail conditions.
 
 ## Production-Ready Features (Vertical Slice Completion)
 
@@ -67,6 +68,13 @@ The following features have completed vertical development with full production 
    - Seed Data: `db/seed-blower-door.sql` (8 scenarios)
    - Compliance: `BLOWER_DOOR_COMPLIANCE.md`
    - Technical Details: Multi-point regression, ACH50 calculations, Minnesota Energy Code (3.0 ACH50), weather/altitude corrections, ring configurations, ELA calculations
+
+6. **Duct Leakage Testing** (40/40 ✅)
+   - Runbook: `DUCT_LEAKAGE_SLICE.md` (900+ lines)
+   - Smoke Tests: `scripts/smoke-test-duct-leakage.sh` (12 tests)
+   - Seed Data: `db/seed-duct-leakage.sql` (10 scenarios)
+   - Compliance: `DUCT_LEAKAGE_COMPLIANCE.md`
+   - Technical Details: Total Duct Leakage (TDL ≤4.0 CFM25/100 sq ft), Duct Leakage to Outside (DLO ≤3.0 CFM25/100 sq ft), Minnesota 2020 Energy Code, pressure pan testing, Minneapolis Duct Blaster calibration (Open C=110, Ring 1 C=71, Ring 2 C=46, Ring 3 C=31), automated calculations, 60-column schema, 6 API endpoints
 
 ## External Dependencies
 
