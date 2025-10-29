@@ -47,6 +47,7 @@ import {
   insertBuilderAbbreviationSchema,
   insertBlowerDoorTestSchema,
   insertDuctLeakageTestSchema,
+  insertVentilationTestSchema,
   insertInvoiceSchema,
   insertPaymentSchema,
   insertFinancialSettingsSchema,
@@ -74,6 +75,7 @@ import {
   updateJobComplianceStatus,
   updateReportComplianceStatus,
 } from "./complianceService";
+import { calculateVentilationRequirements } from "./ventilationTests";
 import { processCalendarEvents, type CalendarEvent } from './calendarImportService';
 import { scheduledExportService } from './scheduledExports';
 import { z, ZodError } from "zod";
@@ -6552,6 +6554,277 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete duct leakage test');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Ventilation Testing Routes
+  app.get("/api/ventilation-tests", isAuthenticated, async (req, res) => {
+    try {
+      const { jobId } = req.query;
+      
+      if (jobId && typeof jobId === "string") {
+        const tests = await storage.getVentilationTestsByJob(jobId);
+        return res.json(tests);
+      }
+      
+      res.status(400).json({ message: "Job ID is required" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch ventilation tests');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/ventilation-tests/:id", isAuthenticated, async (req, res) => {
+    try {
+      const test = await storage.getVentilationTest(req.params.id);
+      if (!test) {
+        return res.status(404).json({ message: "Ventilation test not found" });
+      }
+      res.json(test);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch ventilation test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/jobs/:jobId/ventilation-tests/latest", isAuthenticated, async (req, res) => {
+    try {
+      const test = await storage.getLatestVentilationTest(req.params.jobId);
+      if (!test) {
+        return res.status(404).json({ message: "No ventilation tests found for this job" });
+      }
+      res.json(test);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch latest ventilation test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/ventilation-tests", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertVentilationTestSchema.parse({
+        ...req.body,
+        createdBy: req.user?.claims?.sub,
+      });
+      
+      // Calculate ventilation requirements using ASHRAE 62.2
+      const requirements = calculateVentilationRequirements({
+        floorArea: Number(validated.floorArea),
+        bedrooms: Number(validated.bedrooms),
+        infiltrationCredit: validated.infiltrationCredit ? Number(validated.infiltrationCredit) : undefined,
+        kitchenExhaustType: validated.kitchenExhaustType,
+        kitchenMeasuredCFM: validated.kitchenMeasuredCFM ? Number(validated.kitchenMeasuredCFM) : undefined,
+        bathroom1Type: validated.bathroom1Type,
+        bathroom1MeasuredCFM: validated.bathroom1MeasuredCFM ? Number(validated.bathroom1MeasuredCFM) : undefined,
+        bathroom2Type: validated.bathroom2Type,
+        bathroom2MeasuredCFM: validated.bathroom2MeasuredCFM ? Number(validated.bathroom2MeasuredCFM) : undefined,
+        bathroom3Type: validated.bathroom3Type,
+        bathroom3MeasuredCFM: validated.bathroom3MeasuredCFM ? Number(validated.bathroom3MeasuredCFM) : undefined,
+        bathroom4Type: validated.bathroom4Type,
+        bathroom4MeasuredCFM: validated.bathroom4MeasuredCFM ? Number(validated.bathroom4MeasuredCFM) : undefined,
+        mechanicalVentilationType: validated.mechanicalVentilationType,
+        mechanicalMeasuredSupplyCFM: validated.mechanicalMeasuredSupplyCFM ? Number(validated.mechanicalMeasuredSupplyCFM) : undefined,
+        mechanicalMeasuredExhaustCFM: validated.mechanicalMeasuredExhaustCFM ? Number(validated.mechanicalMeasuredExhaustCFM) : undefined,
+      });
+      
+      // Apply calculated values
+      validated.requiredVentilationRate = requirements.requiredVentilationRate;
+      validated.requiredContinuousRate = requirements.requiredContinuousRate;
+      validated.adjustedRequiredRate = requirements.adjustedRequiredRate;
+      validated.kitchenMeetsCode = requirements.kitchenMeetsCode;
+      validated.bathroom1MeetsCode = validated.bathroom1Type ? 
+        requirements.overallCompliant || !requirements.nonComplianceReasons.includes('Bathroom 1 exhaust does not meet code requirements') : null;
+      validated.bathroom2MeetsCode = validated.bathroom2Type ? 
+        requirements.overallCompliant || !requirements.nonComplianceReasons.includes('Bathroom 2 exhaust does not meet code requirements') : null;
+      validated.bathroom3MeetsCode = validated.bathroom3Type ? 
+        requirements.overallCompliant || !requirements.nonComplianceReasons.includes('Bathroom 3 exhaust does not meet code requirements') : null;
+      validated.bathroom4MeetsCode = validated.bathroom4Type ? 
+        requirements.overallCompliant || !requirements.nonComplianceReasons.includes('Bathroom 4 exhaust does not meet code requirements') : null;
+      validated.totalVentilationProvided = requirements.totalVentilationProvided;
+      validated.meetsVentilationRequirement = requirements.meetsVentilationRequirement;
+      validated.overallCompliant = requirements.overallCompliant;
+      validated.nonComplianceNotes = requirements.nonComplianceReasons.length > 0 ? 
+        requirements.nonComplianceReasons.join('; ') : null;
+      
+      const test = await storage.createVentilationTest(validated);
+      
+      // Update job compliance status if needed
+      if (test.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('VentilationTest/ComplianceUpdate', error, { testId: test.id });
+        }
+      }
+      
+      res.status(201).json(test);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create ventilation test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/ventilation-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertVentilationTestSchema.partial().parse(req.body);
+      
+      // Recalculate requirements if key values changed
+      const existing = await storage.getVentilationTest(req.params.id);
+      if (existing) {
+        const floorArea = validated.floorArea !== undefined ? Number(validated.floorArea) : Number(existing.floorArea);
+        const bedrooms = validated.bedrooms !== undefined ? Number(validated.bedrooms) : Number(existing.bedrooms);
+        
+        // Check if any ventilation-related fields changed
+        const shouldRecalculate = 
+          validated.floorArea !== undefined ||
+          validated.bedrooms !== undefined ||
+          validated.infiltrationCredit !== undefined ||
+          validated.kitchenExhaustType !== undefined ||
+          validated.kitchenMeasuredCFM !== undefined ||
+          validated.bathroom1Type !== undefined ||
+          validated.bathroom1MeasuredCFM !== undefined ||
+          validated.bathroom2Type !== undefined ||
+          validated.bathroom2MeasuredCFM !== undefined ||
+          validated.bathroom3Type !== undefined ||
+          validated.bathroom3MeasuredCFM !== undefined ||
+          validated.bathroom4Type !== undefined ||
+          validated.bathroom4MeasuredCFM !== undefined ||
+          validated.mechanicalVentilationType !== undefined ||
+          validated.mechanicalMeasuredSupplyCFM !== undefined ||
+          validated.mechanicalMeasuredExhaustCFM !== undefined;
+        
+        if (shouldRecalculate) {
+          const requirements = calculateVentilationRequirements({
+            floorArea,
+            bedrooms,
+            infiltrationCredit: validated.infiltrationCredit !== undefined ? 
+              (validated.infiltrationCredit ? Number(validated.infiltrationCredit) : undefined) : 
+              (existing.infiltrationCredit ? Number(existing.infiltrationCredit) : undefined),
+            kitchenExhaustType: validated.kitchenExhaustType ?? existing.kitchenExhaustType ?? undefined,
+            kitchenMeasuredCFM: validated.kitchenMeasuredCFM !== undefined ?
+              (validated.kitchenMeasuredCFM ? Number(validated.kitchenMeasuredCFM) : undefined) :
+              (existing.kitchenMeasuredCFM ? Number(existing.kitchenMeasuredCFM) : undefined),
+            bathroom1Type: validated.bathroom1Type ?? existing.bathroom1Type ?? undefined,
+            bathroom1MeasuredCFM: validated.bathroom1MeasuredCFM !== undefined ?
+              (validated.bathroom1MeasuredCFM ? Number(validated.bathroom1MeasuredCFM) : undefined) :
+              (existing.bathroom1MeasuredCFM ? Number(existing.bathroom1MeasuredCFM) : undefined),
+            bathroom2Type: validated.bathroom2Type ?? existing.bathroom2Type ?? undefined,
+            bathroom2MeasuredCFM: validated.bathroom2MeasuredCFM !== undefined ?
+              (validated.bathroom2MeasuredCFM ? Number(validated.bathroom2MeasuredCFM) : undefined) :
+              (existing.bathroom2MeasuredCFM ? Number(existing.bathroom2MeasuredCFM) : undefined),
+            bathroom3Type: validated.bathroom3Type ?? existing.bathroom3Type ?? undefined,
+            bathroom3MeasuredCFM: validated.bathroom3MeasuredCFM !== undefined ?
+              (validated.bathroom3MeasuredCFM ? Number(validated.bathroom3MeasuredCFM) : undefined) :
+              (existing.bathroom3MeasuredCFM ? Number(existing.bathroom3MeasuredCFM) : undefined),
+            bathroom4Type: validated.bathroom4Type ?? existing.bathroom4Type ?? undefined,
+            bathroom4MeasuredCFM: validated.bathroom4MeasuredCFM !== undefined ?
+              (validated.bathroom4MeasuredCFM ? Number(validated.bathroom4MeasuredCFM) : undefined) :
+              (existing.bathroom4MeasuredCFM ? Number(existing.bathroom4MeasuredCFM) : undefined),
+            mechanicalVentilationType: validated.mechanicalVentilationType ?? existing.mechanicalVentilationType ?? undefined,
+            mechanicalMeasuredSupplyCFM: validated.mechanicalMeasuredSupplyCFM !== undefined ?
+              (validated.mechanicalMeasuredSupplyCFM ? Number(validated.mechanicalMeasuredSupplyCFM) : undefined) :
+              (existing.mechanicalMeasuredSupplyCFM ? Number(existing.mechanicalMeasuredSupplyCFM) : undefined),
+            mechanicalMeasuredExhaustCFM: validated.mechanicalMeasuredExhaustCFM !== undefined ?
+              (validated.mechanicalMeasuredExhaustCFM ? Number(validated.mechanicalMeasuredExhaustCFM) : undefined) :
+              (existing.mechanicalMeasuredExhaustCFM ? Number(existing.mechanicalMeasuredExhaustCFM) : undefined),
+          });
+          
+          validated.requiredVentilationRate = requirements.requiredVentilationRate;
+          validated.requiredContinuousRate = requirements.requiredContinuousRate;
+          validated.adjustedRequiredRate = requirements.adjustedRequiredRate;
+          validated.kitchenMeetsCode = requirements.kitchenMeetsCode;
+          validated.totalVentilationProvided = requirements.totalVentilationProvided;
+          validated.meetsVentilationRequirement = requirements.meetsVentilationRequirement;
+          validated.overallCompliant = requirements.overallCompliant;
+          validated.nonComplianceNotes = requirements.nonComplianceReasons.length > 0 ? 
+            requirements.nonComplianceReasons.join('; ') : null;
+        }
+      }
+      
+      const test = await storage.updateVentilationTest(req.params.id, validated);
+      if (!test) {
+        return res.status(404).json({ message: "Ventilation test not found" });
+      }
+      
+      // Update job compliance status if needed
+      if (test.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('VentilationTest/ComplianceUpdate', error, { testId: req.params.id });
+        }
+      }
+      
+      res.json(test);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update ventilation test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/ventilation-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const test = await storage.getVentilationTest(req.params.id);
+      const deleted = await storage.deleteVentilationTest(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Ventilation test not found" });
+      }
+      
+      // Update job compliance status if needed
+      if (test?.jobId) {
+        try {
+          await updateJobComplianceStatus(storage, test.jobId);
+        } catch (error) {
+          logError('VentilationTest/ComplianceUpdate', error, { testId: req.params.id });
+        }
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete ventilation test');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/ventilation-tests/:id/calculate", isAuthenticated, async (req, res) => {
+    try {
+      const test = await storage.getVentilationTest(req.params.id);
+      if (!test) {
+        return res.status(404).json({ message: "Ventilation test not found" });
+      }
+      
+      // Recalculate requirements
+      const requirements = calculateVentilationRequirements({
+        floorArea: Number(test.floorArea),
+        bedrooms: Number(test.bedrooms),
+        infiltrationCredit: test.infiltrationCredit ? Number(test.infiltrationCredit) : undefined,
+        kitchenExhaustType: test.kitchenExhaustType ?? undefined,
+        kitchenMeasuredCFM: test.kitchenMeasuredCFM ? Number(test.kitchenMeasuredCFM) : undefined,
+        bathroom1Type: test.bathroom1Type ?? undefined,
+        bathroom1MeasuredCFM: test.bathroom1MeasuredCFM ? Number(test.bathroom1MeasuredCFM) : undefined,
+        bathroom2Type: test.bathroom2Type ?? undefined,
+        bathroom2MeasuredCFM: test.bathroom2MeasuredCFM ? Number(test.bathroom2MeasuredCFM) : undefined,
+        bathroom3Type: test.bathroom3Type ?? undefined,
+        bathroom3MeasuredCFM: test.bathroom3MeasuredCFM ? Number(test.bathroom3MeasuredCFM) : undefined,
+        bathroom4Type: test.bathroom4Type ?? undefined,
+        bathroom4MeasuredCFM: test.bathroom4MeasuredCFM ? Number(test.bathroom4MeasuredCFM) : undefined,
+        mechanicalVentilationType: test.mechanicalVentilationType ?? undefined,
+        mechanicalMeasuredSupplyCFM: test.mechanicalMeasuredSupplyCFM ? Number(test.mechanicalMeasuredSupplyCFM) : undefined,
+        mechanicalMeasuredExhaustCFM: test.mechanicalMeasuredExhaustCFM ? Number(test.mechanicalMeasuredExhaustCFM) : undefined,
+      });
+      
+      res.json(requirements);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'calculate ventilation requirements');
       res.status(status).json({ message });
     }
   });

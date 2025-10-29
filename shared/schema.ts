@@ -1000,6 +1000,93 @@ export const ductLeakageTests = pgTable("duct_leakage_tests", {
   index("idx_duct_leakage_tests_meets_code_dlo").on(table.meetsCodeDLO),
 ]);
 
+// Ventilation Testing (ASHRAE 62.2)
+export const ventilationTests = pgTable("ventilation_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  reportInstanceId: varchar("report_instance_id").references(() => reportInstances.id, { onDelete: 'set null' }),
+  
+  // Test Information
+  testDate: timestamp("test_date").notNull(),
+  testTime: text("test_time").notNull(),
+  equipmentSerial: text("equipment_serial"),
+  equipmentCalibrationDate: timestamp("equipment_calibration_date"),
+  
+  // House Characteristics
+  floorArea: decimal("floor_area", { precision: 10, scale: 2 }).notNull(), // Total conditioned floor area (sq ft)
+  bedrooms: integer("bedrooms").notNull(),
+  stories: decimal("stories", { precision: 3, scale: 1 }).default("1"), // Building height (1, 1.5, 2, etc.)
+  
+  // ASHRAE 62.2 Whole-House Ventilation Calculations
+  requiredVentilationRate: decimal("required_ventilation_rate", { precision: 8, scale: 2 }), // Qtotal (cfm)
+  requiredContinuousRate: decimal("required_continuous_rate", { precision: 8, scale: 2 }), // For continuous operation
+  infiltrationCredit: decimal("infiltration_credit", { precision: 8, scale: 2 }), // From blower door if available (cfm)
+  adjustedRequiredRate: decimal("adjusted_required_rate", { precision: 8, scale: 2 }), // After infiltration credit
+  
+  // Kitchen Exhaust Fan
+  kitchenExhaustType: text("kitchen_exhaust_type", { enum: ["intermittent", "continuous", "none"] }),
+  kitchenRatedCFM: decimal("kitchen_rated_cfm", { precision: 8, scale: 2 }),
+  kitchenMeasuredCFM: decimal("kitchen_measured_cfm", { precision: 8, scale: 2 }),
+  kitchenMeetsCode: boolean("kitchen_meets_code"), // ≥100 intermittent or ≥25 continuous
+  kitchenNotes: text("kitchen_notes"),
+  
+  // Bathroom Exhaust Fans (supporting up to 4 bathrooms)
+  bathroom1Type: text("bathroom1_type", { enum: ["intermittent", "continuous", "none"] }),
+  bathroom1RatedCFM: decimal("bathroom1_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom1MeasuredCFM: decimal("bathroom1_measured_cfm", { precision: 8, scale: 2 }),
+  bathroom1MeetsCode: boolean("bathroom1_meets_code"), // ≥50 intermittent or ≥20 continuous
+  
+  bathroom2Type: text("bathroom2_type", { enum: ["intermittent", "continuous", "none"] }),
+  bathroom2RatedCFM: decimal("bathroom2_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom2MeasuredCFM: decimal("bathroom2_measured_cfm", { precision: 8, scale: 2 }),
+  bathroom2MeetsCode: boolean("bathroom2_meets_code"),
+  
+  bathroom3Type: text("bathroom3_type", { enum: ["intermittent", "continuous", "none"] }),
+  bathroom3RatedCFM: decimal("bathroom3_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom3MeasuredCFM: decimal("bathroom3_measured_cfm", { precision: 8, scale: 2 }),
+  bathroom3MeetsCode: boolean("bathroom3_meets_code"),
+  
+  bathroom4Type: text("bathroom4_type", { enum: ["intermittent", "continuous", "none"] }),
+  bathroom4RatedCFM: decimal("bathroom4_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom4MeasuredCFM: decimal("bathroom4_measured_cfm", { precision: 8, scale: 2 }),
+  bathroom4MeetsCode: boolean("bathroom4_meets_code"),
+  
+  // Mechanical Ventilation System
+  mechanicalVentilationType: text("mechanical_ventilation_type", { 
+    enum: ["none", "supply_only", "exhaust_only", "balanced_hrv", "balanced_erv", "other"] 
+  }).default("none"),
+  mechanicalRatedCFM: decimal("mechanical_rated_cfm", { precision: 8, scale: 2 }),
+  mechanicalMeasuredSupplyCFM: decimal("mechanical_measured_supply_cfm", { precision: 8, scale: 2 }),
+  mechanicalMeasuredExhaustCFM: decimal("mechanical_measured_exhaust_cfm", { precision: 8, scale: 2 }),
+  mechanicalOperatingSchedule: text("mechanical_operating_schedule", { enum: ["continuous", "intermittent", "on_demand"] }),
+  mechanicalControls: text("mechanical_controls"), // Timer, humidity sensor, manual, etc.
+  mechanicalNotes: text("mechanical_notes"),
+  
+  // Total Ventilation Provided
+  totalVentilationProvided: decimal("total_ventilation_provided", { precision: 8, scale: 2 }), // Total cfm from all sources
+  meetsVentilationRequirement: boolean("meets_ventilation_requirement"), // Provided ≥ Required
+  
+  // Minnesota Code Compliance (2020 Energy Code + ASHRAE 62.2)
+  codeYear: text("code_year").default("2020"),
+  overallCompliant: boolean("overall_compliant"), // All requirements met
+  nonComplianceNotes: text("non_compliance_notes"),
+  recommendations: text("recommendations"),
+  
+  // Additional Data
+  weatherConditions: text("weather_conditions"),
+  inspectorNotes: text("inspector_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+}, (table) => [
+  index("idx_ventilation_tests_job_id").on(table.jobId),
+  index("idx_ventilation_tests_report_instance_id").on(table.reportInstanceId),
+  index("idx_ventilation_tests_test_date").on(table.testDate),
+  index("idx_ventilation_tests_overall_compliant").on(table.overallCompliant),
+  index("idx_ventilation_tests_meets_ventilation_requirement").on(table.meetsVentilationRequirement),
+]);
+
 // Financial Management Tables
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1862,6 +1949,32 @@ export const insertDuctLeakageTestSchema = createInsertSchema(ductLeakageTests).
   outsideLeakageLimit: z.coerce.number().nullable().optional(),
 });
 
+export const insertVentilationTestSchema = createInsertSchema(ventilationTests).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  testDate: z.coerce.date(),
+  equipmentCalibrationDate: z.coerce.date().nullable().optional(),
+  floorArea: z.coerce.number(),
+  bedrooms: z.coerce.number(),
+  stories: z.coerce.number().nullable().optional(),
+  requiredVentilationRate: z.coerce.number().nullable().optional(),
+  requiredContinuousRate: z.coerce.number().nullable().optional(),
+  infiltrationCredit: z.coerce.number().nullable().optional(),
+  adjustedRequiredRate: z.coerce.number().nullable().optional(),
+  kitchenRatedCFM: z.coerce.number().nullable().optional(),
+  kitchenMeasuredCFM: z.coerce.number().nullable().optional(),
+  bathroom1RatedCFM: z.coerce.number().nullable().optional(),
+  bathroom1MeasuredCFM: z.coerce.number().nullable().optional(),
+  bathroom2RatedCFM: z.coerce.number().nullable().optional(),
+  bathroom2MeasuredCFM: z.coerce.number().nullable().optional(),
+  bathroom3RatedCFM: z.coerce.number().nullable().optional(),
+  bathroom3MeasuredCFM: z.coerce.number().nullable().optional(),
+  bathroom4RatedCFM: z.coerce.number().nullable().optional(),
+  bathroom4MeasuredCFM: z.coerce.number().nullable().optional(),
+  mechanicalRatedCFM: z.coerce.number().nullable().optional(),
+  mechanicalMeasuredSupplyCFM: z.coerce.number().nullable().optional(),
+  mechanicalMeasuredExhaustCFM: z.coerce.number().nullable().optional(),
+  totalVentilationProvided: z.coerce.number().nullable().optional(),
+});
+
 // Calendar import schemas
 export const approveEventSchema = z.object({
   builderId: z.string().min(1, "Builder is required"),
@@ -1974,6 +2087,8 @@ export type BlowerDoorTest = typeof blowerDoorTests.$inferSelect;
 export type InsertBlowerDoorTest = z.infer<typeof insertBlowerDoorTestSchema>;
 export type DuctLeakageTest = typeof ductLeakageTests.$inferSelect;
 export type InsertDuctLeakageTest = z.infer<typeof insertDuctLeakageTestSchema>;
+export type VentilationTest = typeof ventilationTests.$inferSelect;
+export type InsertVentilationTest = z.infer<typeof insertVentilationTestSchema>;
 
 // Financial types
 export type Invoice = typeof invoices.$inferSelect;

@@ -79,6 +79,8 @@ import {
   type InsertBlowerDoorTest,
   type DuctLeakageTest,
   type InsertDuctLeakageTest,
+  type VentilationTest,
+  type InsertVentilationTest,
   type Invoice,
   type InsertInvoice,
   type Payment,
@@ -174,6 +176,7 @@ import {
   builderAbbreviations,
   blowerDoorTests,
   ductLeakageTests,
+  ventilationTests,
   invoices,
   payments,
   financialSettings,
@@ -718,6 +721,14 @@ export interface IStorage {
   getLatestDuctLeakageTest(jobId: string): Promise<DuctLeakageTest | undefined>;
   updateDuctLeakageTest(id: string, test: Partial<InsertDuctLeakageTest>): Promise<DuctLeakageTest | undefined>;
   deleteDuctLeakageTest(id: string): Promise<boolean>;
+
+  // Ventilation Tests
+  createVentilationTest(test: InsertVentilationTest): Promise<VentilationTest>;
+  getVentilationTest(id: string): Promise<VentilationTest | undefined>;
+  getVentilationTestsByJob(jobId: string): Promise<VentilationTest[]>;
+  getLatestVentilationTest(jobId: string): Promise<VentilationTest | undefined>;
+  updateVentilationTest(id: string, test: Partial<InsertVentilationTest>): Promise<VentilationTest | undefined>;
+  deleteVentilationTest(id: string): Promise<boolean>;
 
   // 45L Tax Credit operations
   // Tax Credit Projects
@@ -5122,6 +5133,56 @@ export class DatabaseStorage implements IStorage {
   async deleteDuctLeakageTest(id: string): Promise<boolean> {
     const result = await db.delete(ductLeakageTests)
       .where(eq(ductLeakageTests.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Ventilation Tests Implementation
+  async createVentilationTest(test: InsertVentilationTest): Promise<VentilationTest> {
+    const result = await db.insert(ventilationTests)
+      .values(test)
+      .returning();
+    return result[0];
+  }
+
+  async getVentilationTest(id: string): Promise<VentilationTest | undefined> {
+    const result = await db.select()
+      .from(ventilationTests)
+      .where(eq(ventilationTests.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getVentilationTestsByJob(jobId: string): Promise<VentilationTest[]> {
+    return await db.select()
+      .from(ventilationTests)
+      .where(eq(ventilationTests.jobId, jobId))
+      .orderBy(desc(ventilationTests.testDate));
+  }
+
+  async getLatestVentilationTest(jobId: string): Promise<VentilationTest | undefined> {
+    const result = await db.select()
+      .from(ventilationTests)
+      .where(eq(ventilationTests.jobId, jobId))
+      .orderBy(desc(ventilationTests.testDate))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateVentilationTest(id: string, test: Partial<InsertVentilationTest>): Promise<VentilationTest | undefined> {
+    const result = await db.update(ventilationTests)
+      .set({
+        ...test,
+        updatedAt: new Date(),
+      })
+      .where(eq(ventilationTests.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteVentilationTest(id: string): Promise<boolean> {
+    const result = await db.delete(ventilationTests)
+      .where(eq(ventilationTests.id, id))
       .returning();
     return result.length > 0;
   }

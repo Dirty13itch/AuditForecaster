@@ -46,6 +46,7 @@ import ReportFillout from "@/pages/ReportFillout";
 import ScheduledExports from "@/pages/ScheduledExports";
 import BlowerDoorTest from "@/pages/BlowerDoorTest";
 import DuctLeakageTest from "@/pages/DuctLeakageTest";
+import VentilationTests from "@/pages/VentilationTests";
 import Analytics from "@/pages/Analytics";
 import AuditLogs from "@/pages/AuditLogs";
 import SettingsPage from "@/pages/SettingsPage";
@@ -225,6 +226,16 @@ function Router() {
       <Route path="/duct-leakage/:jobId" component={() => (
         <RouteErrorBoundary>
           <DuctLeakageTest />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/ventilation-tests" component={() => (
+        <RouteErrorBoundary>
+          <VentilationTests />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/ventilation-tests/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <VentilationTests />
         </RouteErrorBoundary>
       )} />
       <Route path="/analytics" component={() => (

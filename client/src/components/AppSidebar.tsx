@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History, Receipt, Package, Award, Trophy, Target, Camera, Car, Clock } from "lucide-react";
+import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History, Receipt, Package, Award, Trophy, Target, Camera, Car, Clock, Wind, Gauge } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -135,6 +135,24 @@ const menuItems = [
   },
 ];
 
+const testingItems = [
+  {
+    title: "Blower Door Test",
+    url: "/blower-door-test",
+    icon: Wind,
+  },
+  {
+    title: "Duct Leakage Test",
+    url: "/duct-leakage-test",
+    icon: Activity,
+  },
+  {
+    title: "Ventilation Tests",
+    url: "/ventilation-tests",
+    icon: Gauge,
+  },
+];
+
 const calendarImportItems = [
   {
     title: "Calendar Management",
@@ -254,6 +272,28 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+        <SidebarGroup>
+          <SidebarGroupLabel>Testing</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {testingItems.map((item) => {
+                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url} data-testid={`link-testing-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
