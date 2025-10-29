@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index, date, time } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -649,27 +649,23 @@ export const reportSectionInstances = pgTable("report_section_instances", {
 export const reportFieldValues = pgTable("report_field_values", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   reportInstanceId: varchar("report_instance_id").notNull().references(() => reportInstances.id, { onDelete: 'cascade' }),
-  sectionInstanceId: varchar("section_instance_id").notNull().references(() => reportSectionInstances.id, { onDelete: 'cascade' }),
-  templateFieldId: varchar("template_field_id").notNull().references(() => templateFields.id, { onDelete: 'restrict' }),
-  fieldType: text("field_type").notNull(),
+  sectionInstanceId: varchar("section_instance_id").references(() => reportSectionInstances.id, { onDelete: 'cascade' }), // Nullable for component-based templates
+  templateFieldId: varchar("template_field_id").notNull(),  // No FK constraint for component-based templates
   // Store different value types
-  textValue: text("text_value"),
-  numberValue: decimal("number_value", { precision: 20, scale: 5 }),
-  booleanValue: boolean("boolean_value"),
-  dateValue: timestamp("date_value"),
-  jsonValue: jsonb("json_value"), // For complex types like multiselect, photo metadata, signatures
-  // Calculated fields
-  isCalculated: boolean("is_calculated").default(false),
-  calculationError: text("calculation_error"),
-  // Metadata
-  modifiedBy: varchar("modified_by").references(() => users.id, { onDelete: 'set null' }),
+  valueText: text("value_text"),
+  valueNumber: decimal("value_number", { precision: 20, scale: 5 }),
+  valueBoolean: boolean("value_boolean"),
+  valueDate: date("value_date"),
+  valueTime: time("value_time"),
+  valueDatetime: timestamp("value_datetime"),
+  valueJson: jsonb("value_json"), // For complex types like multiselect, photo metadata, signatures
+  photoIds: text("photo_ids").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_report_field_values_report_id").on(table.reportInstanceId),
   index("idx_report_field_values_section_instance_id").on(table.sectionInstanceId),
   index("idx_report_field_values_template_field_id").on(table.templateFieldId),
-  index("idx_report_field_values_field_type").on(table.fieldType),
 ]);
 
 // Field Dependencies - Tracks relationships and conditional logic between fields
@@ -1590,8 +1586,9 @@ export const insertReportInstanceSchema = createInsertSchema(reportInstances).om
 });
 export const insertReportSectionInstanceSchema = createInsertSchema(reportSectionInstances).omit({ id: true, createdAt: true });
 export const insertReportFieldValueSchema = createInsertSchema(reportFieldValues).omit({ id: true, createdAt: true, updatedAt: true }).extend({
-  numberValue: z.coerce.number().nullable().optional(),
-  dateValue: z.coerce.date().nullable().optional(),
+  valueNumber: z.coerce.number().nullable().optional(),
+  valueDate: z.coerce.date().nullable().optional(),
+  valueDatetime: z.coerce.date().nullable().optional(),
 });
 export const insertForecastSchema = createInsertSchema(forecasts).omit({ id: true }).extend({
   recordedAt: z.coerce.date().nullable().optional(),

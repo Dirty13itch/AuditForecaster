@@ -58,6 +58,7 @@ import {
   insertEquipmentCalibrationSchema,
   insertEquipmentMaintenanceSchema,
   insertEquipmentCheckoutSchema,
+  insertReportFieldValueSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";

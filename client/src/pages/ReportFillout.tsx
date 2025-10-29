@@ -750,7 +750,7 @@ export default function ReportFilloutPage() {
   // Save field value mutation
   const saveFieldValue = useMutation({
     mutationFn: (data: any) => 
-      apiRequest("/api/report-field-values", "POST", data),
+      apiRequest("POST", "/api/report-field-values", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-instances", id, "field-values"] });
     },
@@ -759,7 +759,7 @@ export default function ReportFilloutPage() {
   // Update report status mutation
   const updateStatus = useMutation({
     mutationFn: (status: string) => 
-      apiRequest(`/api/report-instances/${id}`, "PATCH", { status }),
+      apiRequest("PATCH", `/api/report-instances/${id}`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-instances", id] });
       toast({
@@ -868,22 +868,24 @@ export default function ReportFilloutPage() {
         case "number":
         case "decimal":
         case "calculated":
-          fieldData.numberValue = value;
+          fieldData.valueNumber = value;
           break;
         case "date":
+          fieldData.valueDate = value;
+          break;
         case "datetime":
-          fieldData.dateValue = value;
+          fieldData.valueDatetime = value;
           break;
         case "multiselect":
         case "photo":
-          fieldData.jsonValue = value;
+          fieldData.valueJson = value;
           break;
         case "checkbox":
-          fieldData.booleanValue = !!value;
-          fieldData.textValue = value ? "yes" : "no";
+          fieldData.valueBoolean = !!value;
+          fieldData.valueText = value ? "yes" : "no";
           break;
         default:
-          fieldData.textValue = value;
+          fieldData.valueText = value;
       }
     }
     
