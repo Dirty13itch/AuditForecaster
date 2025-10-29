@@ -113,7 +113,8 @@ export async function status(req: Request, res: Response) {
   const statusInfo = {
     status: "operational",
     timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || "unknown",
+    version: process.env.npm_package_version || "1.0.0",
+    commitSha: process.env.GIT_COMMIT_SHA || process.env.REPL_ID || "development",
     environment: config.nodeEnv,
     uptime: {
       seconds: process.uptime(),
