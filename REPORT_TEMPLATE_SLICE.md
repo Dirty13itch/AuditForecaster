@@ -16,9 +16,31 @@
 
 ## Prerequisites
 
+### Environment
 - Node.js 20+
 - PostgreSQL database (configured via `DATABASE_URL` env var)
 - Replit Auth configured (for authentication)
+- Session store (uses PostgreSQL by default)
+
+### Required Packages
+```bash
+# Backend
+express
+drizzle-orm
+@neondatabase/serverless
+zod  # Validation
+
+# Frontend
+react
+@tanstack/react-query
+react-hook-form
+@hookform/resolvers/zod
+lucide-react  # Icons
+
+# Testing/Development Tools
+jq  # JSON parsing for smoke tests
+psql  # PostgreSQL client for seed data
+```
 
 ## Database Schema
 
@@ -86,11 +108,19 @@ npm run dev
 ### 2. Seed Database
 
 ```bash
-# Create sample report templates
-npm run seed
+# Load sample report templates using psql
+psql $DATABASE_URL -f db/seed-report-templates.sql
 
-# Clear seed data
-npm run seed:clear
+# Or using npm script (if configured)
+npm run seed:report-templates
+
+# The seed file creates:
+# - 5 realistic RESNET report templates
+# - Pre-Drywall Inspection
+# - Final Energy Audit
+# - HVAC Performance Test
+# - Insulation Verification
+# - Air Sealing Checklist
 ```
 
 ### 3. Run Tests
@@ -116,8 +146,22 @@ npm run typecheck
 ### 5. Smoke Tests
 
 ```bash
-# Run smoke tests against running server
-npm run smoke
+# Run automated smoke tests (12 tests)
+./scripts/smoke-test-report-templates.sh
+
+# Tests include:
+# - Health & status checks (3 tests)
+# - Authentication setup
+# - Template CRUD operations
+# - Template cloning
+# - Report instance creation
+# - Field value persistence
+# - Template archiving
+# - Cleanup verification
+
+# Exit codes:
+# - 0: All tests passed ✓
+# - 1: One or more tests failed ✗
 ```
 
 ### 6. Build for Production
@@ -506,10 +550,13 @@ npm run seed
 
 ## Acceptance Checklist
 
-### Development
-- ✅ `npm run dev` starts server on port 5000
-- ✅ Database migrated and seeded with sample templates
-- ✅ Template designer page loads at `/report-template-designer`
+For detailed verification procedures, see: [REPORT_TEMPLATES_COMPLIANCE.md](./REPORT_TEMPLATES_COMPLIANCE.md)
+
+### Development (4/4) ✅
+- ✅ `npm run dev` starts server without errors
+- ✅ Database schema synced (`npm run db:push`)
+- ✅ Seed data available (`db/seed-report-templates.sql`)
+- ✅ Smoke tests executable (`scripts/smoke-test-report-templates.sh`)
 - ✅ Template list page loads at `/report-templates`
 - ✅ Can create template via designer UI
 - ✅ Can click template → Navigate to detail page
