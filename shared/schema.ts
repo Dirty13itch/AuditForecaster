@@ -549,9 +549,9 @@ export const reportTemplates = pgTable("report_templates", {
 // Report Instances - Enhanced for storing actual reports created from templates
 export const reportInstances = pgTable("report_instances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'cascade' }),
   templateId: varchar("template_id").notNull().references(() => reportTemplates.id, { onDelete: 'restrict' }),
-  templateVersion: integer("template_version").notNull(),
+  templateVersion: integer("template_version").notNull().default(1),
   status: text("status", { enum: ["draft", "in_progress", "completed", "submitted", "approved"] }).notNull().default("draft"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),

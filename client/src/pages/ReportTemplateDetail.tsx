@@ -1,5 +1,7 @@
 import { useParams, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +13,31 @@ import type { ReportTemplate } from "@shared/schema";
 export default function ReportTemplateDetail() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const { data: template, isLoading, error } = useQuery<ReportTemplate>({
     queryKey: ["/api/report-templates", id],
+  });
+
+  const createReportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/report-instances", {
+        templateId: template.id,
+        templateVersion: template.version || 1,
+        status: "draft"
+      });
+      return response;
+    },
+    onSuccess: (data: any) => {
+      setLocation(`/reports/fillout/${data.id}`);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create report instance. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -156,11 +180,12 @@ export default function ReportTemplateDetail() {
               <CardContent className="space-y-3">
                 <Button
                   className="w-full"
-                  onClick={() => setLocation(`/reports/fillout/${template.id}`)}
+                  onClick={() => createReportMutation.mutate()}
+                  disabled={createReportMutation.isPending}
                   data-testid="button-create-report"
                 >
                   <FileText className="mr-2 h-4 w-4" />
-                  Create Report from This Template
+                  {createReportMutation.isPending ? "Creating..." : "Create Report from This Template"}
                 </Button>
                 <Button
                   variant="outline"
