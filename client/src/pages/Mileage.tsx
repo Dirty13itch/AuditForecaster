@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -68,12 +68,13 @@ import {
   Navigation,
   ArrowRight,
   ListTodo,
+  AlertCircle,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Link } from "wouter";
 import { TripController } from "@/components/mileage/TripController";
 
-const IRS_RATE = 0.67; // 2024 IRS standard mileage rate
+const IRS_RATE = 0.70; // 2025 IRS standard mileage rate
 
 export default function Mileage() {
   const { toast } = useToast();
@@ -151,6 +152,39 @@ export default function Mileage() {
     },
   });
 
+  // Fetch monthly summary from API
+  const { data: monthlySummary, isLoading: isSummaryLoading, error: summaryError } = useQuery({
+    queryKey: ['/api/mileage/summary', dateRange],
+    queryFn: async ({ queryKey }) => {
+      const range = queryKey[1] as { startDate: Date; endDate: Date };
+      const month = format(range.startDate, 'yyyy-MM');
+      const response = await fetch(`/api/mileage/summary?month=${month}`);
+      if (!response.ok) throw new Error('Failed to fetch summary');
+      return response.json() as Promise<{
+        month: string;
+        totalDrives: number;
+        businessDrives: number;
+        personalDrives: number;
+        totalMiles: number;
+        businessMiles: number;
+        personalMiles: number;
+        taxDeduction: number;
+        irsRate: number;
+      }>;
+    },
+  });
+
+  // Show error toast if summary fails to load (useEffect to prevent re-render spam)
+  useEffect(() => {
+    if (summaryError) {
+      toast({
+        title: "Error",
+        description: "Failed to load monthly summary",
+        variant: "destructive",
+      });
+    }
+  }, [summaryError, toast]);
+
   // Create mileage log mutation
   const createMutation = useMutation({
     mutationFn: async (data: InsertMileageLog) => {
@@ -161,6 +195,7 @@ export default function Mileage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/mileage-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mileage/summary"] });
       toast({
         title: "Success",
         description: "Mileage log added successfully",
@@ -187,6 +222,7 @@ export default function Mileage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/mileage-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mileage/summary"] });
       toast({
         title: "Success",
         description: "Mileage log updated",
@@ -205,6 +241,7 @@ export default function Mileage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/mileage-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mileage/summary"] });
       toast({
         title: "Success",
         description: "Mileage log deleted",
@@ -222,17 +259,6 @@ export default function Mileage() {
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat("en-US").format(num);
   };
-
-  // Calculate statistics
-  const stats = {
-    totalMiles: logs?.reduce((sum: number, log: MileageLog) => sum + log.distance, 0) || 0,
-    businessMiles: logs?.filter((log: MileageLog) => log.purpose === "business")
-      .reduce((sum: number, log: MileageLog) => sum + log.distance, 0) || 0,
-    personalMiles: logs?.filter((log: MileageLog) => log.purpose === "personal")
-      .reduce((sum: number, log: MileageLog) => sum + log.distance, 0) || 0,
-    totalDeduction: 0,
-  };
-  stats.totalDeduction = stats.businessMiles * IRS_RATE;
 
   const onSubmit = (data: InsertMileageLog) => {
     if (selectedLog) {
@@ -258,12 +284,9 @@ export default function Mileage() {
   };
 
   const exportReport = () => {
-    const params = new URLSearchParams({
-      startDate: dateRange.startDate.toISOString(),
-      endDate: dateRange.endDate.toISOString(),
-      format: "csv",
-    });
-    window.location.href = `/api/mileage-logs/export?${params}`;
+    const month = format(dateRange.startDate, 'yyyy-MM');
+    const url = `/api/mileage/export?month=${month}&format=csv`;
+    window.location.href = url;
     toast({
       title: "Exporting",
       description: "Your mileage report is being downloaded",
@@ -315,62 +338,147 @@ export default function Mileage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Miles</p>
-                  <p className="text-2xl font-bold" data-testid="text-total-miles">
-                    {formatNumber(stats.totalMiles)}
-                  </p>
-                </div>
-                <Gauge className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
+          {isSummaryLoading ? (
+            <>
+              <Skeleton className="h-24" data-testid="skeleton-total-miles" />
+              <Skeleton className="h-24" data-testid="skeleton-business-miles" />
+              <Skeleton className="h-24" data-testid="skeleton-deduction" />
+              <Skeleton className="h-24" data-testid="skeleton-irs-rate" />
+            </>
+          ) : summaryError ? (
+            <>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Miles</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-destructive">Failed to load</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/mileage/summary'] })}
+                    className="mt-2"
+                    data-testid="button-retry-summary"
+                  >
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Business Miles</p>
-                  <p className="text-2xl font-bold text-green-600" data-testid="text-business-miles">
-                    {formatNumber(stats.businessMiles)}
-                  </p>
-                </div>
-                <Car className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Business Miles</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-destructive">Failed to load</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/mileage/summary'] })}
+                    className="mt-2"
+                    data-testid="button-retry-summary"
+                  >
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Tax Deduction</p>
-                  <p className="text-2xl font-bold text-blue-600" data-testid="text-deduction">
-                    {formatCurrency(stats.totalDeduction)}
-                  </p>
-                </div>
-                <DollarSign className="h-8 w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Tax Deduction</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-destructive">Failed to load</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/mileage/summary'] })}
+                    className="mt-2"
+                    data-testid="button-retry-summary"
+                  >
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">IRS Rate</p>
-                  <p className="text-2xl font-bold" data-testid="text-irs-rate">
-                    ${IRS_RATE}/mile
-                  </p>
-                  <p className="text-xs text-muted-foreground">2024 Rate</p>
-                </div>
-                <FileText className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">IRS Rate</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-destructive">Failed to load</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/mileage/summary'] })}
+                    className="mt-2"
+                    data-testid="button-retry-summary"
+                  >
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Miles</p>
+                      <p className="text-2xl font-bold" data-testid="text-total-miles">
+                        {formatNumber(monthlySummary?.totalMiles || 0)}
+                      </p>
+                    </div>
+                    <Gauge className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Business Miles</p>
+                      <p className="text-2xl font-bold text-green-600" data-testid="text-business-miles">
+                        {formatNumber(monthlySummary?.businessMiles || 0)}
+                      </p>
+                    </div>
+                    <Car className="h-8 w-8 text-green-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Tax Deduction</p>
+                      <p className="text-2xl font-bold text-blue-600" data-testid="text-deduction">
+                        {formatCurrency(monthlySummary?.taxDeduction || 0)}
+                      </p>
+                    </div>
+                    <DollarSign className="h-8 w-8 text-blue-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">IRS Rate</p>
+                      <p className="text-2xl font-bold" data-testid="text-irs-rate">
+                        ${IRS_RATE}/mile
+                      </p>
+                      <p className="text-xs text-muted-foreground">2025 Rate</p>
+                    </div>
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         {/* Main Content */}
@@ -506,55 +614,116 @@ export default function Mileage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  {/* Summary Stats */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="p-4 rounded-lg border">
-                      <p className="text-sm text-muted-foreground mb-1">Total Trips</p>
-                      <p className="text-2xl font-bold">{logs?.length || 0}</p>
+                {isSummaryLoading ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <Skeleton className="h-24" />
+                      <Skeleton className="h-24" />
+                      <Skeleton className="h-24" />
                     </div>
-                    <div className="p-4 rounded-lg border">
-                      <p className="text-sm text-muted-foreground mb-1">Average Trip</p>
-                      <p className="text-2xl font-bold">
-                        {logs?.length ? Math.round(stats.totalMiles / logs.length) : 0} mi
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-lg border">
-                      <p className="text-sm text-muted-foreground mb-1">Business %</p>
-                      <p className="text-2xl font-bold">
-                        {stats.totalMiles ? Math.round((stats.businessMiles / stats.totalMiles) * 100) : 0}%
-                      </p>
-                    </div>
+                    <Skeleton className="h-48" />
                   </div>
-
-                  {/* IRS Compliance Box */}
-                  <div className="p-6 rounded-lg bg-muted">
-                    <h4 className="font-semibold mb-3 flex items-center">
-                      <FileText className="h-5 w-5 mr-2" />
-                      IRS Compliance Information
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Total Business Miles:</span>
-                        <span className="font-medium">{formatNumber(stats.businessMiles)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">IRS Standard Rate:</span>
-                        <span className="font-medium">${IRS_RATE} per mile</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Total Deduction:</span>
-                        <span className="font-semibold text-lg">
-                          {formatCurrency(stats.totalDeduction)}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-4">
-                      This mileage log meets IRS requirements for business mileage deduction.
-                      Keep receipts and records for audit purposes.
+                ) : summaryError ? (
+                  <div className="text-center py-12">
+                    <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+                    <p className="text-lg font-semibold mb-2">Failed to load summary</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Could not retrieve monthly statistics
                     </p>
+                    <Button
+                      onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/mileage/summary'] })}
+                      data-testid="button-retry-monthly-summary"
+                    >
+                      Retry
+                    </Button>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-lg border" data-testid="summary-total-drives">
+                        <p className="text-sm text-muted-foreground mb-1">Total Drives</p>
+                        <p className="text-2xl font-bold">{monthlySummary?.totalDrives || 0}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Business: {monthlySummary?.businessDrives || 0} | Personal: {monthlySummary?.personalDrives || 0}
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-lg border" data-testid="summary-average-trip">
+                        <p className="text-sm text-muted-foreground mb-1">Average Trip</p>
+                        <p className="text-2xl font-bold">
+                          {monthlySummary?.totalDrives 
+                            ? Math.round(monthlySummary.totalMiles / monthlySummary.totalDrives) 
+                            : 0} mi
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-lg border" data-testid="summary-business-percentage">
+                        <p className="text-sm text-muted-foreground mb-1">Business %</p>
+                        <p className="text-2xl font-bold">
+                          {monthlySummary?.totalMiles 
+                            ? Math.round((monthlySummary.businessMiles / monthlySummary.totalMiles) * 100) 
+                            : 0}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Drive Comparison */}
+                    <div className="p-4 rounded-lg border" data-testid="summary-drive-comparison">
+                      <h4 className="font-semibold mb-3">Drive Breakdown</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Business Drives</p>
+                          <p className="text-xl font-bold text-green-600">
+                            {monthlySummary?.businessDrives || 0}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatNumber(monthlySummary?.businessMiles || 0)} miles
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Personal Drives</p>
+                          <p className="text-xl font-bold">
+                            {monthlySummary?.personalDrives || 0}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatNumber(monthlySummary?.personalMiles || 0)} miles
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* IRS Compliance Box */}
+                    <div className="p-6 rounded-lg bg-muted" data-testid="summary-irs-compliance">
+                      <h4 className="font-semibold mb-3 flex items-center">
+                        <FileText className="h-5 w-5 mr-2" />
+                        IRS Compliance Information
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total Business Miles:</span>
+                          <span className="font-medium" data-testid="summary-irs-business-miles">
+                            {formatNumber(monthlySummary?.businessMiles || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">IRS Standard Rate:</span>
+                          <span className="font-medium" data-testid="summary-irs-rate">
+                            ${monthlySummary?.irsRate || IRS_RATE} per mile
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total Deduction:</span>
+                          <span className="font-semibold text-lg" data-testid="summary-irs-deduction">
+                            {formatCurrency(monthlySummary?.taxDeduction || 0)}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-4">
+                        This mileage log meets IRS requirements for business mileage deduction.
+                        Keep receipts and records for audit purposes.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
