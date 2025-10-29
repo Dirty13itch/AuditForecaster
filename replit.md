@@ -31,6 +31,42 @@ Core architectural decisions and features include:
 -   **WebSocket Notifications**: Real-time notification system with exponential backoff and HTTP polling fallback.
 -   **Database Schema Integrity**: Comprehensive schema synchronization across all tables, including dedicated columns for assignment tracking, OCR, financial tracking, and notification preferences.
 -   **Report Template System - JSON-Only Architecture**: Complete migration to a pure JSON architecture for report templates, supporting standalone reports and version tracking.
+-   **Blower Door Testing System**: Production-grade multi-point pressure testing with automated ACH50 calculations, weather/altitude corrections, and Minnesota 2020 Energy Code compliance verification (≤3.0 ACH50 limit). Features 59-column database schema, multi-point regression analysis, ring configuration support (Open, Ring A-D), ELA calculations, and automated compliance checking. Complete with comprehensive runbook, 12-test smoke suite, and 8 realistic seed scenarios.
+
+## Production-Ready Features (Vertical Slice Completion)
+
+The following features have completed vertical development with full production artifacts:
+
+1. **Mileage Tracking** (40/40 ✅)
+   - Runbook: `MILEAGE_SLICE.md`
+   - Smoke Tests: `scripts/smoke-test-mileage.sh`
+   - Seed Data: `db/seed-mileage.sql`
+   - Compliance: Checklist integrated
+
+2. **Expenses Management** (40/40 ✅)
+   - Runbook: `EXPENSES_SLICE.md`
+   - Smoke Tests: `scripts/smoke-test-expenses.sh`
+   - Seed Data: `db/seed-expenses.sql`
+   - Compliance: Checklist integrated
+
+3. **Report Templates** (40/40 ✅)
+   - Runbook: `REPORT_TEMPLATE_SLICE.md`
+   - Smoke Tests: `scripts/smoke-test-report-templates.sh`
+   - Seed Data: `db/seed-report-templates.sql`
+   - Compliance: Checklist integrated
+
+4. **Calendar Integration** (40/40 ✅)
+   - Runbook: `CALENDAR_SLICE.md`
+   - Smoke Tests: `scripts/smoke-test-calendar.sh`
+   - Seed Data: `db/seed-calendar.sql`
+   - Compliance: `CALENDAR_COMPLIANCE.md`
+
+5. **Blower Door Testing** (40/40 ✅)
+   - Runbook: `BLOWER_DOOR_SLICE.md` (1,200+ lines)
+   - Smoke Tests: `scripts/smoke-test-blower-door.sh` (12 tests)
+   - Seed Data: `db/seed-blower-door.sql` (8 scenarios)
+   - Compliance: `BLOWER_DOOR_COMPLIANCE.md`
+   - Technical Details: Multi-point regression, ACH50 calculations, Minnesota Energy Code (3.0 ACH50), weather/altitude corrections, ring configurations, ELA calculations
 
 ## External Dependencies
 
