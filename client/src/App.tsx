@@ -36,6 +36,7 @@ import FinancialDashboard from "@/pages/FinancialDashboard";
 import Invoices from "@/pages/Invoices";
 import Expenses from "@/pages/Expenses";
 import Mileage from "@/pages/Mileage";
+import MileageClassify from "@/pages/MileageClassify";
 import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
 import ReportTemplates from "@/pages/ReportTemplates";
@@ -158,6 +159,11 @@ function Router() {
       <Route path="/mileage/new" component={() => (
         <RouteErrorBoundary>
           <Mileage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/mileage/classify" component={() => (
+        <RouteErrorBoundary>
+          <MileageClassify />
         </RouteErrorBoundary>
       )} />
       <Route path="/reports" component={() => (

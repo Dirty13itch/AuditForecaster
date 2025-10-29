@@ -51,6 +51,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Car,
   Plus,
@@ -65,6 +66,8 @@ import {
   TrendingUp,
   Gauge,
   Navigation,
+  ArrowRight,
+  ListTodo,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Link } from "wouter";
@@ -129,6 +132,11 @@ export default function Mileage() {
   // Fetch jobs for linking
   const { data: jobs } = useQuery({
     queryKey: ["/api/jobs"],
+  });
+
+  // Fetch unclassified drives count
+  const { data: unclassifiedDrives } = useQuery({
+    queryKey: ["/api/mileage/unclassified"],
   });
 
   // Fetch last mileage log for "same as last" feature
@@ -289,6 +297,21 @@ export default function Mileage() {
 
         {/* GPS Trip Controller */}
         <TripController />
+
+        {/* Unclassified Drives Alert */}
+        {unclassifiedDrives && unclassifiedDrives.length > 0 && (
+          <Link href="/mileage/classify">
+            <Alert className="cursor-pointer hover-elevate" data-testid="alert-unclassified-drives">
+              <ListTodo className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>
+                  You have <strong>{unclassifiedDrives.length}</strong> {unclassifiedDrives.length === 1 ? 'drive' : 'drives'} to classify
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </AlertDescription>
+            </Alert>
+          </Link>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
