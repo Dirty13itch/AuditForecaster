@@ -387,6 +387,11 @@ export interface IStorage {
   createMileageLogWithRoute(log: InsertMileageLog, routePoints: any[]): Promise<MileageLog>;
   getMileageLogRoute(logId: string): Promise<any[]>;
   updateMileageLogRoute(logId: string, points: any[]): Promise<void>;
+  // MileIQ backend methods
+  getUnclassifiedMileageLogs(userId: string, limit?: number): Promise<any[]>;
+  classifyMileageLog(id: string, userId: string, purpose: string, jobId?: string): Promise<MileageLog>;
+  getMileageMonthlySummary(userId: string, month: string): Promise<any>;
+  exportMileageCsv(userId: string, month: string): Promise<string>;
 
   // Report Templates - Enhanced for visual designer
   createReportTemplate(template: InsertReportTemplate): Promise<ReportTemplate>;
@@ -1928,6 +1933,232 @@ export class DatabaseStorage implements IStorage {
         await tx.insert(mileageRoutePoints).values(pointsToInsert);
       }
     });
+  }
+
+  async getUnclassifiedMileageLogs(userId: string, limit: number = 50): Promise<any[]> {
+    // Use SQL JSON aggregation to avoid N+1 query pattern
+    const results = await db.execute(sql`
+      SELECT 
+        ml.id,
+        ml.start_location,
+        ml.end_location,
+        ml.distance_meters,
+        ml.distance,
+        ml.duration_seconds,
+        ml.start_timestamp,
+        ml.end_timestamp,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'latitude', mrp.latitude,
+              'longitude', mrp.longitude,
+              'timestamp', mrp.timestamp
+            ) ORDER BY mrp.timestamp
+          ) FILTER (WHERE mrp.id IS NOT NULL),
+          '[]'
+        ) as route_points
+      FROM mileage_logs ml
+      LEFT JOIN mileage_route_points mrp ON mrp.log_id = ml.id
+      WHERE ml.user_id = ${userId} AND ml.vehicle_state = 'unclassified'
+      GROUP BY ml.id
+      ORDER BY ml.date DESC
+      LIMIT ${limit}
+    `);
+
+    // Map results to proper types
+    return results.rows.map((row: any) => {
+      const distanceMiles = row.distance ? parseFloat(row.distance.toString()) : 0;
+      
+      return {
+        id: row.id,
+        startLocation: row.start_location,
+        endLocation: row.end_location,
+        distanceMeters: row.distance_meters || 0,
+        distanceMiles,
+        durationSeconds: row.duration_seconds || 0,
+        startTimestamp: row.start_timestamp?.toISOString(),
+        endTimestamp: row.end_timestamp?.toISOString(),
+        routePoints: typeof row.route_points === 'string' 
+          ? JSON.parse(row.route_points) 
+          : row.route_points,
+      };
+    });
+  }
+
+  async classifyMileageLog(id: string, userId: string, purpose: string, jobId?: string): Promise<MileageLog> {
+    // First verify the log exists and belongs to the user
+    const existingLog = await db
+      .select()
+      .from(mileageLogs)
+      .where(eq(mileageLogs.id, id))
+      .limit(1);
+
+    if (existingLog.length === 0) {
+      throw new Error('Mileage log not found');
+    }
+
+    if (existingLog[0].userId !== userId) {
+      throw new Error('Unauthorized: You do not own this mileage log');
+    }
+
+    // Check state transition - only allow classification of unclassified drives
+    if (existingLog[0].vehicleState !== 'unclassified') {
+      throw new Error('Drive already classified or invalid state');
+    }
+
+    // Optionally verify jobId ownership if provided
+    if (jobId) {
+      const job = await db
+        .select()
+        .from(jobs)
+        .where(eq(jobs.id, jobId))
+        .limit(1);
+      
+      if (job.length === 0) {
+        throw new Error('Job not found');
+      }
+      
+      // Verify job belongs to the same user
+      if (job[0].assignedTo !== userId) {
+        throw new Error('Unauthorized: Job does not belong to you');
+      }
+    }
+
+    // Update the log
+    const updateData: Partial<InsertMileageLog> = {
+      purpose,
+      vehicleState: 'completed',
+      isWorkRelated: purpose === 'business',
+    };
+
+    if (jobId) {
+      updateData.jobId = jobId;
+    }
+
+    const [updatedLog] = await db
+      .update(mileageLogs)
+      .set(updateData)
+      .where(eq(mileageLogs.id, id))
+      .returning();
+
+    return updatedLog;
+  }
+
+  async getMileageMonthlySummary(userId: string, month: string): Promise<any> {
+    // Parse month (format: YYYY-MM)
+    const [year, monthNum] = month.split('-').map(Number);
+    const startDate = new Date(year, monthNum - 1, 1);
+    const endDate = new Date(year, monthNum, 0, 23, 59, 59, 999);
+
+    const IRS_RATE = 0.70; // $0.70 per mile for 2025
+
+    // Get all completed drives in the month
+    const drives = await db
+      .select({
+        purpose: mileageLogs.purpose,
+        distance: mileageLogs.distance,
+      })
+      .from(mileageLogs)
+      .where(
+        and(
+          eq(mileageLogs.userId, userId),
+          eq(mileageLogs.vehicleState, 'completed'),
+          gte(mileageLogs.date, startDate),
+          lte(mileageLogs.date, endDate)
+        )
+      );
+
+    // Calculate summary statistics
+    let totalDrives = 0;
+    let businessDrives = 0;
+    let personalDrives = 0;
+    let totalMiles = 0;
+    let businessMiles = 0;
+    let personalMiles = 0;
+
+    drives.forEach((drive) => {
+      const miles = drive.distance ? parseFloat(drive.distance.toString()) : 0;
+      totalDrives++;
+      totalMiles += miles;
+
+      if (drive.purpose === 'business') {
+        businessDrives++;
+        businessMiles += miles;
+      } else if (drive.purpose === 'personal') {
+        personalDrives++;
+        personalMiles += miles;
+      }
+    });
+
+    const taxDeduction = businessMiles * IRS_RATE;
+
+    return {
+      month,
+      totalDrives,
+      businessDrives,
+      personalDrives,
+      totalMiles: parseFloat(totalMiles.toFixed(2)),
+      businessMiles: parseFloat(businessMiles.toFixed(2)),
+      personalMiles: parseFloat(personalMiles.toFixed(2)),
+      taxDeduction: parseFloat(taxDeduction.toFixed(2)),
+      irsRate: IRS_RATE,
+    };
+  }
+
+  async exportMileageCsv(userId: string, month: string): Promise<string> {
+    // Parse month (format: YYYY-MM)
+    const [year, monthNum] = month.split('-').map(Number);
+    const startDate = new Date(year, monthNum - 1, 1);
+    const endDate = new Date(year, monthNum, 0, 23, 59, 59, 999);
+
+    const IRS_RATE = 0.70; // $0.70 per mile for 2025
+
+    // Get all completed drives in the month
+    const drives = await db
+      .select({
+        date: mileageLogs.date,
+        startLocation: mileageLogs.startLocation,
+        endLocation: mileageLogs.endLocation,
+        distance: mileageLogs.distance,
+        purpose: mileageLogs.purpose,
+      })
+      .from(mileageLogs)
+      .where(
+        and(
+          eq(mileageLogs.userId, userId),
+          eq(mileageLogs.vehicleState, 'completed'),
+          gte(mileageLogs.date, startDate),
+          lte(mileageLogs.date, endDate)
+        )
+      )
+      .orderBy(asc(mileageLogs.date));
+
+    // Generate CSV
+    const headers = ['Date', 'Start', 'End', 'Miles', 'Purpose', 'Deduction'];
+    const rows = drives.map((drive) => {
+      const miles = drive.distance ? parseFloat(drive.distance.toString()) : 0;
+      const deduction = drive.purpose === 'business' ? (miles * IRS_RATE).toFixed(2) : '0.00';
+      const dateStr = drive.date.toISOString().split('T')[0];
+
+      return [
+        dateStr,
+        drive.startLocation || '',
+        drive.endLocation || '',
+        miles.toFixed(2),
+        drive.purpose || '',
+        deduction,
+      ];
+    });
+
+    // Convert to CSV format
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) =>
+        row.map((cell) => `"${cell.toString().replace(/"/g, '""')}"`).join(',')
+      ),
+    ].join('\n');
+
+    return csvContent;
   }
 
   async createReportTemplate(insertTemplate: InsertReportTemplate): Promise<ReportTemplate> {

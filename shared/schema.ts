@@ -469,6 +469,7 @@ export const mileageLogs = pgTable("mileage_logs", {
   purpose: text("purpose"),
   isWorkRelated: boolean("is_work_related"),
   jobId: varchar("job_id"),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   startLatitude: real("start_latitude"),
   startLongitude: real("start_longitude"),
   endLatitude: real("end_latitude"),
@@ -490,13 +491,17 @@ export const mileageLogs = pgTable("mileage_logs", {
     enum: ["manual", "gps_auto", "gps_manual"] 
   }).default("manual"),
   vehicleState: text("vehicle_state", { 
-    enum: ["idle", "monitoring", "recording", "completed"] 
+    enum: ["idle", "monitoring", "recording", "unclassified", "completed"] 
   }).default("completed"),
 }, (table) => [
   index("idx_mileage_logs_date").on(table.date),
   index("idx_mileage_logs_tracking_source").on(table.trackingSource),
   index("idx_mileage_logs_vehicle_state").on(table.vehicleState),
   index("idx_mileage_logs_date_source").on(table.date, table.trackingSource),
+  index("idx_mileage_logs_user_id").on(table.userId),
+  // Performance indexes for MileIQ functionality
+  index("idx_mileage_unclassified").on(table.vehicleState, table.date).where(sql`vehicle_state = 'unclassified'`),
+  index("idx_mileage_monthly_summary").on(table.date, table.purpose).where(sql`vehicle_state IN ('completed', 'unclassified')`),
 ]);
 
 export const mileageRoutePoints = pgTable("mileage_route_points", {

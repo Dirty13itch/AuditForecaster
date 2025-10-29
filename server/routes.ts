@@ -83,6 +83,7 @@ import { sql } from "drizzle-orm";
 import { exportService, type ExportOptions } from "./exportService";
 import { createReadStream } from "fs";
 import { unlink } from "fs/promises";
+import rateLimit from "express-rate-limit";
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
@@ -4189,6 +4190,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(status).json({ message });
       }
       const { status, message } = handleDatabaseError(error, 'update route points');
+      res.status(status).json({ message });
+    }
+  });
+
+  // MileIQ Backend Endpoints
+  // Rate limiter for classify endpoint (100 req/min)
+  const classifyRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // 100 requests per minute
+    message: 'Too many classification requests, please try again later',
+  });
+
+  app.get("/api/mileage/unclassified", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      // Validate limit parameter with Zod
+      const limitSchema = z.coerce.number().int().min(1).max(100).default(50);
+      const limit = limitSchema.parse(req.query.limit || 50);
+      
+      const drives = await storage.getUnclassifiedMileageLogs(userId, limit);
+      res.json({ drives });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch unclassified mileage logs');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/mileage/:id/classify", isAuthenticated, csrfSynchronisedProtection, classifyRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const logId = req.params.id;
+      
+      // Validate request body
+      const classifySchema = z.object({
+        purpose: z.enum(['business', 'personal']),
+        jobId: z.string().uuid().optional(),
+      });
+      
+      const validated = classifySchema.parse(req.body);
+      
+      // Classify the mileage log
+      const updatedLog = await storage.classifyMileageLog(
+        logId,
+        userId,
+        validated.purpose,
+        validated.jobId
+      );
+      
+      res.json(updatedLog);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      
+      // Handle specific error messages from storage layer
+      if (error instanceof Error) {
+        if (error.message === 'Mileage log not found') {
+          return res.status(404).json({ message: 'Mileage log not found' });
+        }
+        if (error.message.includes('Unauthorized')) {
+          return res.status(403).json({ message: 'You do not have permission to classify this mileage log' });
+        }
+        // Handle state transition errors with 409 Conflict
+        if (error.message.includes('already classified')) {
+          return res.status(409).json({ message: error.message });
+        }
+        if (error.message === 'Job not found') {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+      }
+      
+      const { status, message } = handleDatabaseError(error, 'classify mileage log');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/mileage/summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const month = req.query.month as string;
+      
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ 
+          message: 'Please provide a valid month in YYYY-MM format' 
+        });
+      }
+      
+      const summary = await storage.getMileageMonthlySummary(userId, month);
+      res.json(summary);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch mileage summary');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/mileage/export", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const month = req.query.month as string;
+      const format = req.query.format as string;
+      
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ 
+          message: 'Please provide a valid month in YYYY-MM format' 
+        });
+      }
+      
+      if (format !== 'csv') {
+        return res.status(400).json({ 
+          message: 'Only CSV format is currently supported' 
+        });
+      }
+      
+      const csvContent = await storage.exportMileageCsv(userId, month);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=mileage-${month}.csv`);
+      res.send(csvContent);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'export mileage data');
       res.status(status).json({ message });
     }
   });
