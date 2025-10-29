@@ -39,6 +39,7 @@ import Mileage from "@/pages/Mileage";
 import Reports from "@/pages/Reports";
 import ReportInstancePage from "@/pages/ReportInstance";
 import ReportTemplates from "@/pages/ReportTemplates";
+import ReportTemplateDetail from "@/pages/ReportTemplateDetail";
 import ReportTemplateDesigner from "@/pages/ReportTemplateDesigner";
 import ReportFillout from "@/pages/ReportFillout";
 import BlowerDoorTest from "@/pages/BlowerDoorTest";
@@ -172,6 +173,11 @@ function Router() {
       <Route path="/report-templates" component={() => (
         <RouteErrorBoundary>
           <ReportTemplates />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/report-templates/:id" component={() => (
+        <RouteErrorBoundary>
+          <ReportTemplateDetail />
         </RouteErrorBoundary>
       )} />
       <Route path="/report-template-designer" component={() => (

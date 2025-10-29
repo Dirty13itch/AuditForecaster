@@ -2134,7 +2134,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select()
       .from(templateSections)
       .where(eq(templateSections.templateId, templateId))
-      .orderBy(templateSections.orderIndex);
+      .orderBy(asc(templateSections.orderIndex));
   }
 
   async updateTemplateSection(id: string, updates: Partial<InsertTemplateSection>): Promise<TemplateSection | undefined> {
@@ -2176,10 +2176,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTemplateFieldsByTemplateId(templateId: string): Promise<TemplateField[]> {
-    return await db.select()
+    return await db.select({
+      id: templateFields.id,
+      sectionId: templateFields.sectionId,
+      fieldType: templateFields.fieldType,
+      label: templateFields.label,
+      description: templateFields.description,
+      placeholder: templateFields.placeholder,
+      orderIndex: templateFields.orderIndex,
+      isRequired: templateFields.isRequired,
+      isVisible: templateFields.isVisible,
+      defaultValue: templateFields.defaultValue,
+      configuration: templateFields.configuration,
+      validationRules: templateFields.validationRules,
+      dependsOn: templateFields.dependsOn,
+      createdAt: templateFields.createdAt,
+      updatedAt: templateFields.updatedAt,
+    })
       .from(templateFields)
-      .where(eq(templateFields.templateId, templateId))
-      .orderBy(templateFields.orderIndex);
+      .innerJoin(templateSections, eq(templateFields.sectionId, templateSections.id))
+      .where(eq(templateSections.templateId, templateId))
+      .orderBy(asc(templateSections.orderIndex), asc(templateFields.orderIndex));
   }
 
   async getTemplateField(id: string): Promise<TemplateField | undefined> {
@@ -2191,7 +2208,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select()
       .from(templateFields)
       .where(eq(templateFields.sectionId, sectionId))
-      .orderBy(templateFields.orderIndex);
+      .orderBy(asc(templateFields.orderIndex));
   }
 
   async updateTemplateField(id: string, updates: Partial<InsertTemplateField>): Promise<TemplateField | undefined> {
@@ -2239,7 +2256,7 @@ export class DatabaseStorage implements IStorage {
         eq(fieldDependencies.fieldId, fieldId),
         eq(fieldDependencies.isActive, true)
       ))
-      .orderBy(fieldDependencies.priority);
+      .orderBy(asc(fieldDependencies.priority));
   }
 
   async getDependenciesByDependsOn(dependsOnFieldId: string): Promise<FieldDependency[]> {
@@ -2249,7 +2266,7 @@ export class DatabaseStorage implements IStorage {
         eq(fieldDependencies.dependsOnFieldId, dependsOnFieldId),
         eq(fieldDependencies.isActive, true)
       ))
-      .orderBy(fieldDependencies.priority);
+      .orderBy(asc(fieldDependencies.priority));
   }
 
   async updateFieldDependency(id: string, updates: Partial<InsertFieldDependency>): Promise<FieldDependency | undefined> {
@@ -2277,7 +2294,7 @@ export class DatabaseStorage implements IStorage {
         eq(fieldDependencies.templateId, templateId),
         eq(fieldDependencies.isActive, true)
       ))
-      .orderBy(fieldDependencies.priority);
+      .orderBy(asc(fieldDependencies.priority));
   }
 
   async upsertFieldDependency(dependency: InsertFieldDependency): Promise<FieldDependency> {
