@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,289 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Copy, Edit, Trash2, Eye, GripVertical, Settings, ChevronDown, ChevronRight, Save, X, Wand2 } from "lucide-react";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { FieldEditDialog } from "@/components/FieldEditDialog";
+import { Plus, Wand2 } from "lucide-react";
 import type { 
   ReportTemplate, 
-  TemplateSection, 
-  TemplateField,
-  InsertReportTemplate,
-  InsertTemplateSection,
-  InsertTemplateField 
+  InsertReportTemplate
 } from "@shared/schema";
-
-// Field type definitions with icons and descriptions - all 15+ field types
-const FIELD_TYPES = [
-  { value: "text", label: "Text", description: "Single line text input" },
-  { value: "textarea", label: "Text Area", description: "Multi-line text input" },
-  { value: "number", label: "Number", description: "Numeric input with optional min/max/decimals" },
-  { value: "checkbox", label: "Checkbox", description: "Simple true/false checkbox" },
-  { value: "select", label: "Dropdown", description: "Select one option from a list" },
-  { value: "multiselect", label: "Multi-Select", description: "Select multiple options from a list" },
-  { value: "yes_no_na", label: "Yes/No/NA", description: "Three-option radio choice" },
-  { value: "scale", label: "Scale", description: "Rating scale (1-5, 1-10, etc.)" },
-  { value: "date", label: "Date", description: "Date picker" },
-  { value: "time", label: "Time", description: "Time picker" },
-  { value: "datetime", label: "Date & Time", description: "Combined date and time picker" },
-  { value: "photo", label: "Photo", description: "Single photo capture/upload" },
-  { value: "photo_group", label: "Photo Group", description: "Multiple photos with annotations" },
-  { value: "signature", label: "Signature", description: "Digital signature capture" },
-  { value: "calculation", label: "Calculation", description: "Auto-calculated based on formula" },
-  { value: "conditional_calculation", label: "Conditional Calc", description: "Calculated based on conditions" },
-];
-
-// Condition operators for conditional logic
-const CONDITION_OPERATORS = [
-  { value: "equals", label: "Equals", description: "Field value exactly matches" },
-  { value: "not_equals", label: "Not Equals", description: "Field value doesn't match" },
-  { value: "greater_than", label: "Greater Than", description: "Numeric value is greater" },
-  { value: "less_than", label: "Less Than", description: "Numeric value is less" },
-  { value: "greater_than_or_equals", label: "Greater or Equal", description: "Numeric value is greater or equal" },
-  { value: "less_than_or_equals", label: "Less or Equal", description: "Numeric value is less or equal" },
-  { value: "contains", label: "Contains", description: "Text contains substring" },
-  { value: "not_contains", label: "Not Contains", description: "Text doesn't contain substring" },
-  { value: "empty", label: "Is Empty", description: "Field has no value" },
-  { value: "not_empty", label: "Is Not Empty", description: "Field has a value" },
-];
-
-// Condition actions for field behavior
-const CONDITION_ACTIONS = [
-  { value: "show", label: "Show", description: "Make field visible" },
-  { value: "hide", label: "Hide", description: "Make field hidden" },
-  { value: "require", label: "Make Required", description: "Field becomes required" },
-  { value: "unrequire", label: "Make Optional", description: "Field becomes optional" },
-  { value: "enable", label: "Enable", description: "Enable field input" },
-  { value: "disable", label: "Disable", description: "Disable field input" },
-];
-
-// Calculation functions available
-const CALCULATION_FUNCTIONS = [
-  { value: "SUM", label: "SUM", description: "Add all values", example: "SUM({field1}, {field2})" },
-  { value: "AVG", label: "AVERAGE", description: "Calculate average", example: "AVG({field1}, {field2})" },
-  { value: "MIN", label: "MIN", description: "Find minimum value", example: "MIN({field1}, {field2})" },
-  { value: "MAX", label: "MAX", description: "Find maximum value", example: "MAX({field1}, {field2})" },
-  { value: "COUNT", label: "COUNT", description: "Count non-empty values", example: "COUNT({field1}, {field2})" },
-  { value: "IF", label: "IF", description: "Conditional calculation", example: "IF({field1} > 10, {field2}, {field3})" },
-];
-
-// Sortable field component
-function SortableField({ field, onEdit, onDelete }: { 
-  field: TemplateField; 
-  onEdit: (field: TemplateField) => void;
-  onDelete: (id: string) => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: field.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  const fieldType = FIELD_TYPES.find(t => t.value === field.fieldType);
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-2 p-3 bg-background border rounded-md hover-elevate"
-    >
-      <div {...attributes} {...listeners} className="cursor-move">
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{field.label}</span>
-          {field.isRequired && <Badge variant="secondary" className="text-xs">Required</Badge>}
-          <Badge variant="outline" className="text-xs">{fieldType?.label}</Badge>
-        </div>
-        {field.description && (
-          <p className="text-sm text-muted-foreground mt-1">{field.description}</p>
-        )}
-      </div>
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={() => onEdit(field)}
-        data-testid={`button-edit-field-${field.id}`}
-      >
-        <Edit className="h-4 w-4" />
-      </Button>
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={() => onDelete(field.id)}
-        data-testid={`button-delete-field-${field.id}`}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
-
-// Section component with fields
-function TemplateSection({ 
-  section, 
-  fields,
-  onUpdateSection,
-  onDeleteSection,
-  onAddField,
-  onUpdateField,
-  onDeleteField,
-  onReorderFields
-}: {
-  section: TemplateSection;
-  fields: TemplateField[];
-  onUpdateSection: (section: TemplateSection) => void;
-  onDeleteSection: (id: string) => void;
-  onAddField: (sectionId: string) => void;
-  onUpdateField: (field: TemplateField) => void;
-  onDeleteField: (fieldId: string) => void;
-  onReorderFields: (sectionId: string, newFields: TemplateField[]) => void;
-}) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [editingField, setEditingField] = useState<TemplateField | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (active.id !== over?.id) {
-      const oldIndex = fields.findIndex(f => f.id === active.id);
-      const newIndex = fields.findIndex(f => f.id === over?.id);
-      
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newFields = arrayMove(fields, oldIndex, newIndex).map((field, index) => ({
-          ...field,
-          order_index: index
-        }));
-        onReorderFields(section.id, newFields);
-      }
-    }
-  };
-
-  return (
-    <Card className="mb-4">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setIsExpanded(!isExpanded)}
-              data-testid={`button-toggle-section-${section.id}`}
-            >
-              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </Button>
-            <div>
-              <CardTitle className="text-lg">{section.title}</CardTitle>
-              {section.description && (
-                <CardDescription className="text-sm mt-1">{section.description}</CardDescription>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {section.isRepeatable && (
-              <Badge variant="outline">Repeatable</Badge>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onAddField(section.id)}
-              data-testid={`button-add-field-${section.id}`}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Field
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => onDeleteSection(section.id)}
-              data-testid={`button-delete-section-${section.id}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      
-      {isExpanded && (
-        <CardContent>
-          {fields.length > 0 ? (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={fields.map(f => f.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2">
-                  {fields.map(field => (
-                    <SortableField
-                      key={field.id}
-                      field={field}
-                      onEdit={setEditingField}
-                      onDelete={onDeleteField}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No fields in this section. Click "Add Field" to get started.
-            </div>
-          )}
-        </CardContent>
-      )}
-      
-      {/* Field edit dialog */}
-      {editingField && (
-        <FieldEditDialog
-          field={editingField}
-          allFields={fields}
-          onSave={(field) => {
-            onUpdateField(field);
-            setEditingField(null);
-          }}
-          onCancel={() => setEditingField(null)}
-        />
-      )}
-    </Card>
-  );
-}
-
 
 export default function ReportTemplatesPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const { showConfirm, ConfirmDialog } = useConfirmDialog();
-  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newTemplate, setNewTemplate] = useState<Partial<InsertReportTemplate>>({
     name: "",
@@ -300,40 +28,11 @@ export default function ReportTemplatesPage() {
     status: "draft",
     isDefault: false
   });
-  
-  // Local state for editing template
-  const [editingSections, setEditingSections] = useState<TemplateSection[]>([]);
-  const [editingFields, setEditingFields] = useState<Record<string, TemplateField[]>>({});
 
   // Fetch templates
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["/api/report-templates"],
   });
-
-  // Fetch sections and fields when a template is selected
-  const { data: sections = [] } = useQuery({
-    queryKey: ["/api/report-templates", selectedTemplate?.id, "sections"],
-    enabled: !!selectedTemplate?.id,
-  });
-
-  const { data: fields = [] } = useQuery({
-    queryKey: ["/api/report-templates", selectedTemplate?.id, "fields"],
-    enabled: !!selectedTemplate?.id,
-  });
-
-  // Group fields by section
-  useEffect(() => {
-    if (sections && Array.isArray(sections) && sections.length > 0 && fields && Array.isArray(fields) && fields.length > 0) {
-      setEditingSections(sections as TemplateSection[]);
-      const grouped: Record<string, TemplateField[]> = {};
-      (sections as TemplateSection[]).forEach(section => {
-        grouped[section.id] = (fields as TemplateField[])
-          .filter((f: TemplateField) => f.sectionId === section.id)
-          .sort((a: TemplateField, b: TemplateField) => a.orderIndex - b.orderIndex);
-      });
-      setEditingFields(grouped);
-    }
-  }, [sections, fields]);
 
   // Create template mutation
   const createTemplate = useMutation({
@@ -357,16 +56,16 @@ export default function ReportTemplatesPage() {
     },
     onSuccess: (newTemplate) => {
       queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
-      setSelectedTemplate(newTemplate as unknown as ReportTemplate);
       setIsCreating(false);
       setNewTemplate({ name: "", description: "", category: "custom", status: "draft", isDefault: false });
       toast({
         title: "Template created",
         description: "Your report template has been created successfully.",
       });
+      // Navigate to the detail page for the newly created template
+      navigate(`/report-templates/${(newTemplate as any).id}`);
     },
-    onError: (error) => {
-      // Failed to create template - error shown in toast
+    onError: () => {
       toast({
         title: "Error",
         description: "Failed to create template. Please try again.",
@@ -374,127 +73,6 @@ export default function ReportTemplatesPage() {
       });
     },
   });
-
-  // Update template mutation
-  const updateTemplate = useMutation({
-    mutationFn: ({ id, ...data }: ReportTemplate) => 
-      apiRequest("PATCH", `/api/report-templates/${id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
-      toast({
-        title: "Template updated",
-        description: "Your changes have been saved.",
-      });
-    },
-  });
-
-  // Delete template mutation
-  const deleteTemplate = useMutation({
-    mutationFn: (id: string) => 
-      apiRequest("DELETE", `/api/report-templates/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
-      setSelectedTemplate(null);
-      toast({
-        title: "Template deleted",
-        description: "The template has been deleted successfully.",
-      });
-    },
-  });
-
-  // Add section
-  const handleAddSection = () => {
-    if (!selectedTemplate) return;
-    
-    const newSection: TemplateSection = {
-      id: `temp-${Date.now()}`,
-      templateId: selectedTemplate.id,
-      parentSectionId: null,
-      title: "New Section",
-      description: "",
-      orderIndex: editingSections.length,
-      isRepeatable: false,
-      minRepetitions: 1,
-      maxRepetitions: null,
-      createdAt: null,
-      updatedAt: null
-    };
-    
-    setEditingSections([...editingSections, newSection]);
-    setEditingFields({ ...editingFields, [newSection.id]: [] });
-  };
-
-  // Add field to section
-  const handleAddField = (sectionId: string) => {
-    const sectionFields = editingFields[sectionId] || [];
-    const newField: TemplateField = {
-      id: `temp-field-${Date.now()}`,
-      sectionId: sectionId,
-      label: "New Field",
-      fieldType: "text",
-      description: "",
-      placeholder: null,
-      isRequired: false,
-      isVisible: true,
-      orderIndex: sectionFields.length,
-      configuration: {},
-      validationRules: null,
-      conditionalLogic: null,
-      defaultValue: null,
-      createdAt: null,
-      updatedAt: null
-    };
-    
-    setEditingFields({
-      ...editingFields,
-      [sectionId]: [...sectionFields, newField]
-    });
-  };
-
-  // Save all changes
-  const handleSaveChanges = async () => {
-    if (!selectedTemplate) return;
-
-    try {
-      // Save sections
-      for (const section of editingSections) {
-        if (section.id.startsWith("temp-")) {
-          // Create new section
-          const { id, ...data } = section;
-          await apiRequest("POST", "/api/report-templates/sections", data);
-        } else {
-          // Update existing section
-          await apiRequest("PATCH", `/api/report-templates/sections/${section.id}`, section);
-        }
-      }
-
-      // Save fields
-      for (const sectionId in editingFields) {
-        for (const field of editingFields[sectionId]) {
-          if (field.id.startsWith("temp-")) {
-            // Create new field
-            const { id, ...data } = field;
-            await apiRequest("POST", "/api/report-templates/fields", data);
-          } else {
-            // Update existing field
-            await apiRequest("PATCH", `/api/report-templates/fields/${field.id}`, field);
-          }
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["/api/report-templates"] });
-      toast({
-        title: "Changes saved",
-        description: "All template changes have been saved successfully.",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save changes. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
 
   return (
     <div className="container mx-auto p-6">
@@ -541,9 +119,9 @@ export default function ReportTemplatesPage() {
                     {(templates as ReportTemplate[]).map((template: ReportTemplate) => (
                       <Button
                         key={template.id}
-                        variant={selectedTemplate?.id === template.id ? "default" : "ghost"}
+                        variant="ghost"
                         className="w-full justify-start"
-                        onClick={() => setSelectedTemplate(template)}
+                        onClick={() => navigate(`/report-templates/${template.id}`)}
                         data-testid={`button-template-${template.id}`}
                       >
                         <div className="text-left">
@@ -561,138 +139,15 @@ export default function ReportTemplatesPage() {
           </Card>
         </div>
 
-        {/* Template builder */}
+        {/* Placeholder message */}
         <div className="col-span-9">
-          {selectedTemplate ? (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>{selectedTemplate.name}</CardTitle>
-                    <CardDescription>{selectedTemplate.description}</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => navigate(`/report-template-designer/${selectedTemplate.id}`)}
-                      data-testid="button-edit-designer"
-                    >
-                      <Wand2 className="h-4 w-4 mr-2" />
-                      Edit in Designer
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleSaveChanges}
-                      data-testid="button-save-template"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Changes
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        const confirmed = await showConfirm(
-                          "Delete Template",
-                          "Are you sure you want to delete this template? This action cannot be undone.",
-                          {
-                            confirmText: "Delete",
-                            cancelText: "Cancel",
-                            variant: "destructive"
-                          }
-                        );
-                        if (confirmed) {
-                          deleteTemplate.mutate(selectedTemplate.id);
-                        }
-                      }}
-                      data-testid="button-delete-template"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">Sections</h3>
-                    <Button
-                      size="sm"
-                      onClick={handleAddSection}
-                      data-testid="button-add-section"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Section
-                    </Button>
-                  </div>
-                  
-                  <ScrollArea className="h-[500px]">
-                    {editingSections.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        No sections yet. Click "Add Section" to create your first section.
-                      </div>
-                    ) : (
-                      editingSections.map(section => (
-                        <TemplateSection
-                          key={section.id}
-                          section={section}
-                          fields={editingFields[section.id] || []}
-                          onUpdateSection={(updated) => {
-                            setEditingSections(editingSections.map(s => 
-                              s.id === updated.id ? updated : s
-                            ));
-                          }}
-                          onDeleteSection={(id) => {
-                            setEditingSections(editingSections.filter(s => s.id !== id));
-                            const newFields = { ...editingFields };
-                            delete newFields[id];
-                            setEditingFields(newFields);
-                          }}
-                          onAddField={handleAddField}
-                          onUpdateField={(field) => {
-                            setEditingFields({
-                              ...editingFields,
-                              [field.sectionId]: editingFields[field.sectionId].map(f =>
-                                f.id === field.id ? field : f
-                              )
-                            });
-                          }}
-                          onDeleteField={(fieldId) => {
-                            const sectionId = Object.keys(editingFields).find(sid =>
-                              editingFields[sid].some(f => f.id === fieldId)
-                            );
-                            if (sectionId) {
-                              setEditingFields({
-                                ...editingFields,
-                                [sectionId]: editingFields[sectionId].filter(f => f.id !== fieldId)
-                              });
-                            }
-                          }}
-                          onReorderFields={(sectionId, newFields) => {
-                            setEditingFields({
-                              ...editingFields,
-                              [sectionId]: newFields
-                            });
-                          }}
-                        />
-                      ))
-                    )}
-                  </ScrollArea>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="flex items-center justify-center h-[600px]">
-                <div className="text-center">
-                  <h3 className="text-lg font-semibold mb-2">No template selected</h3>
-                  <p className="text-muted-foreground">
-                    Select a template from the list or create a new one to get started.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <Card>
+            <CardContent className="flex items-center justify-center h-[600px]">
+              <div className="text-center text-muted-foreground">
+                <p className="text-lg">Select a template from the list or create a new one to get started.</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -700,19 +155,19 @@ export default function ReportTemplatesPage() {
       <Dialog open={isCreating} onOpenChange={setIsCreating}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New Template</DialogTitle>
+            <DialogTitle>Create Report Template</DialogTitle>
             <DialogDescription>
-              Enter the basic information for your new report template.
+              Create a new inspection report template
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4">
             <div>
               <Label htmlFor="template-name">Template Name</Label>
               <Input
                 id="template-name"
                 value={newTemplate.name}
                 onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
-                placeholder="e.g., Home Energy Audit"
+                placeholder="Enter template name"
                 data-testid="input-template-name"
               />
             </div>
@@ -722,8 +177,8 @@ export default function ReportTemplatesPage() {
                 id="template-description"
                 value={newTemplate.description || ""}
                 onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
-                placeholder="Describe what this template is for..."
-                data-testid="textarea-template-description"
+                placeholder="Enter template description"
+                data-testid="input-template-description"
               />
             </div>
             <div>
@@ -732,37 +187,37 @@ export default function ReportTemplatesPage() {
                 value={newTemplate.category}
                 onValueChange={(value) => setNewTemplate({ ...newTemplate, category: value as any })}
               >
-                <SelectTrigger id="template-category" data-testid="select-template-category">
-                  <SelectValue />
+                <SelectTrigger data-testid="select-template-category">
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pre_drywall">Pre-Drywall</SelectItem>
-                  <SelectItem value="final">Final</SelectItem>
-                  <SelectItem value="duct_testing">Duct Testing</SelectItem>
-                  <SelectItem value="blower_door">Blower Door</SelectItem>
-                  <SelectItem value="pre_insulation">Pre-Insulation</SelectItem>
-                  <SelectItem value="post_insulation">Post-Insulation</SelectItem>
-                  <SelectItem value="rough_in">Rough In</SelectItem>
+                  <SelectItem value="energy_audit">Energy Audit</SelectItem>
+                  <SelectItem value="blower_door">Blower Door Test</SelectItem>
+                  <SelectItem value="duct_leakage">Duct Leakage</SelectItem>
+                  <SelectItem value="final_testing">Final Testing</SelectItem>
                   <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreating(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsCreating(false)}
+              data-testid="button-cancel-create"
+            >
               Cancel
             </Button>
             <Button
-              onClick={() => createTemplate.mutate(newTemplate as InsertReportTemplate)}
+              onClick={() => createTemplate.mutate(newTemplate)}
               disabled={!newTemplate.name || createTemplate.isPending}
-              data-testid="button-create-template-confirm"
+              data-testid="button-confirm-create"
             >
-              Create Template
+              {createTemplate.isPending ? "Creating..." : "Create Template"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <ConfirmDialog />
     </div>
   );
 }
