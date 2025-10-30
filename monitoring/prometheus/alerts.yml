@@ -1,0 +1,137 @@
+groups:
+  - name: api_alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum by (service)(rate(http_requests_total{status_code=~"5.."}[5m])) 
+            / 
+            sum by (service)(rate(http_requests_total[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+          team: backend
+        annotations:
+          summary: "High HTTP error rate detected"
+          description: "API error rate is {{ $value | humanizePercentage }} (threshold: 1%). This indicates server-side failures affecting user requests."
+          impact: "Users may be experiencing failures when accessing the application"
+          runbook_url: "https://docs.example.com/runbooks/high-error-rate"
+          dashboard_url: "https://grafana.example.com/d/api-overview"
+
+      - alert: HighAPILatency
+        expr: |
+          histogram_quantile(0.95, 
+            sum by (le)(rate(http_request_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+          team: backend
+        annotations:
+          summary: "High API latency detected"
+          description: "P95 API latency is {{ $value | humanizeDuration }} (threshold: 500ms). Slow response times may degrade user experience."
+          impact: "Users may experience slow page loads and delayed operations"
+          runbook_url: "https://docs.example.com/runbooks/high-latency"
+          dashboard_url: "https://grafana.example.com/d/api-overview"
+
+  - name: database_alerts
+    interval: 30s
+    rules:
+      - alert: DatabaseConnectionFailures
+        expr: increase(db_connection_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          team: platform
+        annotations:
+          summary: "Database connection failures detected"
+          description: "{{ $value }} database connection errors in the last 5 minutes. This may indicate database availability issues."
+          impact: "Application cannot persist or retrieve data, affecting all user operations"
+          runbook_url: "https://docs.example.com/runbooks/db-connection-failures"
+          dashboard_url: "https://grafana.example.com/d/system-health"
+
+  - name: system_alerts
+    interval: 30s
+    rules:
+      - alert: HighMemoryUsage
+        expr: (process_resident_memory_bytes / 1024 / 1024 / 1024) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: nodejs
+          team: platform
+        annotations:
+          summary: "High memory usage detected"
+          description: "Node.js process memory is {{ $value | humanize }}GB (threshold: 0.8GB). Process may be approaching memory limits."
+          impact: "Application may crash or experience OOM (Out of Memory) errors if memory continues to grow"
+          runbook_url: "https://docs.example.com/runbooks/high-memory-usage"
+          dashboard_url: "https://grafana.example.com/d/system-health"
+
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_user_seconds_total[5m]) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: nodejs
+          team: platform
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value | humanizePercentage }} (threshold: 90%). High CPU may indicate performance bottlenecks."
+          impact: "Slow response times and degraded application performance"
+          runbook_url: "https://docs.example.com/runbooks/high-cpu-usage"
+          dashboard_url: "https://grafana.example.com/d/system-health"
+
+      - alert: EventLoopBlocked
+        expr: nodejs_eventloop_lag_p95_seconds > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: nodejs
+          team: backend
+        annotations:
+          summary: "Node.js event loop blocked"
+          description: "Event loop lag P95 is {{ $value | humanizeDuration }} (threshold: 100ms). Indicates blocked event loop affecting request processing."
+          impact: "Severe performance degradation, requests timing out"
+          runbook_url: "https://docs.example.com/runbooks/event-loop-blocked"
+          dashboard_url: "https://grafana.example.com/d/system-health"
+
+  - name: business_alerts
+    interval: 60s
+    rules:
+      - alert: LowJobCompletionRate
+        expr: |
+          (
+            rate(jobs_completed_total[1h]) 
+            / 
+            rate(jobs_created_total[1h])
+          ) < 0.5
+        for: 2h
+        labels:
+          severity: warning
+          component: jobs
+          team: product
+        annotations:
+          summary: "Low job completion rate"
+          description: "Job completion rate is {{ $value | humanizePercentage }} (threshold: 50%). Jobs may be stalling or failing."
+          impact: "Field inspectors unable to complete work, revenue impact"
+          runbook_url: "https://docs.example.com/runbooks/low-job-completion"
+          dashboard_url: "https://grafana.example.com/d/business-metrics"
+
+      - alert: NoJobsCreatedRecently
+        expr: increase(jobs_created_total[1h]) == 0
+        for: 2h
+        labels:
+          severity: warning
+          component: jobs
+          team: product
+        annotations:
+          summary: "No jobs created recently"
+          description: "No new jobs have been created in the last 2 hours. This may indicate an issue with job creation workflow."
+          impact: "No new work being scheduled, potential business interruption"
+          runbook_url: "https://docs.example.com/runbooks/no-jobs-created"
+          dashboard_url: "https://grafana.example.com/d/business-metrics"
