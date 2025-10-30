@@ -210,11 +210,11 @@ export function sentryUserMiddleware(req: Request, res: Response, next: NextFunc
  * Add at end of middleware chain (before final error handler)
  * Only reports 5xx errors (not 4xx client errors)
  */
-export const sentryErrorHandler = Sentry.Handlers.errorHandler({
+export const sentryErrorHandler = SENTRY_DSN ? Sentry.Handlers.errorHandler({
   shouldHandleError(error: any) {
     // Only report server errors (5xx), not client errors (4xx)
     return error.status ? error.status >= 500 : true;
   }
-});
+}) : (req: Request, res: Response, next: NextFunction) => next();
 
 export { Sentry };
