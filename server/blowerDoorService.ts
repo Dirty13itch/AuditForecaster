@@ -7,6 +7,8 @@
  * Formulas based on RESNET Standards and ASTM E779/E1827
  */
 
+import { blowerDoorTestsTotal } from './metrics';
+
 export interface WeatherConditions {
   indoorTemp: number;    // Fahrenheit
   outdoorTemp: number;   // Fahrenheit
@@ -189,6 +191,9 @@ export function checkMinnesotaCompliance(
 
   const compliant = ach50 <= codeLimit;
   const margin = Number((codeLimit - ach50).toFixed(2));
+
+  // Track metrics
+  blowerDoorTestsTotal.inc({ passed: String(compliant) });
 
   return {
     compliant,

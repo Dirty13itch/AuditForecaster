@@ -125,6 +125,10 @@ app.use(express.urlencoded({ extended: false }));
 import { requestLoggingMiddleware } from "./middleware/requestLogging";
 app.use(requestLoggingMiddleware);
 
+// Prometheus metrics middleware
+import { metricsMiddleware } from "./middleware/metricsMiddleware";
+app.use(metricsMiddleware);
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -500,6 +504,42 @@ async function startServer() {
           serverLogger.info('[Server] Automated calendar import cron job initialized');
         } catch (error) {
           serverLogger.error('[Server] Failed to initialize calendar import cron job:', error);
+        }
+
+        // Initialize periodic job status metrics update
+        try {
+          const { jobStatusGauge } = await import('./metrics');
+          
+          const updateJobMetrics = async () => {
+            try {
+              const jobs = await storage.getAllJobs();
+              const statusCounts: Record<string, number> = {};
+              
+              for (const job of jobs) {
+                const status = job.status || 'unknown';
+                statusCounts[status] = (statusCounts[status] || 0) + 1;
+              }
+              
+              jobStatusGauge.reset();
+              Object.entries(statusCounts).forEach(([status, count]) => {
+                jobStatusGauge.set({ status }, count);
+              });
+              
+              serverLogger.debug('[Metrics] Job status gauge updated', { statusCounts });
+            } catch (error) {
+              serverLogger.error('[Metrics] Failed to update job status gauge', { error });
+            }
+          };
+          
+          // Update immediately on startup
+          await updateJobMetrics();
+          
+          // Update every 60 seconds
+          setInterval(updateJobMetrics, 60000);
+          
+          serverLogger.info('[Server] Periodic job status metrics initialized');
+        } catch (error) {
+          serverLogger.error('[Server] Failed to initialize job status metrics:', error);
         }
         
         resolve();

@@ -129,6 +129,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/healthz", healthz);
   app.get("/readyz", readyz);
   app.get("/api/status", status);
+
+  // Prometheus metrics endpoint (no authentication for monitoring systems)
+  const { register } = await import('./metrics');
+  app.get('/metrics', async (req, res) => {
+    try {
+      res.set('Content-Type', register.contentType);
+      res.end(await register.metrics());
+    } catch (error) {
+      logError('Metrics', error);
+      res.status(500).json({ message: "Failed to generate metrics" });
+    }
+  });
   
   // Setup Replit Auth middleware
   await setupAuth(app);

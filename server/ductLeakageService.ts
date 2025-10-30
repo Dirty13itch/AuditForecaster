@@ -9,6 +9,8 @@
  * Formulas based on RESNET Standards and ASHRAE 152
  */
 
+import { ductLeakageTestsTotal } from './metrics';
+
 export interface DuctComplianceResult {
   tdlCompliant: boolean;
   dloCompliant: boolean;
@@ -225,6 +227,10 @@ export function checkMinnesotaDuctCompliance(
 
   const tdlMargin = Number((tdlLimit - tdl).toFixed(2));
   const dloMargin = Number((dloLimit - dlo).toFixed(2));
+
+  // Track metrics
+  ductLeakageTestsTotal.inc({ test_type: 'TDL', passed: String(tdlCompliant) });
+  ductLeakageTestsTotal.inc({ test_type: 'DLO', passed: String(dloCompliant) });
 
   return {
     tdlCompliant,
