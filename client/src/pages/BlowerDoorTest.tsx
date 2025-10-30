@@ -775,6 +775,7 @@ function BlowerDoorTestPage() {
                 onClick={calculateRegression}
                 className="w-full mt-4"
                 disabled={(testData.testPoints as TestPoint[]).filter(p => p.fanPressure > 0).length < 5}
+                data-testid="button-calculate-results"
               >
                 <Calculator className="h-4 w-4 mr-2" />
                 Calculate Results
@@ -792,15 +793,15 @@ function BlowerDoorTestPage() {
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">CFM50</span>
-                  <span className="text-2xl font-bold">{testData.cfm50 || "—"}</span>
+                  <span className="text-2xl font-bold" data-testid="result-cfm50">{testData.cfm50 || "—"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">ACH50</span>
-                  <span className="text-2xl font-bold">{testData.ach50 || "—"}</span>
+                  <span className="text-2xl font-bold" data-testid="result-ach50">{testData.ach50 || "—"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">ELA (in²)</span>
-                  <span className="text-xl font-semibold">{testData.ela || "—"}</span>
+                  <span className="text-xl font-semibold" data-testid="result-ela">{testData.ela || "—"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Flow Exponent (n)</span>
@@ -819,12 +820,12 @@ function BlowerDoorTestPage() {
                 <CardDescription>2020 Energy Code Requirements - Climate Zone 6</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Alert variant={testData.meetsCode ? "default" : "destructive"}>
+                <Alert variant={testData.meetsCode ? "default" : "destructive"} data-testid="alert-compliance">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>
+                  <AlertTitle data-testid="text-compliance-status">
                     {testData.meetsCode ? "PASSES" : "FAILS"} Code
                   </AlertTitle>
-                  <AlertDescription>
+                  <AlertDescription data-testid="text-compliance-details">
                     {testData.ach50 
                       ? `ACH50: ${testData.ach50} | Limit: ${MINNESOTA_CODE_LIMIT_ACH50} | Margin: ${testData.margin! > 0 ? '+' : ''}${testData.margin}`
                       : "Complete test to check compliance"
