@@ -23,19 +23,20 @@ export function setupWebSocket(server: Server) {
     path: "/ws/notifications" 
   });
 
-  // Heartbeat to keep connections alive
+  // Heartbeat to keep connections alive and close dead connections
   const interval = setInterval(() => {
-    clients.forEach((client) => {
+    clients.forEach((client, userId) => {
       if (!client.isAlive) {
+        serverLogger.warn(`[WebSocket] Terminating dead connection for user: ${userId}`);
         client.ws.terminate();
-        clients.delete(client.userId);
+        clients.delete(userId);
         return;
       }
       
       client.isAlive = false;
       client.ws.ping();
     });
-  }, 30000); // Ping every 30 seconds
+  }, 30000); // Ping every 30 seconds, timeout after 60 seconds
 
   wss.on("connection", async (ws, req) => {
     // Extract user ID from request with proper session validation

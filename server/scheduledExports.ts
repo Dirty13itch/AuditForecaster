@@ -29,10 +29,12 @@ export interface ScheduledExport {
 class ScheduledExportService {
   private jobs: Map<string, cron.ScheduledTask>;
   private exports: Map<string, ScheduledExport>;
+  private runningExports: Set<string>; // Prevent job overlap
 
   constructor() {
     this.jobs = new Map();
     this.exports = new Map();
+    this.runningExports = new Set();
     this.initialize();
   }
 
@@ -78,6 +80,16 @@ class ScheduledExportService {
   }
 
   private async executeExport(exp: ScheduledExport) {
+    // JOB OVERLAP PREVENTION: Check if this export is already running
+    if (this.runningExports.has(exp.id)) {
+      serverLogger.warn('[ScheduledExports] Export already running, skipping', {
+        id: exp.id,
+        name: exp.name,
+      });
+      return;
+    }
+
+    this.runningExports.add(exp.id);
     serverLogger.info('[ScheduledExports] Executing scheduled export', {
       id: exp.id,
       name: exp.name,
@@ -189,6 +201,16 @@ class ScheduledExportService {
         error,
       });
       
+      // Clean up temp file on error as well
+      try {
+        const tempFiles = await exportService.getTempFiles();
+        for (const file of tempFiles) {
+          await unlink(file).catch(() => {});
+        }
+      } catch (cleanupError) {
+        serverLogger.error('[ScheduledExports] Temp file cleanup failed', { error: cleanupError });
+      }
+      
       // Store error in database for user visibility
       const failureLog = {
         timestamp: new Date().toISOString(),
@@ -196,6 +218,9 @@ class ScheduledExportService {
         attemptCount: 1,
       };
       await storage.updateScheduledExportLastRun(exp.id, new Date(), exp.nextRun || null, [failureLog]);
+    } finally {
+      // Always release the lock
+      this.runningExports.delete(exp.id);
     }
   }
 

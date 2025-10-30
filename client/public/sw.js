@@ -13,6 +13,13 @@ const CACHE_LIMITS = {
   static: 200,     // Max 200 static assets
 };
 
+// Cache TTL (time-to-live) in milliseconds
+const CACHE_TTL = {
+  api: 5 * 60 * 1000,      // 5 minutes for API responses
+  static: 24 * 60 * 60 * 1000,  // 24 hours for static assets
+  photos: 7 * 24 * 60 * 60 * 1000, // 7 days for photos
+};
+
 // Static assets to cache on install
 const STATIC_ASSETS = [
   '/',
@@ -291,6 +298,15 @@ async function cacheFirst(request) {
   }
 }
 
+// Check if cached response is still fresh based on TTL
+function isCacheFresh(response, ttl) {
+  const cachedTime = response.headers.get('sw-cache-time');
+  if (!cachedTime) return false;
+  
+  const age = Date.now() - parseInt(cachedTime);
+  return age < ttl;
+}
+
 async function networkFirstWithCache(request) {
   const cache = await caches.open(API_CACHE_NAME);
   
@@ -298,8 +314,19 @@ async function networkFirstWithCache(request) {
     const response = await fetch(request);
     
     if (response.ok) {
-      // Cache successful responses
-      await cache.put(request, response.clone());
+      // Add timestamp header for TTL tracking
+      const responseToCache = response.clone();
+      const headers = new Headers(responseToCache.headers);
+      headers.append('sw-cache-time', Date.now().toString());
+      
+      const modifiedResponse = new Response(responseToCache.body, {
+        status: responseToCache.status,
+        statusText: responseToCache.statusText,
+        headers: headers
+      });
+      
+      // Cache successful responses with timestamp
+      await cache.put(request, modifiedResponse);
       await evictLRUCache(API_CACHE_NAME, CACHE_LIMITS.api);
       
       // Add metadata for sync tracking
@@ -319,20 +346,27 @@ async function networkFirstWithCache(request) {
     const cached = await cache.match(request);
     
     if (cached) {
-      logger.info('Serving from cache (offline):', request.url);
+      // Check cache freshness
+      if (!isCacheFresh(cached, CACHE_TTL.api)) {
+        logger.warn('Cached data is stale but serving due to offline:', request.url);
+      } else {
+        logger.info('Serving fresh cached data (offline):', request.url);
+      }
       
       // Clone and modify response to indicate it's from cache
       const cachedData = await cached.json();
       return new Response(JSON.stringify({
         ...cachedData,
         _offline: true,
-        _cachedAt: cached.headers.get('date')
+        _cachedAt: cached.headers.get('date'),
+        _stale: !isCacheFresh(cached, CACHE_TTL.api)
       }), {
         status: 200,
         statusText: 'OK (from cache)',
         headers: {
           'Content-Type': 'application/json',
-          'X-From-Cache': 'true'
+          'X-From-Cache': 'true',
+          'X-Cache-Stale': (!isCacheFresh(cached, CACHE_TTL.api)).toString()
         }
       });
     }
