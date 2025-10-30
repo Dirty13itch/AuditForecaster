@@ -18,6 +18,12 @@ export default defineConfig({
         '**/*.test.ts',
         'server/seeds/**',
       ],
+      thresholds: {
+        lines: 70,
+        functions: 70,
+        branches: 65,
+        statements: 70,
+      },
     },
     testTimeout: 30000,
     hookTimeout: 30000,
