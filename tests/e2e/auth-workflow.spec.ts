@@ -97,18 +97,34 @@ test.describe('Authentication Workflow', () => {
     // Try to navigate to admin diagnostics page
     await page.goto('/admin/diagnostics');
     
-    // Verify either redirected away or sees error
-    // The app may redirect to dashboard or show the page but with limited content
-    // We check that inspector doesn't have full access
-    await page.waitForTimeout(1000);
+    // Wait for page to fully load
+    await page.waitForLoadState('networkidle');
     
-    // Check if we stayed on the page or got redirected
+    // Assert either redirected away OR shows access denied message
     const currentUrl = page.url();
-    // If on diagnostics, there should be no admin-only controls visible
+    
     if (currentUrl.includes('/admin/diagnostics')) {
-      // Page may show but with restricted content
-      // Just verify we don't crash
-      await expect(page.locator('body')).toBeVisible();
+      // If still on diagnostics page, there must be an access denied message
+      await expect(
+        page.getByText(/access denied|unauthorized|forbidden|you don't have permission/i)
+      ).toBeVisible();
+      
+      // Verify admin-only controls are NOT visible
+      const adminPanel = page.getByTestId('admin-panel');
+      if (await adminPanel.count() > 0) {
+        await expect(adminPanel).not.toBeVisible();
+      }
+    } else {
+      // Verify redirected to an appropriate page (not admin diagnostics)
+      expect(currentUrl).not.toContain('/admin/diagnostics');
+      
+      // Should be on dashboard, access-denied, or landing page
+      expect(
+        currentUrl.includes('/dashboard') || 
+        currentUrl.includes('/access-denied') || 
+        currentUrl.includes('/unauthorized') ||
+        currentUrl === '/'
+      ).toBe(true);
     }
   });
 
@@ -177,10 +193,7 @@ test.describe('Authentication Workflow', () => {
     const sidebarTrigger = page.getByTestId('button-sidebar-toggle');
     await sidebarTrigger.click();
     
-    // Wait for sidebar to open
-    await page.waitForTimeout(500);
-    
-    // Verify admin-only menu items are visible
+    // Verify admin-only menu items are visible (Playwright auto-waits)
     await loginPage.verifySidebarItemVisible('diagnostics');
     
     // Verify audit logs is visible (admin and manager can see it)
@@ -195,10 +208,7 @@ test.describe('Authentication Workflow', () => {
     const sidebarTrigger = page.getByTestId('button-sidebar-toggle');
     await sidebarTrigger.click();
     
-    // Wait for sidebar to open
-    await page.waitForTimeout(500);
-    
-    // Verify admin-only menu items are NOT visible
+    // Verify admin-only menu items are NOT visible (Playwright auto-waits)
     await loginPage.verifySidebarItemNotVisible('diagnostics');
     
     // Verify audit logs is NOT visible for inspector

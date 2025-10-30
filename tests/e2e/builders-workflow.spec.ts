@@ -885,7 +885,6 @@ test.describe('Builders Workflow - Cascade Delete', () => {
           const closeButton = page.getByRole('button', { name: /close/i }).last();
           if (await closeButton.isVisible().catch(() => false)) {
             await closeButton.click();
-            await page.waitForTimeout(500);
           }
         }
       }

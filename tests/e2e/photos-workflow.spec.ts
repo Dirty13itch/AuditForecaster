@@ -33,6 +33,48 @@ test.describe('Photos Workflow - Upload and Management', () => {
     await photosPage.goto();
   });
 
+  test.afterEach(async ({ page }) => {
+    // Cleanup: Delete all photos created during the test
+    try {
+      await page.goto('/photos');
+      
+      const photoCount = await photosPage.getPhotoCount();
+      
+      if (photoCount > 0) {
+        // Enter selection mode
+        const toggleButton = page.getByTestId('button-toggle-selection');
+        await toggleButton.click();
+        
+        // Select all photos
+        const selectAllButton = page.getByTestId('button-select-all');
+        if (await selectAllButton.isVisible()) {
+          await selectAllButton.click();
+        }
+        
+        // Delete all selected photos
+        const deleteButton = page.getByTestId('button-bulk-delete');
+        if (await deleteButton.isVisible()) {
+          await deleteButton.click();
+          
+          // Confirm deletion
+          const confirmButton = page.getByTestId('button-confirm-delete');
+          if (await confirmButton.isVisible()) {
+            await confirmButton.click();
+            
+            // Wait for deletion to complete - photos should be gone
+            await expect(async () => {
+              const newCount = await photosPage.getPhotoCount();
+              expect(newCount).toBe(0);
+            }).toPass({ timeout: 10000 });
+          }
+        }
+      }
+    } catch (error) {
+      // Cleanup failed - log but don't fail the test
+      console.log('Photo cleanup failed:', error);
+    }
+  });
+
   test('should display photos page with title and controls', async ({ page }) => {
     // Verify page title
     await expect(page.getByTestId('text-page-title')).toHaveText('Inspection Photos');
@@ -50,13 +92,12 @@ test.describe('Photos Workflow - Upload and Management', () => {
     // Upload photo
     await photosPage.uploadPhoto(testImagePath);
     
+    // Wait for upload to complete - verify photo appears
+    await photosPage.verifyPhotoExists(0);
+    
     // Verify photo was added
-    await page.waitForTimeout(2000);
     const newCount = await photosPage.getPhotoCount();
     expect(newCount).toBeGreaterThan(initialCount);
-    
-    // Verify at least one photo exists
-    await photosPage.verifyPhotoExists(0);
   });
 
   test('should upload photo with tags', async ({ page }) => {
@@ -67,8 +108,7 @@ test.describe('Photos Workflow - Upload and Management', () => {
       tags: ['exterior', 'foundation'] 
     });
     
-    // Verify photo uploaded
-    await page.waitForTimeout(2000);
+    // Verify photo uploaded (Playwright auto-waits)
     await photosPage.verifyPhotoExists(0);
     
     // Note: Tag verification might need adjustment based on actual UI
@@ -154,9 +194,8 @@ test.describe('Photos Workflow - Upload and Management', () => {
       
       // Zoom in
       await photosPage.zoomIn();
-      await page.waitForTimeout(500);
       
-      // Verify zoom level changed (check for zoom percentage)
+      // Verify zoom level changed (check for zoom percentage) - Playwright auto-waits
       const zoomText = page.locator('text=/\\d+%/').first();
       await expect(zoomText).toBeVisible();
       
@@ -177,7 +216,6 @@ test.describe('Photos Workflow - Upload and Management', () => {
       
       // Rotate photo
       await photosPage.rotatePhoto();
-      await page.waitForTimeout(500);
       
       // Rotate again to verify it works multiple times
       await photosPage.rotatePhoto();
@@ -196,7 +234,6 @@ test.describe('Photos Workflow - Upload and Management', () => {
       
       // Toggle info on
       await photosPage.toggleInfo();
-      await page.waitForTimeout(500);
       
       // Verify info panel is visible (look for metadata fields)
       const infoPanel = page.locator('text=Details, text=File Name, text=Size');
@@ -219,7 +256,6 @@ test.describe('Photos Workflow - Upload and Management', () => {
       
       // Navigate to next photo
       await photosPage.nextPhoto();
-      await page.waitForTimeout(500);
       
       // Navigate back to previous
       await photosPage.previousPhoto();
@@ -292,10 +328,7 @@ test.describe('Photos Workflow - Upload and Management', () => {
       // Bulk tag
       await photosPage.bulkTag(['test-tag', 'bulk-operation']);
       
-      // Verify success (check for toast or updated UI)
-      await page.waitForTimeout(1000);
-      
-      // Exit selection mode
+      // Exit selection mode (Playwright auto-waits for operations to complete)
       await photosPage.exitSelectionMode();
     } else {
       test.skip();
@@ -307,6 +340,7 @@ test.describe('Photos Workflow - Upload and Management', () => {
     const testImagePath = path.join(__dirname, '..', 'fixtures', 'test-image.jpg');
     await photosPage.uploadPhoto(testImagePath);
     
+    // Wait for upload to complete
     const initialCount = await photosPage.getPhotoCount();
     
     if (initialCount > 0) {
@@ -316,10 +350,11 @@ test.describe('Photos Workflow - Upload and Management', () => {
       // Delete selected photo
       await photosPage.bulkDelete();
       
-      // Verify photo was deleted
-      await page.waitForTimeout(2000);
-      const newCount = await photosPage.getPhotoCount();
-      expect(newCount).toBeLessThan(initialCount);
+      // Wait for deletion to complete by checking count changed
+      await expect(async () => {
+        const newCount = await photosPage.getPhotoCount();
+        expect(newCount).toBeLessThan(initialCount);
+      }).toPass();
     } else {
       test.skip();
     }
@@ -330,7 +365,8 @@ test.describe('Photos Workflow - Upload and Management', () => {
     const testImagePath = path.join(__dirname, '..', 'fixtures', 'image-with-text.png');
     await photosPage.uploadPhoto(testImagePath);
     
-    await page.waitForTimeout(2000);
+    // Wait for photo to be uploaded and available
+    await photosPage.verifyPhotoExists(0);
     
     // Open photo detail
     await photosPage.openPhotoDetail(0);
@@ -364,8 +400,7 @@ test.describe('Photos Workflow - File Validation', () => {
     // Upload should succeed
     await photosPage.uploadPhoto(testImagePath);
     
-    // Verify upload completed
-    await page.waitForTimeout(2000);
+    // Verify upload completed (Playwright auto-waits)
     await photosPage.verifyPhotoExists(0);
   });
 
@@ -380,8 +415,8 @@ test.describe('Photos Workflow - File Validation', () => {
     await fileInput.setInputFiles(testFilePath);
     
     // Uppy should show error or reject the file
-    // Look for error message in Uppy dashboard
-    await page.waitForTimeout(2000);
+    // Wait for error state in Uppy dashboard
+    await expect(page.locator('.uppy-Dashboard')).toBeVisible();
     
     // Close modal
     const closeButton = page.locator('.uppy-Dashboard-close').first();
@@ -397,8 +432,7 @@ test.describe('Photos Workflow - File Validation', () => {
     try {
       await photosPage.uploadPhoto(largeImagePath);
       
-      // If file exists and upload succeeds
-      await page.waitForTimeout(3000);
+      // If file exists and upload succeeds, verify photo appears
       await photosPage.verifyPhotoExists(0);
     } catch (error) {
       // If file doesn't exist, skip test

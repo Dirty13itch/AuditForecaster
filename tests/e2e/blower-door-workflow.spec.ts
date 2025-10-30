@@ -40,9 +40,6 @@ test.describe('Blower Door Testing Workflow', () => {
       contractor: 'Green Build Co',
       inspectionType: 'Final',
     });
-
-    // Wait for job creation and extract job ID from URL
-    await page.waitForTimeout(1000);
     
     // Navigate to jobs page to find the created job
     await jobsPage.goto();
