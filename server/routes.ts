@@ -79,6 +79,7 @@ import {
 import { calculateVentilationRequirements } from "./ventilationTests";
 import { processCalendarEvents, type CalendarEvent } from './calendarImportService';
 import { scheduledExportService } from './scheduledExports';
+import { calculateACH50, checkMinnesotaCompliance } from './blowerDoorService';
 import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
@@ -6419,16 +6420,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdBy: req.user?.claims?.sub,
       });
       
-      // Calculate ACH50 if not provided: ACH50 = (CFM50 × 60) / Volume
+      // Calculate ACH50 using service function
       if (!validated.ach50 && validated.cfm50 && validated.houseVolume) {
-        validated.ach50 = (validated.cfm50 * 60) / validated.houseVolume;
+        validated.ach50 = calculateACH50(validated.cfm50, validated.houseVolume);
       }
       
-      // Determine Minnesota 2020 Energy Code compliance
-      const codeLimit = validated.codeLimit || 3.0; // Minnesota 2020 Energy Code limit is 3.0 ACH50
-      validated.codeLimit = codeLimit;
-      validated.meetsCode = validated.ach50 <= codeLimit;
-      validated.margin = codeLimit - validated.ach50; // Positive means under limit
+      // Determine Minnesota 2020 Energy Code compliance using service function
+      const codeYear = validated.codeYear || '2020';
+      const compliance = checkMinnesotaCompliance(validated.ach50, codeYear);
+      validated.codeLimit = compliance.codeLimit;
+      validated.meetsCode = compliance.compliant;
+      validated.margin = compliance.margin;
       
       const test = await storage.createBlowerDoorTest(validated);
       
@@ -6456,23 +6458,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validated = insertBlowerDoorTestSchema.partial().parse(req.body);
       
-      // Recalculate ACH50 if CFM50 or volume changed
+      // Recalculate ACH50 if CFM50 or volume changed using service function
       if ((validated.cfm50 !== undefined || validated.houseVolume !== undefined)) {
         const existing = await storage.getBlowerDoorTest(req.params.id);
         if (existing) {
           const cfm50 = validated.cfm50 ?? existing.cfm50;
           const volume = validated.houseVolume ?? existing.houseVolume;
           if (cfm50 && volume) {
-            validated.ach50 = (Number(cfm50) * 60) / Number(volume);
+            validated.ach50 = calculateACH50(Number(cfm50), Number(volume));
           }
         }
       }
       
-      // Update compliance if ACH50 changed
+      // Update compliance if ACH50 changed using service function
       if (validated.ach50 !== undefined) {
-        const codeLimit = validated.codeLimit || 3.0;
-        validated.meetsCode = validated.ach50 <= codeLimit;
-        validated.margin = codeLimit - validated.ach50;
+        const codeYear = validated.codeYear || '2020';
+        const compliance = checkMinnesotaCompliance(validated.ach50, codeYear);
+        validated.codeLimit = compliance.codeLimit;
+        validated.meetsCode = compliance.compliant;
+        validated.margin = compliance.margin;
       }
       
       const test = await storage.updateBlowerDoorTest(req.params.id, validated);
