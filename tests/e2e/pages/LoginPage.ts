@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 
 /**
  * LoginPage - Handles authentication for E2E tests
@@ -54,5 +54,63 @@ export class LoginPage {
    */
   async logout() {
     await this.page.goto('/api/logout');
+  }
+
+  /**
+   * Verify user is logged in by checking for user profile element
+   * @param expectedText - Optional text to verify in user profile (e.g., username or email)
+   */
+  async verifyLoggedIn(expectedText?: string) {
+    const userProfile = this.page.getByTestId('user-profile');
+    await expect(userProfile).toBeVisible();
+    
+    if (expectedText) {
+      await expect(userProfile).toContainText(expectedText);
+    }
+  }
+
+  /**
+   * Verify user is logged out by checking for login button on landing page
+   */
+  async verifyLoggedOut() {
+    const loginButton = this.page.getByTestId('button-login');
+    await expect(loginButton).toBeVisible();
+    await expect(this.page).toHaveURL('/');
+  }
+
+  /**
+   * Verify user has a specific role by checking the role badge
+   * @param role - Expected role (admin, inspector, manager, viewer)
+   */
+  async verifyRole(role: string) {
+    const roleBadge = this.page.getByTestId(`badge-role-${role}`);
+    await expect(roleBadge).toBeVisible();
+  }
+
+  /**
+   * Click the logout button in the sidebar
+   */
+  async clickLogoutButton() {
+    const logoutButton = this.page.getByTestId('button-logout');
+    await expect(logoutButton).toBeVisible();
+    await logoutButton.click();
+  }
+
+  /**
+   * Verify sidebar menu item is visible
+   * @param itemName - Name of the menu item (e.g., 'diagnostics', 'audit logs')
+   */
+  async verifySidebarItemVisible(itemName: string) {
+    const menuItem = this.page.getByTestId(`link-${itemName.toLowerCase()}`);
+    await expect(menuItem).toBeVisible();
+  }
+
+  /**
+   * Verify sidebar menu item is not visible
+   * @param itemName - Name of the menu item (e.g., 'diagnostics', 'audit logs')
+   */
+  async verifySidebarItemNotVisible(itemName: string) {
+    const menuItem = this.page.getByTestId(`link-${itemName.toLowerCase()}`);
+    await expect(menuItem).not.toBeVisible();
   }
 }
