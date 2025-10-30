@@ -1,0 +1,125 @@
+config:
+  target: "http://0.0.0.0:5000"
+  phases:
+    - duration: 120
+      arrivalRate: 5
+      name: "Warm up - 5 users/sec"
+    - duration: 300
+      arrivalRate: 10
+      name: "Sustained load - 10 users/sec"
+    - duration: 120
+      arrivalRate: 20
+      name: "Peak load - 20 users/sec"
+    - duration: 60
+      arrivalRate: 5
+      name: "Cool down - 5 users/sec"
+  processor: "./processor.js"
+  plugins:
+    metrics-by-endpoint: {}
+  ensure:
+    p95: 200  # 95th percentile < 200ms
+    maxErrorRate: 1  # Error rate < 1%
+
+scenarios:
+  - name: "Read-heavy API endpoints"
+    weight: 70
+    flow:
+      # Dashboard - most frequently accessed
+      - get:
+          url: "/api/dashboard/summary"
+          name: "GET /api/dashboard/summary"
+          expect:
+            - statusCode: 
+                - 200
+                - 401  # May not be authenticated in load test
+      
+      # Jobs list - core functionality
+      - get:
+          url: "/api/jobs?limit=25&offset=0"
+          name: "GET /api/jobs (paginated)"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+      
+      # Photos list - high traffic endpoint
+      - get:
+          url: "/api/photos?limit=50&offset=0"
+          name: "GET /api/photos (paginated)"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+      
+      # Equipment list
+      - get:
+          url: "/api/equipment"
+          name: "GET /api/equipment"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+      
+      # Schedule events
+      - get:
+          url: "/api/schedule-events"
+          name: "GET /api/schedule-events"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+      
+      # Think time between requests
+      - think: 1
+
+  - name: "Health checks and monitoring"
+    weight: 20
+    flow:
+      - get:
+          url: "/healthz"
+          name: "GET /healthz"
+          expect:
+            - statusCode: 200
+      
+      - get:
+          url: "/readyz"
+          name: "GET /readyz"
+          expect:
+            - statusCode: 200
+      
+      - get:
+          url: "/api/status"
+          name: "GET /api/status"
+          expect:
+            - statusCode: 200
+      
+      - think: 2
+
+  - name: "Builder and QA endpoints"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/builders"
+          name: "GET /api/builders"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+      
+      - get:
+          url: "/api/dashboard/leaderboard"
+          name: "GET /api/dashboard/leaderboard"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+      
+      - get:
+          url: "/api/forecasts"
+          name: "GET /api/forecasts"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+      
+      - think: 1
