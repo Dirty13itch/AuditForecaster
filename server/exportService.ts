@@ -1,5 +1,5 @@
 import { stringify } from 'csv-stringify/sync';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { format } from 'date-fns';
@@ -405,34 +405,36 @@ export class ExportService {
 
   // Excel Generation
   private async generateExcel(data: any[], columns: string[], sheetName: string): Promise<Buffer> {
-    const workbook = XLSX.utils.book_new();
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(sheetName);
 
-    // Format data for Excel
-    const worksheetData = data.map(row => {
+    // Add header row with column definitions
+    worksheet.columns = columns.map(col => ({
+      header: col,
+      key: col,
+      width: 15
+    }));
+
+    // Style header row
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' }
+    };
+
+    // Add data rows
+    data.forEach(row => {
       const excelRow: any = {};
       columns.forEach(col => {
         const value = row[col];
         excelRow[col] = value instanceof Date ? format(value, 'yyyy-MM-dd HH:mm:ss') : value;
       });
-      return excelRow;
+      worksheet.addRow(excelRow);
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-
-    // Apply basic styling
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const address = XLSX.utils.encode_col(C) + '1';
-      if (!worksheet[address]) continue;
-      worksheet[address].s = {
-        font: { bold: true },
-        fill: { fgColor: { rgb: 'E0E0E0' } },
-      };
-    }
-
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-
-    return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+    // Write to buffer
+    return await workbook.xlsx.writeBuffer() as Buffer;
   }
 
   // PDF Generation
