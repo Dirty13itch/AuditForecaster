@@ -235,6 +235,48 @@ function validateUserId(id: any): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
+// Builder-related interfaces for hierarchical queries
+export interface BuilderStats {
+  totalDevelopments: number;
+  totalLots: number;
+  totalJobs: number;
+  completedJobs: number;
+  totalRevenue: number;
+  activeAgreements: number;
+  activePrograms: number;
+  lastInteractionDate?: Date;
+}
+
+export interface BuilderHierarchy {
+  builder: Builder;
+  developments: Array<{
+    development: Development;
+    lots: Array<{
+      lot: Lot;
+      jobs: Job[];
+    }>;
+  }>;
+}
+
+export interface DevelopmentWithLots {
+  development: Development;
+  lots: Lot[];
+  stats: {
+    totalLots: number;
+    lotsByStatus: Record<string, number>;
+  };
+}
+
+export interface LotWithJobs {
+  lot: Lot;
+  jobs: Job[];
+  stats: {
+    totalJobs: number;
+    completedJobs: number;
+    pendingJobs: number;
+  };
+}
+
 // Critical user integrity check
 async function verifyCriticalUsersIntegrity(db: any): Promise<{ success: boolean; errors: string[] }> {
   const errors: string[] = [];
@@ -306,6 +348,8 @@ export interface IStorage {
   getBuildersPaginated(params: PaginationParams): Promise<PaginatedResult<Builder>>;
   updateBuilder(id: string, builder: Partial<InsertBuilder>): Promise<Builder | undefined>;
   deleteBuilder(id: string): Promise<boolean>;
+  getBuilderStats(builderId: string): Promise<BuilderStats>;
+  getBuilderHierarchy(builderId: string): Promise<BuilderHierarchy>;
 
   createBuilderContact(contact: InsertBuilderContact): Promise<BuilderContact>;
   getBuilderContact(id: string): Promise<BuilderContact | undefined>;
@@ -313,6 +357,8 @@ export interface IStorage {
   updateBuilderContact(id: string, contact: Partial<InsertBuilderContact>): Promise<BuilderContact | undefined>;
   deleteBuilderContact(id: string): Promise<boolean>;
   setPrimaryContact(builderId: string, contactId: string): Promise<void>;
+  getContactsByRole(builderId: string, role: string): Promise<BuilderContact[]>;
+  getPrimaryContact(builderId: string): Promise<BuilderContact | undefined>;
 
   createBuilderAgreement(agreement: InsertBuilderAgreement): Promise<BuilderAgreement>;
   getBuilderAgreement(id: string): Promise<BuilderAgreement | undefined>;
@@ -320,6 +366,8 @@ export interface IStorage {
   getActiveAgreement(builderId: string): Promise<BuilderAgreement | undefined>;
   updateBuilderAgreement(id: string, agreement: Partial<InsertBuilderAgreement>): Promise<BuilderAgreement | undefined>;
   deleteBuilderAgreement(id: string): Promise<boolean>;
+  getActiveAgreements(builderId: string): Promise<BuilderAgreement[]>;
+  getExpiringAgreements(daysAhead: number): Promise<BuilderAgreement[]>;
 
   createBuilderProgram(program: InsertBuilderProgram): Promise<BuilderProgram>;
   getBuilderProgram(id: string): Promise<BuilderProgram | undefined>;
@@ -341,6 +389,7 @@ export interface IStorage {
   getDevelopmentsByStatus(status: string): Promise<Development[]>;
   updateDevelopment(id: string, development: Partial<InsertDevelopment>): Promise<Development | undefined>;
   deleteDevelopment(id: string): Promise<boolean>;
+  getDevelopmentWithLots(developmentId: string): Promise<DevelopmentWithLots>;
 
   createLot(lot: InsertLot): Promise<Lot>;
   getLot(id: string): Promise<Lot | undefined>;
@@ -348,6 +397,7 @@ export interface IStorage {
   getLotsByPlan(planId: string): Promise<Lot[]>;
   updateLot(id: string, lot: Partial<InsertLot>): Promise<Lot | undefined>;
   deleteLot(id: string): Promise<boolean>;
+  getLotWithJobs(lotId: string): Promise<LotWithJobs>;
 
   createPlan(plan: InsertPlan): Promise<Plan>;
   getPlan(id: string): Promise<Plan | undefined>;
@@ -1151,6 +1201,123 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  /**
+   * Get comprehensive statistics for a builder
+   * Aggregates data across developments, lots, jobs, agreements, and programs
+   */
+  async getBuilderStats(builderId: string): Promise<BuilderStats> {
+    const [
+      developmentsCount,
+      lotsCount,
+      jobsData,
+      agreementsCount,
+      programsCount,
+      lastInteraction
+    ] = await Promise.all([
+      // Count total developments
+      db.select({ count: count() })
+        .from(developments)
+        .where(eq(developments.builderId, builderId)),
+      
+      // Count total lots across all developments
+      db.select({ count: count() })
+        .from(lots)
+        .innerJoin(developments, eq(lots.developmentId, developments.id))
+        .where(eq(developments.builderId, builderId)),
+      
+      // Count jobs and sum revenue
+      db.select({
+        total: count(),
+        completed: sql<number>`COUNT(CASE WHEN ${jobs.status} = 'completed' THEN 1 END)`,
+        revenue: sql<string>`COALESCE(SUM(${jobs.pricing}), 0)`
+      })
+        .from(jobs)
+        .where(eq(jobs.builderId, builderId)),
+      
+      // Count active agreements
+      db.select({ count: count() })
+        .from(builderAgreements)
+        .where(and(
+          eq(builderAgreements.builderId, builderId),
+          eq(builderAgreements.status, 'active')
+        )),
+      
+      // Count active programs
+      db.select({ count: count() })
+        .from(builderPrograms)
+        .where(and(
+          eq(builderPrograms.builderId, builderId),
+          eq(builderPrograms.status, 'active')
+        )),
+      
+      // Get most recent interaction date
+      db.select({ date: builderInteractions.interactionDate })
+        .from(builderInteractions)
+        .where(eq(builderInteractions.builderId, builderId))
+        .orderBy(desc(builderInteractions.interactionDate))
+        .limit(1)
+    ]);
+
+    return {
+      totalDevelopments: developmentsCount[0]?.count || 0,
+      totalLots: lotsCount[0]?.count || 0,
+      totalJobs: jobsData[0]?.total || 0,
+      completedJobs: Number(jobsData[0]?.completed || 0),
+      totalRevenue: Number(jobsData[0]?.revenue || 0),
+      activeAgreements: agreementsCount[0]?.count || 0,
+      activePrograms: programsCount[0]?.count || 0,
+      lastInteractionDate: lastInteraction[0]?.date || undefined
+    };
+  }
+
+  /**
+   * Get full hierarchical data for a builder
+   * Includes builder -> developments -> lots -> jobs
+   */
+  async getBuilderHierarchy(builderId: string): Promise<BuilderHierarchy> {
+    // Get the builder
+    const builder = await this.getBuilder(builderId);
+    if (!builder) {
+      throw new Error(`Builder not found: ${builderId}`);
+    }
+
+    // Get all developments for this builder
+    const builderDevelopments = await this.getDevelopments(builderId);
+
+    // For each development, get lots and jobs
+    const developments = await Promise.all(
+      builderDevelopments.map(async (development) => {
+        // Get all lots for this development
+        const developmentLots = await this.getLots(development.id);
+
+        // For each lot, get all jobs
+        const lots = await Promise.all(
+          developmentLots.map(async (lot) => {
+            const lotJobs = await db.select()
+              .from(jobs)
+              .where(eq(jobs.lotId, lot.id))
+              .orderBy(desc(jobs.scheduledDate));
+
+            return {
+              lot,
+              jobs: lotJobs
+            };
+          })
+        );
+
+        return {
+          development,
+          lots
+        };
+      })
+    );
+
+    return {
+      builder,
+      developments
+    };
+  }
+
   async createBuilderContact(insertContact: InsertBuilderContact): Promise<BuilderContact> {
     // Use setPrimaryContact instead to manage primary designation
     const result = await db.insert(builderContacts).values({ ...insertContact, isPrimary: false }).returning();
@@ -1219,6 +1386,35 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  /**
+   * Get all contacts for a builder filtered by role
+   * Useful for role-specific notifications and communications
+   */
+  async getContactsByRole(builderId: string, role: string): Promise<BuilderContact[]> {
+    return await db.select()
+      .from(builderContacts)
+      .where(and(
+        eq(builderContacts.builderId, builderId),
+        eq(builderContacts.role, role as any)
+      ))
+      .orderBy(asc(builderContacts.name));
+  }
+
+  /**
+   * Get the primary contact for a builder
+   * Quick lookup avoiding filtering in application code
+   */
+  async getPrimaryContact(builderId: string): Promise<BuilderContact | undefined> {
+    const result = await db.select()
+      .from(builderContacts)
+      .where(and(
+        eq(builderContacts.builderId, builderId),
+        eq(builderContacts.isPrimary, true)
+      ))
+      .limit(1);
+    return result[0];
+  }
+
   async createBuilderAgreement(insertAgreement: InsertBuilderAgreement): Promise<BuilderAgreement> {
     const result = await db.insert(builderAgreements).values(insertAgreement).returning();
     return result[0];
@@ -1257,6 +1453,39 @@ export class DatabaseStorage implements IStorage {
   async deleteBuilderAgreement(id: string): Promise<boolean> {
     const result = await db.delete(builderAgreements).where(eq(builderAgreements.id, id)).returning();
     return result.length > 0;
+  }
+
+  /**
+   * Get all active agreements for a builder (plural version)
+   * Unlike getActiveAgreement (singular), returns all active agreements
+   */
+  async getActiveAgreements(builderId: string): Promise<BuilderAgreement[]> {
+    return await db.select()
+      .from(builderAgreements)
+      .where(and(
+        eq(builderAgreements.builderId, builderId),
+        eq(builderAgreements.status, 'active')
+      ))
+      .orderBy(desc(builderAgreements.startDate));
+  }
+
+  /**
+   * Get agreements expiring within specified number of days
+   * Critical for business continuity - enables proactive renewal alerts
+   */
+  async getExpiringAgreements(daysAhead: number): Promise<BuilderAgreement[]> {
+    const now = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+
+    return await db.select()
+      .from(builderAgreements)
+      .where(and(
+        eq(builderAgreements.status, 'active'),
+        gte(builderAgreements.endDate, now),
+        lte(builderAgreements.endDate, futureDate)
+      ))
+      .orderBy(asc(builderAgreements.endDate));
   }
 
   async createBuilderProgram(insertProgram: InsertBuilderProgram): Promise<BuilderProgram> {
@@ -1367,6 +1596,37 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  /**
+   * Get development with all associated lots and statistics
+   * Enables comprehensive development detail views
+   */
+  async getDevelopmentWithLots(developmentId: string): Promise<DevelopmentWithLots> {
+    // Get the development
+    const development = await this.getDevelopment(developmentId);
+    if (!development) {
+      throw new Error(`Development not found: ${developmentId}`);
+    }
+
+    // Get all lots for this development
+    const developmentLots = await this.getLots(developmentId);
+
+    // Calculate lot statistics by status
+    const lotsByStatus: Record<string, number> = {};
+    for (const lot of developmentLots) {
+      const status = lot.status || 'unknown';
+      lotsByStatus[status] = (lotsByStatus[status] || 0) + 1;
+    }
+
+    return {
+      development,
+      lots: developmentLots,
+      stats: {
+        totalLots: developmentLots.length,
+        lotsByStatus
+      }
+    };
+  }
+
   async createLot(insertLot: InsertLot): Promise<Lot> {
     // Convert numeric fields to strings for decimal columns
     const values = {
@@ -1410,6 +1670,41 @@ export class DatabaseStorage implements IStorage {
   async deleteLot(id: string): Promise<boolean> {
     const result = await db.delete(lots).where(eq(lots.id, id)).returning();
     return result.length > 0;
+  }
+
+  /**
+   * Get lot with all associated jobs and statistics
+   * Enables comprehensive lot detail views with job history
+   */
+  async getLotWithJobs(lotId: string): Promise<LotWithJobs> {
+    // Get the lot
+    const lot = await this.getLot(lotId);
+    if (!lot) {
+      throw new Error(`Lot not found: ${lotId}`);
+    }
+
+    // Get all jobs for this lot
+    const lotJobs = await db.select()
+      .from(jobs)
+      .where(eq(jobs.lotId, lotId))
+      .orderBy(desc(jobs.scheduledDate));
+
+    // Calculate job statistics
+    const totalJobs = lotJobs.length;
+    const completedJobs = lotJobs.filter(job => job.status === 'completed').length;
+    const pendingJobs = lotJobs.filter(job => 
+      job.status === 'scheduled' || job.status === 'in_progress'
+    ).length;
+
+    return {
+      lot,
+      jobs: lotJobs,
+      stats: {
+        totalJobs,
+        completedJobs,
+        pendingJobs
+      }
+    };
   }
 
   async createPlan(insertPlan: InsertPlan): Promise<Plan> {
