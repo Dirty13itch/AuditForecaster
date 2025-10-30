@@ -115,6 +115,46 @@ export const exportDuration = new promClient.Histogram({
   registers: [register]
 });
 
+// ============================================
+// Cache Metrics
+// ============================================
+
+export const cacheHits = new promClient.Counter({
+  name: 'cache_hits_total',
+  help: 'Total number of cache hits',
+  labelNames: ['category'],
+  registers: [register]
+});
+
+export const cacheMisses = new promClient.Counter({
+  name: 'cache_misses_total',
+  help: 'Total number of cache misses',
+  labelNames: ['category'],
+  registers: [register]
+});
+
+export const cacheSize = new promClient.Gauge({
+  name: 'cache_size_keys',
+  help: 'Number of keys in cache by category',
+  labelNames: ['category'],
+  registers: [register]
+});
+
+export const cacheEvictions = new promClient.Counter({
+  name: 'cache_evictions_total',
+  help: 'Total number of cache evictions',
+  labelNames: ['category', 'reason'],
+  registers: [register]
+});
+
+export const cacheOperationDuration = new promClient.Histogram({
+  name: 'cache_operation_duration_seconds',
+  help: 'Duration of cache operations',
+  labelNames: ['operation', 'category'],
+  buckets: [0.0001, 0.0005, 0.001, 0.005, 0.01],
+  registers: [register]
+});
+
 // Helper to track endpoint timing
 export function trackRequestDuration(method: string, route: string, statusCode: number, durationSeconds: number) {
   httpRequestDuration.observe({ method, route, status_code: statusCode }, durationSeconds);

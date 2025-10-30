@@ -1,7 +1,7 @@
 import { initSentry } from "@/lib/sentry";
 initSentry();
 
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Switch, Route, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -18,67 +18,79 @@ import { useAuth } from "@/hooks/useAuth";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { fetchCsrfToken } from "@/lib/csrfToken";
-import Dashboard from "@/pages/Dashboard";
-import Inspection from "@/pages/Inspection";
-import Photos from "@/pages/Photos";
-import PhotoAnnotation from "@/pages/PhotoAnnotation";
-import PhotoCleanup from "@/pages/PhotoCleanup";
-import Forecast from "@/pages/Forecast";
-import Jobs from "@/pages/Jobs";
-import Gamification from "@/pages/Gamification";
-import Challenges from "@/pages/Challenges";
-import Schedule from "@/pages/Schedule";
-import RouteView from "@/pages/RouteView";
-import Builders from "@/pages/Builders";
-import Plans from "@/pages/Plans";
-import Financials from "@/pages/Financials";
-import FinancialDashboard from "@/pages/FinancialDashboard";
-import Invoices from "@/pages/Invoices";
-import Expenses from "@/pages/Expenses";
-import Mileage from "@/pages/Mileage";
-import MileageClassify from "@/pages/MileageClassify";
-import Reports from "@/pages/Reports";
-import ReportInstancePage from "@/pages/ReportInstance";
-import ReportTemplates from "@/pages/ReportTemplates";
-import ReportTemplateDetail from "@/pages/ReportTemplateDetail";
-import ReportTemplateDesigner from "@/pages/ReportTemplateDesigner";
-import ReportFillout from "@/pages/ReportFillout";
-import ScheduledExports from "@/pages/ScheduledExports";
-import BlowerDoorTest from "@/pages/BlowerDoorTest";
-import DuctLeakageTest from "@/pages/DuctLeakageTest";
-import VentilationTests from "@/pages/VentilationTests";
-import Analytics from "@/pages/Analytics";
-import AuditLogs from "@/pages/AuditLogs";
-import SettingsPage from "@/pages/SettingsPage";
-import AdminDiagnostics from "@/pages/AdminDiagnostics";
-import CalendarPOC from "@/pages/CalendarPOC";
-import CalendarReview from "@/pages/CalendarReview";
-import CalendarImportHistory from "@/pages/CalendarImportHistory";
-import CalendarImportQueuePage from "@/pages/CalendarImportQueuePage";
-import CalendarManagement from "@/pages/CalendarManagement";
-import TaxCredit45L from "@/pages/TaxCredit45L";
-import TaxCreditProject from "@/pages/TaxCreditProject";
-import TaxCreditCompliance from "@/pages/TaxCreditCompliance";
-import TaxCreditReports from "@/pages/TaxCreditReports";
-import Equipment from "@/pages/Equipment";
-import EquipmentDetails from "@/pages/EquipmentDetails";
-import CalibrationSchedule from "@/pages/CalibrationSchedule";
-import QualityAssurance from "@/pages/QualityAssurance";
-import QAScoring from "@/pages/QAScoring";
-import QAChecklists from "@/pages/QAChecklists";
-import QAPerformance from "@/pages/QAPerformance";
-import QAReview from "@/components/QAReview";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
-import ConflictResolution from "@/pages/ConflictResolution";
-import CustomReports from "@/pages/CustomReports";
-import KPISettings from "@/pages/KPISettings";
-import { OfflineIndicator } from "@/components/OfflineIndicator";
-import NotificationTest from "@/pages/NotificationTest";
+
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Inspection = lazy(() => import("@/pages/Inspection"));
+const Photos = lazy(() => import("@/pages/Photos"));
+const PhotoAnnotation = lazy(() => import("@/pages/PhotoAnnotation"));
+const PhotoCleanup = lazy(() => import("@/pages/PhotoCleanup"));
+const Forecast = lazy(() => import("@/pages/Forecast"));
+const Jobs = lazy(() => import("@/pages/Jobs"));
+const Gamification = lazy(() => import("@/pages/Gamification"));
+const Challenges = lazy(() => import("@/pages/Challenges"));
+const Schedule = lazy(() => import("@/pages/Schedule"));
+const RouteView = lazy(() => import("@/pages/RouteView"));
+const Builders = lazy(() => import("@/pages/Builders"));
+const Plans = lazy(() => import("@/pages/Plans"));
+const Financials = lazy(() => import("@/pages/Financials"));
+const FinancialDashboard = lazy(() => import("@/pages/FinancialDashboard"));
+const Invoices = lazy(() => import("@/pages/Invoices"));
+const Expenses = lazy(() => import("@/pages/Expenses"));
+const Mileage = lazy(() => import("@/pages/Mileage"));
+const MileageClassify = lazy(() => import("@/pages/MileageClassify"));
+const Reports = lazy(() => import("@/pages/Reports"));
+const ReportInstancePage = lazy(() => import("@/pages/ReportInstance"));
+const ReportTemplates = lazy(() => import("@/pages/ReportTemplates"));
+const ReportTemplateDetail = lazy(() => import("@/pages/ReportTemplateDetail"));
+const ReportTemplateDesigner = lazy(() => import("@/pages/ReportTemplateDesigner"));
+const ReportFillout = lazy(() => import("@/pages/ReportFillout"));
+const ScheduledExports = lazy(() => import("@/pages/ScheduledExports"));
+const BlowerDoorTest = lazy(() => import("@/pages/BlowerDoorTest"));
+const DuctLeakageTest = lazy(() => import("@/pages/DuctLeakageTest"));
+const VentilationTests = lazy(() => import("@/pages/VentilationTests"));
+const Analytics = lazy(() => import("@/pages/Analytics"));
+const AuditLogs = lazy(() => import("@/pages/AuditLogs"));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
+const AdminDiagnostics = lazy(() => import("@/pages/AdminDiagnostics"));
+const CalendarPOC = lazy(() => import("@/pages/CalendarPOC"));
+const CalendarReview = lazy(() => import("@/pages/CalendarReview"));
+const CalendarImportHistory = lazy(() => import("@/pages/CalendarImportHistory"));
+const CalendarImportQueuePage = lazy(() => import("@/pages/CalendarImportQueuePage"));
+const CalendarManagement = lazy(() => import("@/pages/CalendarManagement"));
+const TaxCredit45L = lazy(() => import("@/pages/TaxCredit45L"));
+const TaxCreditProject = lazy(() => import("@/pages/TaxCreditProject"));
+const TaxCreditCompliance = lazy(() => import("@/pages/TaxCreditCompliance"));
+const TaxCreditReports = lazy(() => import("@/pages/TaxCreditReports"));
+const Equipment = lazy(() => import("@/pages/Equipment"));
+const EquipmentDetails = lazy(() => import("@/pages/EquipmentDetails"));
+const CalibrationSchedule = lazy(() => import("@/pages/CalibrationSchedule"));
+const QualityAssurance = lazy(() => import("@/pages/QualityAssurance"));
+const QAScoring = lazy(() => import("@/pages/QAScoring"));
+const QAChecklists = lazy(() => import("@/pages/QAChecklists"));
+const QAPerformance = lazy(() => import("@/pages/QAPerformance"));
+const QAReview = lazy(() => import("@/components/QAReview"));
+const ConflictResolution = lazy(() => import("@/pages/ConflictResolution"));
+const CustomReports = lazy(() => import("@/pages/CustomReports"));
+const KPISettings = lazy(() => import("@/pages/KPISettings"));
+const NotificationTest = lazy(() => import("@/pages/NotificationTest"));
+
+const LoadingFallback = () => (
+  <div className="flex h-full items-center justify-center">
+    <div className="text-center space-y-4">
+      <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+);
 
 function Router() {
   return (
-    <Switch>
+    <Suspense fallback={<LoadingFallback />}>
+      <Switch>
       <Route path="/" component={() => (
         <RouteErrorBoundary>
           <Dashboard />
@@ -424,6 +436,7 @@ function Router() {
         </RouteErrorBoundary>
       )} />
     </Switch>
+    </Suspense>
   );
 }
 
