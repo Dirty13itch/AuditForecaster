@@ -4,16 +4,27 @@ import { trackRequestDuration } from '../metrics';
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction) {
   const start = Date.now();
   
-  const originalSend = res.send;
-  res.send = function(data: any) {
-    const duration = (Date.now() - start) / 1000;
+  // Capture metrics on response finish event (captures ALL response types)
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000; // Convert to seconds
     
+    // Normalize route to avoid high cardinality (replace IDs with :id)
     const route = normalizeRoute(req.path);
     
     trackRequestDuration(req.method, route, res.statusCode, duration);
-    
-    return originalSend.call(this, data);
-  };
+  });
+  
+  // Also capture on close event (for aborted requests)
+  res.on('close', () => {
+    if (!res.headersSent) {
+      // Request was aborted before response could be sent
+      const duration = (Date.now() - start) / 1000;
+      const route = normalizeRoute(req.path);
+      
+      // Track as 499 (client closed request)
+      trackRequestDuration(req.method, route, 499, duration);
+    }
+  });
   
   next();
 }
