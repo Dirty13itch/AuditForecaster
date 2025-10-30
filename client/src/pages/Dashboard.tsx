@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +13,11 @@ import {
   ActivityFeedSkeleton
 } from "@/components/ui/skeleton-variants";
 import { 
-  FadeIn, 
-  FadeInUp, 
-  StaggerContainer, 
-  StaggerItem,
-  AnimatedNumber,
-  HoverScale
-} from "@/components/ui/animated-wrapper";
+  staggerContainer, 
+  cardAppear, 
+  listItem,
+  fadeInUp
+} from "@/lib/animations";
 import { useAnimatedCounter } from "@/hooks/useAnimation";
 import {
   DropdownMenu,
@@ -610,8 +609,13 @@ export default function Dashboard() {
         </div>
 
         {/* KPI Cards */}
-        <StaggerContainer className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <StaggerItem>
+        <motion.div 
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-5"
+        >
+          <motion.div variants={cardAppear}>
             <MetricCard
               title="Jobs Completed"
               value={metrics.jobsCompleted}
@@ -625,8 +629,8 @@ export default function Dashboard() {
               animate={isLiveMode}
               live={isLiveMode}
             />
-          </StaggerItem>
-          <StaggerItem>
+          </motion.div>
+          <motion.div variants={cardAppear}>
             <MetricCard
               title="Avg QA Score"
               value={`${metrics.avgQaScore.toFixed(1)}%`}
@@ -638,8 +642,8 @@ export default function Dashboard() {
               animate={isLiveMode}
               live={isLiveMode}
             />
-          </StaggerItem>
-          <StaggerItem>
+          </motion.div>
+          <motion.div variants={cardAppear}>
             <MetricCard
               title="Monthly Revenue"
               value={metrics.monthlyRevenue}
@@ -653,8 +657,8 @@ export default function Dashboard() {
               animate={isLiveMode}
               live={isLiveMode}
             />
-          </StaggerItem>
-          <StaggerItem>
+          </motion.div>
+          <motion.div variants={cardAppear}>
             <MetricCard
               title="Compliance Rate"
               value={`${metrics.complianceRate.toFixed(1)}%`}
@@ -666,8 +670,8 @@ export default function Dashboard() {
               animate={isLiveMode}
               live={isLiveMode}
             />
-          </StaggerItem>
-          <StaggerItem>
+          </motion.div>
+          <motion.div variants={cardAppear}>
             <MetricCard
               title="Active Builders"
               value={metrics.activeBuilders}
@@ -680,8 +684,8 @@ export default function Dashboard() {
               animate={isLiveMode}
               live={isLiveMode}
             />
-          </StaggerItem>
-        </StaggerContainer>
+          </motion.div>
+        </motion.div>
 
         {/* Progress Widgets */}
         <div className="grid gap-4 md:grid-cols-3">

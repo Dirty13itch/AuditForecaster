@@ -1,13 +1,13 @@
 import { initSentry } from "@/lib/sentry";
 initSentry();
 
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Switch, Route, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
@@ -19,6 +19,9 @@ import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { fetchCsrfToken } from "@/lib/csrfToken";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { useGlobalShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
+import type { ShortcutConfig } from "@/hooks/useKeyboardShortcuts";
 
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
@@ -442,11 +445,84 @@ function Router() {
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
+  const [, navigate] = useLocation();
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
   };
+
+  // Global keyboard shortcuts
+  useGlobalShortcuts({
+    onShowShortcuts: () => setShowShortcutsModal(true),
+    onGoHome: () => navigate('/'),
+    onGoJobs: () => navigate('/jobs'),
+    onGoBuilders: () => navigate('/builders'),
+    onGoPhotos: () => navigate('/photos'),
+    onGoSchedule: () => navigate('/schedule'),
+    onGoEquipment: () => navigate('/equipment'),
+  });
+
+  // Collect all shortcuts for the modal
+  const allShortcuts: ShortcutConfig[] = [
+    {
+      id: 'show-shortcuts',
+      description: 'Show keyboard shortcuts',
+      category: 'global',
+      key: '?',
+      modifiers: { shift: true },
+      handler: () => setShowShortcutsModal(true)
+    },
+    {
+      id: 'go-home',
+      description: 'Go to Dashboard',
+      category: 'navigation',
+      key: 'g+h',
+      sequence: true,
+      handler: () => navigate('/')
+    },
+    {
+      id: 'go-jobs',
+      description: 'Go to Jobs',
+      category: 'navigation',
+      key: 'g+j',
+      sequence: true,
+      handler: () => navigate('/jobs')
+    },
+    {
+      id: 'go-builders',
+      description: 'Go to Builders',
+      category: 'navigation',
+      key: 'g+b',
+      sequence: true,
+      handler: () => navigate('/builders')
+    },
+    {
+      id: 'go-photos',
+      description: 'Go to Photos',
+      category: 'navigation',
+      key: 'g+p',
+      sequence: true,
+      handler: () => navigate('/photos')
+    },
+    {
+      id: 'go-schedule',
+      description: 'Go to Schedule',
+      category: 'navigation',
+      key: 'g+s',
+      sequence: true,
+      handler: () => navigate('/schedule')
+    },
+    {
+      id: 'go-equipment',
+      description: 'Go to Equipment',
+      category: 'navigation',
+      key: 'g+e',
+      sequence: true,
+      handler: () => navigate('/equipment')
+    },
+  ];
 
   // Pre-fetch CSRF token when authenticated
   useEffect(() => {
@@ -500,6 +576,13 @@ function AppContent() {
           </div>
         </div>
       </SidebarProvider>
+      
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={showShortcutsModal}
+        onClose={() => setShowShortcutsModal(false)}
+        shortcuts={allShortcuts}
+      />
     </>
   );
 }

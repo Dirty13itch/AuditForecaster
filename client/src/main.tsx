@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { clientLogger, swLogger } from "./lib/logger";
+import { initSessionReplay } from "./lib/sessionReplay";
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -67,6 +68,12 @@ if ('serviceWorker' in navigator) {
       window.dispatchEvent(new CustomEvent('background-sync'));
     }
   });
+}
+
+// Initialize session replay only in production when enabled
+// This prevents unnecessary bundle size and costs during development
+if (import.meta.env.VITE_SESSION_REPLAY_ENABLED === 'true' && import.meta.env.PROD) {
+  initSessionReplay();
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

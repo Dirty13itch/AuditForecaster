@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useInfiniteQuery, useQuery, useMutation } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import { ArrowLeft, Camera, Filter, X, FilterX, CheckSquare, Square, WifiOff, CloudUpload, Compare, Star, FolderOpen } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { fadeInUp, scaleIn } from "@/lib/animations";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { SelectionToolbar, commonBulkActions } from "@/components/SelectionToolbar";
 import { BulkDeleteDialog, BulkTagDialog, BulkExportDialog, type TagOperationMode, type ExportFormat } from "@/components/BulkActionDialogs";
@@ -727,14 +729,20 @@ export default function Photos() {
             </Card>
           ) : (
             <>
-              <PhotoGallery
-                photos={photos}
-                onPhotoClick={(photo) => {}}
-                onPhotoDelete={(id) => {}}
-                selectionMode={selectionMode}
-                selectedIds={metadata.selectedIds}
-                onToggleSelection={actions.toggle}
-              />
+              <motion.div
+                variants={fadeInUp}
+                initial="hidden"
+                animate="visible"
+              >
+                <PhotoGallery
+                  photos={photos}
+                  onPhotoClick={(photo) => {}}
+                  onPhotoDelete={(id) => {}}
+                  selectionMode={selectionMode}
+                  selectedIds={metadata.selectedIds}
+                  onToggleSelection={actions.toggle}
+                />
+              </motion.div>
 
               {/* Intersection observer trigger */}
               <div ref={loadMoreRef} className="h-10" />

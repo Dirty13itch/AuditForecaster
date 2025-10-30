@@ -352,17 +352,68 @@ export default function Schedule() {
     },
   });
 
-  // Quick status update mutation
+  // Quick status update mutation with optimistic updates
   const updateJobStatusMutation = useMutation({
     mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
       const response = await apiRequest('PATCH', `/api/jobs/${jobId}/status`, { status });
       return response.json();
     },
+    
+    // Optimistic update
+    onMutate: async ({ jobId, status }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['/api/schedule-events'] });
+      await queryClient.cancelQueries({ queryKey: ['/api/jobs'] });
+      await queryClient.cancelQueries({ queryKey: ['/api/jobs', jobId] });
+      
+      // Snapshot the previous values
+      const previousScheduleEvents = queryClient.getQueryData(['/api/schedule-events']);
+      const previousJobs = queryClient.getQueryData(['/api/jobs']);
+      const previousJob = queryClient.getQueryData(['/api/jobs', jobId]);
+      
+      // Optimistically update schedule events
+      queryClient.setQueryData(['/api/schedule-events'], (old: any) => {
+        if (!old) return old;
+        return old.map((event: any) => 
+          event.resource?.jobId === jobId
+            ? { ...event, resource: { ...event.resource, status } }
+            : event
+        );
+      });
+      
+      // Optimistically update jobs list
+      queryClient.setQueryData(['/api/jobs'], (old: any) => {
+        if (!old) return old;
+        return old.map((job: any) => 
+          job.id === jobId ? { ...job, status } : job
+        );
+      });
+      
+      // Optimistically update individual job
+      queryClient.setQueryData(['/api/jobs', jobId], (old: any) => {
+        if (!old) return old;
+        return { ...old, status };
+      });
+      
+      // Update selected event in UI immediately
+      if (selectedEvent?.resource?.jobId === jobId) {
+        setSelectedEvent({
+          ...selectedEvent,
+          resource: {
+            ...selectedEvent.resource,
+            status,
+          }
+        });
+      }
+      
+      return { previousScheduleEvents, previousJobs, previousJob, previousSelectedEvent: selectedEvent };
+    },
+    
     onSuccess: (data) => {
       toast({ title: 'Job status updated successfully' });
       queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
-      // Update the selectedEvent to reflect the new status
+      // Update the selectedEvent to reflect the actual data from server
       if (selectedEvent && data) {
         setSelectedEvent({
           ...selectedEvent,
@@ -374,7 +425,23 @@ export default function Schedule() {
         });
       }
     },
-    onError: (error: any) => {
+    
+    // Rollback on error
+    onError: (error: any, variables, context) => {
+      // Restore previous values on error
+      if (context?.previousScheduleEvents) {
+        queryClient.setQueryData(['/api/schedule-events'], context.previousScheduleEvents);
+      }
+      if (context?.previousJobs) {
+        queryClient.setQueryData(['/api/jobs'], context.previousJobs);
+      }
+      if (context?.previousJob) {
+        queryClient.setQueryData(['/api/jobs', variables.jobId], context.previousJob);
+      }
+      if (context?.previousSelectedEvent) {
+        setSelectedEvent(context.previousSelectedEvent);
+      }
+      
       toast({ 
         title: 'Failed to update status', 
         description: error?.message || 'An error occurred',

@@ -123,15 +123,70 @@ export function BulkOperationsToolbar({
     },
   });
 
-  // Tag mutation
+  // Tag mutation with optimistic updates
   const tagMutation = useMutation({
     mutationFn: async ({ ids, mode, tags }: { ids: string[], mode: string, tags: string[] }) =>
       apiRequest("/api/photos/bulk-tag", {
         method: "POST",
         body: JSON.stringify({ ids, mode, tags }),
       }),
+    
+    // Optimistic update
+    onMutate: async ({ ids, mode, tags }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["/api/photos"] });
+      await queryClient.cancelQueries({ queryKey: ["/api/photos-cursor"] });
+      
+      // Snapshot the previous value
+      const previousPhotos = queryClient.getQueryData(["/api/photos"]);
+      const previousPhotosCursor = queryClient.getQueryData(["/api/photos-cursor"]);
+      
+      // Optimistically update the photos
+      const updatePhotoTags = (photo: any) => {
+        if (!ids.includes(photo.id)) return photo;
+        
+        let newTags = [...(photo.tags || [])];
+        if (mode === 'add') {
+          // Add tags that don't already exist
+          tags.forEach(tag => {
+            if (!newTags.includes(tag)) {
+              newTags.push(tag);
+            }
+          });
+        } else if (mode === 'remove') {
+          // Remove specified tags
+          newTags = newTags.filter(tag => !tags.includes(tag));
+        } else if (mode === 'replace') {
+          // Replace all tags
+          newTags = tags;
+        }
+        
+        return { ...photo, tags: newTags };
+      };
+      
+      queryClient.setQueryData(["/api/photos"], (old: any) => {
+        if (!old) return old;
+        return old.map(updatePhotoTags);
+      });
+      
+      // Update cursor-based photos if present
+      queryClient.setQueryData(["/api/photos-cursor"], (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            photos: page.photos.map(updatePhotoTags)
+          }))
+        };
+      });
+      
+      return { previousPhotos, previousPhotosCursor };
+    },
+    
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/photos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/photos-cursor"] });
       toast({
         title: "Tags updated",
         description: `Successfully updated tags for ${selectedCount} photo${selectedCount > 1 ? 's' : ''}`,
@@ -139,7 +194,17 @@ export function BulkOperationsToolbar({
       onClearSelection();
       setShowTagDialog(false);
     },
-    onError: () => {
+    
+    // Rollback on error
+    onError: (error, variables, context) => {
+      // Restore previous values on error
+      if (context?.previousPhotos) {
+        queryClient.setQueryData(["/api/photos"], context.previousPhotos);
+      }
+      if (context?.previousPhotosCursor) {
+        queryClient.setQueryData(["/api/photos-cursor"], context.previousPhotosCursor);
+      }
+      
       toast({
         title: "Error",
         description: "Failed to update tags",
