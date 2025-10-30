@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History, Receipt, Package, Award, Trophy, Target, Camera, Car, Clock, Wind, Gauge } from "lucide-react";
+import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History, Receipt, Package, Award, Trophy, Target, Camera, Car, Clock, Wind, Gauge, UserCheck } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -50,6 +50,12 @@ const menuItems = [
     title: "Builders",
     url: "/builders",
     icon: Building2,
+  },
+  {
+    title: "Builder Review",
+    url: "/builder-review",
+    icon: UserCheck,
+    adminOnly: true,
   },
   {
     title: "Plans",

@@ -55,12 +55,18 @@ export const builders = pgTable("builders", {
   billingTerms: text("billing_terms"),
   preferredLeadTime: integer("preferred_lead_time"),
   abbreviations: text("abbreviations").array(), // Calendar parsing abbreviations e.g. ['MI', 'MIH', 'M/I']
+  status: text("status", { enum: ["active", "temporary", "merged"] }).default("active"),
+  autoCreatedFromEvent: boolean("auto_created_from_event").default(false),
+  needsReview: boolean("needs_review").default(false),
+  confidence: integer("confidence"), // 0-100 score from parser
   createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_builders_company_name").on(table.companyName),
   index("idx_builders_name_company").on(table.name, table.companyName),
   index("idx_builders_created_by").on(table.createdBy),
+  index("idx_builders_status").on(table.status),
+  index("idx_builders_needs_review").on(table.needsReview),
 ]);
 
 export const builderContacts = pgTable("builder_contacts", {

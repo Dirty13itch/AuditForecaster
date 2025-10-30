@@ -38,6 +38,7 @@ const Challenges = lazy(() => import("@/pages/Challenges"));
 const Schedule = lazy(() => import("@/pages/Schedule"));
 const RouteView = lazy(() => import("@/pages/RouteView"));
 const Builders = lazy(() => import("@/pages/Builders"));
+const BuilderReview = lazy(() => import("@/pages/BuilderReview"));
 const Plans = lazy(() => import("@/pages/Plans"));
 const Financials = lazy(() => import("@/pages/Financials"));
 const FinancialDashboard = lazy(() => import("@/pages/FinancialDashboard"));
@@ -126,6 +127,11 @@ function Router() {
       <Route path="/builders" component={() => (
         <RouteErrorBoundary>
           <Builders />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/builder-review" component={() => (
+        <RouteErrorBoundary>
+          <BuilderReview />
         </RouteErrorBoundary>
       )} />
       <Route path="/plans" component={() => (

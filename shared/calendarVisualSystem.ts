@@ -92,7 +92,7 @@ export const JOB_TYPE_VISUALS = {
   sv2: {
     label: 'SV2',
     fullName: 'Pre-Drywall Site Visit',
-    icon: '🔍',
+    icon: 'Search',
     pattern: 'diagonal-stripes',
     borderStyle: 'dashed',
     borderWidth: '2px',
@@ -100,7 +100,7 @@ export const JOB_TYPE_VISUALS = {
   full_test: {
     label: 'Test',
     fullName: 'Full Test (Final)',
-    icon: '📊',
+    icon: 'BarChart3',
     pattern: 'solid',
     borderStyle: 'solid',
     borderWidth: '4px',
@@ -108,7 +108,7 @@ export const JOB_TYPE_VISUALS = {
   code_bdoor: {
     label: 'Code BDoor',
     fullName: 'Code Blower Door',
-    icon: '🌪️',
+    icon: 'Wind',
     pattern: 'dots',
     borderStyle: 'dotted',
     borderWidth: '3px',
@@ -116,7 +116,7 @@ export const JOB_TYPE_VISUALS = {
   rough_duct: {
     label: 'Rough Duct',
     fullName: 'Rough-in Duct Leakage',
-    icon: '🔧',
+    icon: 'Wrench',
     pattern: 'double-lines',
     borderStyle: 'double',
     borderWidth: '3px',
@@ -124,7 +124,7 @@ export const JOB_TYPE_VISUALS = {
   rehab: {
     label: 'Rehab',
     fullName: 'Rehabilitation Project',
-    icon: '🔄',
+    icon: 'RotateCcw',
     pattern: 'wave',
     borderStyle: 'solid',
     borderWidth: '2px',
@@ -132,7 +132,7 @@ export const JOB_TYPE_VISUALS = {
   bdoor_retest: {
     label: 'Retest',
     fullName: 'Blower Door Retest',
-    icon: '⚠️',
+    icon: 'AlertTriangle',
     pattern: 'diagonal-warning',
     borderStyle: 'solid',
     borderWidth: '3px',
@@ -140,7 +140,7 @@ export const JOB_TYPE_VISUALS = {
   multifamily: {
     label: 'Multi-Family',
     fullName: 'Multi-Family Project',
-    icon: '🏢',
+    icon: 'Building2',
     pattern: 'grid',
     borderStyle: 'solid',
     borderWidth: '2px',
@@ -148,7 +148,7 @@ export const JOB_TYPE_VISUALS = {
   energy_star: {
     label: 'Energy Star',
     fullName: 'Energy Star Certification',
-    icon: '⭐',
+    icon: 'Star',
     pattern: 'gradient',
     borderStyle: 'solid',
     borderWidth: '2px',
@@ -156,7 +156,7 @@ export const JOB_TYPE_VISUALS = {
   other: {
     label: 'Other',
     fullName: 'Other Inspection',
-    icon: '📋',
+    icon: 'FileText',
     pattern: 'solid',
     borderStyle: 'solid',
     borderWidth: '2px',
@@ -303,31 +303,31 @@ export function getBackgroundPattern(jobType: string | null | undefined): string
 export const COMPLETION_STATUS = {
   scheduled: {
     label: 'Scheduled',
-    icon: '📅',
+    icon: 'Calendar',
     opacity: '100',
   },
   in_progress: {
     label: 'In Progress',
-    icon: '🔄',
+    icon: 'RotateCw',
     opacity: '100',
     pulse: true,
   },
   field_complete: {
     label: 'Field Work Done',
-    icon: '✓',
+    icon: 'Check',
     opacity: '90',
     checkmark: 'single',
   },
   fully_complete: {
     label: 'Fully Complete',
-    icon: '✓✓',
+    icon: 'CheckCheck',
     opacity: '60',
     checkmark: 'double',
     tint: 'rgba(34, 197, 94, 0.2)', // Green tint
   },
   cancelled: {
     label: 'Cancelled',
-    icon: '✕',
+    icon: 'X',
     opacity: '40',
     strikethrough: true,
   },
@@ -374,13 +374,13 @@ export interface CalendarEventStyle {
 }
 
 export function getCalendarEventStyle(
-  assignedUserId: string | null,
+  assignedUser: { firstName?: string; lastName?: string; email?: string } | null,
   jobType: string | null,
   fieldWorkComplete: boolean,
   photoUploadComplete: boolean,
   isCancelled: boolean
 ): CalendarEventStyle {
-  const inspectorColor = getInspectorColor(assignedUserId);
+  const inspectorColor = getInspectorColorByUser(assignedUser);
   const jobTypeVisuals = getJobTypeVisuals(jobType);
   const completionStatus = getCompletionStatus(fieldWorkComplete, photoUploadComplete, isCancelled);
 

@@ -350,6 +350,12 @@ export interface IStorage {
   deleteBuilder(id: string): Promise<boolean>;
   getBuilderStats(builderId: string): Promise<BuilderStats>;
   getBuilderHierarchy(builderId: string): Promise<BuilderHierarchy>;
+  
+  // Builder review queue methods
+  getBuildersNeedingReview(): Promise<Builder[]>;
+  approveBuilder(id: string): Promise<Builder | undefined>;
+  mergeBuilders(sourceId: string, targetId: string): Promise<void>;
+  rejectBuilder(id: string, unknownBuilderId: string): Promise<void>;
 
   createBuilderContact(contact: InsertBuilderContact): Promise<BuilderContact>;
   getBuilderContact(id: string): Promise<BuilderContact | undefined>;
@@ -1323,6 +1329,69 @@ export class DatabaseStorage implements IStorage {
       builder,
       developments
     };
+  }
+
+  /**
+   * Get builders that need review (temporary builders auto-created from calendar events)
+   */
+  async getBuildersNeedingReview(): Promise<Builder[]> {
+    return await db.select()
+      .from(builders)
+      .where(eq(builders.needsReview, true))
+      .orderBy(desc(builders.createdAt));
+  }
+
+  /**
+   * Approve a builder - set needsReview=false and status="active"
+   */
+  async approveBuilder(id: string): Promise<Builder | undefined> {
+    const result = await db.update(builders)
+      .set({
+        needsReview: false,
+        status: 'active'
+      })
+      .where(eq(builders.id, id))
+      .returning();
+    return result[0];
+  }
+
+  /**
+   * Merge a temporary builder into an existing builder
+   * Reassigns all jobs from source to target, then deletes source
+   */
+  async mergeBuilders(sourceId: string, targetId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Reassign all jobs from source to target
+      await tx.update(jobs)
+        .set({ builderId: targetId })
+        .where(eq(jobs.builderId, sourceId));
+      
+      // Mark source builder as merged
+      await tx.update(builders)
+        .set({ status: 'merged' })
+        .where(eq(builders.id, sourceId));
+      
+      serverLogger.info(`[BuilderReview] Merged builder ${sourceId} into ${targetId}`);
+    });
+  }
+
+  /**
+   * Reject a temporary builder
+   * Reassigns all jobs to "Unknown Builder" placeholder, then deletes the builder
+   */
+  async rejectBuilder(id: string, unknownBuilderId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Reassign all jobs to Unknown Builder
+      await tx.update(jobs)
+        .set({ builderId: unknownBuilderId })
+        .where(eq(jobs.builderId, id));
+      
+      // Delete the temporary builder
+      await tx.delete(builders)
+        .where(eq(builders.id, id));
+      
+      serverLogger.info(`[BuilderReview] Rejected and deleted builder ${id}, jobs reassigned to ${unknownBuilderId}`);
+    });
   }
 
   async createBuilderContact(insertContact: InsertBuilderContact): Promise<BuilderContact> {

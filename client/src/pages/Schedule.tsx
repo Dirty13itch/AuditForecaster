@@ -4,11 +4,12 @@ import { Calendar as BigCalendar, dateFnsLocalizer, View, Event } from "react-bi
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2, Users, Activity, TrendingUp } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2, Users, Activity, TrendingUp, BarChart3, Wind, Wrench, RotateCcw, AlertTriangle, Building2, Star, FileText, Check, CheckCheck, X, RotateCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -22,6 +23,7 @@ import { UnassignedQueueSheet } from "@/components/UnassignedQueueSheet";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Job, ScheduleEvent, GoogleEvent, PendingCalendarEvent, User } from "@shared/schema";
+import { getInspectorColor, getJobTypeVisuals, getCalendarEventStyle, getCompletionStatus } from "@shared/calendarVisualSystem";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
 const localizer = dateFnsLocalizer({
@@ -49,6 +51,56 @@ interface CalendarEvent extends Event {
     googleEvent?: GoogleEvent;
   };
 }
+
+const getIconComponent = (iconName: string) => {
+  const iconMap: Record<string, React.ComponentType<any>> = {
+    'Search': Search,
+    'BarChart3': BarChart3,
+    'Wind': Wind,
+    'Wrench': Wrench,
+    'RotateCcw': RotateCcw,
+    'AlertTriangle': AlertTriangle,
+    'Building2': Building2,
+    'Star': Star,
+    'FileText': FileText,
+    'Calendar': Calendar,
+    'RotateCw': RotateCw,
+    'Check': Check,
+    'CheckCheck': CheckCheck,
+    'X': X,
+  };
+  return iconMap[iconName] || FileText;
+};
+
+const CustomEvent = ({ event }: { event: CalendarEvent }) => {
+  const job = event.resource.job;
+  const isGoogleEvent = event.resource.eventType === 'google';
+  
+  if (isGoogleEvent) {
+    const GoogleIcon = getIconComponent('Calendar');
+    return (
+      <div className="flex items-center gap-1 px-1">
+        <GoogleIcon className="w-3 h-3 flex-shrink-0" />
+        <span className="truncate text-xs">{event.title}</span>
+      </div>
+    );
+  }
+  
+  if (!job) {
+    return <span className="truncate text-xs px-1">{event.title}</span>;
+  }
+  
+  const jobTypeVisuals = getJobTypeVisuals(job.inspectionType);
+  const IconComponent = getIconComponent(jobTypeVisuals.icon);
+  const syncIcon = event.resource.googleEventId ? ' 🔗' : '';
+  
+  return (
+    <div className="flex items-center gap-1 px-1">
+      <IconComponent className="w-3 h-3 flex-shrink-0" />
+      <span className="truncate text-xs">{event.title}{syncIcon}</span>
+    </div>
+  );
+};
 
 interface DraggableJobCardProps {
   job: Job;
@@ -118,7 +170,7 @@ export default function Schedule() {
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
   const [pendingEvent, setPendingEvent] = useState<{ job: Job; start: Date; end: Date } | null>(null);
-  const [eventFormData, setEventFormData] = useState({ startTime: '', endTime: '' });
+  const [eventFormData, setEventFormData] = useState({ startTime: '', endTime: '', fieldWorkComplete: false, photoUploadComplete: false });
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
@@ -349,6 +401,36 @@ export default function Schedule() {
     },
     onError: () => {
       toast({ title: 'Failed to delete event', variant: 'destructive' });
+    },
+  });
+
+  // Update job completion fields mutation
+  const updateJobCompletionMutation = useMutation({
+    mutationFn: async ({ jobId, fieldWorkComplete, photoUploadComplete }: { jobId: string; fieldWorkComplete: boolean; photoUploadComplete: boolean }) => {
+      const response = await apiRequest('PUT', `/api/jobs/${jobId}`, { fieldWorkComplete, photoUploadComplete });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: 'Workflow progress updated successfully' });
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+      // Update the selectedEvent to reflect the actual data from server
+      if (selectedEvent && data) {
+        setSelectedEvent({
+          ...selectedEvent,
+          resource: {
+            ...selectedEvent.resource,
+            job: data,
+          }
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to update workflow progress', 
+        description: error?.message || 'An error occurred',
+        variant: 'destructive' 
+      });
     },
   });
 
@@ -591,10 +673,12 @@ export default function Schedule() {
         const job = jobMap.get(event.jobId);
         if (!job) return null;
 
+        const syncIcon = event.googleCalendarEventId ? ' 🔗' : '';
+        
         return {
           id: event.id,
           jobId: event.jobId,
-          title: event.googleCalendarEventId ? `${event.title} 🔗` : event.title,
+          title: `${event.title}${syncIcon}`,
           start: new Date(event.startTime),
           end: new Date(event.endTime),
           resource: {
@@ -637,7 +721,7 @@ export default function Schedule() {
       .map(event => ({
         id: event.id,
         jobId: '',
-        title: `📅 ${event.title}`,
+        title: event.title,
         start: new Date(event.startTime),
         end: new Date(event.endTime),
         resource: {
@@ -646,8 +730,30 @@ export default function Schedule() {
         },
       }));
     
-    return [...appEvents, ...jobOnlyEvents, ...googleEvents];
-  }, [scheduleEvents, jobs, googleOnlyEvents]);
+    // Combine all events
+    const allEvents = [...appEvents, ...jobOnlyEvents, ...googleEvents];
+    
+    // Filter based on user role
+    // Admin sees ALL events (all inspectors + Building Knowledge + unassigned)
+    // Non-admin inspector users ONLY see events assigned to them
+    if (!isAdmin && user?.id) {
+      return allEvents.filter(event => {
+        // Google-only events are visible to all users
+        if (event.resource.eventType === 'google') {
+          return true;
+        }
+        
+        // App events: filter by assignedTo
+        const job = event.resource.job;
+        if (!job) return false;
+        
+        // Show event if it's assigned to this user
+        return job.assignedTo === user.id;
+      });
+    }
+    
+    return allEvents;
+  }, [scheduleEvents, jobs, googleOnlyEvents, isAdmin, user?.id]);
 
   const unscheduledJobs = useMemo(() => {
     const scheduledJobIds = new Set(scheduleEvents.map(e => e.jobId));
@@ -701,6 +807,8 @@ export default function Schedule() {
     setEventFormData({
       startTime: format(event.start, "yyyy-MM-dd'T'HH:mm"),
       endTime: format(event.end, "yyyy-MM-dd'T'HH:mm"),
+      fieldWorkComplete: event.resource.job?.fieldWorkComplete ?? false,
+      photoUploadComplete: event.resource.job?.photoUploadComplete ?? false,
     });
     setEventDialogOpen(true);
   }, []);
@@ -708,7 +816,7 @@ export default function Schedule() {
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
   }, []);
 
-  const handleSaveEvent = useCallback(() => {
+  const handleSaveEvent = useCallback(async () => {
     if (!selectedEvent) return;
 
     const startTime = new Date(eventFormData.startTime);
@@ -734,25 +842,55 @@ export default function Schedule() {
       return;
     }
 
-    // If this is a job-only event (no schedule_event record), create one
-    if (!selectedEvent.resource.scheduleEventId) {
-      createEventMutation.mutate({
-        jobId: selectedEvent.jobId,
-        title: selectedEvent.title,
-        startTime,
-        endTime,
-      });
-    } else {
-      // Update existing schedule_event
-      updateEventMutation.mutate({
-        id: selectedEvent.resource.scheduleEventId,
-        startTime,
-        endTime,
-      });
-    }
+    try {
+      // Update completion fields if they changed
+      const job = selectedEvent.resource.job;
+      const completionFieldsChanged = job && (
+        job.fieldWorkComplete !== eventFormData.fieldWorkComplete ||
+        job.photoUploadComplete !== eventFormData.photoUploadComplete
+      );
 
-    setEventDialogOpen(false);
-  }, [selectedEvent, eventFormData, checkConflict, updateEventMutation, createEventMutation, toast]);
+      // Wait for completion mutation if needed
+      if (completionFieldsChanged && job) {
+        console.log('[Schedule] Updating completion fields:', {
+          jobId: job.id,
+          fieldWorkComplete: eventFormData.fieldWorkComplete,
+          photoUploadComplete: eventFormData.photoUploadComplete,
+        });
+        
+        await updateJobCompletionMutation.mutateAsync({
+          jobId: job.id,
+          fieldWorkComplete: eventFormData.fieldWorkComplete,
+          photoUploadComplete: eventFormData.photoUploadComplete,
+        });
+      }
+
+      // If this is a job-only event (no schedule_event record), create one
+      if (!selectedEvent.resource.scheduleEventId) {
+        await createEventMutation.mutateAsync({
+          jobId: selectedEvent.jobId,
+          title: selectedEvent.title,
+          startTime,
+          endTime,
+        });
+      } else {
+        // Update existing schedule_event
+        await updateEventMutation.mutateAsync({
+          id: selectedEvent.resource.scheduleEventId,
+          startTime,
+          endTime,
+        });
+      }
+
+      // Close dialog only after all mutations succeed
+      setEventDialogOpen(false);
+    } catch (error) {
+      // Error toasts are already handled by mutation onError callbacks
+      // Just log for debugging
+      console.error('[Schedule] Failed to save event:', error);
+      // Keep dialog open so user can retry
+    }
+  }, [selectedEvent, eventFormData, checkConflict, updateEventMutation, createEventMutation, updateJobCompletionMutation, toast]);
 
   const handleDeleteEvent = useCallback(() => {
     if (!selectedEvent) return;
@@ -787,15 +925,10 @@ export default function Schedule() {
     setPendingEvent(null);
   }, [pendingEvent, createEventMutation]);
 
-  // Create dynamic color mapping for inspectors
-  const inspectorColors = useMemo(() => {
-    if (!inspectors || inspectors.length === 0) return {};
-    
-    const colors = ['#2E5BBA', '#28A745', '#FD7E14', '#9C27B0', '#FF5722'];
-    return inspectors.reduce((acc, inspector, index) => {
-      acc[inspector.id] = colors[index % colors.length];
-      return acc;
-    }, {} as Record<string, string>);
+  // Create user lookup map for inspector color mapping
+  const userLookup = useMemo(() => {
+    if (!inspectors || inspectors.length === 0) return new Map<string, User>();
+    return new Map(inspectors.map(inspector => [inspector.id, inspector]));
   }, [inspectors]);
 
   const eventStyleGetter = useCallback((event: CalendarEvent) => {
@@ -813,36 +946,70 @@ export default function Schedule() {
       };
     }
     
-    // Color coding based on assignment status
-    // Unassigned events = orange
-    if (event.resource.job && !event.resource.job.assignedTo) {
+    // Get job data for styling
+    const job = event.resource.job;
+    if (!job) {
+      // Fallback for events without job data
       return {
         style: {
-          backgroundColor: '#FD7E14', // orange
+          backgroundColor: '#6b7280',
           color: 'white',
           borderRadius: '4px',
           opacity: 0.9,
-          border: '2px solid #F57C00',
+          border: '2px solid #4b5563',
           display: 'block',
         },
       };
     }
     
-    // Assigned - use dynamic color mapping
-    const assignedTo = event.resource.job?.assignedTo;
-    const color = assignedTo ? inspectorColors[assignedTo] || '#6C757D' : '#6C757D';
+    // Look up the assigned user object for color mapping
+    const assignedUser = job.assignedTo ? userLookup.get(job.assignedTo) || null : null;
+    const assignedUserObj = assignedUser ? {
+      firstName: assignedUser.firstName,
+      lastName: assignedUser.lastName,
+      email: assignedUser.email,
+    } : null;
     
-    return {
-      style: {
-        backgroundColor: color,
-        color: 'white',
-        borderRadius: '4px',
-        opacity: 0.9,
-        border: '0',
-        display: 'block',
-      },
+    // Use visual system to get complete styling
+    const eventStyle = getCalendarEventStyle(
+      assignedUserObj,
+      job.inspectionType,
+      job.fieldWorkComplete || false,
+      job.photoUploadComplete || false,
+      job.status === 'cancelled'
+    );
+    
+    // Build CSS style object
+    const style: React.CSSProperties = {
+      backgroundColor: eventStyle.backgroundColor,
+      borderRadius: '4px',
+      opacity: parseFloat(eventStyle.opacity) / 100,
+      color: eventStyle.color,
+      border: `${eventStyle.borderWidth} ${eventStyle.borderStyle} ${eventStyle.borderColor}`,
+      display: 'block',
+      position: 'relative',
+      overflow: 'hidden',
     };
-  }, [inspectorColors]);
+    
+    // Add background pattern if available
+    if (eventStyle.backgroundPattern) {
+      style.backgroundImage = `url("${eventStyle.backgroundPattern}")`;
+      style.backgroundSize = 'auto';
+      style.backgroundRepeat = 'repeat';
+    }
+    
+    // Add tint overlay for fully complete items
+    if (eventStyle.tint) {
+      style.boxShadow = `inset 0 0 0 2000px ${eventStyle.tint}`;
+    }
+    
+    // Add text decoration for cancelled items
+    if (eventStyle.strikethrough) {
+      style.textDecoration = 'line-through';
+    }
+    
+    return { style };
+  }, [userLookup]);
 
   const CalendarWrapper = useCallback(({ children }: { children: React.ReactNode }) => {
     const [, drop] = useDrop(() => ({
@@ -1222,6 +1389,9 @@ export default function Schedule() {
                 onSelectEvent={handleSelectEvent}
                 onSelectSlot={handleSelectSlot}
                 eventPropGetter={eventStyleGetter}
+                components={{
+                  event: CustomEvent,
+                }}
                 selectable
                 style={{ height: '100%' }}
                 className="rbc-calendar"
@@ -1327,6 +1497,60 @@ export default function Schedule() {
                     <span>Updating status...</span>
                   </div>
                 )}
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium mb-3">Workflow Progress</h3>
+                <div className="space-y-4">
+                  <div className="flex flex-row items-start space-x-3 space-y-0">
+                    <Checkbox
+                      checked={eventFormData.fieldWorkComplete}
+                      onCheckedChange={(checked) => setEventFormData({ 
+                        ...eventFormData, 
+                        fieldWorkComplete: checked === true 
+                      })}
+                      disabled={user?.role === 'viewer' || user?.role === 'manager'}
+                      data-testid="checkbox-field-work"
+                    />
+                    <div className="space-y-1 leading-none">
+                      <Label className="font-normal">
+                        Field Work
+                      </Label>
+                      {selectedEvent.resource.job?.fieldWorkCompletedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Completed on {format(new Date(selectedEvent.resource.job.fieldWorkCompletedAt), "PPP")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-row items-start space-x-3 space-y-0">
+                    <Checkbox
+                      checked={eventFormData.photoUploadComplete}
+                      onCheckedChange={(checked) => setEventFormData({ 
+                        ...eventFormData, 
+                        photoUploadComplete: checked === true 
+                      })}
+                      disabled={user?.role === 'viewer' || user?.role === 'manager' || !eventFormData.fieldWorkComplete}
+                      data-testid="checkbox-photo-upload"
+                    />
+                    <div className="space-y-1 leading-none">
+                      <Label className="font-normal">
+                        Photo Upload
+                      </Label>
+                      {!eventFormData.fieldWorkComplete && (
+                        <p className="text-xs text-muted-foreground">
+                          Complete field work first
+                        </p>
+                      )}
+                      {selectedEvent.resource.job?.photoUploadCompletedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Completed on {format(new Date(selectedEvent.resource.job.photoUploadCompletedAt), "PPP")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">

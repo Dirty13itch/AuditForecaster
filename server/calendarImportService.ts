@@ -1,7 +1,7 @@
 import { serverLogger } from "./logger";
 import type { IStorage } from "./storage";
-import { parseCalendarEvent, type ParsedEvent } from "./calendarEventParser";
-import type { InsertJob, InsertUnmatchedCalendarEvent, InsertCalendarImportLog } from "@shared/schema";
+import { parseCalendarEvent, type ParsedEventResult } from "./eventParser";
+import type { InsertJob, InsertUnmatchedCalendarEvent, InsertCalendarImportLog, InsertBuilder } from "@shared/schema";
 
 /**
  * Calendar event interface (from Google Calendar API)
@@ -34,15 +34,43 @@ export interface ImportResult {
 /**
  * Convert calendar event to Job based on parsed data
  * Auto-creates job from high-confidence events (≥80%)
+ * Auto-creates temporary builders for new builder names
  */
 export async function createJobFromCalendarEvent(
   storage: IStorage,
   event: CalendarEvent,
-  parsed: ParsedEvent,
+  parsed: ParsedEventResult,
   createdBy: string
 ): Promise<string> {
-  if (!parsed.builderId || !parsed.inspectionType) {
-    throw new Error('Missing required fields: builderId or inspectionType');
+  // Handle missing builder by auto-creating temporary builder
+  let builderId = parsed.parsedBuilderId;
+  
+  if (!builderId && parsed.parsedBuilderName && parsed.isNewBuilder) {
+    // Auto-create a temporary builder record
+    const temporaryBuilder: InsertBuilder = {
+      name: parsed.parsedBuilderName,
+      companyName: parsed.parsedBuilderName,
+      status: 'temporary',
+      autoCreatedFromEvent: true,
+      needsReview: true,
+      confidence: parsed.confidenceScore,
+      abbreviations: parsed.matchedAbbreviation ? [parsed.matchedAbbreviation] : [],
+      createdBy,
+    };
+    
+    const newBuilder = await storage.createBuilder(temporaryBuilder);
+    builderId = newBuilder.id;
+    
+    serverLogger.info(`[CalendarImport] Auto-created temporary builder for review`, {
+      builderId: newBuilder.id,
+      builderName: parsed.parsedBuilderName,
+      confidence: parsed.confidenceScore,
+      eventId: event.id,
+    });
+  }
+  
+  if (!builderId || !parsed.parsedJobType) {
+    throw new Error('Missing required fields: builderId or jobType');
   }
 
   // Check for duplicate by google_event_id
@@ -59,14 +87,14 @@ export async function createJobFromCalendarEvent(
 
   // Generate job name from event data
   const jobName = event.location 
-    ? `${parsed.inspectionType} - ${event.location}`
+    ? `${parsed.parsedJobType} - ${event.location}`
     : event.summary;
 
   // Create job from event
   const jobData: InsertJob = {
     name: jobName,
-    builderId: parsed.builderId,
-    inspectionType: parsed.inspectionType,
+    builderId: builderId,
+    inspectionType: parsed.parsedJobType,
     address: event.location || event.summary || 'TBD',
     contractor: 'TBD', // Calendar events don't have contractor info
     scheduledDate: startTime,
@@ -79,9 +107,9 @@ export async function createJobFromCalendarEvent(
   const job = await storage.createJob(jobData);
   
   serverLogger.info(`[CalendarImport] Created job ${job.id} from event ${event.id}`, {
-    builder: parsed.builderName,
-    inspectionType: parsed.inspectionType,
-    confidence: parsed.confidence,
+    builder: parsed.parsedBuilderName,
+    inspectionType: parsed.parsedJobType,
+    confidence: parsed.confidenceScore,
   });
 
   return job.id;
@@ -110,6 +138,9 @@ export async function processCalendarEvents(
 
   serverLogger.info(`[CalendarImport] Processing ${events.length} events from calendar ${calendarId}`);
 
+  // Fetch all builders for parser
+  const builders = await storage.listBuilders();
+
   for (const event of events) {
     try {
       // Skip events without titles
@@ -118,12 +149,12 @@ export async function processCalendarEvents(
         continue;
       }
 
-      // Parse event title
-      const parsed = await parseCalendarEvent(storage, event.summary);
+      // Parse event title using new eventParser
+      const parsed = parseCalendarEvent(event.summary, event.description, builders);
 
       // Determine action based on confidence score
-      if (parsed.confidence >= 80 && parsed.builderId && parsed.inspectionType) {
-        // High confidence: Auto-create job
+      if (parsed.confidenceScore >= 80 && (parsed.parsedBuilderId || parsed.isNewBuilder) && parsed.parsedJobType !== 'other') {
+        // High confidence: Auto-create job (and temporary builder if needed)
         try {
           await createJobFromCalendarEvent(storage, event, parsed, userId);
           result.jobsCreated++;
@@ -134,7 +165,7 @@ export async function processCalendarEvents(
             throw error;
           }
         }
-      } else if (parsed.confidence >= 60 && parsed.builderId && parsed.inspectionType) {
+      } else if (parsed.confidenceScore >= 60 && (parsed.parsedBuilderId || parsed.isNewBuilder) && parsed.parsedJobType !== 'other') {
         // Medium confidence: Auto-create job + queue for review
         try {
           await createJobFromCalendarEvent(storage, event, parsed, userId);
@@ -193,7 +224,7 @@ export async function processCalendarEvents(
 async function queueEventForReview(
   storage: IStorage,
   event: CalendarEvent,
-  parsed: ParsedEvent,
+  parsed: ParsedEventResult,
   calendarId: string,
   status: string = 'pending'
 ): Promise<void> {
@@ -215,20 +246,20 @@ async function queueEventForReview(
     rawEventJson: {
       ...event,
       parsed: {
-        builderName: parsed.builderName,
-        inspectionType: parsed.inspectionType,
-        confidence: parsed.confidence,
-        parsedBuilderAbbreviation: parsed.parsedBuilderAbbreviation,
-        parsedInspectionKeyword: parsed.parsedInspectionKeyword,
+        builderName: parsed.parsedBuilderName,
+        inspectionType: parsed.parsedJobType,
+        confidence: parsed.confidenceScore,
+        matchedAbbreviation: parsed.matchedAbbreviation,
+        isNewBuilder: parsed.isNewBuilder,
       },
     },
-    confidenceScore: parsed.confidence,
+    confidenceScore: parsed.confidenceScore,
     status,
   };
 
   await storage.createUnmatchedEvent(unmatchedEvent);
   serverLogger.info(`[CalendarImport] Queued event ${event.id} for review`, {
-    confidence: parsed.confidence,
+    confidence: parsed.confidenceScore,
     status,
   });
 }

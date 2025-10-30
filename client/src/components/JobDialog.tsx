@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
@@ -16,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
+import { useAuth } from "@/hooks/useAuth";
 import { generateJobName } from "@shared/jobNameGenerator";
 import { insertJobSchema, type Job, type Builder, type Plan, type Development, type Lot } from "@shared/schema";
 
@@ -60,6 +62,8 @@ const jobFormSchema = insertJobSchema.pick({
   stories: true,
   notes: true,
   pricing: true,
+  fieldWorkComplete: true,
+  photoUploadComplete: true,
 });
 
 type JobFormValues = z.infer<typeof jobFormSchema>;
@@ -83,6 +87,7 @@ export default function JobDialog({
 }: JobDialogProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [selectedDevelopmentId, setSelectedDevelopmentId] = useState<string>("");
+  const { user } = useAuth();
 
   const form = useForm<JobFormValues>({
     resolver: zodResolver(jobFormSchema),
@@ -105,6 +110,8 @@ export default function JobDialog({
       houseVolume: job?.houseVolume ? parseFloat(job.houseVolume as any) : undefined,
       stories: job?.stories ? parseFloat(job.stories as any) : undefined,
       notes: job?.notes || "",
+      fieldWorkComplete: job?.fieldWorkComplete ?? false,
+      photoUploadComplete: job?.photoUploadComplete ?? false,
     },
   });
 
@@ -127,6 +134,9 @@ export default function JobDialog({
   const builderId = form.watch('builderId');
   const planId = form.watch('planId');
   const lotId = form.watch('lotId');
+  const fieldWorkComplete = form.watch('fieldWorkComplete');
+
+  const canEdit = user && user.role !== 'viewer';
 
   useEffect(() => {
     // Only auto-generate for new jobs (not editing)
@@ -512,6 +522,72 @@ export default function JobDialog({
                   </FormItem>
                 )}
               />
+            </div>
+
+            <div className="space-y-4">
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium mb-3">Workflow Progress</h3>
+                <div className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="fieldWorkComplete"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={!canEdit}
+                            data-testid="checkbox-field-work"
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="font-normal">
+                            Field Work
+                          </FormLabel>
+                          {job?.fieldWorkCompletedAt && (
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Completed on {format(new Date(job.fieldWorkCompletedAt), "PPP")}
+                            </FormDescription>
+                          )}
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="photoUploadComplete"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={!canEdit || !fieldWorkComplete}
+                            data-testid="checkbox-photo-upload"
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="font-normal">
+                            Photo Upload
+                          </FormLabel>
+                          {!fieldWorkComplete && (
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Complete field work first
+                            </FormDescription>
+                          )}
+                          {job?.photoUploadCompletedAt && (
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Completed on {format(new Date(job.photoUploadCompletedAt), "PPP")}
+                            </FormDescription>
+                          )}
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

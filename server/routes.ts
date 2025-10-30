@@ -759,6 +759,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Builder Review Queue routes (admin-only)
+  app.get("/api/builders/review", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const builders = await storage.getBuildersNeedingReview();
+      
+      // Enrich with job counts
+      const buildersWithCounts = await Promise.all(
+        builders.map(async (builder) => {
+          const stats = await storage.getBuilderStats(builder.id);
+          return {
+            ...builder,
+            jobCount: stats.totalJobs,
+          };
+        })
+      );
+      
+      res.json(buildersWithCounts);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builders for review');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builders/:id/approve", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const builder = await storage.approveBuilder(req.params.id);
+      if (!builder) {
+        return res.status(404).json({ message: "Builder not found" });
+      }
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'builder.approve',
+        resourceType: 'builder',
+        resourceId: req.params.id,
+        metadata: { builderName: builder.name, companyName: builder.companyName },
+      }, storage);
+      
+      res.json(builder);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'approve builder');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builders/:id/merge", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { targetBuilderId } = req.body;
+      if (!targetBuilderId) {
+        return res.status(400).json({ message: "Target builder ID is required" });
+      }
+      
+      const sourceBuilder = await storage.getBuilder(req.params.id);
+      const targetBuilder = await storage.getBuilder(targetBuilderId);
+      
+      if (!sourceBuilder || !targetBuilder) {
+        return res.status(404).json({ message: "Builder not found" });
+      }
+      
+      await storage.mergeBuilders(req.params.id, targetBuilderId);
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'builder.merge',
+        resourceType: 'builder',
+        resourceId: req.params.id,
+        metadata: { 
+          sourceBuilder: sourceBuilder.name,
+          targetBuilder: targetBuilder.name,
+          targetBuilderId,
+        },
+      }, storage);
+      
+      res.json({ success: true, message: "Builder merged successfully" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'merge builders');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/builders/:id/reject", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { unknownBuilderId } = req.body;
+      if (!unknownBuilderId) {
+        return res.status(400).json({ message: "Unknown builder ID is required" });
+      }
+      
+      const builder = await storage.getBuilder(req.params.id);
+      if (!builder) {
+        return res.status(404).json({ message: "Builder not found" });
+      }
+      
+      await storage.rejectBuilder(req.params.id, unknownBuilderId);
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'builder.reject',
+        resourceType: 'builder',
+        resourceId: req.params.id,
+        metadata: { builderName: builder.name, reassignedTo: unknownBuilderId },
+      }, storage);
+      
+      res.json({ success: true, message: "Builder rejected and deleted" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'reject builder');
+      res.status(status).json({ message });
+    }
+  });
+
   // Builder Contacts routes
   app.get("/api/builders/:builderId/contacts", isAuthenticated, async (req, res) => {
     try {
@@ -2196,6 +2305,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set completedDate if not already set and job is being completed
       if (isCompletingNow && !validated.completedDate) {
         validated.completedDate = new Date();
+      }
+
+      // Set fieldWorkCompletedAt when fieldWorkComplete changes to true
+      if (validated.fieldWorkComplete === true && !existingJob.fieldWorkComplete) {
+        validated.fieldWorkCompletedAt = new Date();
+      }
+
+      // Set photoUploadCompletedAt when photoUploadComplete changes to true
+      if (validated.photoUploadComplete === true && !existingJob.photoUploadComplete) {
+        validated.photoUploadCompletedAt = new Date();
       }
 
       // Update the job
