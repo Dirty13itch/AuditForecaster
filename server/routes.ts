@@ -80,6 +80,7 @@ import { calculateVentilationRequirements } from "./ventilationTests";
 import { processCalendarEvents, type CalendarEvent } from './calendarImportService';
 import { scheduledExportService } from './scheduledExports';
 import { calculateACH50, checkMinnesotaCompliance } from './blowerDoorService';
+import { validateJobUpdate, validateJobCreation } from './jobService';
 import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
@@ -2183,6 +2184,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validated.builderId = undefined;
       }
 
+      // CRITICAL: Validate job update including status transition protection
+      const updateValidation = validateJobUpdate(existingJob, validated);
+      if (!updateValidation.valid) {
+        return res.status(400).json({ message: updateValidation.error });
+      }
+
       // Check if status is changing to "completed"
       const isCompletingNow = validated.status === 'completed' && existingJob.status !== 'completed';
 
@@ -2856,6 +2863,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         message: 'Failed to sync Building Knowledge calendar', 
         error: error.message 
+      });
+    }
+  });
+
+  // Export job to Google Calendar (two-way sync)
+  app.post('/api/calendar/export-job/:jobId', isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const jobId = req.params.jobId;
+      const { calendarId } = req.body; // Optional, defaults to 'primary'
+      
+      serverLogger.info('[API] Exporting job to Google Calendar', { userId, jobId, calendarId });
+      
+      const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+      const eventId = await extendedService.exportJobToGoogleCalendar(userId, jobId, calendarId);
+      
+      res.json({
+        success: true,
+        eventId,
+        message: 'Job exported to Google Calendar successfully'
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Calendar export failed', { error });
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to export job to Google Calendar'
+      });
+    }
+  });
+  
+  // Update job in Google Calendar (two-way sync)
+  app.put('/api/calendar/update-job/:jobId', isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const jobId = req.params.jobId;
+      
+      serverLogger.info('[API] Updating job in Google Calendar', { userId, jobId });
+      
+      const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+      await extendedService.updateJobInGoogleCalendar(userId, jobId);
+      
+      res.json({
+        success: true,
+        message: 'Job updated in Google Calendar successfully'
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Calendar update failed', { error });
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to update job in Google Calendar'
+      });
+    }
+  });
+  
+  // Delete job from Google Calendar (two-way sync)
+  app.delete('/api/calendar/delete-event/:eventId', isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const eventId = req.params.eventId;
+      const calendarId = req.query.calendarId as string || 'primary';
+      
+      serverLogger.info('[API] Deleting event from Google Calendar', { userId, eventId, calendarId });
+      
+      const { googleCalendarService: extendedService } = await import('./googleCalendarService');
+      await extendedService.deleteJobFromGoogleCalendar(userId, eventId, calendarId);
+      
+      res.json({
+        success: true,
+        message: 'Event deleted from Google Calendar successfully'
+      });
+    } catch (error: any) {
+      serverLogger.error('[API] Calendar delete failed', { error });
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to delete event from Google Calendar'
       });
     }
   });
@@ -5701,6 +5783,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       if (!req.body.filePath) {
         return res.status(400).json({ message: "Please provide a file path for the photo" });
+      }
+
+      // CRITICAL: Backend file type validation
+      // Extract file extension from path
+      const filePath = req.body.filePath as string;
+      const extension = filePath.toLowerCase().split('.').pop();
+      const allowedImageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+      
+      if (!extension || !allowedImageExtensions.includes(extension)) {
+        return res.status(400).json({ 
+          message: "Invalid file type. Only image files are allowed (jpg, jpeg, png, gif, webp, heic, heif).",
+          fileType: extension,
+        });
+      }
+
+      // Additional MIME type validation if available
+      if (req.body.mimeType && !req.body.mimeType.startsWith('image/')) {
+        return res.status(400).json({ 
+          message: "Invalid file type. Only image files are allowed.",
+          mimeType: req.body.mimeType,
+        });
       }
 
       const objectStorageService = new ObjectStorageService();
@@ -8817,6 +8920,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (equipment.status !== 'available') {
         return res.status(400).json({ message: "Equipment is not available for checkout" });
+      }
+
+      // CRITICAL: Enforce calibration requirements before checkout
+      // Check if equipment has any calibrations
+      const calibrations = await storage.getEquipmentCalibrations(validated.equipmentId);
+      if (calibrations && calibrations.length > 0) {
+        // Get the most recent calibration
+        const latestCalibration = calibrations[0]; // Assumes ordered by date desc
+        const today = new Date();
+        const nextDue = latestCalibration.nextDueDate ? new Date(latestCalibration.nextDueDate) : null;
+        
+        // Block checkout if calibration is overdue
+        if (nextDue && nextDue < today) {
+          return res.status(400).json({ 
+            message: "Cannot checkout equipment with overdue calibration. Please ensure equipment is calibrated before use.",
+            calibrationDue: nextDue.toISOString(),
+            lastCalibrationDate: latestCalibration.calibrationDate,
+          });
+        }
       }
       
       const checkout = await storage.createEquipmentCheckout(validated);

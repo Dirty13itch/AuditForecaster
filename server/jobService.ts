@@ -367,6 +367,18 @@ export function validateJobUpdate(
 
   // Validate status transition if status is being updated
   if (updates.status && updates.status !== currentJob.status) {
+    // CRITICAL: Prevent reverting completed jobs back to in-progress
+    // Completed jobs should only be able to transition to 'review' or 'cancelled'
+    if (currentJob.status === 'completed' && 
+        updates.status !== 'completed' && 
+        updates.status !== 'review' && 
+        updates.status !== 'cancelled') {
+      return {
+        valid: false,
+        error: 'Cannot revert a completed job to in-progress status. If changes are needed, please contact an administrator or transition to review status.',
+      };
+    }
+    
     const transitionValidation = validateJobStatusTransition(
       currentJob.status as JobStatus,
       updates.status as JobStatus

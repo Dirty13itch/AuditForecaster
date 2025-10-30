@@ -4,14 +4,15 @@
  * specifically designed for the Building Knowledge calendar integration.
  */
 
-import { googleCalendarService as baseService, getUncachableGoogleCalendarClient, allDayDateToUTC } from './googleCalendar';
+import { googleCalendarService as baseService, getUncachableGoogleCalendarClient, allDayDateToUTC, verifyRequiredScopes } from './googleCalendar';
+import { google } from 'googleapis';
 import { serverLogger } from './logger';
 import type { ScheduleEvent, Job, GoogleEvent, InsertGoogleEvent } from '@shared/schema';
 import { storage } from './storage';
 import { parseCalendarEvent } from './eventParser';
 
 // Re-export core functions from googleCalendar
-export { getUncachableGoogleCalendarClient, allDayDateToUTC };
+export { getUncachableGoogleCalendarClient, allDayDateToUTC, verifyRequiredScopes };
 
 interface GoogleCalendarEventRaw {
   id?: string | null;
@@ -148,6 +149,16 @@ export class ExtendedGoogleCalendarService {
     includeDeleted = false
   ): Promise<GoogleEvent[]> {
     try {
+      // Get access token and verify scopes before proceeding
+      const { getAccessToken } = await import('./googleCalendar');
+      const accessToken = await getAccessToken();
+      
+      // CRITICAL: Verify required scopes before calendar operations
+      const hasRequiredScopes = await verifyRequiredScopes(accessToken);
+      if (!hasRequiredScopes) {
+        throw new Error('Missing required Google Calendar permissions. Please reconnect your calendar with the required scopes.');
+      }
+      
       const calendar = await getUncachableGoogleCalendarClient();
       const allEvents: GoogleEvent[] = [];
       
@@ -179,11 +190,56 @@ export class ExtendedGoogleCalendarService {
             serverLogger.debug(`[GoogleCalendarService] Sample events from ${calendarId}:`, sampleEvents);
           }
           
-          // Convert to GoogleEvent format
+          // Convert to GoogleEvent format and detect recurring events
+          // Group events by recurringEventId to identify recurring series
+          const recurringGroups = new Map<string, GoogleCalendarEventRaw[]>();
+          const singleEvents: GoogleCalendarEventRaw[] = [];
+          
           for (const event of events) {
+            if (event.recurringEventId) {
+              const group = recurringGroups.get(event.recurringEventId) || [];
+              group.push(event);
+              recurringGroups.set(event.recurringEventId, group);
+            } else {
+              singleEvents.push(event);
+            }
+          }
+          
+          // Log recurring series detected
+          if (recurringGroups.size > 0) {
+            serverLogger.info(`[GoogleCalendarService] Detected ${recurringGroups.size} recurring event series with ${Array.from(recurringGroups.values()).reduce((sum, group) => sum + group.length, 0)} total instances`);
+            
+            // Log details of each recurring series
+            for (const [recurringId, instances] of recurringGroups.entries()) {
+              if (instances.length > 0) {
+                serverLogger.info(`[GoogleCalendarService] Recurring series "${instances[0].summary}" has ${instances.length} instances`);
+              }
+            }
+          }
+          
+          // Process single events
+          for (const event of singleEvents) {
             const googleEvent = this.parseRawEventToGoogleEvent(event as GoogleCalendarEventRaw, calendarId);
             if (googleEvent) {
               allEvents.push(googleEvent);
+            }
+          }
+          
+          // Process recurring events - add metadata for frontend handling
+          for (const [recurringId, instances] of recurringGroups.entries()) {
+            for (const event of instances) {
+              const googleEvent = this.parseRawEventToGoogleEvent(event as GoogleCalendarEventRaw, calendarId);
+              if (googleEvent) {
+                // Add recurring metadata to help frontend decide import strategy
+                googleEvent.metadata = {
+                  ...googleEvent.metadata,
+                  isRecurring: true,
+                  recurringEventId: recurringId,
+                  instanceCount: instances.length,
+                  isFirstInstance: event.id === instances[0].id,
+                };
+                allEvents.push(googleEvent);
+              }
             }
           }
         } catch (error) {
@@ -600,6 +656,240 @@ export class ExtendedGoogleCalendarService {
       result.errors.push(errorMsg);
       return result;
     }
+  }
+  
+  /**
+   * Exports a job to Google Calendar as an event
+   * Creates a new calendar event with job details
+   */
+  async exportJobToGoogleCalendar(
+    userId: string,
+    jobId: string,
+    calendarId: string = 'primary'
+  ): Promise<string> {
+    try {
+      // Get access token and verify scopes
+      const { getAccessToken } = await import('./googleCalendar');
+      const accessToken = await getAccessToken();
+      
+      // Verify scopes before export
+      const hasRequiredScopes = await verifyRequiredScopes(accessToken);
+      if (!hasRequiredScopes) {
+        throw new Error('Missing required Google Calendar permissions for export. Please reconnect your calendar.');
+      }
+      
+      // Get job details
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        throw new Error('Job not found');
+      }
+      
+      // Get lot and development for full context
+      const lot = job.lotId ? await storage.getLot(job.lotId) : null;
+      const development = lot?.developmentId ? 
+        await storage.getDevelopment(lot.developmentId) : null;
+      
+      // Create OAuth client
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+      
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+      
+      // Build event description
+      const description = this.buildEventDescription(job, lot, development);
+      
+      // Build event from job data
+      const event = {
+        summary: `Energy Audit: ${job.address || 'TBD'}`,
+        description,
+        location: job.address || '',
+        start: job.scheduledDate ? {
+          dateTime: new Date(job.scheduledDate).toISOString(),
+          timeZone: 'America/Chicago' // Minnesota timezone
+        } : undefined,
+        end: job.scheduledDate ? {
+          dateTime: new Date(new Date(job.scheduledDate).getTime() + 2 * 60 * 60 * 1000).toISOString(), // +2 hours
+          timeZone: 'America/Chicago'
+        } : undefined,
+        extendedProperties: {
+          private: {
+            jobId: jobId.toString(),
+            source: 'energy-audit-app',
+            lotNumber: lot?.lotNumber || '',
+            developmentName: development?.name || ''
+          }
+        }
+      };
+      
+      // Create event in Google Calendar
+      const response = await calendar.events.insert({
+        calendarId,
+        requestBody: event
+      });
+      
+      // Save Google Calendar event ID in job record
+      if (response.data.id) {
+        await storage.updateJob(jobId, {
+          googleEventId: response.data.id
+        });
+      }
+      
+      serverLogger.info('[Calendar Export] Job exported to Google Calendar', {
+        jobId,
+        eventId: response.data.id,
+        calendarId
+      });
+      
+      return response.data.id!;
+    } catch (error) {
+      serverLogger.error('[Calendar Export] Export failed', { error, jobId });
+      throw error;
+    }
+  }
+  
+  /**
+   * Updates a Google Calendar event when job changes
+   */
+  async updateJobInGoogleCalendar(
+    userId: string,
+    jobId: string
+  ): Promise<void> {
+    try {
+      const job = await storage.getJob(jobId);
+      if (!job || !job.googleEventId) {
+        throw new Error('Job has no linked calendar event');
+      }
+      
+      // Get access token and verify scopes
+      const { getAccessToken } = await import('./googleCalendar');
+      const accessToken = await getAccessToken();
+      
+      const hasRequiredScopes = await verifyRequiredScopes(accessToken);
+      if (!hasRequiredScopes) {
+        throw new Error('Missing required Google Calendar permissions for update.');
+      }
+      
+      // Get lot and development for full context
+      const lot = job.lotId ? await storage.getLot(job.lotId) : null;
+      const development = lot?.developmentId ? 
+        await storage.getDevelopment(lot.developmentId) : null;
+      
+      // Create OAuth client
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+      
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+      
+      // Build event description
+      const description = this.buildEventDescription(job, lot, development);
+      
+      // Build updated event data
+      const event = {
+        summary: `Energy Audit: ${job.address || 'TBD'}`,
+        description,
+        location: job.address || '',
+        start: job.scheduledDate ? {
+          dateTime: new Date(job.scheduledDate).toISOString(),
+          timeZone: 'America/Chicago'
+        } : undefined,
+        end: job.scheduledDate ? {
+          dateTime: new Date(new Date(job.scheduledDate).getTime() + 2 * 60 * 60 * 1000).toISOString(),
+          timeZone: 'America/Chicago'
+        } : undefined,
+        extendedProperties: {
+          private: {
+            jobId: jobId.toString(),
+            source: 'energy-audit-app',
+            lotNumber: lot?.lotNumber || '',
+            developmentName: development?.name || ''
+          }
+        }
+      };
+      
+      // Update event in Google Calendar
+      await calendar.events.update({
+        calendarId: 'primary', // Could be made configurable
+        eventId: job.googleEventId,
+        requestBody: event
+      });
+      
+      serverLogger.info('[Calendar Export] Job updated in Google Calendar', {
+        jobId,
+        eventId: job.googleEventId
+      });
+    } catch (error) {
+      serverLogger.error('[Calendar Export] Update failed', { error, jobId });
+      throw error;
+    }
+  }
+  
+  /**
+   * Deletes a Google Calendar event when job is deleted
+   */
+  async deleteJobFromGoogleCalendar(
+    userId: string,
+    eventId: string,
+    calendarId: string = 'primary'
+  ): Promise<void> {
+    try {
+      // Get access token
+      const { getAccessToken } = await import('./googleCalendar');
+      const accessToken = await getAccessToken();
+      
+      // Create OAuth client
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+      
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+      
+      await calendar.events.delete({
+        calendarId,
+        eventId
+      });
+      
+      serverLogger.info('[Calendar Export] Event deleted from Google Calendar', {
+        eventId,
+        calendarId
+      });
+    } catch (error: any) {
+      // If event is already deleted (404), treat as success
+      if (error.code === 404 || error.message?.includes('404')) {
+        serverLogger.info(`[Calendar Export] Event ${eventId} not found, already deleted`);
+        return;
+      }
+      serverLogger.error('[Calendar Export] Delete failed', { error, eventId });
+      // Don't throw - deletion should not block job deletion
+    }
+  }
+  
+  /**
+   * Helper to build event description from job data
+   */
+  private buildEventDescription(job: any, lot: any, development: any): string {
+    const lines = [
+      `Job Status: ${job.status}`,
+      `Address: ${job.address || 'TBD'}`,
+    ];
+    
+    if (development) {
+      lines.push(`Development: ${development.name}`);
+    }
+    
+    if (lot) {
+      lines.push(`Lot: ${lot.lotNumber}`);
+    }
+    
+    if (job.inspectionType) {
+      lines.push(`Job Type: ${job.inspectionType}`);
+    }
+    
+    if (job.notes) {
+      lines.push(``, `Notes:`, job.notes);
+    }
+    
+    lines.push(``, `---`, `Created by Energy Audit Application`);
+    
+    return lines.join('\n');
   }
 }
 

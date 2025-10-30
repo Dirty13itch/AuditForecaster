@@ -288,6 +288,52 @@ async function getAccessToken(forceRefresh = false): Promise<string> {
   return tokenRefreshPromise;
 }
 
+/**
+ * Verifies that all required OAuth scopes are present in the access token
+ * Required scopes:
+ * - calendar.readonly: For reading calendars and events
+ * - calendar.events: For creating/updating/deleting events (export feature)
+ */
+export async function verifyRequiredScopes(accessToken: string): Promise<boolean> {
+  const requiredScopes = [
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar.events'
+  ];
+  
+  try {
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    
+    // Get token info from Google to verify scopes
+    const tokenInfo = await oauth2Client.getTokenInfo(accessToken);
+    const grantedScopes = tokenInfo.scopes || [];
+    
+    serverLogger.debug('[GoogleCalendar] Verifying scopes', {
+      requiredScopes,
+      grantedScopes
+    });
+    
+    // Check if all required scopes are granted
+    const missingScopes = requiredScopes.filter(scope => 
+      !grantedScopes.includes(scope)
+    );
+    
+    if (missingScopes.length > 0) {
+      serverLogger.error('[GoogleCalendar] Missing required OAuth scopes', {
+        missingScopes,
+        grantedScopes
+      });
+      return false;
+    }
+    
+    serverLogger.info('[GoogleCalendar] ✓ All required scopes verified');
+    return true;
+  } catch (error) {
+    serverLogger.error('[GoogleCalendar] Failed to verify scopes', { error });
+    return false;
+  }
+}
+
 export async function getUncachableGoogleCalendarClient() {
   const accessToken = await getAccessToken();
 
