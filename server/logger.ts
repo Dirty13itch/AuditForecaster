@@ -1,68 +1,89 @@
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+import winston from 'winston';
 
-interface LoggerConfig {
-  minLevel: LogLevel;
-  enabledInProduction: boolean;
-  prefix?: string;
+// Define log format (JSON for production, pretty for development)
+const logFormat = winston.format.combine(
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.errors({ stack: true }),
+  winston.format.metadata({ fillExcept: ['timestamp', 'level', 'message'] }),
+  process.env.NODE_ENV === 'production'
+    ? winston.format.json()
+    : winston.format.printf(({ timestamp, level, message, metadata }) => {
+        const meta = Object.keys(metadata).length ? ` ${JSON.stringify(metadata)}` : '';
+        return `${timestamp} [${level}]: ${message}${meta}`;
+      })
+);
+
+// Create Winston logger instance
+export const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: logFormat,
+  defaultMeta: { service: 'energy-audit-api' },
+  transports: [
+    new winston.transports.Console(),
+    // Add file transports for production
+    ...(process.env.NODE_ENV === 'production'
+      ? [
+          new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+          new winston.transports.File({ filename: 'logs/combined.log' })
+        ]
+      : [])
+  ]
+});
+
+// Create child logger with context and optional correlation ID
+export function createLogger(context: string, correlationId?: string) {
+  return logger.child({
+    context,
+    ...(correlationId && { correlationId })
+  });
 }
 
-const LOG_LEVELS: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
-
+/**
+ * Backward-compatible Logger class wrapper around Winston
+ * Maintains the same interface as the previous console.log-based logger
+ */
 class Logger {
-  private config: LoggerConfig;
-  private isProduction: boolean;
+  private winstonLogger: winston.Logger;
 
-  constructor(config: Partial<LoggerConfig> = {}) {
-    this.isProduction = process.env.NODE_ENV === 'production';
-    this.config = {
-      minLevel: this.isProduction ? 'warn' : 'debug',
-      enabledInProduction: true,
-      ...config,
-    };
-  }
-
-  private shouldLog(level: LogLevel): boolean {
-    if (!this.isProduction || this.config.enabledInProduction) {
-      return LOG_LEVELS[level] >= LOG_LEVELS[this.config.minLevel];
-    }
-    return false;
-  }
-
-  private formatMessage(level: LogLevel, message: string, ...args: any[]): [string, ...any[]] {
-    const timestamp = new Date().toISOString();
-    const prefix = this.config.prefix || 'Server';
-    const formattedMessage = `[${timestamp}] [${prefix}] [${level.toUpperCase()}] ${message}`;
-    return [formattedMessage, ...args];
+  constructor(config: { prefix?: string } = {}) {
+    // Create child logger with context
+    this.winstonLogger = logger.child({
+      context: config.prefix || 'Server'
+    });
   }
 
   debug(message: string, ...args: any[]): void {
-    if (this.shouldLog('debug')) {
-      console.debug(...this.formatMessage('debug', message, ...args));
+    if (args.length > 0 && typeof args[0] === 'object') {
+      this.winstonLogger.debug(message, args[0]);
+    } else {
+      this.winstonLogger.debug(message, { args });
     }
   }
 
   info(message: string, ...args: any[]): void {
-    if (this.shouldLog('info')) {
-      console.info(...this.formatMessage('info', message, ...args));
+    if (args.length > 0 && typeof args[0] === 'object') {
+      this.winstonLogger.info(message, args[0]);
+    } else {
+      this.winstonLogger.info(message, { args });
     }
   }
 
   warn(message: string, ...args: any[]): void {
-    if (this.shouldLog('warn')) {
-      console.warn(...this.formatMessage('warn', message, ...args));
+    if (args.length > 0 && typeof args[0] === 'object') {
+      this.winstonLogger.warn(message, args[0]);
+    } else {
+      this.winstonLogger.warn(message, { args });
     }
   }
 
   error(message: string, ...args: any[]): void {
-    if (this.shouldLog('error')) {
-      console.error(...this.formatMessage('error', message, ...args));
+    if (args.length > 0 && typeof args[0] === 'object') {
+      this.winstonLogger.error(message, args[0]);
+    } else {
+      this.winstonLogger.error(message, { args });
     }
   }
 }
 
+// Export serverLogger for backward compatibility
 export const serverLogger = new Logger({ prefix: 'Server' });

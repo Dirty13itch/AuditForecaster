@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/node";
 import { nodeProfilingIntegration } from "@sentry/profiling-node";
+import { logger } from "./logger";
 
+const sentryLog = logger.child({ context: 'Sentry' });
 const SENTRY_DSN = process.env.SENTRY_DSN;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
@@ -8,7 +10,7 @@ let sentryEnabled = false;
 
 export function initSentry() {
   if (!SENTRY_DSN) {
-    console.warn('[Sentry] SENTRY_DSN not configured - error tracking disabled');
+    sentryLog.warn('SENTRY_DSN not configured - error tracking disabled');
     return;
   }
 
@@ -27,7 +29,7 @@ export function initSentry() {
 
     beforeSend(event, hint) {
       if (NODE_ENV === 'development') {
-        console.log('[Sentry] Would send error:', event);
+        sentryLog.debug('Would send error', { event });
         return null;
       }
       return event;
@@ -35,7 +37,7 @@ export function initSentry() {
   });
 
   sentryEnabled = true;
-  console.log('[Sentry] Initialized for environment:', NODE_ENV);
+  sentryLog.info('Initialized for environment', { environment: NODE_ENV });
 }
 
 export function isSentryEnabled(): boolean {

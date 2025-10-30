@@ -4774,7 +4774,11 @@ export class DatabaseStorage implements IStorage {
         jobs.push(result.job);
       } catch (error) {
         // Log error but continue with other events
-        console.error(`Failed to assign event ${eventId}:`, error);
+        serverLogger.error('Failed to assign event', { 
+          eventId, 
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined 
+        });
       }
     }
     

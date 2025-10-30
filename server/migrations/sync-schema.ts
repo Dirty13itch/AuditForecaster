@@ -12,13 +12,16 @@
 
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
+import { logger } from '../logger';
+
+const migrationLog = logger.child({ context: 'SchemaMigration' });
 
 async function syncSchema() {
-  console.log('🔄 Starting non-interactive schema sync...\n');
+  migrationLog.info('Starting non-interactive schema sync');
 
   try {
     // Add missing columns to unmatched_calendar_events
-    console.log('📋 Adding missing columns to unmatched_calendar_events...');
+    migrationLog.info('Adding missing columns to unmatched_calendar_events');
     await db.execute(sql`
       ALTER TABLE unmatched_calendar_events 
         ADD COLUMN IF NOT EXISTS suggested_inspector_id varchar REFERENCES users(id) ON DELETE SET NULL,
@@ -27,22 +30,25 @@ async function syncSchema() {
         ADD COLUMN IF NOT EXISTS parsed_address text,
         ADD COLUMN IF NOT EXISTS urgency_level text DEFAULT 'medium'
     `);
-    console.log('✅ unmatched_calendar_events columns added\n');
+    migrationLog.info('unmatched_calendar_events columns added');
 
     // Add missing columns to duct_leakage_tests
-    console.log('📋 Adding missing columns to duct_leakage_tests...');
+    migrationLog.info('Adding missing columns to duct_leakage_tests');
     await db.execute(sql`
       ALTER TABLE duct_leakage_tests
         ADD COLUMN IF NOT EXISTS system_type text
     `);
-    console.log('✅ duct_leakage_tests columns added\n');
+    migrationLog.info('duct_leakage_tests columns added');
 
-    console.log('✅ Schema sync complete!\n');
-    console.log('Run tests to verify: npm test');
+    migrationLog.info('Schema sync complete');
+    migrationLog.info('Run tests to verify: npm test');
     
     process.exit(0);
   } catch (error) {
-    console.error('❌ Schema sync failed:', error);
+    migrationLog.error('Schema sync failed', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     process.exit(1);
   }
 }
