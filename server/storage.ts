@@ -1164,6 +1164,13 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(builders);
   }
 
+  async getBuildersByUser(userId: string): Promise<Builder[]> {
+    return await db.select()
+      .from(builders)
+      .where(eq(builders.createdBy, userId))
+      .orderBy(desc(builders.id));
+  }
+
   async getBuildersPaginated(params: PaginationParams): Promise<PaginatedResult<Builder>> {
     const { limit, offset } = params;
     

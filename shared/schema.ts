@@ -55,9 +55,12 @@ export const builders = pgTable("builders", {
   billingTerms: text("billing_terms"),
   preferredLeadTime: integer("preferred_lead_time"),
   abbreviations: text("abbreviations").array(), // Calendar parsing abbreviations e.g. ['MI', 'MIH', 'M/I']
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_builders_company_name").on(table.companyName),
   index("idx_builders_name_company").on(table.name, table.companyName),
+  index("idx_builders_created_by").on(table.createdBy),
 ]);
 
 export const builderContacts = pgTable("builder_contacts", {
@@ -73,10 +76,12 @@ export const builderContacts = pgTable("builder_contacts", {
   isPrimary: boolean("is_primary").default(false),
   preferredContact: text("preferred_contact", { enum: ["phone", "email", "text"] }).default("phone"),
   notes: text("notes"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_builder_contacts_builder_id").on(table.builderId),
   index("idx_builder_contacts_is_primary").on(table.isPrimary),
+  index("idx_builder_contacts_created_by").on(table.createdBy),
 ]);
 
 export const builderAgreements = pgTable("builder_agreements", {
@@ -90,12 +95,14 @@ export const builderAgreements = pgTable("builder_agreements", {
   paymentTerms: text("payment_terms"),
   inspectionTypesIncluded: text("inspection_types_included").array(),
   notes: text("notes"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_builder_agreements_builder_id").on(table.builderId),
   index("idx_builder_agreements_status").on(table.status),
   index("idx_builder_agreements_builder_status").on(table.builderId, table.status),
+  index("idx_builder_agreements_created_by").on(table.createdBy),
 ]);
 
 export const builderPrograms = pgTable("builder_programs", {
@@ -112,11 +119,13 @@ export const builderPrograms = pgTable("builder_programs", {
   rebateAmount: decimal("rebate_amount", { precision: 10, scale: 2 }),
   requiresDocumentation: boolean("requires_documentation").default(true),
   notes: text("notes"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_builder_programs_builder_id").on(table.builderId),
   index("idx_builder_programs_builder_status").on(table.builderId, table.status),
   index("idx_builder_programs_program_type").on(table.programType),
+  index("idx_builder_programs_created_by").on(table.createdBy),
 ]);
 
 export const builderInteractions = pgTable("builder_interactions", {
@@ -185,11 +194,13 @@ export const developments = pgTable("developments", {
   startDate: timestamp("start_date"),
   targetCompletionDate: timestamp("target_completion_date"),
   notes: text("notes"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_developments_builder_id").on(table.builderId),
   index("idx_developments_builder_status").on(table.builderId, table.status),
   index("idx_developments_municipality").on(table.municipality),
+  index("idx_developments_created_by").on(table.createdBy),
 ]);
 
 export const lots = pgTable("lots", {
@@ -203,12 +214,14 @@ export const lots = pgTable("lots", {
   status: text("status", { enum: ["available", "under_construction", "completed", "sold", "on_hold"] }).notNull(),
   squareFootage: decimal("square_footage", { precision: 10, scale: 2 }),
   notes: text("notes"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_lots_development_id").on(table.developmentId),
   index("idx_lots_development_lot_number").on(table.developmentId, table.lotNumber),
   index("idx_lots_plan_id").on(table.planId),
   index("idx_lots_status").on(table.status),
+  index("idx_lots_created_by").on(table.createdBy),
 ]);
 
 export const plans = pgTable("plans", {
@@ -1537,15 +1550,15 @@ export const upsertUserSchema = createInsertSchema(users).pick({
   profileImageUrl: true,
 });
 
-export const insertBuilderSchema = createInsertSchema(builders).omit({ id: true, totalJobs: true });
-export const insertBuilderContactSchema = createInsertSchema(builderContacts).omit({ id: true, createdAt: true, isPrimary: true });
+export const insertBuilderSchema = createInsertSchema(builders).omit({ id: true, totalJobs: true, createdBy: true, createdAt: true });
+export const insertBuilderContactSchema = createInsertSchema(builderContacts).omit({ id: true, createdBy: true, createdAt: true, isPrimary: true });
 export const updateBuilderContactSchema = insertBuilderContactSchema.omit({ builderId: true }).partial();
-export const insertBuilderAgreementSchema = createInsertSchema(builderAgreements).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+export const insertBuilderAgreementSchema = createInsertSchema(builderAgreements).omit({ id: true, createdBy: true, createdAt: true, updatedAt: true }).extend({
   startDate: z.coerce.date(),
   endDate: z.coerce.date().nullable().optional(),
 });
 export const updateBuilderAgreementSchema = insertBuilderAgreementSchema.omit({ builderId: true }).partial();
-export const insertBuilderProgramSchema = createInsertSchema(builderPrograms).omit({ id: true, createdAt: true }).extend({
+export const insertBuilderProgramSchema = createInsertSchema(builderPrograms).omit({ id: true, createdBy: true, createdAt: true }).extend({
   enrollmentDate: z.coerce.date(),
   expirationDate: z.coerce.date().nullable().optional(),
 });
@@ -1564,12 +1577,12 @@ export const insertPendingCalendarEventSchema = createInsertSchema(pendingCalend
   eventDate: z.coerce.date(),
   confidenceScore: z.number().min(0).max(100).optional(),
 });
-export const insertDevelopmentSchema = createInsertSchema(developments).omit({ id: true, createdAt: true }).extend({
+export const insertDevelopmentSchema = createInsertSchema(developments).omit({ id: true, createdBy: true, createdAt: true }).extend({
   startDate: z.coerce.date().nullable().optional(),
   targetCompletionDate: z.coerce.date().nullable().optional(),
 });
 export const updateDevelopmentSchema = insertDevelopmentSchema.omit({ builderId: true }).partial();
-export const insertLotSchema = createInsertSchema(lots).omit({ id: true, createdAt: true }).extend({
+export const insertLotSchema = createInsertSchema(lots).omit({ id: true, createdBy: true, createdAt: true }).extend({
   squareFootage: z.coerce.number().nullable().optional(),
 });
 export const updateLotSchema = insertLotSchema.omit({ developmentId: true }).partial();

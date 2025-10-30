@@ -1,7 +1,7 @@
 # Energy Auditing Field Application
 
 ## Overview
-This full-stack energy auditing field application optimizes energy auditing workflows for field inspectors. It enables management of inspections, job tracking, event scheduling, and report generation. Key capabilities include outdoor readability, offline-first operation, rapid data entry, enhanced data accuracy via photo documentation and OCR, and robust analytics. The project aims to provide a comprehensive, user-friendly, and powerful mobile solution for field operations.
+This full-stack energy auditing field application optimizes energy auditing workflows for field inspectors. It enables management of inspections, job tracking, event scheduling, and report generation. Key capabilities include outdoor readability, offline-first operation, rapid data entry, enhanced data accuracy via photo documentation and OCR, and robust analytics. The project aims to provide a comprehensive, user-friendly, and powerful mobile solution for field operations, offering significant market potential by streamlining energy audit processes and improving data reliability for field inspectors.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -13,100 +13,30 @@ The backend is developed with **Express.js** and **Node.js** in **TypeScript**, 
 
 Core architectural decisions and features include:
 -   **Comprehensive Error Prevention**: Centralized logging, extensive type safety, and a two-layer Error Boundary system.
--   **Bulletproof Authentication System**: Robust session management with health monitoring, triple-layer admin protection, and enhanced security measures.
--   **Builder Hierarchy System**: Manages contacts, agreements, programs, and interactions, including a geographic hierarchy (Development → Lot → Job).
+-   **Bulletproof Authentication System**: Robust session management, triple-layer admin protection, and enhanced security measures.
+-   **Builder Hierarchy System**: Manages contacts, agreements, programs, and interactions within a geographic hierarchy (Development → Lot → Job).
 -   **Bulk Operations**: Multi-select functionality for Photos, Jobs, and Expenses with bulk actions.
 -   **Search & Filtering**: Advanced search across Jobs, Builders, and Photos with real-time filtering and pagination.
 -   **Analytics Dashboard**: Provides metrics on inspection volume, photo tag analysis, and builder performance.
 -   **PDF Export System**: Uses `@react-pdf/renderer` for professional, dynamic PDF generation.
--   **Photo Documentation**: Supports multi-tagging, annotations, OCR via `tesseract.js`, photo-required checklists, dual capture with auto-linking, offline queue, duplicate detection, compression, and smart tag suggestions.
+-   **Photo Documentation**: Supports multi-tagging, annotations, OCR, photo-required checklists, dual capture, offline queue, duplicate detection, compression, and smart tag suggestions.
 -   **Offline-First Functionality**: Utilizes service workers, IndexedDB, and a custom sync queue.
 -   **Automated Calendar Import System**: Smart parsing of calendar events with confidence scoring, fuzzy matching, deduplication, and automated polling.
--   **Unified Schedule Page with Admin Assignment Workflow**: Production-ready calendar system with role-based visibility, responsive design, admin assignment controls, and quick status update capabilities for field inspectors.
--   **Google Calendar Integration**: Multi-calendar integration with OAuth2 via Replit Connectors for two-way sync.
+-   **Unified Schedule Page with Admin Assignment Workflow**: Production-ready calendar system with role-based visibility, responsive design, and admin assignment controls.
+-   **Google Calendar Integration**: Multi-calendar integration with OAuth2 for two-way sync.
 -   **Conditional Logic**: Dynamic inspection forms driven by a conditional logic engine.
 -   **Gamification & Achievements System**: Tracks predefined achievements with automated criteria evaluation.
 -   **Database Optimization**: Over 35 strategic database indexes across key tables for enhanced query performance.
 -   **Enterprise Hardening**: Includes **Sentry** integration for error monitoring, multi-layered security (CSRF, rate limiting, Helmet), and secure sessions.
 -   **WebSocket Notifications**: Real-time notification system with exponential backoff and HTTP polling fallback.
--   **Database Schema Integrity**: Comprehensive schema synchronization across all tables, including dedicated columns for assignment tracking, OCR, financial tracking, and notification preferences.
+-   **Database Schema Integrity**: Comprehensive schema synchronization, including dedicated columns for assignment tracking, OCR, financial tracking, and notification preferences.
 -   **Report Template System - JSON-Only Architecture**: Complete migration to a pure JSON architecture for report templates, supporting standalone reports and version tracking.
--   **Blower Door Testing System**: Production-grade multi-point pressure testing with automated ACH50 calculations, weather/altitude corrections, and Minnesota 2020 Energy Code compliance verification (≤3.0 ACH50 limit). Features 59-column database schema, multi-point regression analysis, ring configuration support (Open, Ring A-D), ELA calculations, and automated compliance checking. Complete with comprehensive runbook, 12-test smoke suite, and 8 realistic seed scenarios.
--   **Duct Leakage Testing System**: Production-grade duct airtightness testing supporting Total Duct Leakage (TDL) and Duct Leakage to Outside (DLO) per Minnesota 2020 Energy Code. Features 60-column database schema, automated calculations with Minneapolis Duct Blaster calibration factors, pressure pan diagnostic testing, real-time compliance verification (TDL ≤4.0, DLO ≤3.0 CFM25/100 sq ft), and job compliance status updates. Complete with comprehensive runbook, 12-test smoke suite, and 10 realistic test scenarios covering pass/fail conditions.
--   **Equipment Management System**: Production-grade equipment inventory, calibration tracking, maintenance scheduling, and checkout workflows for RESNET-certified field equipment. Features 4-table architecture (equipment, calibrations, maintenance, checkouts), 23 API endpoints, 9 equipment types (blower doors, duct testers, manometers, cameras, etc.), QR code generation, automatic due date calculations, checkout/check-in workflows, and comprehensive alerts. Supports RESNET annual calibration requirements and Minnesota Energy Code compliance verification. Complete with comprehensive runbook, 17-test smoke suite, and 10 realistic equipment scenarios.
--   **Scheduled Exports System**: Production-grade automated data export system with cron scheduling, multi-format support (CSV, JSON), and email delivery. Features 17-column database schema, 8 API endpoints with multi-tenant security, conditional email delivery, timezone-aware cron parsing (America/Chicago), test run capabilities, and dynamic export generation (jobs, financial, photos). Supports daily/weekly/monthly schedules with comprehensive next-run calculations. Complete with runbook, 15-test smoke suite, and 8 realistic scheduling scenarios.
--   **Ventilation Testing System**: Production-grade ASHRAE 62.2 whole-house ventilation compliance testing for RESNET-certified inspectors. Features 56-column database schema with comprehensive ventilation calculations, local exhaust fan testing (kitchen ≥100/25 cfm, bathrooms ≥50/20 cfm), mechanical ventilation systems (HRV/ERV, supply/exhaust/balanced), infiltration credit support, and Minnesota 2020 Energy Code compliance verification. Automated calculations using formula Qtotal = 0.03 × floorArea + 7.5 × (bedrooms + 1) with real-time compliance determination. Complete with 7 API endpoints, 900+ line React UI with tabbed interface, 1,528-line comprehensive runbook, 12-test smoke suite, and 8 realistic seed scenarios.
--   **Jobs Management System**: Production-grade job tracking with automated compliance evaluation, inspector assignment workflows, and billing-ready notifications. Features 45-column database schema with 8 indexes, 22 API endpoints, dynamic compliance rule evaluation from compliance_rules table (Minnesota 2020 Energy Code: ACH50 ≤3.0, DLO ≤3.0, TDL ≤4.0), structured ComplianceViolation objects with full audit trail (ruleId, threshold, actual, units, severity), comprehensive compliance history storage, required test validation for Final inspections (blower door + duct leakage DLO/TDL + ventilation), automatic status transitions (in-progress→review on compliance failure), 6 storage hooks triggering compliance recalculation on test saves, multi-builder support, bulk operations, advanced filtering and search. Complete with 1,500-line runbook, 15-test smoke suite, and 10 realistic scenarios.
-
-## Production-Ready Features (Vertical Slice Completion)
-
-The following features have completed vertical development with full production artifacts:
-
-1. **Mileage Tracking** (40/40 ✅)
-   - Runbook: `MILEAGE_SLICE.md`
-   - Smoke Tests: `scripts/smoke-test-mileage.sh`
-   - Seed Data: `db/seed-mileage.sql`
-   - Compliance: Checklist integrated
-
-2. **Expenses Management** (40/40 ✅)
-   - Runbook: `EXPENSES_SLICE.md`
-   - Smoke Tests: `scripts/smoke-test-expenses.sh`
-   - Seed Data: `db/seed-expenses.sql`
-   - Compliance: Checklist integrated
-
-3. **Report Templates** (40/40 ✅)
-   - Runbook: `REPORT_TEMPLATE_SLICE.md`
-   - Smoke Tests: `scripts/smoke-test-report-templates.sh`
-   - Seed Data: `db/seed-report-templates.sql`
-   - Compliance: Checklist integrated
-
-4. **Calendar Integration** (40/40 ✅)
-   - Runbook: `CALENDAR_SLICE.md`
-   - Smoke Tests: `scripts/smoke-test-calendar.sh`
-   - Seed Data: `db/seed-calendar.sql`
-   - Compliance: `CALENDAR_COMPLIANCE.md`
-
-5. **Blower Door Testing** (40/40 ✅)
-   - Runbook: `BLOWER_DOOR_SLICE.md` (1,200+ lines)
-   - Smoke Tests: `scripts/smoke-test-blower-door.sh` (12 tests)
-   - Seed Data: `db/seed-blower-door.sql` (8 scenarios)
-   - Compliance: `BLOWER_DOOR_COMPLIANCE.md`
-   - Technical Details: Multi-point regression, ACH50 calculations, Minnesota Energy Code (3.0 ACH50), weather/altitude corrections, ring configurations, ELA calculations
-
-6. **Duct Leakage Testing** (40/40 ✅)
-   - Runbook: `DUCT_LEAKAGE_SLICE.md` (900+ lines)
-   - Smoke Tests: `scripts/smoke-test-duct-leakage.sh` (12 tests)
-   - Seed Data: `db/seed-duct-leakage.sql` (10 scenarios)
-   - Compliance: `DUCT_LEAKAGE_COMPLIANCE.md`
-   - Technical Details: Total Duct Leakage (TDL ≤4.0 CFM25/100 sq ft), Duct Leakage to Outside (DLO ≤3.0 CFM25/100 sq ft), Minnesota 2020 Energy Code, pressure pan testing, Minneapolis Duct Blaster calibration (Open C=110, Ring 1 C=71, Ring 2 C=46, Ring 3 C=31), automated calculations, 60-column schema, 6 API endpoints
-
-7. **Equipment Management** (40/40 ✅)
-   - Runbook: `EQUIPMENT_SLICE.md` (1,850+ lines)
-   - Smoke Tests: `scripts/smoke-test-equipment.sh` (17 tests, executable)
-   - Seed Data: `db/seed-equipment.sql` (10 scenarios)
-   - Compliance: `EQUIPMENT_COMPLIANCE.md`
-   - Technical Details: 4 tables (equipment, equipmentCalibrations, equipmentMaintenance, equipmentCheckouts), 23 API endpoints, 9 equipment types, calibration/maintenance tracking, checkout system, QR codes, RESNET compliance
-
-8. **Scheduled Exports** (40/40 ✅)
-   - Runbook: `SCHEDULED_EXPORTS_SLICE.md` (750+ lines)
-   - Smoke Tests: `scripts/smoke-test-scheduled-exports.sh` (15 tests)
-   - Seed Data: `db/seed-scheduled-exports.sql` (8 scenarios)
-   - Compliance: `SCHEDULED_EXPORTS_COMPLIANCE.md`
-   - Technical Details: 17-column schema with 5 indexes, 8 API endpoints with userId verification, cron scheduling (America/Chicago timezone), multi-format export (CSV/JSON), conditional email delivery, test run capability, next-run calculation, multi-tenant security (updateScheduledExportSchema prevents ownership reassignment)
-
-9. **Ventilation Testing** (40/40 ✅)
-   - Runbook: `VENTILATION_SLICE.md` (1,528 lines)
-   - Smoke Tests: `scripts/smoke-test-ventilation.sh` (12 tests)
-   - Seed Data: `db/seed-ventilation.sql` (8 scenarios)
-   - Compliance: `VENTILATION_COMPLIANCE.md`
-   - Technical Details: 56-column schema with 5 indexes, 7 API endpoints with authentication, ASHRAE 62.2 calculations (Qtotal = 0.03 × floorArea + 7.5 × (bedrooms + 1)), local exhaust fan testing (kitchen ≥100/25 cfm, bathrooms ≥50/20 cfm), mechanical ventilation support (HRV/ERV/supply/exhaust/balanced), infiltration credit from blower door tests, Minnesota 2020 Energy Code compliance, real-time compliance determination, 900+ line tabbed React UI
-
-10. **Jobs Management System** (40/40 ✅)
-   - Runbook: `JOBS_SLICE.md` (1,500+ lines)
-   - Smoke Tests: `scripts/smoke-test-jobs.sh` (15 tests)
-   - Seed Data: `db/seed-jobs.sql` (10 scenarios)
-   - Compliance: `JOBS_COMPLIANCE.md`
-   - Technical Details: 45-column schema with 8 indexes, 22 API endpoints with authentication, automated compliance evaluation using dynamic rules from compliance_rules table, structured ComplianceViolation objects with full audit trail (ruleId, threshold, actual, units, severity), comprehensive compliance history, required test validation for Final inspections (blower door, duct leakage DLO/TDL, ventilation), automatic status transitions (in-progress→review on compliance failure), billing-ready notifications when completed + passing, 6 storage hooks triggering compliance recalculation on test saves, multi-builder support, inspector assignment workflows, bulk operations (status changes, assignments), advanced filtering and search
+-   **Blower Door Testing System**: Production-grade multi-point pressure testing with automated ACH50 calculations, weather/altitude corrections, and Minnesota 2020 Energy Code compliance verification.
+-   **Duct Leakage Testing System**: Production-grade duct airtightness testing supporting Total Duct Leakage (TDL) and Duct Leakage to Outside (DLO) per Minnesota 2020 Energy Code.
+-   **Equipment Management System**: Production-grade equipment inventory, calibration tracking, maintenance scheduling, and checkout workflows for RESNET-certified field equipment.
+-   **Scheduled Exports System**: Production-grade automated data export system with cron scheduling, multi-format support (CSV, JSON), and email delivery.
+-   **Ventilation Testing System**: Production-grade ASHRAE 62.2 whole-house ventilation compliance testing for RESNET-certified inspectors.
+-   **Jobs Management System**: Production-grade job tracking with automated compliance evaluation, inspector assignment workflows, and billing-ready notifications.
 
 ## External Dependencies
 

@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Building2, Plus, Search } from "lucide-react";
+import { Building2, Plus, Search, ArrowLeft, Edit, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +19,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { BuilderCard } from "@/components/BuilderCard";
 import { BuilderDialog } from "@/components/BuilderDialog";
-import { BuilderDetailDialog } from "@/components/BuilderDetailDialog";
+import { BuilderOverviewTab } from "@/components/builders/BuilderOverviewTab";
+import { BuilderHierarchyTab } from "@/components/builders/BuilderHierarchyTab";
+import { BuilderContactsTab } from "@/components/builders/BuilderContactsTab";
+import { BuilderAgreementsTab } from "@/components/builders/BuilderAgreementsTab";
+import { BuilderProgramsTab } from "@/components/builders/BuilderProgramsTab";
+import { BuilderInteractionsTab } from "@/components/builders/BuilderInteractionsTab";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Builder, InsertBuilder } from "@shared/schema";
@@ -29,6 +36,7 @@ export default function Builders() {
   const [selectedBuilder, setSelectedBuilder] = useState<Builder | null>(null);
   const [builderToEdit, setBuilderToEdit] = useState<Builder | null>(null);
   const [builderToDelete, setBuilderToDelete] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const { data: builders = [], isLoading } = useQuery<Builder[]>({
     queryKey: ["/api/builders"],
@@ -135,11 +143,26 @@ export default function Builders() {
 
   const handleViewDetails = (builder: Builder) => {
     setSelectedBuilder(builder);
+    setActiveTab("overview");
+  };
+
+  const handleBackToList = () => {
+    setSelectedBuilder(null);
+    setActiveTab("overview");
   };
 
   const handleAddNew = () => {
     setBuilderToEdit(null);
     setIsAddDialogOpen(true);
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   const filteredBuilders = builders.filter((builder) => {
@@ -152,6 +175,113 @@ export default function Builders() {
     );
   });
 
+  // If a builder is selected, show the tabbed detail view
+  if (selectedBuilder) {
+    return (
+      <div className="p-4 md:p-6 max-w-7xl mx-auto">
+        <div className="flex flex-col gap-6">
+          {/* Header with builder info and back button */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-4 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleBackToList}
+                data-testid="button-back-to-list"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <Avatar className="h-14 w-14 flex-shrink-0">
+                <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-lg">
+                  {getInitials(selectedBuilder.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl md:text-3xl font-bold truncate" data-testid="text-builder-name">
+                  {selectedBuilder.name}
+                </h1>
+                <p className="text-sm text-muted-foreground truncate" data-testid="text-builder-company">
+                  {selectedBuilder.companyName}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={() => handleEdit(selectedBuilder)}
+                className="flex-1 sm:flex-none"
+                data-testid="button-edit-builder"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => handleDelete(selectedBuilder.id)}
+                className="flex-1 sm:flex-none"
+                data-testid="button-delete-builder"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </div>
+          </div>
+
+          {/* Tabbed interface */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="w-full grid grid-cols-3 lg:grid-cols-6 h-auto gap-1" data-testid="tabs-list">
+              <TabsTrigger value="overview" className="text-xs sm:text-sm" data-testid="tab-overview">
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="hierarchy" className="text-xs sm:text-sm" data-testid="tab-hierarchy">
+                Hierarchy
+              </TabsTrigger>
+              <TabsTrigger value="contacts" className="text-xs sm:text-sm" data-testid="tab-contacts">
+                Contacts
+              </TabsTrigger>
+              <TabsTrigger value="agreements" className="text-xs sm:text-sm" data-testid="tab-agreements">
+                Agreements
+              </TabsTrigger>
+              <TabsTrigger value="programs" className="text-xs sm:text-sm" data-testid="tab-programs">
+                Programs
+              </TabsTrigger>
+              <TabsTrigger value="interactions" className="text-xs sm:text-sm" data-testid="tab-interactions">
+                Interactions
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="mt-6">
+              <TabsContent value="overview" className="mt-0">
+                <BuilderOverviewTab builder={selectedBuilder} />
+              </TabsContent>
+
+              <TabsContent value="hierarchy" className="mt-0">
+                <BuilderHierarchyTab builder={selectedBuilder} />
+              </TabsContent>
+
+              <TabsContent value="contacts" className="mt-0">
+                <BuilderContactsTab builder={selectedBuilder} />
+              </TabsContent>
+
+              <TabsContent value="agreements" className="mt-0">
+                <BuilderAgreementsTab builder={selectedBuilder} />
+              </TabsContent>
+
+              <TabsContent value="programs" className="mt-0">
+                <BuilderProgramsTab builder={selectedBuilder} />
+              </TabsContent>
+
+              <TabsContent value="interactions" className="mt-0">
+                <BuilderInteractionsTab builder={selectedBuilder} />
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
+      </div>
+    );
+  }
+
+  // Default view: Builder list
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col gap-6">
@@ -260,14 +390,6 @@ export default function Builders() {
         builder={builderToEdit}
         onSubmit={handleSubmit}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
-      />
-
-      <BuilderDetailDialog
-        open={!!selectedBuilder}
-        onOpenChange={(open) => !open && setSelectedBuilder(null)}
-        builder={selectedBuilder}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
       />
 
       <AlertDialog

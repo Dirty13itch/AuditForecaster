@@ -11,6 +11,7 @@ import { healthz, readyz, status } from "./health";
 import { generateToken, csrfSynchronisedProtection } from "./csrf";
 import { createAuditLog } from "./auditLogger";
 import { requireRole, checkResourceOwnership, canEdit, canCreate, canDelete, type UserRole } from "./permissions";
+import { validateContactRole, categorizeAgreementExpiration } from "./builderService";
 import {
   insertBuilderSchema,
   insertBuilderContactSchema,
@@ -610,8 +611,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/builders", isAuthenticated, async (req, res) => {
+  app.get("/api/builders", isAuthenticated, async (req: any, res) => {
     try {
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.id;
+      
+      // Inspectors only see their own builders
+      if (userRole === 'inspector') {
+        const builders = await storage.getBuildersByUser(userId);
+        return res.json(builders);
+      }
+      
+      // Admins/managers see all builders
       if (req.query.limit !== undefined || req.query.offset !== undefined) {
         const params = paginationParamsSchema.parse(req.query);
         const result = await storage.getBuildersPaginated(params);
@@ -632,6 +643,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/builders", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderSchema.parse(req.body);
+      // Set createdBy to current user
+      validated.createdBy = req.user.id;
       const builder = await storage.createBuilder(validated);
       
       // Audit log: Builder creation
@@ -654,12 +667,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/builders/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/builders/:id", isAuthenticated, async (req: any, res) => {
     try {
       const builder = await storage.getBuilder(req.params.id);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found. It may have been deleted." });
       }
+      
+      // Check ownership using checkResourceOwnership
+      if (!checkResourceOwnership(builder.createdBy, req.user.id, req.user.role)) {
+        return res.status(403).json({ message: "Forbidden: Cannot access this builder" });
+      }
+      
       res.json(builder);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch builder');
@@ -739,6 +758,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         builderId: req.params.builderId,
       });
+      // Set createdBy to current user
+      validated.createdBy = req.user.id;
       const contact = await storage.createBuilderContact(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -905,6 +926,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/builders/:builderId/agreements", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderAgreementSchema.parse({ ...req.body, builderId: req.params.builderId });
+      // Set createdBy to current user
+      validated.createdBy = req.user.id;
       const agreement = await storage.createBuilderAgreement(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1029,6 +1052,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/builders/:builderId/programs", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderProgramSchema.parse({ ...req.body, builderId: req.params.builderId });
+      // Set createdBy to current user
+      validated.createdBy = req.user.id;
       const program = await storage.createBuilderProgram(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1281,6 +1306,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/builders/:builderId/developments", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertDevelopmentSchema.parse({ ...req.body, builderId: req.params.builderId });
+      // Set createdBy to current user
+      validated.createdBy = req.user.id;
       const development = await storage.createDevelopment(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1530,6 +1557,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * GET /api/builders/:id/stats
+   * Get comprehensive performance statistics for a builder
+   */
+  app.get("/api/builders/:id/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const builder = await storage.getBuilder(req.params.id);
+      if (!builder) {
+        return res.status(404).json({ message: "Builder not found" });
+      }
+      
+      // Check ownership using checkResourceOwnership
+      if (!checkResourceOwnership(builder.createdBy, req.user.id, req.user.role)) {
+        return res.status(403).json({ message: "Forbidden: Cannot access this builder" });
+      }
+      
+      const stats = await storage.getBuilderStats(req.params.id);
+      res.json(stats);
+    } catch (error) {
+      logError('Builders/GetStats', error, { builderId: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'fetch builder stats');
+      res.status(status).json({ message });
+    }
+  });
+
+  /**
+   * GET /api/builders/:id/hierarchy
+   * Get full builder hierarchy (builder → developments → lots → jobs)
+   */
+  app.get("/api/builders/:id/hierarchy", isAuthenticated, async (req: any, res) => {
+    try {
+      const builder = await storage.getBuilder(req.params.id);
+      if (!builder) {
+        return res.status(404).json({ message: "Builder not found" });
+      }
+      
+      // Check ownership using checkResourceOwnership
+      if (!checkResourceOwnership(builder.createdBy, req.user.id, req.user.role)) {
+        return res.status(403).json({ message: "Forbidden: Cannot access this builder" });
+      }
+      
+      const hierarchy = await storage.getBuilderHierarchy(req.params.id);
+      res.json(hierarchy);
+    } catch (error) {
+      logError('Builders/GetHierarchy', error, { builderId: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'fetch builder hierarchy');
+      res.status(status).json({ message });
+    }
+  });
+
+  /**
+   * GET /api/agreements/expiring
+   * Get agreements expiring within specified timeframe
+   * Query params: ?days=30 (default 30)
+   */
+  app.get("/api/agreements/expiring", isAuthenticated, async (req, res) => {
+    try {
+      const days = req.query.days ? parseInt(req.query.days as string, 10) : 30;
+      if (isNaN(days) || days < 1) {
+        return res.status(400).json({ message: "Invalid days parameter. Must be a positive number." });
+      }
+      
+      const agreements = await storage.getExpiringAgreements(days);
+      
+      // Add expiration categorization to each agreement
+      const enrichedAgreements = agreements.map(agreement => ({
+        ...agreement,
+        expirationInfo: categorizeAgreementExpiration(agreement)
+      }));
+      
+      res.json(enrichedAgreements);
+    } catch (error) {
+      logError('Agreements/GetExpiring', error, { days: req.query.days });
+      const { status, message } = handleDatabaseError(error, 'fetch expiring agreements');
+      res.status(status).json({ message });
+    }
+  });
+
+  /**
+   * GET /api/builders/:builderId/contacts/by-role/:role
+   * Get builder contacts filtered by role
+   */
+  app.get("/api/builders/:builderId/contacts/by-role/:role", isAuthenticated, async (req, res) => {
+    try {
+      const { role } = req.params;
+      
+      // Validate role
+      const validation = validateContactRole(role);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.error });
+      }
+      
+      const contacts = await storage.getContactsByRole(req.params.builderId, role);
+      res.json(contacts);
+    } catch (error) {
+      logError('Builders/GetContactsByRole', error, { 
+        builderId: req.params.builderId, 
+        role: req.params.role 
+      });
+      const { status, message } = handleDatabaseError(error, 'fetch contacts by role');
+      res.status(status).json({ message });
+    }
+  });
+
+  /**
+   * GET /api/developments/:id/with-lots
+   * Get development with nested lots and stats
+   */
+  app.get("/api/developments/:id/with-lots", isAuthenticated, async (req, res) => {
+    try {
+      const developmentWithLots = await storage.getDevelopmentWithLots(req.params.id);
+      if (!developmentWithLots) {
+        return res.status(404).json({ message: "Development not found" });
+      }
+      res.json(developmentWithLots);
+    } catch (error) {
+      logError('Developments/GetWithLots', error, { developmentId: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'fetch development with lots');
+      res.status(status).json({ message });
+    }
+  });
+
+  /**
+   * GET /api/lots/:id/with-jobs
+   * Get lot with nested jobs and stats
+   */
+  app.get("/api/lots/:id/with-jobs", isAuthenticated, async (req, res) => {
+    try {
+      const lotWithJobs = await storage.getLotWithJobs(req.params.id);
+      if (!lotWithJobs) {
+        return res.status(404).json({ message: "Lot not found" });
+      }
+      res.json(lotWithJobs);
+    } catch (error) {
+      logError('Lots/GetWithJobs', error, { lotId: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'fetch lot with jobs');
+      res.status(status).json({ message });
+    }
+  });
+
   // Lots routes
   app.get("/api/developments/:developmentId/lots", isAuthenticated, async (req, res) => {
     try {
@@ -1544,6 +1711,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/developments/:developmentId/lots", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertLotSchema.parse({ ...req.body, developmentId: req.params.developmentId });
+      // Set createdBy to current user
+      validated.createdBy = req.user.id;
       const lot = await storage.createLot(validated);
       
       const development = await storage.getDevelopment(req.params.developmentId);
