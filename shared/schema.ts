@@ -161,8 +161,8 @@ export const pendingCalendarEvents = pgTable("pending_calendar_events", {
   parsedBuilderName: text("parsed_builder_name"), // Extracted builder name from title
   parsedBuilderId: varchar("parsed_builder_id").references(() => builders.id, { onDelete: 'set null' }), // Matched builder
   parsedJobType: text("parsed_job_type", { 
-    enum: ["pre_drywall", "final", "final_special", "multifamily", "other"] 
-  }), // SV2 -> pre_drywall, Test -> final
+    enum: ["sv2", "full_test", "code_bdoor", "rough_duct", "rehab", "bdoor_retest", "multifamily", "energy_star", "other"] 
+  }), // Comprehensive job type enum matching jobs table
   confidenceScore: integer("confidence_score").default(0), // 0-100 match confidence
   status: text("status", { 
     enum: ["pending", "assigned", "rejected", "duplicate"] 
@@ -248,10 +248,16 @@ export const jobs = pgTable("jobs", {
   lotId: varchar("lot_id").references(() => lots.id, { onDelete: 'set null' }),
   contractor: text("contractor").notNull(),
   status: text("status").notNull(),
-  inspectionType: text("inspection_type").notNull(),
+  inspectionType: text("inspection_type", {
+    enum: ["sv2", "full_test", "code_bdoor", "rough_duct", "rehab", "bdoor_retest", "multifamily", "energy_star", "other"]
+  }).notNull(),
   pricing: decimal("pricing", { precision: 10, scale: 2 }),
   scheduledDate: timestamp("scheduled_date"),
   completedDate: timestamp("completed_date"),
+  fieldWorkComplete: boolean("field_work_complete").default(false),
+  fieldWorkCompletedAt: timestamp("field_work_completed_at"),
+  photoUploadComplete: boolean("photo_upload_complete").default(false),
+  photoUploadCompletedAt: timestamp("photo_upload_completed_at"),
   completedItems: integer("completed_items").default(0),
   totalItems: integer("total_items").default(52),
   priority: text("priority").default('medium'),
@@ -296,6 +302,9 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_status_completed_date").on(table.status, table.completedDate),
   index("idx_jobs_builder_completed_date").on(table.builderId, table.completedDate),
   index("idx_jobs_compliance_status").on(table.complianceStatus),
+  // Completion tracking indexes
+  index("idx_jobs_field_work_complete").on(table.fieldWorkComplete),
+  index("idx_jobs_photo_upload_complete").on(table.photoUploadComplete),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -1148,9 +1157,10 @@ export const payments = pgTable("payments", {
   invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: 'cascade' }),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   paymentDate: timestamp("payment_date").notNull(),
-  method: text("method", { 
+  paymentMethod: text("payment_method", { 
     enum: ["check", "credit", "ach", "cash", "other"] 
   }).notNull(),
+  transactionId: text("transaction_id"),
   reference: text("reference"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1161,18 +1171,18 @@ export const payments = pgTable("payments", {
 
 export const financialSettings = pgTable("financial_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  companyName: varchar("company_name"),
+  companyAddress: text("company_address"),
+  companyPhone: varchar("company_phone"),
+  companyEmail: varchar("company_email"),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
   invoicePrefix: varchar("invoice_prefix").default("INV"),
   nextInvoiceNumber: integer("next_invoice_number").default(1000),
-  paymentTermsDays: integer("payment_terms_days").default(30),
+  paymentTerms: text("payment_terms"),
   invoiceFooterText: text("invoice_footer_text"),
-  companyDetails: jsonb("company_details"), // {name, address, phone, email, taxId}
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("idx_financial_settings_user_id").on(table.userId),
-]);
+});
 
 // Equipment Management Tables
 export const equipment = pgTable("equipment", {
