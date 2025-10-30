@@ -23,6 +23,9 @@ if (isSentryEnabled()) {
   app.use(Sentry.Handlers.tracingHandler());
 }
 
+// Export app for testing
+export { app };
+
 // Security headers
 app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
