@@ -145,6 +145,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Replit Auth middleware
   await setupAuth(app);
   
+  // Setup Sentry user tracking (after authentication)
+  const { sentryUserMiddleware } = await import("./sentry");
+  app.use(sentryUserMiddleware);
+  
   // Setup force admin endpoint (for emergency admin role assignment)
   await setupForceAdminEndpoint(app);
 
@@ -2013,6 +2017,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set createdBy to current user
       validated.createdBy = req.user.id;
       
+      // Add breadcrumb for job creation attempt
+      const { addBreadcrumb } = await import("./sentry");
+      addBreadcrumb('jobs', 'Creating new job', {
+        inspectionType: validated.inspectionType,
+        contractor: validated.contractor,
+        address: validated.address
+      });
+      
       serverLogger.info('[API] Attempting to create job:', {
         name: validated.name,
         address: validated.address,
@@ -2027,6 +2039,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         job = await storage.createJob(validated);
       } catch (storageError) {
+        // Add breadcrumb for job creation failure
+        addBreadcrumb('jobs', 'Job creation failed', {
+          error: storageError instanceof Error ? storageError.message : String(storageError),
+          name: validated.name,
+          address: validated.address
+        }, 'error');
+        
         // Log the critical error
         serverLogger.error('[API] CRITICAL: Job creation failed in storage layer:', {
           error: storageError instanceof Error ? storageError.message : String(storageError),
@@ -2037,6 +2056,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             builderId: validated.builderId,
           },
         });
+        
+        // Capture error with context
+        const { captureErrorWithContext } = await import("./sentry");
+        if (storageError instanceof Error) {
+          captureErrorWithContext(storageError, {
+            tags: { operation: 'create_job', inspectionType: validated.inspectionType || 'unknown' },
+            extra: { jobData: { name: validated.name, address: validated.address } }
+          });
+        }
         
         // CRITICAL: Ensure we return 500, not 201
         // Re-throw to be caught by outer error handler
@@ -2055,6 +2083,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: job.name,
         address: job.address,
       });
+      
+      // Add breadcrumb for successful job creation
+      addBreadcrumb('jobs', 'Job created successfully', {
+        jobId: job.id,
+        name: job.name,
+        inspectionType: job.inspectionType
+      }, 'info');
       
       // Auto-generate checklist items from template based on inspection type
       if (job.inspectionType) {

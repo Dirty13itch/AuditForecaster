@@ -681,11 +681,32 @@ function InspectionReportDocument({ data }: { data: PDFGenerationData }) {
 }
 
 export async function generateReportPDF(data: PDFGenerationData): Promise<Buffer> {
+  // Add breadcrumb for PDF generation start
+  const { addBreadcrumb } = await import('./sentry');
+  addBreadcrumb('pdf', 'Starting PDF generation', {
+    jobId: data.job.id,
+    jobName: data.job.name,
+    sectionsCount: data.templateSections.length
+  });
+  
   try {
     const pdfDocument = <InspectionReportDocument data={data} />;
     const buffer = await renderToBuffer(pdfDocument);
+    
+    // Add breadcrumb for successful PDF generation
+    addBreadcrumb('pdf', 'PDF generated successfully', {
+      jobId: data.job.id,
+      sizeKB: (buffer.length / 1024).toFixed(2)
+    });
+    
     return buffer;
   } catch (error) {
+    // Add breadcrumb for PDF generation failure
+    addBreadcrumb('pdf', 'PDF generation failed', {
+      jobId: data.job.id,
+      error: error instanceof Error ? error.message : String(error)
+    }, 'error');
+    
     serverLogger.error('Error generating PDF:', error);
     throw new Error(`PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

@@ -1,4 +1,4 @@
-import { initSentry, Sentry, isSentryEnabled, captureException } from "./sentry";
+import { initSentry, Sentry, isSentryEnabled, captureException, sentryUserMiddleware, sentryErrorHandler } from "./sentry";
 initSentry();
 
 import express, { type Request, Response, NextFunction } from "express";
@@ -305,6 +305,12 @@ async function startServer() {
     // Store server instance for graceful shutdown
     serverInstance = server;
 
+    // Add Sentry error handler (only reports 5xx errors)
+    if (isSentryEnabled()) {
+      app.use(sentryErrorHandler);
+    }
+
+    // Final error handler
     app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
@@ -314,10 +320,6 @@ async function startServer() {
 
       res.status(status).json({ message });
     });
-
-    if (isSentryEnabled()) {
-      app.use(Sentry.Handlers.errorHandler());
-    }
 
     // importantly only setup vite in development and after
     // setting up all the other routes so the catch-all route

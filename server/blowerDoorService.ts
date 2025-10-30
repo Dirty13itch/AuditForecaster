@@ -8,6 +8,7 @@
  */
 
 import { blowerDoorTestsTotal } from './metrics';
+import { addBreadcrumb, captureErrorWithContext } from './sentry';
 
 export interface WeatherConditions {
   indoorTemp: number;    // Fahrenheit
@@ -41,21 +42,39 @@ export interface ComplianceResult {
  * @throws Error if inputs are invalid
  */
 export function calculateACH50(cfm50: number, houseVolume: number): number {
+  // Add breadcrumb for calculation attempt
+  addBreadcrumb('compliance', 'Calculating ACH50', {
+    cfm50,
+    houseVolume
+  });
+  
   // Validation
   if (houseVolume <= 0) {
-    throw new Error('Volume must be greater than zero');
+    const error = new Error('Volume must be greater than zero');
+    addBreadcrumb('compliance', 'ACH50 calculation failed - invalid volume', { houseVolume }, 'error');
+    throw error;
   }
   
   if (cfm50 < 0) {
-    throw new Error('CFM50 cannot be negative');
+    const error = new Error('CFM50 cannot be negative');
+    addBreadcrumb('compliance', 'ACH50 calculation failed - negative CFM50', { cfm50 }, 'error');
+    throw error;
   }
 
   if (!Number.isFinite(cfm50) || !Number.isFinite(houseVolume)) {
-    throw new Error('CFM50 and volume must be finite numbers');
+    const error = new Error('CFM50 and volume must be finite numbers');
+    addBreadcrumb('compliance', 'ACH50 calculation failed - non-finite values', { cfm50, houseVolume }, 'error');
+    throw error;
   }
 
   // ACH50 = (CFM50 × 60 minutes/hour) / Volume
   const ach50 = (cfm50 * 60) / houseVolume;
+  
+  // Add breadcrumb for successful calculation
+  addBreadcrumb('compliance', 'ACH50 calculated', {
+    ach50,
+    passed: ach50 <= 3.0
+  }, ach50 <= 3.0 ? 'info' : 'warning');
   
   return Number(ach50.toFixed(2)); // Round to 2 decimal places
 }
@@ -178,12 +197,22 @@ export function checkMinnesotaCompliance(
   ach50: number,
   codeYear: string = '2020'
 ): ComplianceResult {
+  // Add breadcrumb for compliance check
+  addBreadcrumb('compliance', 'Checking Minnesota compliance', {
+    ach50,
+    codeYear
+  });
+  
   if (ach50 < 0) {
-    throw new Error('ACH50 cannot be negative');
+    const error = new Error('ACH50 cannot be negative');
+    addBreadcrumb('compliance', 'Compliance check failed - negative ACH50', { ach50 }, 'error');
+    throw error;
   }
 
   if (!Number.isFinite(ach50)) {
-    throw new Error('ACH50 must be a finite number');
+    const error = new Error('ACH50 must be a finite number');
+    addBreadcrumb('compliance', 'Compliance check failed - non-finite ACH50', { ach50 }, 'error');
+    throw error;
   }
 
   // Minnesota 2020 Energy Code limit
@@ -191,6 +220,14 @@ export function checkMinnesotaCompliance(
 
   const compliant = ach50 <= codeLimit;
   const margin = Number((codeLimit - ach50).toFixed(2));
+
+  // Add breadcrumb for compliance result
+  addBreadcrumb('compliance', 'Compliance check complete', {
+    ach50,
+    compliant,
+    margin,
+    codeLimit
+  }, compliant ? 'info' : 'warning');
 
   // Track metrics
   blowerDoorTestsTotal.inc({ passed: String(compliant) });
