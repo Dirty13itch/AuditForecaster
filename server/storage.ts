@@ -200,6 +200,7 @@ import { type UserRole } from "./permissions";
 import { db } from "./db";
 import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count, isNull } from "drizzle-orm";
 import { serverLogger } from "./logger";
+import { updateJobComplianceStatus } from './complianceService.js';
 
 // ID Validation function for robust user ID handling
 function validateUserId(id: any): { valid: boolean; error?: string } {
@@ -4677,6 +4678,14 @@ export class DatabaseStorage implements IStorage {
     const result = await db.insert(blowerDoorTests)
       .values(test)
       .returning();
+    
+    // Trigger compliance recalculation
+    try {
+      await updateJobComplianceStatus(this, test.jobId);
+    } catch (error) {
+      serverLogger.error(`[BlowerDoorTest] Failed to update compliance for job ${test.jobId}:`, error);
+    }
+    
     return result[0];
   }
 
@@ -4712,6 +4721,16 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(blowerDoorTests.id, id))
       .returning();
+    
+    // Trigger compliance recalculation
+    if (result[0]) {
+      try {
+        await updateJobComplianceStatus(this, result[0].jobId);
+      } catch (error) {
+        serverLogger.error(`[BlowerDoorTest] Failed to update compliance for job ${result[0].jobId}:`, error);
+      }
+    }
+    
     return result[0];
   }
 
@@ -5092,6 +5111,14 @@ export class DatabaseStorage implements IStorage {
     const result = await db.insert(ductLeakageTests)
       .values(test)
       .returning();
+    
+    // Trigger compliance recalculation
+    try {
+      await updateJobComplianceStatus(this, test.jobId);
+    } catch (error) {
+      serverLogger.error(`[DuctLeakageTest] Failed to update compliance for job ${test.jobId}:`, error);
+    }
+    
     return result[0];
   }
 
@@ -5127,6 +5154,16 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(ductLeakageTests.id, id))
       .returning();
+    
+    // Trigger compliance recalculation
+    if (result[0]) {
+      try {
+        await updateJobComplianceStatus(this, result[0].jobId);
+      } catch (error) {
+        serverLogger.error(`[DuctLeakageTest] Failed to update compliance for job ${result[0].jobId}:`, error);
+      }
+    }
+    
     return result[0];
   }
 
@@ -5142,6 +5179,14 @@ export class DatabaseStorage implements IStorage {
     const result = await db.insert(ventilationTests)
       .values(test)
       .returning();
+    
+    // Trigger compliance recalculation
+    try {
+      await updateJobComplianceStatus(this, test.jobId);
+    } catch (error) {
+      serverLogger.error(`[VentilationTest] Failed to update compliance for job ${test.jobId}:`, error);
+    }
+    
     return result[0];
   }
 
@@ -5177,6 +5222,16 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(ventilationTests.id, id))
       .returning();
+    
+    // Trigger compliance recalculation
+    if (result[0]) {
+      try {
+        await updateJobComplianceStatus(this, result[0].jobId);
+      } catch (error) {
+        serverLogger.error(`[VentilationTest] Failed to update compliance for job ${result[0].jobId}:`, error);
+      }
+    }
+    
     return result[0];
   }
 
