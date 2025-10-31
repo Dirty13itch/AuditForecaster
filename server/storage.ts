@@ -4660,22 +4660,39 @@ export class DatabaseStorage implements IStorage {
       )
       .groupBy(jobs.assignedTo, sql`DATE(${jobs.scheduledDate})`);
     
-    // Enrich with inspector names
-    const result = [];
-    for (const item of workload) {
-      if (!item.inspectorId) continue;
-      
-      const inspector = await this.getUser(item.inspectorId);
-      result.push({
-        inspectorId: item.inspectorId,
-        inspectorName: inspector 
-          ? `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown'
-          : 'Unknown',
+    // Enrich with inspector names - optimized to avoid N+1 queries
+    // Get unique inspector IDs
+    const inspectorIds = [...new Set(
+      workload
+        .map(item => item.inspectorId)
+        .filter((id): id is string => id !== null && id !== undefined)
+    )];
+    
+    // Fetch all inspectors in a single query
+    const inspectors = inspectorIds.length > 0
+      ? await db.select()
+          .from(users)
+          .where(inArray(users.id, inspectorIds))
+      : [];
+    
+    // Create a map for O(1) lookup
+    const inspectorMap = new Map(
+      inspectors.map(inspector => [
+        inspector.id,
+        `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown'
+      ])
+    );
+    
+    // Map workload items with inspector names
+    const result = workload
+      .filter(item => item.inspectorId)
+      .map(item => ({
+        inspectorId: item.inspectorId!,
+        inspectorName: inspectorMap.get(item.inspectorId!) || 'Unknown',
         date: item.date,
         jobCount: item.jobCount,
         scheduledMinutes: item.scheduledMinutes,
-      });
-    }
+      }));
     
     return result;
   }

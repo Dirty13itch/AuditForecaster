@@ -71,6 +71,12 @@ import { reportReadyTemplate } from "./email/templates/reportReady";
 import { calendarEventNotificationTemplate } from "./email/templates/calendarEventNotification";
 import { paginationParamsSchema, cursorPaginationParamsSchema, photoCursorPaginationParamsSchema } from "@shared/pagination";
 import {
+  idParamSchema,
+  dateRangeQuerySchema,
+  scheduleEventsQuerySchema,
+  googleEventsQuerySchema
+} from "@shared/validation";
+import {
   evaluateJobCompliance,
   evaluateReportCompliance,
   updateJobComplianceStatus,
@@ -687,7 +693,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/builders/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const builder = await storage.getBuilder(req.params.id);
+      const { id } = idParamSchema.parse(req.params);
+      const builder = await storage.getBuilder(id);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found. It may have been deleted." });
       }
@@ -699,6 +706,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(builder);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch builder');
       res.status(status).json({ message });
     }
@@ -1690,7 +1701,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/builders/:id/stats", isAuthenticated, async (req: any, res) => {
     try {
-      const builder = await storage.getBuilder(req.params.id);
+      const { id } = idParamSchema.parse(req.params);
+      const builder = await storage.getBuilder(id);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found" });
       }
@@ -1700,10 +1712,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden: Cannot access this builder" });
       }
       
-      const stats = await storage.getBuilderStats(req.params.id);
+      const stats = await storage.getBuilderStats(id);
       res.json(stats);
     } catch (error) {
-      logError('Builders/GetStats', error, { builderId: req.params.id });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Builders/GetStats', error);
       const { status, message } = handleDatabaseError(error, 'fetch builder stats');
       res.status(status).json({ message });
     }
@@ -1715,7 +1731,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/builders/:id/hierarchy", isAuthenticated, async (req: any, res) => {
     try {
-      const builder = await storage.getBuilder(req.params.id);
+      const { id } = idParamSchema.parse(req.params);
+      const builder = await storage.getBuilder(id);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found" });
       }
@@ -1725,10 +1742,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden: Cannot access this builder" });
       }
       
-      const hierarchy = await storage.getBuilderHierarchy(req.params.id);
+      const hierarchy = await storage.getBuilderHierarchy(id);
       res.json(hierarchy);
     } catch (error) {
-      logError('Builders/GetHierarchy', error, { builderId: req.params.id });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Builders/GetHierarchy', error);
       const { status, message } = handleDatabaseError(error, 'fetch builder hierarchy');
       res.status(status).json({ message });
     }
@@ -2253,7 +2274,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
-      const job = await storage.getJob(req.params.id);
+      const { id } = idParamSchema.parse(req.params);
+      const job = await storage.getJob(id);
       if (!job) {
         return res.status(404).json({ message: "Job not found. It may have been deleted or the link may be outdated." });
       }
@@ -2267,6 +2289,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(job);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'fetch job');
       res.status(status).json({ message });
     }
@@ -2777,19 +2803,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = user.id;
       const userRole = (user.role as UserRole) || 'inspector';
       
-      const { startDate, endDate, jobId } = req.query;
+      // Validate query parameters
+      const validated = scheduleEventsQuerySchema.parse(req.query);
 
       serverLogger.info(`[API/schedule-events] Request from user ${user.id} (${user.email}) with role: ${userRole} (from session)`);
 
-      if (jobId && typeof jobId === "string") {
-        const events = await storage.getScheduleEventsByJob(jobId);
-        serverLogger.info(`[API/schedule-events] Returning ${events.length} events for job ${jobId}`);
+      if ('jobId' in validated && validated.jobId) {
+        const events = await storage.getScheduleEventsByJob(validated.jobId);
+        serverLogger.info(`[API/schedule-events] Returning ${events.length} events for job ${validated.jobId}`);
         return res.json(events);
       }
 
-      if (startDate && endDate) {
-        const start = new Date(startDate as string);
-        const end = new Date(endDate as string);
+      if ('startDate' in validated && validated.startDate && validated.endDate) {
+        const start = new Date(validated.startDate);
+        const end = new Date(validated.endDate);
         const events = await storage.getScheduleEventsByDateRange(start, end, user.id, userRole);
         serverLogger.info(`[API/schedule-events] Returning ${events.length} events for ${userRole} user ${user.email} (${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]})`);
         return res.json(events);
@@ -2797,6 +2824,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(400).json({ message: "Please provide either a job ID or date range to view schedule events" });
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       serverLogger.error(`[API/schedule-events] Error:`, error);
       const { status, message } = handleDatabaseError(error, 'fetch schedule events');
       res.status(status).json({ message });
@@ -2805,17 +2836,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/google-events", isAuthenticated, async (req, res) => {
     try {
-      const { startDate, endDate, forceSync } = req.query;
+      // Validate query parameters
+      const validated = googleEventsQuerySchema.parse(req.query);
       
-      if (!startDate || !endDate) {
-        return res.status(400).json({ message: 'startDate and endDate are required' });
-      }
-      
-      const start = new Date(startDate as string);
-      const end = new Date(endDate as string);
+      const start = new Date(validated.startDate);
+      const end = new Date(validated.endDate);
       
       // If forceSync is true or if we don't have recent data, fetch from Google Calendar
-      if (forceSync === 'true') {
+      if (validated.forceSync === 'true') {
         serverLogger.info('[API] Force syncing Google Calendar events');
         
         // Import the extended service
@@ -2848,6 +2876,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(events);
     } catch (error: any) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       serverLogger.error('[API] Error fetching Google events:', error);
       res.status(500).json({ message: 'Failed to fetch Google events', error: error.message });
     }
