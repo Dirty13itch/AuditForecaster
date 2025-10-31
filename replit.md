@@ -11,6 +11,26 @@ The application features a **React** and **TypeScript** frontend, built with **V
 
 The backend is developed with **Express.js** and **Node.js** in **TypeScript**, with **PostgreSQL** (Neon serverless) as the primary database, accessed via **Drizzle ORM**. The API is RESTful, with **Zod** schemas for validation. **Replit Auth** (OpenID Connect) handles authentication, with sessions stored in PostgreSQL.
 
+## Quality Standards & Development Process
+
+**VERTICAL COMPLETION FRAMEWORK ADOPTED** (October 2025): The project now enforces a mandatory 6-phase framework to prevent "70% completion" and ensure all features reach production standards:
+
+1. **Phase 1 - PLAN**: Define requirements, success criteria, technical approach, edge cases
+2. **Phase 2 - BUILD**: Implement core functionality with proper types, validation, error handling
+3. **Phase 3 - OPTIMIZE**: Add loading states, error boundaries, memoization, accessibility
+4. **Phase 4 - TEST**: Execute end-to-end testing with `run_test` tool - **MANDATORY before claiming completion**
+5. **Phase 5 - HARDEN**: Security audit, performance review, edge case handling, production readiness
+6. **Phase 6 - DOCUMENT**: Update replit.md, add code comments, create user documentation
+
+**Key Enforcement Mechanisms**:
+- NO feature is "complete" without passing Phase 4 (TEST) - testing MUST happen before architect review
+- ALL code changes require architect review with full git diff before marking tasks as completed
+- Console.log statements prohibited in production code (development utilities excepted)
+- Memory leak prevention: All useEffect hooks with timers/listeners/observers require cleanup functions
+- Comprehensive documentation in VERTICAL_COMPLETION_FRAMEWORK.md and TESTING_GUIDELINES.md
+
+**Reference Implementation**: Schedule.tsx demonstrates proper vertical completion - initially claimed complete without testing, architect correctly rejected, testing revealed syntax errors preventing page load, bugs fixed, re-tested successfully, architect approved. This proves the framework's value.
+
 Core architectural decisions and features include:
 -   **Comprehensive Error Prevention**: Centralized logging, extensive type safety, and a two-layer Error Boundary system.
 -   **Bulletproof Authentication System**: Robust session management, triple-layer admin protection, and enhanced security measures.

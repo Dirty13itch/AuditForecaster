@@ -1486,6 +1486,8 @@ export default function Schedule() {
           />
         )}
       </div>
+        )}
+      </div>
 
       {/* Admin-only Unassigned Events Queue (Mobile Bottom Sheet) */}
       {!authLoading && isAdmin === true && isMobile && (
@@ -1710,8 +1712,6 @@ export default function Schedule() {
           handleGoogleCalendarSync();
         }}
       />
-      )}
-      </div>
     </DndProvider>
   );
 }
