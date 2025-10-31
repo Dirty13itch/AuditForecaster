@@ -143,6 +143,11 @@ import {
   type InsertFeatureFlag,
   type SystemConfig,
   type InsertSystemConfig,
+  type ProfitabilitySummary,
+  type JobTypeRevenue,
+  type BuilderProfitability,
+  type CashFlowForecast,
+  type InspectorUtilization,
   notifications,
   notificationPreferences,
   scheduledExports,
@@ -1080,6 +1085,13 @@ export interface IStorage {
   // System Configuration Operations
   getSystemConfig(key: string): Promise<any>;
   setSystemConfig(key: string, value: any, updatedBy: string): Promise<void>;
+  
+  // Analytics Methods - Phase 5.1
+  getProfitabilitySummary(startDate?: Date, endDate?: Date): Promise<ProfitabilitySummary>;
+  getRevenueByJobType(startDate?: Date, endDate?: Date): Promise<JobTypeRevenue[]>;
+  getBuilderProfitability(startDate?: Date, endDate?: Date): Promise<BuilderProfitability[]>;
+  getCashFlowForecast(daysAhead?: number): Promise<CashFlowForecast>;
+  getInspectorUtilization(userId: string, startDate?: Date, endDate?: Date): Promise<InspectorUtilization>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -9118,6 +9130,330 @@ export class DatabaseStorage implements IStorage {
         value,
         updatedBy,
       });
+    }
+  }
+
+  // Analytics Methods - Phase 5.1
+  async getProfitabilitySummary(startDate?: Date, endDate?: Date): Promise<ProfitabilitySummary> {
+    try {
+      // Default to MTD (month-to-date) if no dates provided
+      const end = endDate || new Date();
+      const start = startDate || new Date(end.getFullYear(), end.getMonth(), 1);
+      
+      serverLogger.info('[Storage/getProfitabilitySummary] Calculating profitability summary', { 
+        startDate: start, 
+        endDate: end 
+      });
+
+      // Query paid invoices in date range
+      const revenueResult = await db.select({
+        total: sql<string>`COALESCE(SUM(${invoices.total}), 0)`,
+        count: sql<number>`COUNT(*)::int`
+      })
+        .from(invoices)
+        .where(and(
+          eq(invoices.status, 'paid'),
+          gte(invoices.paidAt, start),
+          lte(invoices.paidAt, end)
+        ));
+
+      const revenue = parseFloat(revenueResult[0]?.total || '0');
+      const invoiceCount = revenueResult[0]?.count || 0;
+
+      // Query approved expenses in date range
+      const expensesResult = await db.select({
+        total: sql<string>`COALESCE(SUM(${expenses.amount}), 0)`,
+        count: sql<number>`COUNT(*)::int`
+      })
+        .from(expenses)
+        .where(and(
+          eq(expenses.approvalStatus, 'approved'),
+          gte(expenses.date, start),
+          lte(expenses.date, end)
+        ));
+
+      const expensesTotal = parseFloat(expensesResult[0]?.total || '0');
+      const expenseCount = expensesResult[0]?.count || 0;
+
+      // Calculate profit and margin
+      const profit = revenue - expensesTotal;
+      const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+      const summary: ProfitabilitySummary = {
+        revenue: revenue.toFixed(2),
+        expenses: expensesTotal.toFixed(2),
+        profit: profit.toFixed(2),
+        profitMargin: profitMargin.toFixed(2),
+        invoiceCount,
+        expenseCount
+      };
+
+      serverLogger.info('[Storage/getProfitabilitySummary] Profitability calculated', summary);
+      return summary;
+    } catch (error) {
+      serverLogger.error('[Storage/getProfitabilitySummary] Failed to calculate profitability summary', { error });
+      throw error;
+    }
+  }
+
+  async getRevenueByJobType(startDate?: Date, endDate?: Date): Promise<JobTypeRevenue[]> {
+    try {
+      // Default to MTD if no dates provided
+      const end = endDate || new Date();
+      const start = startDate || new Date(end.getFullYear(), end.getMonth(), 1);
+      
+      serverLogger.info('[Storage/getRevenueByJobType] Calculating revenue by job type', { 
+        startDate: start, 
+        endDate: end 
+      });
+
+      // Query jobs with their invoice line items
+      const results = await db.select({
+        jobType: jobs.jobType,
+        revenue: sql<string>`COALESCE(SUM(${invoiceLineItems.lineTotal}), 0)`,
+        jobCount: sql<number>`COUNT(DISTINCT ${jobs.id})::int`
+      })
+        .from(jobs)
+        .leftJoin(invoiceLineItems, eq(jobs.id, invoiceLineItems.jobId))
+        .leftJoin(invoices, eq(invoiceLineItems.invoiceId, invoices.id))
+        .where(and(
+          eq(invoices.status, 'paid'),
+          gte(invoices.paidAt, start),
+          lte(invoices.paidAt, end)
+        ))
+        .groupBy(jobs.jobType)
+        .orderBy(desc(sql<string>`COALESCE(SUM(${invoiceLineItems.lineTotal}), 0)`));
+
+      const jobTypeRevenue: JobTypeRevenue[] = results.map(row => {
+        const revenue = parseFloat(row.revenue || '0');
+        const jobCount = row.jobCount || 0;
+        const avgRevenue = jobCount > 0 ? revenue / jobCount : 0;
+
+        return {
+          jobType: row.jobType || 'unknown',
+          revenue: revenue.toFixed(2),
+          jobCount,
+          avgRevenue: avgRevenue.toFixed(2)
+        };
+      });
+
+      serverLogger.info(`[Storage/getRevenueByJobType] Calculated revenue for ${jobTypeRevenue.length} job types`);
+      return jobTypeRevenue;
+    } catch (error) {
+      serverLogger.error('[Storage/getRevenueByJobType] Failed to calculate revenue by job type', { error });
+      throw error;
+    }
+  }
+
+  async getBuilderProfitability(startDate?: Date, endDate?: Date): Promise<BuilderProfitability[]> {
+    try {
+      // Default to MTD if no dates provided
+      const end = endDate || new Date();
+      const start = startDate || new Date(end.getFullYear(), end.getMonth(), 1);
+      
+      serverLogger.info('[Storage/getBuilderProfitability] Calculating builder profitability', { 
+        startDate: start, 
+        endDate: end 
+      });
+
+      // Get revenue by builder with job counts
+      const revenueResults = await db.select({
+        builderId: invoices.builderId,
+        builderName: builders.companyName,
+        revenue: sql<string>`COALESCE(SUM(${invoices.total}), 0)`,
+        jobCount: sql<number>`COUNT(DISTINCT ${jobs.id})::int`
+      })
+        .from(invoices)
+        .innerJoin(builders, eq(invoices.builderId, builders.id))
+        .leftJoin(invoiceLineItems, eq(invoices.id, invoiceLineItems.invoiceId))
+        .leftJoin(jobs, eq(invoiceLineItems.jobId, jobs.id))
+        .where(and(
+          eq(invoices.status, 'paid'),
+          gte(invoices.paidAt, start),
+          lte(invoices.paidAt, end)
+        ))
+        .groupBy(invoices.builderId, builders.companyName)
+        .orderBy(desc(sql<string>`COALESCE(SUM(${invoices.total}), 0)`));
+
+      // Get latest AR snapshots for each builder
+      const latestArResults = await db.select({
+        builderId: arSnapshots.builderId,
+        totalAR: arSnapshots.totalAR,
+        snapshotDate: arSnapshots.snapshotDate
+      })
+        .from(arSnapshots)
+        .where(
+          sql`(${arSnapshots.builderId}, ${arSnapshots.snapshotDate}) IN (
+            SELECT ${arSnapshots.builderId}, MAX(${arSnapshots.snapshotDate})
+            FROM ${arSnapshots}
+            GROUP BY ${arSnapshots.builderId}
+          )`
+        );
+
+      // Create a map of builder AR
+      const arMap = new Map<string, string>();
+      for (const ar of latestArResults) {
+        arMap.set(ar.builderId, ar.totalAR);
+      }
+
+      // Combine results
+      const builderProfitability: BuilderProfitability[] = revenueResults.map(row => {
+        const revenue = parseFloat(row.revenue || '0');
+        const jobCount = row.jobCount || 0;
+        const avgRevenue = jobCount > 0 ? revenue / jobCount : 0;
+        const outstandingAR = arMap.get(row.builderId) || '0.00';
+
+        return {
+          builderId: row.builderId,
+          builderName: row.builderName,
+          revenue: revenue.toFixed(2),
+          jobCount,
+          avgRevenue: avgRevenue.toFixed(2),
+          outstandingAR
+        };
+      });
+
+      serverLogger.info(`[Storage/getBuilderProfitability] Calculated profitability for ${builderProfitability.length} builders`);
+      return builderProfitability;
+    } catch (error) {
+      serverLogger.error('[Storage/getBuilderProfitability] Failed to calculate builder profitability', { error });
+      throw error;
+    }
+  }
+
+  async getCashFlowForecast(daysAhead: number = 30): Promise<CashFlowForecast> {
+    try {
+      serverLogger.info('[Storage/getCashFlowForecast] Calculating cash flow forecast', { daysAhead });
+
+      // Get latest AR snapshots
+      const arResults = await db.select({
+        current: sql<string>`COALESCE(SUM(CAST(${arSnapshots.current} AS DECIMAL)), 0)`,
+        days30: sql<string>`COALESCE(SUM(CAST(${arSnapshots.days30} AS DECIMAL)), 0)`,
+        days60: sql<string>`COALESCE(SUM(CAST(${arSnapshots.days60} AS DECIMAL)), 0)`,
+        days90Plus: sql<string>`COALESCE(SUM(CAST(${arSnapshots.days90Plus} AS DECIMAL)), 0)`
+      })
+        .from(arSnapshots)
+        .where(
+          sql`(${arSnapshots.builderId}, ${arSnapshots.snapshotDate}) IN (
+            SELECT ${arSnapshots.builderId}, MAX(${arSnapshots.snapshotDate})
+            FROM ${arSnapshots}
+            GROUP BY ${arSnapshots.builderId}
+          )`
+        );
+
+      const arCurrent = parseFloat(arResults[0]?.current || '0');
+      const arDays30 = parseFloat(arResults[0]?.days30 || '0');
+      const arDays60 = parseFloat(arResults[0]?.days60 || '0');
+      const arDays90Plus = parseFloat(arResults[0]?.days90Plus || '0');
+      const arOverdue = arDays30 + arDays60 + arDays90Plus;
+
+      // Projected cash in: assume current bucket will be collected within daysAhead
+      // For 30 days ahead, include current bucket
+      // For 60+ days, also include some of the 30-day bucket
+      let projectedCashIn = arCurrent;
+      if (daysAhead >= 60) {
+        projectedCashIn += arDays30;
+      }
+
+      // Projected cash out: approved but not reimbursed expenses
+      const expensesResult = await db.select({
+        total: sql<string>`COALESCE(SUM(${expenses.amount}), 0)`
+      })
+        .from(expenses)
+        .where(and(
+          eq(expenses.approvalStatus, 'approved'),
+          sql`${expenses.reimbursementStatus} IS NULL OR ${expenses.reimbursementStatus} != 'reimbursed'`
+        ));
+
+      const projectedCashOut = parseFloat(expensesResult[0]?.total || '0');
+      const netCashFlow = projectedCashIn - projectedCashOut;
+
+      const forecast: CashFlowForecast = {
+        projectedCashIn: projectedCashIn.toFixed(2),
+        projectedCashOut: projectedCashOut.toFixed(2),
+        netCashFlow: netCashFlow.toFixed(2),
+        arCurrent: arCurrent.toFixed(2),
+        arOverdue: arOverdue.toFixed(2)
+      };
+
+      serverLogger.info('[Storage/getCashFlowForecast] Cash flow forecast calculated', forecast);
+      return forecast;
+    } catch (error) {
+      serverLogger.error('[Storage/getCashFlowForecast] Failed to calculate cash flow forecast', { error });
+      throw error;
+    }
+  }
+
+  async getInspectorUtilization(userId: string, startDate?: Date, endDate?: Date): Promise<InspectorUtilization> {
+    try {
+      // Default to MTD if no dates provided
+      const end = endDate || new Date();
+      const start = startDate || new Date(end.getFullYear(), end.getMonth(), 1);
+      
+      serverLogger.info('[Storage/getInspectorUtilization] Calculating inspector utilization', { 
+        userId, 
+        startDate: start, 
+        endDate: end 
+      });
+
+      // Get inspector name
+      const user = await this.getUser(userId);
+      const inspectorName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Unknown';
+
+      // Get completed jobs count
+      const jobsResult = await db.select({
+        count: sql<number>`COUNT(*)::int`
+      })
+        .from(jobs)
+        .where(and(
+          eq(jobs.assignedTo, userId),
+          eq(jobs.status, 'completed'),
+          gte(jobs.completedAt, start),
+          lte(jobs.completedAt, end)
+        ));
+
+      const jobsCompleted = jobsResult[0]?.count || 0;
+
+      // Get revenue generated from jobs assigned to this inspector
+      const revenueResult = await db.select({
+        total: sql<string>`COALESCE(SUM(${invoiceLineItems.lineTotal}), 0)`
+      })
+        .from(jobs)
+        .innerJoin(invoiceLineItems, eq(jobs.id, invoiceLineItems.jobId))
+        .innerJoin(invoices, eq(invoiceLineItems.invoiceId, invoices.id))
+        .where(and(
+          eq(jobs.assignedTo, userId),
+          eq(invoices.status, 'paid'),
+          gte(jobs.completedAt, start),
+          lte(jobs.completedAt, end)
+        ));
+
+      const revenueGenerated = parseFloat(revenueResult[0]?.total || '0');
+
+      // Calculate working days in range (assume 5 working days per week)
+      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      const totalDays = daysDiff + 1; // Include both start and end dates
+      const totalWeeks = totalDays / 7;
+      const workingDays = Math.round(totalWeeks * 5); // 5 working days per week
+
+      // Calculate metrics
+      const avgJobsPerDay = workingDays > 0 ? jobsCompleted / workingDays : 0;
+      const utilizationRate = workingDays > 0 ? (jobsCompleted / workingDays) * 100 : 0;
+
+      const utilization: InspectorUtilization = {
+        inspectorId: userId,
+        inspectorName,
+        jobsCompleted,
+        revenueGenerated: revenueGenerated.toFixed(2),
+        avgJobsPerDay: avgJobsPerDay.toFixed(2),
+        utilizationRate: utilizationRate.toFixed(2)
+      };
+
+      serverLogger.info('[Storage/getInspectorUtilization] Inspector utilization calculated', utilization);
+      return utilization;
+    } catch (error) {
+      serverLogger.error('[Storage/getInspectorUtilization] Failed to calculate inspector utilization', { error });
+      throw error;
     }
   }
 }

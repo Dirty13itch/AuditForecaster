@@ -137,6 +137,13 @@ function handleDatabaseError(error: unknown, operation: string): { status: numbe
   };
 }
 
+// Date parsing helper for analytics routes
+function parseDateParams(query: any): { startDate?: Date; endDate?: Date } {
+  const startDate = query.startDate ? new Date(query.startDate) : undefined;
+  const endDate = query.endDate ? new Date(query.endDate) : undefined;
+  return { startDate, endDate };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoints (no authentication required for monitoring)
   app.get("/healthz", healthz);
@@ -5675,6 +5682,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch job profitability');
       res.status(status).json({ message });
+    }
+  });
+
+  // ============================================================================
+  // Analytics Routes (Admin Only)
+  // ============================================================================
+
+  // GET /api/analytics/profitability-summary - Get profitability summary
+  app.get("/api/analytics/profitability-summary", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      serverLogger.info('[Analytics/ProfitabilitySummary] Fetching profitability summary', {
+        userId: req.user.id,
+        query: req.query
+      });
+
+      const { startDate, endDate } = parseDateParams(req.query);
+      const summary = await storage.getProfitabilitySummary(startDate, endDate);
+
+      serverLogger.info('[Analytics/ProfitabilitySummary] Successfully fetched profitability summary', {
+        revenue: summary.revenue,
+        profit: summary.profit,
+        margin: summary.profitMargin
+      });
+
+      res.json(summary);
+    } catch (error) {
+      logError('Analytics/ProfitabilitySummary', error, {
+        userId: req.user?.id,
+        query: req.query
+      });
+      res.status(500).json({ message: "Failed to fetch profitability summary" });
+    }
+  });
+
+  // GET /api/analytics/revenue-by-job-type - Get revenue breakdown by job type
+  app.get("/api/analytics/revenue-by-job-type", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      serverLogger.info('[Analytics/RevenueByJobType] Fetching revenue by job type', {
+        userId: req.user.id,
+        query: req.query
+      });
+
+      const { startDate, endDate } = parseDateParams(req.query);
+      const jobTypeRevenue = await storage.getRevenueByJobType(startDate, endDate);
+
+      serverLogger.info('[Analytics/RevenueByJobType] Successfully fetched revenue by job type', {
+        jobTypeCount: jobTypeRevenue.length
+      });
+
+      res.json(jobTypeRevenue);
+    } catch (error) {
+      logError('Analytics/RevenueByJobType', error, {
+        userId: req.user?.id,
+        query: req.query
+      });
+      res.status(500).json({ message: "Failed to fetch revenue by job type" });
+    }
+  });
+
+  // GET /api/analytics/builder-profitability - Get builder profitability with AR
+  app.get("/api/analytics/builder-profitability", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      serverLogger.info('[Analytics/BuilderProfitability] Fetching builder profitability', {
+        userId: req.user.id,
+        query: req.query
+      });
+
+      const { startDate, endDate } = parseDateParams(req.query);
+      const builderProfitability = await storage.getBuilderProfitability(startDate, endDate);
+
+      serverLogger.info('[Analytics/BuilderProfitability] Successfully fetched builder profitability', {
+        builderCount: builderProfitability.length
+      });
+
+      res.json(builderProfitability);
+    } catch (error) {
+      logError('Analytics/BuilderProfitability', error, {
+        userId: req.user?.id,
+        query: req.query
+      });
+      res.status(500).json({ message: "Failed to fetch builder profitability" });
+    }
+  });
+
+  // GET /api/analytics/cash-flow-forecast - Get cash flow forecast
+  app.get("/api/analytics/cash-flow-forecast", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const daysAhead = req.query.daysAhead ? parseInt(req.query.daysAhead as string, 10) : 30;
+
+      serverLogger.info('[Analytics/CashFlowForecast] Fetching cash flow forecast', {
+        userId: req.user.id,
+        daysAhead
+      });
+
+      const forecast = await storage.getCashFlowForecast(daysAhead);
+
+      serverLogger.info('[Analytics/CashFlowForecast] Successfully fetched cash flow forecast', {
+        projectedCashIn: forecast.projectedCashIn,
+        projectedCashOut: forecast.projectedCashOut,
+        netCashFlow: forecast.netCashFlow
+      });
+
+      res.json(forecast);
+    } catch (error) {
+      logError('Analytics/CashFlowForecast', error, {
+        userId: req.user?.id,
+        query: req.query
+      });
+      res.status(500).json({ message: "Failed to fetch cash flow forecast" });
+    }
+  });
+
+  // GET /api/analytics/inspector-utilization - Get inspector productivity metrics
+  app.get("/api/analytics/inspector-utilization", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const { userId } = req.query;
+
+      // Validate required userId parameter
+      if (!userId || typeof userId !== 'string') {
+        serverLogger.warn('[Analytics/InspectorUtilization] Missing or invalid userId parameter', {
+          adminId: req.user.id,
+          query: req.query
+        });
+        return res.status(400).json({ message: "userId parameter is required" });
+      }
+
+      serverLogger.info('[Analytics/InspectorUtilization] Fetching inspector utilization', {
+        adminId: req.user.id,
+        inspectorId: userId,
+        query: req.query
+      });
+
+      const { startDate, endDate } = parseDateParams(req.query);
+      const utilization = await storage.getInspectorUtilization(userId, startDate, endDate);
+
+      serverLogger.info('[Analytics/InspectorUtilization] Successfully fetched inspector utilization', {
+        inspectorId: userId,
+        jobsCompleted: utilization.jobsCompleted,
+        utilizationRate: utilization.utilizationRate
+      });
+
+      res.json(utilization);
+    } catch (error) {
+      logError('Analytics/InspectorUtilization', error, {
+        userId: req.user?.id,
+        query: req.query
+      });
+      res.status(500).json({ message: "Failed to fetch inspector utilization" });
     }
   });
 

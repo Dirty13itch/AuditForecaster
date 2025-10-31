@@ -14,6 +14,49 @@ export interface ScoreSummary {
   updatedAt: string;
 }
 
+// Analytics interfaces for Phase 5.1
+export interface ProfitabilitySummary {
+  revenue: string;
+  expenses: string;
+  profit: string;
+  profitMargin: string;
+  invoiceCount: number;
+  expenseCount: number;
+}
+
+export interface JobTypeRevenue {
+  jobType: string;
+  revenue: string;
+  jobCount: number;
+  avgRevenue: string;
+}
+
+export interface BuilderProfitability {
+  builderId: string;
+  builderName: string;
+  revenue: string;
+  jobCount: number;
+  avgRevenue: string;
+  outstandingAR: string;
+}
+
+export interface CashFlowForecast {
+  projectedCashIn: string;
+  projectedCashOut: string;
+  netCashFlow: string;
+  arCurrent: string;
+  arOverdue: string;
+}
+
+export interface InspectorUtilization {
+  inspectorId: string;
+  inspectorName: string;
+  jobsCompleted: number;
+  revenueGenerated: string;
+  avgJobsPerDay: string;
+  utilizationRate: string;
+}
+
 // Session storage table for Replit Auth
 export const sessions = pgTable(
   "sessions",
