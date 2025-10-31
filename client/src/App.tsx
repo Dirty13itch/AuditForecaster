@@ -42,7 +42,7 @@ const BuilderReview = lazy(() => import("@/pages/BuilderReview"));
 const Plans = lazy(() => import("@/pages/Plans"));
 const Financials = lazy(() => import("@/pages/Financials"));
 const FinancialDashboard = lazy(() => import("@/pages/FinancialDashboard"));
-const Invoices = lazy(() => import("@/pages/Invoices"));
+const Invoices = lazy(() => import("@/pages/financial/invoices"));
 const Expenses = lazy(() => import("@/pages/Expenses"));
 const Mileage = lazy(() => import("@/pages/Mileage"));
 const MileageClassify = lazy(() => import("@/pages/MileageClassify"));

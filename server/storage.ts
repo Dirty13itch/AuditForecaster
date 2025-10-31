@@ -83,10 +83,20 @@ import {
   type InsertVentilationTest,
   type Invoice,
   type InsertInvoice,
+  type InvoiceLineItem,
+  type InsertInvoiceLineItem,
+  type BuilderRateCard,
+  type InsertBuilderRateCard,
   type Payment,
   type InsertPayment,
   type FinancialSettings,
   type InsertFinancialSettings,
+  type ExpenseCategory,
+  type InsertExpenseCategory,
+  type ExpenseRule,
+  type InsertExpenseRule,
+  type JobCostLedger,
+  type InsertJobCostLedger,
   type TaxCreditProject,
   type InsertTaxCreditProject,
   type TaxCreditRequirement,
@@ -184,8 +194,13 @@ import {
   ductLeakageTests,
   ventilationTests,
   invoices,
+  invoiceLineItems,
+  builderRateCards,
   payments,
   financialSettings,
+  expenseCategories,
+  expenseRules,
+  jobCostLedger,
   taxCreditProjects,
   taxCreditRequirements,
   taxCreditDocuments,
@@ -756,6 +771,64 @@ export interface IStorage {
   getPaymentsPaginated(params: PaginationParams): Promise<PaginatedResult<Payment>>;
   updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment | undefined>;
   deletePayment(id: string): Promise<boolean>;
+  
+  // Invoice Line Items
+  createInvoiceLineItem(lineItem: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
+  getInvoiceLineItem(id: string): Promise<InvoiceLineItem | undefined>;
+  getInvoiceLineItemsByInvoice(invoiceId: string): Promise<InvoiceLineItem[]>;
+  updateInvoiceLineItem(id: string, lineItem: Partial<InsertInvoiceLineItem>): Promise<InvoiceLineItem | undefined>;
+  deleteInvoiceLineItem(id: string): Promise<boolean>;
+  bulkCreateInvoiceLineItems(lineItems: InsertInvoiceLineItem[]): Promise<InvoiceLineItem[]>;
+  
+  // Builder Rate Cards
+  createBuilderRateCard(rateCard: InsertBuilderRateCard): Promise<BuilderRateCard>;
+  getBuilderRateCard(id: string): Promise<BuilderRateCard | undefined>;
+  getBuilderRateCardsByBuilder(builderId: string): Promise<BuilderRateCard[]>;
+  getActiveRateCard(builderId: string, jobType: string, date?: Date): Promise<BuilderRateCard | undefined>;
+  updateBuilderRateCard(id: string, rateCard: Partial<InsertBuilderRateCard>): Promise<BuilderRateCard | undefined>;
+  deleteBuilderRateCard(id: string): Promise<boolean>;
+  
+  // Expense Categories
+  createExpenseCategory(category: InsertExpenseCategory): Promise<ExpenseCategory>;
+  getExpenseCategory(id: string): Promise<ExpenseCategory | undefined>;
+  getAllExpenseCategories(): Promise<ExpenseCategory[]>;
+  updateExpenseCategory(id: string, category: Partial<InsertExpenseCategory>): Promise<ExpenseCategory | undefined>;
+  deleteExpenseCategory(id: string): Promise<boolean>;
+  
+  // Expense Rules
+  createExpenseRule(rule: InsertExpenseRule): Promise<ExpenseRule>;
+  getExpenseRule(id: string): Promise<ExpenseRule | undefined>;
+  getAllExpenseRules(): Promise<ExpenseRule[]>;
+  updateExpenseRule(id: string, rule: Partial<InsertExpenseRule>): Promise<ExpenseRule | undefined>;
+  deleteExpenseRule(id: string): Promise<boolean>;
+  
+  // Job Cost Ledger
+  createJobCostEntry(entry: InsertJobCostLedger): Promise<JobCostLedger>;
+  getJobCostEntry(id: string): Promise<JobCostLedger | undefined>;
+  getJobCostsByJob(jobId: string): Promise<JobCostLedger[]>;
+  deleteJobCostEntry(id: string): Promise<boolean>;
+  
+  // Invoice Workflow Helpers
+  getUnbilledJobs(builderId: string): Promise<Job[]>;
+  generateInvoicePreview(params: {
+    builderId: string;
+    periodStart: Date;
+    periodEnd: Date;
+    jobIds: string[];
+  }): Promise<{
+    jobs: Job[];
+    lineItems: Array<{
+      jobId: string;
+      description: string;
+      quantity: number;
+      unitPrice: string;
+      lineTotal: string;
+      jobType: string;
+    }>;
+    subtotal: string;
+    tax: string;
+    total: string;
+  }>;
   
   // Financial Settings
   getFinancialSettings(userId: string): Promise<FinancialSettings | undefined>;
@@ -5104,6 +5177,319 @@ export class DatabaseStorage implements IStorage {
       .where(eq(payments.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  // Invoice Line Items
+  async createInvoiceLineItem(lineItem: InsertInvoiceLineItem): Promise<InvoiceLineItem> {
+    const result = await db.insert(invoiceLineItems)
+      .values(lineItem)
+      .returning();
+    return result[0];
+  }
+
+  async getInvoiceLineItem(id: string): Promise<InvoiceLineItem | undefined> {
+    const result = await db.select()
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getInvoiceLineItemsByInvoice(invoiceId: string): Promise<InvoiceLineItem[]> {
+    return await db.select()
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, invoiceId))
+      .orderBy(desc(invoiceLineItems.id));
+  }
+
+  async updateInvoiceLineItem(id: string, lineItem: Partial<InsertInvoiceLineItem>): Promise<InvoiceLineItem | undefined> {
+    const result = await db.update(invoiceLineItems)
+      .set(lineItem)
+      .where(eq(invoiceLineItems.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteInvoiceLineItem(id: string): Promise<boolean> {
+    const result = await db.delete(invoiceLineItems)
+      .where(eq(invoiceLineItems.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async bulkCreateInvoiceLineItems(lineItems: InsertInvoiceLineItem[]): Promise<InvoiceLineItem[]> {
+    if (lineItems.length === 0) return [];
+    const result = await db.insert(invoiceLineItems)
+      .values(lineItems)
+      .returning();
+    return result;
+  }
+
+  // Builder Rate Cards
+  async createBuilderRateCard(rateCard: InsertBuilderRateCard): Promise<BuilderRateCard> {
+    const result = await db.insert(builderRateCards)
+      .values(rateCard)
+      .returning();
+    return result[0];
+  }
+
+  async getBuilderRateCard(id: string): Promise<BuilderRateCard | undefined> {
+    const result = await db.select()
+      .from(builderRateCards)
+      .where(eq(builderRateCards.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getBuilderRateCardsByBuilder(builderId: string): Promise<BuilderRateCard[]> {
+    return await db.select()
+      .from(builderRateCards)
+      .where(eq(builderRateCards.builderId, builderId))
+      .orderBy(desc(builderRateCards.effectiveStartDate));
+  }
+
+  async getActiveRateCard(builderId: string, jobType: string, date?: Date): Promise<BuilderRateCard | undefined> {
+    const checkDate = date || new Date();
+    const result = await db.select()
+      .from(builderRateCards)
+      .where(
+        and(
+          eq(builderRateCards.builderId, builderId),
+          eq(builderRateCards.jobType, jobType),
+          lte(builderRateCards.effectiveStartDate, checkDate),
+          or(
+            isNull(builderRateCards.effectiveEndDate),
+            gte(builderRateCards.effectiveEndDate, checkDate)
+          )
+        )
+      )
+      .orderBy(desc(builderRateCards.effectiveStartDate))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateBuilderRateCard(id: string, rateCard: Partial<InsertBuilderRateCard>): Promise<BuilderRateCard | undefined> {
+    const result = await db.update(builderRateCards)
+      .set(rateCard)
+      .where(eq(builderRateCards.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBuilderRateCard(id: string): Promise<boolean> {
+    const result = await db.delete(builderRateCards)
+      .where(eq(builderRateCards.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Expense Categories
+  async createExpenseCategory(category: InsertExpenseCategory): Promise<ExpenseCategory> {
+    const result = await db.insert(expenseCategories)
+      .values(category)
+      .returning();
+    return result[0];
+  }
+
+  async getExpenseCategory(id: string): Promise<ExpenseCategory | undefined> {
+    const result = await db.select()
+      .from(expenseCategories)
+      .where(eq(expenseCategories.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAllExpenseCategories(): Promise<ExpenseCategory[]> {
+    return await db.select()
+      .from(expenseCategories)
+      .orderBy(expenseCategories.name);
+  }
+
+  async updateExpenseCategory(id: string, category: Partial<InsertExpenseCategory>): Promise<ExpenseCategory | undefined> {
+    const result = await db.update(expenseCategories)
+      .set(category)
+      .where(eq(expenseCategories.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteExpenseCategory(id: string): Promise<boolean> {
+    const result = await db.delete(expenseCategories)
+      .where(eq(expenseCategories.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Expense Rules
+  async createExpenseRule(rule: InsertExpenseRule): Promise<ExpenseRule> {
+    const result = await db.insert(expenseRules)
+      .values(rule)
+      .returning();
+    return result[0];
+  }
+
+  async getExpenseRule(id: string): Promise<ExpenseRule | undefined> {
+    const result = await db.select()
+      .from(expenseRules)
+      .where(eq(expenseRules.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAllExpenseRules(): Promise<ExpenseRule[]> {
+    return await db.select()
+      .from(expenseRules)
+      .orderBy(desc(expenseRules.priority));
+  }
+
+  async updateExpenseRule(id: string, rule: Partial<InsertExpenseRule>): Promise<ExpenseRule | undefined> {
+    const result = await db.update(expenseRules)
+      .set(rule)
+      .where(eq(expenseRules.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteExpenseRule(id: string): Promise<boolean> {
+    const result = await db.delete(expenseRules)
+      .where(eq(expenseRules.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Job Cost Ledger
+  async createJobCostEntry(entry: InsertJobCostLedger): Promise<JobCostLedger> {
+    const result = await db.insert(jobCostLedger)
+      .values(entry)
+      .returning();
+    return result[0];
+  }
+
+  async getJobCostEntry(id: string): Promise<JobCostLedger | undefined> {
+    const result = await db.select()
+      .from(jobCostLedger)
+      .where(eq(jobCostLedger.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getJobCostsByJob(jobId: string): Promise<JobCostLedger[]> {
+    return await db.select()
+      .from(jobCostLedger)
+      .where(eq(jobCostLedger.jobId, jobId))
+      .orderBy(desc(jobCostLedger.recordedAt));
+  }
+
+  async deleteJobCostEntry(id: string): Promise<boolean> {
+    const result = await db.delete(jobCostLedger)
+      .where(eq(jobCostLedger.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Invoice Workflow Helpers
+  async getUnbilledJobs(builderId: string): Promise<Job[]> {
+    // Get all completed jobs that haven't been invoiced yet
+    return await db.select()
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.builderId, builderId),
+          eq(jobs.status, 'completed'),
+          isNull(jobs.invoicedAt)
+        )
+      )
+      .orderBy(desc(jobs.completedAt));
+  }
+
+  async generateInvoicePreview(params: {
+    builderId: string;
+    periodStart: Date;
+    periodEnd: Date;
+    jobIds: string[];
+  }): Promise<{
+    jobs: Job[];
+    builderName: string;
+    lineItems: Array<{
+      jobId: string;
+      description: string;
+      quantity: number;
+      unitPrice: string;
+      lineTotal: string;
+      jobType: string;
+    }>;
+    subtotal: string;
+    tax: string;
+    total: string;
+  }> {
+    const { builderId, periodStart, periodEnd, jobIds } = params;
+    
+    // Get builder info
+    const builder = await this.getBuilder(builderId);
+    const builderName = builder?.name || 'Unknown Builder';
+    
+    // Get the jobs
+    const jobs = await db.select()
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.builderId, builderId),
+          inArray(jobs.id, jobIds),
+          gte(jobs.completedAt, periodStart),
+          lte(jobs.completedAt, periodEnd)
+        )
+      )
+      .orderBy(jobs.completedAt);
+
+    // Generate line items with pricing
+    const lineItems: Array<{
+      jobId: string;
+      description: string;
+      quantity: number;
+      unitPrice: string;
+      lineTotal: string;
+      jobType: string;
+    }> = [];
+
+    let subtotal = 0;
+
+    for (const job of jobs) {
+      // Get the active rate card for this job
+      const rateCard = await this.getActiveRateCard(
+        builderId,
+        job.type,
+        job.completedAt || new Date()
+      );
+
+      const baseRate = rateCard ? parseFloat(rateCard.baseRate) : 0;
+      const quantity = 1;
+      const lineTotal = baseRate * quantity;
+
+      lineItems.push({
+        jobId: job.id,
+        description: `${job.type.toUpperCase()} - ${job.address}`,
+        quantity,
+        unitPrice: baseRate.toFixed(2),
+        lineTotal: lineTotal.toFixed(2),
+        jobType: job.type,
+      });
+
+      subtotal += lineTotal;
+    }
+
+    // Calculate tax (0% for now, can be configured)
+    const taxRate = 0;
+    const tax = subtotal * taxRate;
+    const total = subtotal + tax;
+
+    return {
+      jobs,
+      builderName,
+      lineItems,
+      subtotal: subtotal.toFixed(2),
+      tax: tax.toFixed(2),
+      total: total.toFixed(2),
+    };
   }
 
   // Financial Settings

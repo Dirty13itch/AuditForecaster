@@ -51,6 +51,11 @@ import {
   insertDuctLeakageTestSchema,
   insertVentilationTestSchema,
   insertInvoiceSchema,
+  insertInvoiceLineItemSchema,
+  insertBuilderRateCardSchema,
+  insertExpenseCategorySchema,
+  insertExpenseRuleSchema,
+  insertJobCostLedgerSchema,
   insertPaymentSchema,
   insertFinancialSettingsSchema,
   insertTaxCreditProjectSchema,
@@ -4910,6 +4915,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/invoices/:id/pdf", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      const lineItems = await storage.getInvoiceLineItemsByInvoice(invoice.id);
+      const builder = await storage.getBuilder(invoice.builderId);
+
+      const { generateInvoicePDF } = await import('./invoicePdfGenerator.tsx');
+      
+      const pdfBuffer = await generateInvoicePDF({
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceDate: invoice.createdAt,
+        periodStart: new Date(invoice.periodStart),
+        periodEnd: new Date(invoice.periodEnd),
+        builderName: builder?.name || 'Unknown Builder',
+        builderAddress: builder?.address,
+        lineItems: lineItems.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+        })),
+        subtotal: invoice.subtotal,
+        tax: invoice.tax,
+        total: invoice.total,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=invoice-${invoice.invoiceNumber}.pdf`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      logError('generate invoice PDF', error);
+      const { status, message } = handleDatabaseError(error, 'generate invoice PDF');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/invoices/:id/send", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      const lineItems = await storage.getInvoiceLineItemsByInvoice(invoice.id);
+      const builder = await storage.getBuilder(invoice.builderId);
+      const user = await storage.getUser(req.user.id);
+
+      const { generateInvoicePDF } = await import('./invoicePdfGenerator.tsx');
+      
+      const pdfBuffer = await generateInvoicePDF({
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceDate: invoice.createdAt,
+        periodStart: new Date(invoice.periodStart),
+        periodEnd: new Date(invoice.periodEnd),
+        builderName: builder?.name || 'Unknown Builder',
+        builderAddress: builder?.address,
+        lineItems: lineItems.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+        })),
+        subtotal: invoice.subtotal,
+        tax: invoice.tax,
+        total: invoice.total,
+      });
+
+      // Send email with PDF attachment
+      const recipientEmail = req.body.recipientEmail || builder?.email || 'pat@buildingknowledge.com';
+      
+      await emailService.sendEmail({
+        to: recipientEmail,
+        subject: `Invoice ${invoice.invoiceNumber} from Ulrich Energy Auditing`,
+        html: `
+          <h2>Invoice ${invoice.invoiceNumber}</h2>
+          <p>Dear ${builder?.name || 'Valued Client'},</p>
+          <p>Please find attached invoice ${invoice.invoiceNumber} for the period ${format(new Date(invoice.periodStart), 'MMMM d, yyyy')} - ${format(new Date(invoice.periodEnd), 'MMMM d, yyyy')}.</p>
+          <p><strong>Total Amount Due: $${invoice.total}</strong></p>
+          <p>Thank you for your continued business.</p>
+          <p>Best regards,<br>Ulrich Energy Auditing</p>
+        `,
+        attachments: [{
+          content: pdfBuffer.toString('base64'),
+          filename: `invoice-${invoice.invoiceNumber}.pdf`,
+          type: 'application/pdf',
+          disposition: 'attachment',
+        }],
+      });
+
+      // Update invoice status to sent
+      await storage.updateInvoice(invoice.id, {
+        status: 'sent',
+        sentAt: new Date(),
+      });
+
+      res.json({ success: true, message: 'Invoice sent successfully' });
+    } catch (error) {
+      logError('send invoice', error);
+      const { status, message } = handleDatabaseError(error, 'send invoice');
+      res.status(status).json({ message });
+    }
+  });
+
   // Payments
   app.get("/api/payments", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
@@ -4999,6 +5111,198 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(status).json({ message });
       }
       const { status, message } = handleDatabaseError(error, 'update financial settings');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Invoice Workflow Helpers
+  app.get("/api/invoices/unbilled/:builderId", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const unbilledJobs = await storage.getUnbilledJobs(req.params.builderId);
+      res.json(unbilledJobs);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch unbilled jobs');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/invoices/preview", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { builderId, periodStart, periodEnd, jobIds } = req.body;
+      const preview = await storage.generateInvoicePreview({
+        builderId,
+        periodStart: new Date(periodStart),
+        periodEnd: new Date(periodEnd),
+        jobIds,
+      });
+      res.json(preview);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'generate invoice preview');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/invoices/create-with-line-items", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { invoice: invoiceData, lineItems } = req.body;
+
+      // Generate invoice number if not provided
+      if (!invoiceData.invoiceNumber) {
+        invoiceData.invoiceNumber = await storage.getNextInvoiceNumber(userId);
+      }
+
+      invoiceData.createdBy = userId;
+      const validated = insertInvoiceSchema.parse(invoiceData);
+      const invoice = await storage.createInvoice(validated);
+
+      // Create line items
+      const lineItemsWithInvoiceId = lineItems.map((item: any) => ({
+        ...item,
+        invoiceId: invoice.id,
+      }));
+
+      const validatedLineItems = lineItemsWithInvoiceId.map((item: any) =>
+        insertInvoiceLineItemSchema.parse(item)
+      );
+
+      const createdLineItems = await storage.bulkCreateInvoiceLineItems(validatedLineItems);
+
+      // Mark jobs as invoiced
+      for (const lineItem of createdLineItems) {
+        if (lineItem.jobId) {
+          await storage.updateJob(lineItem.jobId, {
+            invoicedAt: new Date(),
+          });
+        }
+      }
+
+      res.status(201).json({
+        invoice,
+        lineItems: createdLineItems,
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create invoice with line items');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Invoice Line Items
+  app.get("/api/invoice-line-items/:invoiceId", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const lineItems = await storage.getInvoiceLineItemsByInvoice(req.params.invoiceId);
+      res.json(lineItems);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch invoice line items');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Builder Rate Cards
+  app.get("/api/builder-rate-cards", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const { builderId } = req.query;
+      if (!builderId || typeof builderId !== 'string') {
+        return res.status(400).json({ message: 'Builder ID required' });
+      }
+      const rateCards = await storage.getBuilderRateCardsByBuilder(builderId);
+      res.json(rateCards);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch builder rate cards');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/builder-rate-cards", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertBuilderRateCardSchema.parse(req.body);
+      const rateCard = await storage.createBuilderRateCard(validated);
+      res.status(201).json(rateCard);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create builder rate card');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/builder-rate-cards/active", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const { builderId, jobType, date } = req.query;
+      if (!builderId || !jobType) {
+        return res.status(400).json({ message: 'Builder ID and job type required' });
+      }
+      const rateCard = await storage.getActiveRateCard(
+        builderId as string,
+        jobType as string,
+        date ? new Date(date as string) : undefined
+      );
+      res.json(rateCard);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch active rate card');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.put("/api/builder-rate-cards/:id", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertBuilderRateCardSchema.partial().parse(req.body);
+      const rateCard = await storage.updateBuilderRateCard(req.params.id, validated);
+      if (!rateCard) {
+        return res.status(404).json({ message: 'Rate card not found' });
+      }
+      res.json(rateCard);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update builder rate card');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/builder-rate-cards/:id", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const deleted = await storage.deleteBuilderRateCard(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: 'Rate card not found' });
+      }
+      res.status(204).send();
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete builder rate card');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Expense Categories
+  app.get("/api/expense-categories", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const categories = await storage.getAllExpenseCategories();
+      res.json(categories);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch expense categories');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/expense-categories", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const validated = insertExpenseCategorySchema.parse(req.body);
+      const category = await storage.createExpenseCategory(validated);
+      res.status(201).json(category);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create expense category');
       res.status(status).json({ message });
     }
   });
