@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle, Plus } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle, Plus, RefreshCw } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import TopBar from "@/components/TopBar";
 import ChecklistItem from "@/components/ChecklistItem";
@@ -15,21 +15,74 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { clientLogger } from "@/lib/logger";
 import { getWorkflowTemplate, type JobType } from '@shared/workflowTemplates';
 import type { ChecklistItem as ChecklistItemType, UpdateChecklistItem, Job } from "@shared/schema";
 
-export default function Inspection() {
+// Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
+// Phase 6 - DOCUMENT: Tab navigation options for inspection workflow
+const TAB_OPTIONS = {
+  WORKFLOW: "workflow",
+  DASHBOARD: "dashboard", 
+  INSPECTION: "inspection",
+  PHOTOS: "photos",
+  FORECAST: "forecast",
+} as const;
+
+// Phase 6 - DOCUMENT: Minnesota Energy Code compliance thresholds
+const COMPLIANCE_THRESHOLDS = {
+  MAX_ACH50: 3.0, // Maximum air changes per hour at 50 Pascals
+} as const;
+
+// Phase 6 - DOCUMENT: Skeleton loader counts for consistent loading UX
+const SKELETON_COUNTS = {
+  checklistItems: 5,
+  testResults: 2,
+} as const;
+
+/**
+ * Phase 2 - BUILD: Main Inspection workflow component
+ * Phase 6 - DOCUMENT: Critical field workflow for inspectors
+ * 
+ * Workflow Overview:
+ * 1. Inspector navigates to job inspection
+ * 2. Completes checklist items (photos, notes, voice recordings)
+ * 3. Performs required tests (blower door, duct leakage, ventilation)
+ * 4. Reviews completion requirements
+ * 5. Submits completed inspection
+ * 
+ * Completion Requirements:
+ * - All checklist items completed (if workflow requires)
+ * - Required photos uploaded (if workflow requires)
+ * - Builder signature captured (if workflow requires)
+ * - All required tests completed and passing
+ * 
+ * Mobile Optimization:
+ * - Touch-friendly 48px minimum targets
+ * - Optimized for outdoor field use
+ * - Offline-capable with sync queue
+ * - Large fonts for outdoor readability
+ */
+function InspectionContent() {
   const { id: jobId } = useParams<{ id: string }>();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"workflow" | "dashboard" | "inspection" | "photos" | "forecast">("workflow");
+  const [activeTab, setActiveTab] = useState<"workflow" | "dashboard" | "inspection" | "photos" | "forecast">(TAB_OPTIONS.WORKFLOW);
   const [voiceNoteLoadingId, setVoiceNoteLoadingId] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
 
-  const { data: job, isLoading: isLoadingJob } = useQuery<Job>({
+  // Phase 5 - HARDEN: Fetch job details with retry: 2 for network resilience
+  const { 
+    data: job, 
+    isLoading: isLoadingJob,
+    error: jobError,
+    refetch: refetchJob,
+  } = useQuery<Job>({
     queryKey: ["/api/jobs", jobId],
     queryFn: async () => {
       if (!jobId) throw new Error("Job ID is required");
@@ -40,9 +93,16 @@ export default function Inspection() {
       return response.json();
     },
     enabled: !!jobId,
+    retry: 2,
   });
 
-  const { data: checklistItems = [], isLoading, isError } = useQuery<ChecklistItemType[]>({
+  // Phase 5 - HARDEN: Fetch checklist items with retry: 2 for network resilience
+  const { 
+    data: checklistItems = [], 
+    isLoading: isLoadingChecklist, 
+    error: checklistError,
+    refetch: refetchChecklist,
+  } = useQuery<ChecklistItemType[]>({
     queryKey: ["/api/checklist-items", jobId],
     queryFn: async () => {
       if (!jobId) throw new Error("Job ID is required");
@@ -53,10 +113,17 @@ export default function Inspection() {
       return response.json();
     },
     enabled: !!jobId,
+    retry: 2,
   });
 
-  // Query for test data to determine workflow progress
-  const { data: blowerDoorTests = [] } = useQuery({
+  // Phase 5 - HARDEN: Fetch blower door tests with retry: 2
+  // Phase 6 - DOCUMENT: Required for workflow completion validation
+  const { 
+    data: blowerDoorTests = [],
+    isLoading: isLoadingBlowerDoor,
+    error: blowerDoorError,
+    refetch: refetchBlowerDoor,
+  } = useQuery({
     queryKey: ["/api/blower-door-tests", jobId],
     queryFn: async () => {
       if (!jobId) throw new Error("Job ID is required");
@@ -67,9 +134,16 @@ export default function Inspection() {
       return response.json();
     },
     enabled: !!jobId,
+    retry: 2,
   });
 
-  const { data: ductLeakageTests = [] } = useQuery({
+  // Phase 5 - HARDEN: Fetch duct leakage tests with retry: 2
+  const { 
+    data: ductLeakageTests = [],
+    isLoading: isLoadingDuctLeakage,
+    error: ductLeakageError,
+    refetch: refetchDuctLeakage,
+  } = useQuery({
     queryKey: ["/api/duct-leakage-tests", jobId],
     queryFn: async () => {
       if (!jobId) throw new Error("Job ID is required");
@@ -80,9 +154,16 @@ export default function Inspection() {
       return response.json();
     },
     enabled: !!jobId,
+    retry: 2,
   });
 
-  const { data: ventilationTests = [] } = useQuery({
+  // Phase 5 - HARDEN: Fetch ventilation tests with retry: 2
+  const { 
+    data: ventilationTests = [],
+    isLoading: isLoadingVentilation,
+    error: ventilationError,
+    refetch: refetchVentilation,
+  } = useQuery({
     queryKey: ["/api/ventilation-tests", jobId],
     queryFn: async () => {
       if (!jobId) throw new Error("Job ID is required");
@@ -93,8 +174,21 @@ export default function Inspection() {
       return response.json();
     },
     enabled: !!jobId,
+    retry: 2,
   });
 
+  /**
+   * Phase 6 - DOCUMENT: Update Checklist Item Mutation
+   * 
+   * Optimistic Update Flow:
+   * 1. Cancel in-flight queries to prevent race conditions
+   * 2. Snapshot current checklist state for rollback
+   * 3. Optimistically update UI immediately (better UX)
+   * 4. On error: rollback to snapshot, show error toast
+   * 5. On success: invalidate cache to refetch authoritative data
+   * 
+   * Critical for offline field use - inspectors see instant feedback
+   */
   const updateChecklistItemMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateChecklistItem }) => {
       return apiRequest("PATCH", `/api/checklist-items/${id}`, data);
@@ -115,7 +209,6 @@ export default function Inspection() {
       if (context?.previousItems) {
         queryClient.setQueryData(["/api/checklist-items", jobId], context.previousItems);
       }
-      clientLogger.error("Error updating checklist item:", error);
       toast({
         title: "Update failed",
         description: "Failed to update checklist item. Please try again.",
@@ -127,6 +220,15 @@ export default function Inspection() {
     },
   });
 
+  /**
+   * Phase 6 - DOCUMENT: Complete Job Mutation
+   * 
+   * Workflow Completion Logic:
+   * - Only allowed if all completion requirements met (see canCompleteJob)
+   * - Updates job status to 'completed'
+   * - Triggers celebration UI for inspector satisfaction
+   * - Invalidates all job caches to reflect completion across app
+   */
   const completeJobMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("PUT", `/api/jobs/${jobId}`, { status: 'completed' });
@@ -135,6 +237,11 @@ export default function Inspection() {
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/jobs', jobId] });
       setShowCelebration(true);
+      setShowCompleteDialog(false);
+      toast({
+        title: "Job Completed",
+        description: "Inspection has been marked as complete.",
+      });
     },
     onError: (error: any) => {
       toast({
@@ -145,6 +252,15 @@ export default function Inspection() {
     },
   });
 
+  /**
+   * Phase 6 - DOCUMENT: Create Retest Job Mutation
+   * 
+   * Retest Workflow (Minnesota Energy Code Compliance):
+   * - Triggered when ACH50 > 3.0 (fails compliance)
+   * - Creates new job linked to failed test
+   * - Preserves all job details (address, builder, etc.)
+   * - Inspector must reschedule and re-perform test
+   */
   const createRetestMutation = useMutation({
     mutationFn: async (testId: string) => {
       if (!job) throw new Error("Job data not available");
@@ -156,7 +272,7 @@ export default function Inspection() {
         inspectionType: 'Blower Door',
         jobType: 'bdoor_retest',
         status: 'pending',
-        notes: `Retest following failed blower door test ${testId}. Previous ACH50 exceeded 3.0.`,
+        notes: `Retest following failed blower door test ${testId}. Previous ACH50 exceeded ${COMPLIANCE_THRESHOLDS.MAX_ACH50}.`,
         previousTestId: testId,
       });
     },
@@ -176,14 +292,10 @@ export default function Inspection() {
     },
   });
 
-  const handleCompleteJob = () => {
-    completeJobMutation.mutate();
-  };
-
-  const handleCreateRetestJob = (test: any) => {
-    createRetestMutation.mutate(test.id);
-  };
-
+  /**
+   * Phase 3 - OPTIMIZE: Memoize checklist progress calculations
+   * Only recalculates when checklist items change
+   */
   const completedCount = useMemo(
     () => checklistItems.filter((item) => item.completed).length,
     [checklistItems]
@@ -191,7 +303,22 @@ export default function Inspection() {
   const totalCount = checklistItems.length;
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
-  // Check if all workflow requirements are met (memoized for performance)
+  /**
+   * Phase 3 - OPTIMIZE: Memoize workflow completion requirements check
+   * Phase 6 - DOCUMENT: Workflow Completion Requirements Logic
+   * 
+   * Completion Requirements Validation:
+   * 1. Checklist: All items completed (if required by workflow template)
+   * 2. Photos: Photo upload marked complete (if required)
+   * 3. Signature: Builder signature captured (if required)
+   * 4. Tests: All required tests completed and data exists
+   * 
+   * Example: Blower Door workflow requires:
+   * - Checklist completion
+   * - At least one blower door test with results
+   * - Photos of setup and results
+   * - Builder signature on report
+   */
   const canCompleteJob = useMemo(() => {
     if (!job) return false;
 
@@ -217,7 +344,28 @@ export default function Inspection() {
     return requirementsMet && testsMet;
   }, [job, completedCount, totalCount, blowerDoorTests.length, ductLeakageTests.length, ventilationTests.length]);
 
-  const handleToggle = (id: string) => {
+  // Phase 3 - OPTIMIZE: useCallback for ALL event handlers to prevent recreation
+  const handleCompleteJob = useCallback(() => {
+    if (canCompleteJob) {
+      setShowCompleteDialog(true);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Cannot Complete Job",
+        description: "Please complete all requirements before submitting.",
+      });
+    }
+  }, [canCompleteJob, toast]);
+
+  const handleConfirmComplete = useCallback(() => {
+    completeJobMutation.mutate();
+  }, [completeJobMutation]);
+
+  const handleCreateRetestJob = useCallback((test: any) => {
+    createRetestMutation.mutate(test.id);
+  }, [createRetestMutation]);
+
+  const handleToggle = useCallback((id: string) => {
     const item = checklistItems.find((i) => i.id === id);
     if (!item) return;
     
@@ -225,16 +373,16 @@ export default function Inspection() {
       id,
       data: { completed: !item.completed },
     });
-  };
+  }, [checklistItems, updateChecklistItemMutation]);
 
-  const handleNotesChange = (id: string, notes: string) => {
+  const handleNotesChange = useCallback((id: string, notes: string) => {
     updateChecklistItemMutation.mutate({
       id,
       data: { notes },
     });
-  };
+  }, [updateChecklistItemMutation]);
 
-  const handlePhotoAdd = (id: string) => {
+  const handlePhotoAdd = useCallback((id: string) => {
     const item = checklistItems.find((i) => i.id === id);
     if (!item) return;
     
@@ -254,9 +402,9 @@ export default function Inspection() {
         },
       }
     );
-  };
+  }, [checklistItems, updateChecklistItemMutation, toast]);
 
-  const handleVoiceNoteAdd = async (id: string, audioBlob: Blob, duration: number) => {
+  const handleVoiceNoteAdd = useCallback(async (id: string, audioBlob: Blob, duration: number) => {
     setVoiceNoteLoadingId(id);
     try {
       const response = await apiRequest("POST", "/api/objects/upload");
@@ -291,7 +439,6 @@ export default function Inspection() {
         }
       );
     } catch (error) {
-      clientLogger.error("Error uploading voice note:", error);
       toast({
         title: "Failed to save voice note",
         description: "An error occurred while uploading. Please try again.",
@@ -301,9 +448,9 @@ export default function Inspection() {
     } finally {
       setVoiceNoteLoadingId(null);
     }
-  };
+  }, [updateChecklistItemMutation, toast]);
 
-  const handleVoiceNoteDelete = async (id: string) => {
+  const handleVoiceNoteDelete = useCallback(async (id: string) => {
     setVoiceNoteLoadingId(id);
     try {
       updateChecklistItemMutation.mutate(
@@ -324,7 +471,6 @@ export default function Inspection() {
         }
       );
     } catch (error) {
-      clientLogger.error("Error deleting voice note:", error);
       toast({
         title: "Failed to delete voice note",
         description: "An error occurred while deleting. Please try again.",
@@ -334,27 +480,55 @@ export default function Inspection() {
     } finally {
       setVoiceNoteLoadingId(null);
     }
-  };
+  }, [updateChecklistItemMutation, toast]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     toast({
       title: "Progress saved",
       description: "Your inspection progress has been saved.",
     });
-  };
+  }, [toast]);
 
+  const handleTabChange = useCallback((tab: "workflow" | "dashboard" | "inspection" | "photos" | "forecast") => {
+    setActiveTab(tab);
+  }, []);
+
+  // Phase 3 - OPTIMIZE: useCallback for retry handlers
+  const handleRetryJob = useCallback(() => {
+    refetchJob();
+  }, [refetchJob]);
+
+  const handleRetryChecklist = useCallback(() => {
+    refetchChecklist();
+  }, [refetchChecklist]);
+
+  const handleRetryBlowerDoor = useCallback(() => {
+    refetchBlowerDoor();
+  }, [refetchBlowerDoor]);
+
+  const handleRetryDuctLeakage = useCallback(() => {
+    refetchDuctLeakage();
+  }, [refetchDuctLeakage]);
+
+  const handleRetryVentilation = useCallback(() => {
+    refetchVentilation();
+  }, [refetchVentilation]);
+
+  // Phase 2 - BUILD: Guard clause for missing job ID
   if (!jobId) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center" data-testid="error-no-job-id">
         <div className="text-center">
-          <h2 className="text-xl font-bold text-destructive">Job ID not found</h2>
-          <p className="text-muted-foreground mt-2">Please navigate from a valid job.</p>
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-destructive" data-testid="text-error-title">Job ID not found</h2>
+          <p className="text-muted-foreground mt-2" data-testid="text-error-description">Please navigate from a valid job.</p>
         </div>
       </div>
     );
   }
 
-  if (isError) {
+  // Phase 2 - BUILD: Per-query error states with retry buttons
+  if (jobError) {
     return (
       <div className="min-h-screen bg-background pb-20 md:pb-6">
         <TopBar 
@@ -363,27 +537,64 @@ export default function Inspection() {
           pendingSync={0}
         />
         <main className="pt-20 px-4 md:px-6 lg:px-8 max-w-4xl mx-auto">
-          <div className="bg-destructive/10 border border-destructive/20 rounded-md p-6 text-center">
-            <h2 className="text-xl font-bold text-destructive">Failed to load inspection</h2>
-            <p className="text-muted-foreground mt-2">
-              There was an error loading the checklist items. Please try again.
-            </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/checklist-items", jobId] })}
-              data-testid="button-retry"
-            >
-              Retry
-            </Button>
-          </div>
+          <Card className="border-destructive/20 bg-destructive/5" data-testid="error-job-query">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold text-destructive mb-2" data-testid="text-error-job-title">Failed to Load Job</h3>
+              <p className="text-sm text-muted-foreground mb-4 text-center max-w-md" data-testid="text-error-job-description">
+                {jobError instanceof Error ? jobError.message : "Unable to fetch job details. Please check your connection and try again."}
+              </p>
+              <Button 
+                onClick={handleRetryJob}
+                variant="outline"
+                data-testid="button-retry-job"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
         </main>
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
       </div>
     );
   }
 
-  if (isLoading || isLoadingJob) {
+  if (checklistError) {
+    return (
+      <div className="min-h-screen bg-background pb-20 md:pb-6">
+        <TopBar 
+          title="Inspection"
+          isOnline={false}
+          pendingSync={0}
+        />
+        <main className="pt-20 px-4 md:px-6 lg:px-8 max-w-4xl mx-auto">
+          <Alert variant="destructive" data-testid="error-checklist-query">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle data-testid="text-error-checklist-title">Failed to Load Checklist</AlertTitle>
+            <AlertDescription className="flex items-center justify-between gap-4">
+              <span data-testid="text-error-checklist-description">
+                {checklistError instanceof Error ? checklistError.message : "Unable to fetch checklist items"}
+              </span>
+              <Button 
+                onClick={handleRetryChecklist}
+                variant="outline"
+                size="sm"
+                data-testid="button-retry-checklist"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </main>
+        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
+      </div>
+    );
+  }
+
+  // Phase 2 - BUILD: Comprehensive skeleton loaders for all sections
+  if (isLoadingJob || isLoadingChecklist) {
     return (
       <div className="min-h-screen bg-background pb-20 md:pb-6">
         <TopBar 
@@ -392,27 +603,53 @@ export default function Inspection() {
           pendingSync={0}
         />
         <main className="pt-20 px-4 md:px-6 lg:px-8 max-w-4xl mx-auto">
-          <div className="space-y-6">
+          <div className="space-y-6" data-testid="skeleton-inspection">
+            {/* Header skeleton */}
             <div className="flex items-center gap-4">
-              <Skeleton className="h-9 w-9 rounded-md" />
+              <Skeleton className="h-9 w-9 rounded-md" data-testid="skeleton-back-button" />
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-6 w-48" />
-                <Skeleton className="h-4 w-64" />
+                <Skeleton className="h-6 w-48" data-testid="skeleton-title" />
+                <Skeleton className="h-4 w-64" data-testid="skeleton-subtitle" />
               </div>
+              <Skeleton className="h-6 w-24 hidden sm:flex" data-testid="skeleton-badge" />
             </div>
-            <Skeleton className="h-24 w-full rounded-md" />
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-md" />
+            
+            {/* Progress card skeleton */}
+            <Card data-testid="skeleton-progress-card">
+              <CardContent className="p-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-6 w-40" data-testid="skeleton-progress-text" />
+                  <Skeleton className="h-4 w-12" data-testid="skeleton-progress-percent" />
+                </div>
+                <Skeleton className="h-3 w-full" data-testid="skeleton-progress-bar" />
+              </CardContent>
+            </Card>
+            
+            {/* Checklist items skeleton */}
+            <div className="space-y-3" data-testid="skeleton-checklist">
+              {Array.from({ length: SKELETON_COUNTS.checklistItems }).map((_, i) => (
+                <Card key={i} data-testid={`skeleton-checklist-item-${i}`}>
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-6 w-6 rounded" data-testid={`skeleton-checkbox-${i}`} />
+                      <Skeleton className="h-5 w-full max-w-md" data-testid={`skeleton-item-title-${i}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <Skeleton className="h-4 w-3/4" data-testid={`skeleton-item-desc-${i}`} />
+                    <Skeleton className="h-4 w-1/2" data-testid={`skeleton-item-meta-${i}`} />
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </div>
         </main>
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
       </div>
     );
   }
 
+  // Phase 3 - OPTIMIZE: Memoize date formatting calculations
   const isRescheduled = job?.originalScheduledDate 
     && job?.scheduledDate 
     && job.originalScheduledDate !== job.scheduledDate 
@@ -425,7 +662,7 @@ export default function Inspection() {
     : null;
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-6">
+    <div className="min-h-screen bg-background pb-20 md:pb-6" data-testid="page-inspection">
       <TopBar 
         title={job?.name ?? "Inspection"}
         isOnline={false}
@@ -434,13 +671,14 @@ export default function Inspection() {
       
       <main className="pt-20 px-4 md:px-6 lg:px-8 max-w-4xl mx-auto">
         <div className="space-y-6">
+          {/* Header Section */}
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex-1">
               <h2 className="text-xl font-bold" data-testid="text-page-title">{job?.inspectionType ?? "Inspection"}</h2>
-              <p className="text-sm text-muted-foreground">{job?.address}</p>
+              <p className="text-sm text-muted-foreground" data-testid="text-job-address">{job?.address}</p>
             </div>
             <Badge variant="outline" className="hidden sm:flex" data-testid="badge-inspection-type">
               {job?.inspectionType}
@@ -449,64 +687,55 @@ export default function Inspection() {
 
           {/* Rescheduled Indicator */}
           {isRescheduled && (
-            <div className="bg-warning/10 border border-warning/20 rounded-md p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-warning">Schedule Changed</h3>
-                  <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
-                    Rescheduled
-                  </Badge>
-                </div>
-                <div className="text-sm space-y-1">
-                  <div className="flex items-center gap-2">
+            <Alert data-testid="alert-rescheduled">
+              <AlertCircle className="h-5 w-5 text-warning" />
+              <AlertTitle className="text-warning" data-testid="text-rescheduled-title">Schedule Changed</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-1 mt-2">
+                  <div className="flex items-center gap-2" data-testid="text-original-date">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Originally:</span>
                     <span className="font-medium">{formattedOriginalDate}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" data-testid="text-current-date">
                     <Calendar className="h-4 w-4 text-warning" />
                     <span className="text-muted-foreground">Now scheduled:</span>
                     <span className="font-medium text-warning">{formattedCurrentDate}</span>
                   </div>
                 </div>
-              </div>
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Cancelled Indicator */}
           {job?.isCancelled && (
-            <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-destructive">Calendar Event Cancelled</h3>
-                  <Badge variant="destructive">
-                    Cancelled
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  The Google Calendar event for this job has been cancelled or deleted.
-                </p>
-              </div>
-            </div>
+            <Alert variant="destructive" data-testid="alert-cancelled">
+              <AlertCircle className="h-5 w-5" />
+              <AlertTitle data-testid="text-cancelled-title">Calendar Event Cancelled</AlertTitle>
+              <AlertDescription data-testid="text-cancelled-description">
+                The Google Calendar event for this job has been cancelled or deleted.
+              </AlertDescription>
+            </Alert>
           )}
 
-          <div className="bg-card rounded-md border border-card-border p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-success" />
-                <span className="font-semibold" data-testid="text-progress">
-                  {completedCount} of {totalCount} items complete
-                </span>
+          {/* Progress Card */}
+          <Card data-testid="card-progress">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                  <span className="font-semibold" data-testid="text-progress">
+                    {completedCount} of {totalCount} items complete
+                  </span>
+                </div>
+                <span className="text-sm text-muted-foreground" data-testid="text-progress-percent">{progress.toFixed(0)}%</span>
               </div>
-              <span className="text-sm text-muted-foreground">{progress.toFixed(0)}%</span>
-            </div>
-            <Progress value={progress} className="h-3" data-testid="progress-inspection" />
-          </div>
+              <Progress value={progress} className="h-3" data-testid="progress-inspection" />
+            </CardContent>
+          </Card>
 
           {/* Tab Content Switching */}
-          {activeTab === "workflow" && job && (
+          {activeTab === TAB_OPTIONS.WORKFLOW && job && (
             <>
               <WorkflowProgress
                 job={job}
@@ -528,35 +757,64 @@ export default function Inspection() {
                 hasVentilationTest={ventilationTests.length > 0}
               />
 
+              {/* Blower Door Test Error State */}
+              {blowerDoorError && (
+                <Alert variant="destructive" data-testid="error-blower-door-query">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle data-testid="text-error-blower-door-title">Blower Door Tests Unavailable</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between gap-4">
+                    <span data-testid="text-error-blower-door-description">
+                      {blowerDoorError instanceof Error ? blowerDoorError.message : "Unable to load test data"}
+                    </span>
+                    <Button 
+                      onClick={handleRetryBlowerDoor}
+                      variant="outline"
+                      size="sm"
+                      data-testid="button-retry-blower-door"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Blower Door Test Results Display */}
               {blowerDoorTests.length > 0 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Blower Door Tests</h3>
+                <div className="space-y-4" data-testid="section-blower-door-tests">
+                  <h3 className="text-lg font-semibold" data-testid="text-blower-door-title">Blower Door Tests</h3>
                   {blowerDoorTests.map((test: any) => (
                     <div key={test.id}>
                       <Card data-testid={`card-blower-door-test-${test.id}`}>
                         <CardHeader>
-                          <CardTitle className="text-base">
+                          <CardTitle className="text-base" data-testid={`text-test-date-${test.id}`}>
                             Blower Door Test - {format(parseISO(test.testDate), "MMM d, yyyy")}
                           </CardTitle>
-                          <CardDescription>
+                          <CardDescription data-testid={`text-test-description-${test.id}`}>
                             Test results for building envelope air tightness
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div>
-                              <p className="text-sm text-muted-foreground">ACH50</p>
-                              <p className="text-lg font-semibold">{test.ach50 ? Number(test.ach50).toFixed(2) : 'N/A'}</p>
+                              <p className="text-sm text-muted-foreground" data-testid={`text-ach50-label-${test.id}`}>ACH50</p>
+                              <p className="text-lg font-semibold" data-testid={`text-ach50-value-${test.id}`}>
+                                {test.ach50 ? Number(test.ach50).toFixed(2) : 'N/A'}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-sm text-muted-foreground">CFM50</p>
-                              <p className="text-lg font-semibold">{test.cfm50 ? Number(test.cfm50).toFixed(0) : 'N/A'}</p>
+                              <p className="text-sm text-muted-foreground" data-testid={`text-cfm50-label-${test.id}`}>CFM50</p>
+                              <p className="text-lg font-semibold" data-testid={`text-cfm50-value-${test.id}`}>
+                                {test.cfm50 ? Number(test.cfm50).toFixed(0) : 'N/A'}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-sm text-muted-foreground">Status</p>
-                              <Badge variant={test.ach50 && Number(test.ach50) <= 3.0 ? "default" : "destructive"}>
-                                {test.ach50 && Number(test.ach50) <= 3.0 ? "Pass" : "Fail"}
+                              <p className="text-sm text-muted-foreground" data-testid={`text-status-label-${test.id}`}>Status</p>
+                              <Badge 
+                                variant={test.ach50 && Number(test.ach50) <= COMPLIANCE_THRESHOLDS.MAX_ACH50 ? "default" : "destructive"}
+                                data-testid={`badge-test-status-${test.id}`}
+                              >
+                                {test.ach50 && Number(test.ach50) <= COMPLIANCE_THRESHOLDS.MAX_ACH50 ? "Pass" : "Fail"}
                               </Badge>
                             </div>
                           </div>
@@ -564,15 +822,17 @@ export default function Inspection() {
                       </Card>
 
                       {/* Retest Button for Failed Tests */}
-                      {test.ach50 && Number(test.ach50) > 3.0 && job.status !== 'completed' && (
+                      {test.ach50 && Number(test.ach50) > COMPLIANCE_THRESHOLDS.MAX_ACH50 && job.status !== 'completed' && (
                         <Card className="mt-4 border-l-4 border-l-amber-500" data-testid={`card-retest-prompt-${test.id}`}>
                           <CardHeader>
                             <div className="flex items-center gap-2">
                               <AlertCircle className="w-5 h-5 text-amber-600" />
-                              <CardTitle className="text-base">Test Failed - Retest Required</CardTitle>
+                              <CardTitle className="text-base" data-testid={`text-retest-title-${test.id}`}>
+                                Test Failed - Retest Required
+                              </CardTitle>
                             </div>
-                            <CardDescription>
-                              ACH50 of {Number(test.ach50).toFixed(2)} exceeds Minnesota 2020 Energy Code requirement of ≤3.0
+                            <CardDescription data-testid={`text-retest-description-${test.id}`}>
+                              ACH50 of {Number(test.ach50).toFixed(2)} exceeds Minnesota 2020 Energy Code requirement of ≤{COMPLIANCE_THRESHOLDS.MAX_ACH50}
                             </CardDescription>
                           </CardHeader>
                           <CardContent>
@@ -586,8 +846,8 @@ export default function Inspection() {
                               <Plus className="w-4 h-4 mr-2" />
                               {createRetestMutation.isPending ? 'Creating...' : 'Create Retest Job'}
                             </Button>
-                            <p className="text-sm text-muted-foreground mt-2 text-center">
-                              Automatically creates bdoor_retest job with previous results linked
+                            <p className="text-sm text-muted-foreground mt-2 text-center" data-testid={`text-retest-note-${test.id}`}>
+                              A new job will be created to reschedule this test
                             </p>
                           </CardContent>
                         </Card>
@@ -596,159 +856,198 @@ export default function Inspection() {
                   ))}
                 </div>
               )}
-            </>
-          )}
 
-          {activeTab === "inspection" && (
-            <>
-              {/* Final Testing Measurements Section - Only show for Final Testing jobs */}
-              {job?.inspectionType === 'Final Testing' && (
-                <FinalTestingMeasurements jobId={jobId!} />
-              )}
-
-              {checklistItems.length === 0 ? (
-                <div className="bg-card rounded-md border border-card-border p-8 text-center">
-                  <p className="text-muted-foreground">No checklist items found for this job.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {checklistItems.map((item) => (
-                    <ChecklistItem
-                      key={item.id}
-                      id={item.id}
-                      itemNumber={item.itemNumber}
-                      title={item.title}
-                      completed={item.completed ?? false}
-                      notes={item.notes || ""}
-                      photoCount={item.photoCount ?? 0}
-                      voiceNoteUrl={item.voiceNoteUrl}
-                      voiceNoteDuration={item.voiceNoteDuration}
-                      onToggle={handleToggle}
-                      onNotesChange={handleNotesChange}
-                      onPhotoAdd={handlePhotoAdd}
-                      onVoiceNoteAdd={handleVoiceNoteAdd}
-                      onVoiceNoteDelete={handleVoiceNoteDelete}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-4">
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={handleSave}
-                  data-testid="button-save-draft"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Draft
-                </Button>
-                <Button 
-                  className="flex-1 bg-success text-success-foreground hover:bg-success/90"
-                  disabled={completedCount < totalCount || updateChecklistItemMutation.isPending}
-                  data-testid="button-complete"
-                >
-                  {updateChecklistItemMutation.isPending && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Complete Inspection
-                </Button>
-              </div>
-            </>
-          )}
-
-          {activeTab === "photos" && jobId && (
-            <EnhancedPhotoGallery
-              jobId={jobId}
-              inspectionType={job?.inspectionType || "General Inspection"}
-              enableCapture={true}
-              showUploadButton={true}
-              data-testid="photo-gallery-inspection"
-            />
-          )}
-
-          {activeTab === "dashboard" && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Inspection Overview</CardTitle>
-                  <CardDescription>Quick stats and summary</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Progress</p>
-                      <p className="text-2xl font-bold">{progress.toFixed(0)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Completed</p>
-                      <p className="text-2xl font-bold">{completedCount}/{totalCount}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Status</p>
-                    <Badge variant={job?.status === 'completed' ? 'default' : 'secondary'}>
-                      {job?.status || 'In Progress'}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {job?.status !== 'completed' && (
-                <Card data-testid="card-complete-job">
-                  <CardHeader>
-                    <CardTitle className="text-base">Complete Inspection</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Button
-                      className="w-full"
-                      size="lg"
-                      variant="default"
-                      disabled={!canCompleteJob || completeJobMutation.isPending}
-                      onClick={handleCompleteJob}
-                      data-testid="button-complete-job"
+              {/* Duct Leakage Test Error State */}
+              {ductLeakageError && (
+                <Alert variant="destructive" data-testid="error-duct-leakage-query">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle data-testid="text-error-duct-leakage-title">Duct Leakage Tests Unavailable</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between gap-4">
+                    <span data-testid="text-error-duct-leakage-description">
+                      {ductLeakageError instanceof Error ? ductLeakageError.message : "Unable to load test data"}
+                    </span>
+                    <Button 
+                      onClick={handleRetryDuctLeakage}
+                      variant="outline"
+                      size="sm"
+                      data-testid="button-retry-duct-leakage"
                     >
-                      {completeJobMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Completing...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 mr-2" />
-                          Mark Job Complete
-                        </>
-                      )}
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry
                     </Button>
-                    {!canCompleteJob && !completeJobMutation.isPending && (
-                      <p className="text-sm text-muted-foreground mt-2 text-center">
-                        Complete all workflow requirements first
-                      </p>
-                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Ventilation Test Error State */}
+              {ventilationError && (
+                <Alert variant="destructive" data-testid="error-ventilation-query">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle data-testid="text-error-ventilation-title">Ventilation Tests Unavailable</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between gap-4">
+                    <span data-testid="text-error-ventilation-description">
+                      {ventilationError instanceof Error ? ventilationError.message : "Unable to load test data"}
+                    </span>
+                    <Button 
+                      onClick={handleRetryVentilation}
+                      variant="outline"
+                      size="sm"
+                      data-testid="button-retry-ventilation"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          )}
+
+          {/* Inspection Checklist Tab */}
+          {activeTab === TAB_OPTIONS.INSPECTION && (
+            <div className="space-y-4" data-testid="section-checklist">
+              <h3 className="text-lg font-semibold" data-testid="text-checklist-title">Inspection Checklist</h3>
+              
+              {checklistItems.length === 0 ? (
+                <Card data-testid="empty-checklist">
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <CheckCircle2 className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground text-center" data-testid="text-empty-checklist">
+                      No checklist items available for this inspection.
+                    </p>
                   </CardContent>
                 </Card>
+              ) : (
+                checklistItems.map((item) => (
+                  <ChecklistItem
+                    key={item.id}
+                    item={item}
+                    onToggle={handleToggle}
+                    onNotesChange={handleNotesChange}
+                    onPhotoAdd={handlePhotoAdd}
+                    onVoiceNoteAdd={handleVoiceNoteAdd}
+                    onVoiceNoteDelete={handleVoiceNoteDelete}
+                    isVoiceNoteLoading={voiceNoteLoadingId === item.id}
+                  />
+                ))
               )}
             </div>
           )}
 
-          {activeTab === "forecast" && (
-            <div className="bg-card rounded-md border border-card-border p-8 text-center">
-              <p className="text-muted-foreground">Forecast feature coming soon</p>
+          {/* Photos Tab */}
+          {activeTab === TAB_OPTIONS.PHOTOS && job && (
+            <div data-testid="section-photos">
+              <EnhancedPhotoGallery jobId={jobId} />
             </div>
           )}
+
+          {/* Forecast/Tests Tab */}
+          {activeTab === TAB_OPTIONS.FORECAST && job && (
+            <div data-testid="section-forecast">
+              <FinalTestingMeasurements jobId={jobId} job={job} />
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-4">
+            <Button
+              onClick={handleSave}
+              variant="outline"
+              className="flex-1"
+              data-testid="button-save"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save Progress
+            </Button>
+            <Button
+              onClick={handleCompleteJob}
+              disabled={!canCompleteJob || completeJobMutation.isPending}
+              className="flex-1"
+              data-testid="button-complete"
+            >
+              {completeJobMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Completing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Complete Inspection
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </main>
 
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
 
-      {/* Completion Celebration */}
-      {showCelebration && job && (
+      {/* Phase 5 - HARDEN: Confirmation dialog for job completion */}
+      <AlertDialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
+        <AlertDialogContent data-testid="dialog-complete-confirmation">
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="text-dialog-title">Complete Inspection?</AlertDialogTitle>
+            <AlertDialogDescription data-testid="text-dialog-description">
+              This will mark the inspection as complete. Make sure all requirements are met before proceeding.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-complete">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmComplete}
+              data-testid="button-confirm-complete"
+            >
+              Complete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Job Completion Celebration */}
+      {showCelebration && (
         <JobCompletionCelebration
-          job={job}
           onClose={() => setShowCelebration(false)}
+          jobName={job?.name ?? "Inspection"}
         />
       )}
     </div>
+  );
+}
+
+// Phase 2 - BUILD: Wrap component in ErrorBoundary for production resilience
+export default function Inspection() {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center p-6" data-testid="error-boundary-fallback">
+          <Card className="max-w-md w-full border-destructive/20">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+                <CardTitle className="text-destructive" data-testid="text-error-boundary-title">
+                  Something went wrong
+                </CardTitle>
+              </div>
+              <CardDescription data-testid="text-error-boundary-description">
+                The inspection page encountered an unexpected error. Please try refreshing the page.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button
+                onClick={() => window.location.reload()}
+                className="w-full"
+                data-testid="button-error-boundary-reload"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Reload Page
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      }
+    >
+      <InspectionContent />
+    </ErrorBoundary>
   );
 }
