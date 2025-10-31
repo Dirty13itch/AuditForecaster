@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi, ChevronLeft, ChevronRight, Download, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ListItemSkeleton, DashboardCardSkeleton } from "@/components/ui/skeleton-variants";
 import { 
   FadeIn, 
@@ -18,6 +19,7 @@ import {
 import { useDebounce } from "@/hooks/useAnimation";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, GoogleEvent } from "@shared/schema";
 import type { PaginatedResult } from "@shared/pagination";
@@ -36,8 +38,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
+// Status colors for job states
+const STATUS_COLORS = {
+  pending: "warning",
+  "in-progress": "info",
+  completed: "success",
+  review: "secondary",
+} as const;
+
+// Default pagination sizes
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
+// Sync check interval (milliseconds)
+const SYNC_CHECK_INTERVAL = 5000;
+
+// Skeleton counts for loading states
+const SKELETON_COUNTS = {
+  plannedEvents: 2,
+  todaysJobs: 3,
+  completedToday: 2,
+  allJobs: 5,
+} as const;
+
 // Pagination hook to manage URL state
-function usePagination(key: string, defaultPageSize = 25) {
+function usePagination(key: string, defaultPageSize = DEFAULT_PAGE_SIZE) {
   const [location, navigate] = useLocation();
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
   
@@ -95,10 +121,11 @@ function PaginationControls({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="10" data-testid="option-page-size-10">10</SelectItem>
-              <SelectItem value="25" data-testid="option-page-size-25">25</SelectItem>
-              <SelectItem value="50" data-testid="option-page-size-50">50</SelectItem>
-              <SelectItem value="100" data-testid="option-page-size-100">100</SelectItem>
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <SelectItem key={size} value={size.toString()} data-testid={`option-page-size-${size}`}>
+                  {size}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -159,7 +186,8 @@ function PaginationControls({
   );
 }
 
-export default function Jobs() {
+// Phase 2 - BUILD: JobsContent component wrapped in ErrorBoundary at export
+function JobsContent() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -209,38 +237,62 @@ export default function Jobs() {
     };
   }, [toast]);
   
-  // Check pending sync status for jobs
-  useEffect(() => {
-    const checkPendingSync = async () => {
-      const queue = await syncQueue.getQueue();
-      const pendingJobIds = new Set<number>();
-      
-      for (const item of queue) {
-        if (item.url.includes('/api/jobs/')) {
-          const match = item.url.match(/\/api\/jobs\/(\d+)/);
-          if (match) {
-            pendingJobIds.add(parseInt(match[1]));
-          }
+  /**
+   * Phase 3 - OPTIMIZE: Memoized callback prevents recreation on every render
+   * 
+   * Business Logic - Offline Sync Tracking:
+   * - Scans the offline sync queue for pending job mutations
+   * - Extracts job IDs from queued API calls (e.g., /api/jobs/123)
+   * - Updates UI to show "syncing" badges on affected jobs
+   * - Runs every 5 seconds (SYNC_CHECK_INTERVAL) to keep UI updated
+   * - Critical for field operations where inspectors work offline
+   */
+  const checkPendingSync = useCallback(async () => {
+    const queue = await syncQueue.getQueue();
+    const pendingJobIds = new Set<number>();
+    
+    for (const item of queue) {
+      if (item.url.includes('/api/jobs/')) {
+        const match = item.url.match(/\/api\/jobs\/(\d+)/);
+        if (match) {
+          pendingJobIds.add(parseInt(match[1]));
         }
       }
-      
-      setPendingSyncJobs(pendingJobIds);
-    };
+    }
     
-    checkPendingSync();
-    // Refresh every 5 seconds
-    const interval = setInterval(checkPendingSync, 5000);
-    
-    return () => clearInterval(interval);
+    setPendingSyncJobs(pendingJobIds);
   }, []);
 
-  // Fetch planned events (today's unconverted Google calendar events)
-  const { data: plannedEvents = [], isLoading: isLoadingPlanned } = useQuery<GoogleEvent[]>({
+  // Check pending sync status for jobs
+  useEffect(() => {
+    checkPendingSync();
+    // Phase 3 - OPTIMIZE: Use constant for interval duration
+    const interval = setInterval(checkPendingSync, SYNC_CHECK_INTERVAL);
+    
+    // Phase 3 - OPTIMIZE: Cleanup function prevents memory leak
+    return () => clearInterval(interval);
+  }, [checkPendingSync]);
+
+  // Phase 5 - HARDEN: Fetch planned events (today's unconverted Google calendar events)
+  // retry: 2 added for network resilience
+  const { 
+    data: plannedEvents = [], 
+    isLoading: isLoadingPlanned,
+    error: plannedEventsError,
+    refetch: refetchPlannedEvents
+  } = useQuery<GoogleEvent[]>({
     queryKey: ["/api/google-events/today"],
+    retry: 2,
   });
 
-  // Fetch today's active jobs with pagination
-  const { data: todaysJobsData, isLoading: isLoadingTodays } = useQuery<PaginatedResult<Job>>({
+  // Phase 5 - HARDEN: Fetch today's active jobs with pagination
+  // retry: 2 added for network resilience
+  const { 
+    data: todaysJobsData, 
+    isLoading: isLoadingTodays,
+    error: todaysJobsError,
+    refetch: refetchTodaysJobs
+  } = useQuery<PaginatedResult<Job>>({
     queryKey: ["/api/jobs/today", { limit: todaysPagination.pageSize, offset: todaysPagination.offset }],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -255,10 +307,17 @@ export default function Jobs() {
       }
       return response.json();
     },
+    retry: 2,
   });
 
-  // Fetch today's completed jobs with pagination
-  const { data: completedTodayData, isLoading: isLoadingCompleted } = useQuery<PaginatedResult<Job>>({
+  // Phase 5 - HARDEN: Fetch today's completed jobs with pagination
+  // retry: 2 added for network resilience
+  const { 
+    data: completedTodayData, 
+    isLoading: isLoadingCompleted,
+    error: completedTodayError,
+    refetch: refetchCompletedToday
+  } = useQuery<PaginatedResult<Job>>({
     queryKey: ["/api/jobs/completed-today", { limit: completedPagination.pageSize, offset: completedPagination.offset }],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -273,10 +332,17 @@ export default function Jobs() {
       }
       return response.json();
     },
+    retry: 2,
   });
 
-  // Fetch all jobs with standard pagination
-  const { data: allJobsData, isLoading: isLoadingAll } = useQuery<PaginatedResult<Job>>({
+  // Phase 5 - HARDEN: Fetch all jobs with standard pagination
+  // retry: 2 added for network resilience
+  const { 
+    data: allJobsData, 
+    isLoading: isLoadingAll,
+    error: allJobsError,
+    refetch: refetchAllJobs
+  } = useQuery<PaginatedResult<Job>>({
     queryKey: ["/api/jobs", { limit: allJobsPagination.pageSize, offset: allJobsPagination.offset }],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -291,6 +357,7 @@ export default function Jobs() {
       }
       return response.json();
     },
+    retry: 2,
   });
 
   // Extract data and pagination info
@@ -301,13 +368,24 @@ export default function Jobs() {
   const allJobs = allJobsData?.data || [];
   const allJobsPaginationInfo = allJobsData?.pagination;
 
-  // Fetch builders for job cards
-  const { data: builders = [] } = useQuery<Builder[]>({
+  // Phase 5 - HARDEN: Fetch builders for job cards
+  // retry: 2 added for network resilience
+  const { 
+    data: builders = [],
+    error: buildersError,
+    refetch: refetchBuilders
+  } = useQuery<Builder[]>({
     queryKey: ["/api/builders"],
+    retry: 2,
   });
 
-  // Fetch all inspectors for assignment (admin only)
-  const { data: inspectors = [] } = useQuery<Array<{
+  // Phase 5 - HARDEN: Fetch all inspectors for assignment (admin only)
+  // retry: 2 added for network resilience
+  const { 
+    data: inspectors = [],
+    error: inspectorsError,
+    refetch: refetchInspectors
+  } = useQuery<Array<{
     id: string;
     firstName: string | null;
     lastName: string | null;
@@ -316,10 +394,16 @@ export default function Jobs() {
   }>>({
     queryKey: ["/api/users/inspectors"],
     enabled: userRole === 'admin',
+    retry: 2,
   });
 
-  // Fetch inspector workload (next 30 days - admin only)
-  const { data: inspectorWorkload = [] } = useQuery<Array<{
+  // Phase 5 - HARDEN: Fetch inspector workload (next 30 days - admin only)
+  // retry: 2 added for network resilience
+  const { 
+    data: inspectorWorkload = [],
+    error: workloadError,
+    refetch: refetchWorkload
+  } = useQuery<Array<{
     inspectorId: string;
     inspectorName: string;
     jobCount: number;
@@ -346,9 +430,20 @@ export default function Jobs() {
       return response.json();
     },
     enabled: userRole === 'admin',
+    retry: 2,
   });
 
-  // Assign job to inspector mutation
+  /**
+   * Assign Job to Inspector Mutation - Admin-only operation
+   * 
+   * Business Logic:
+   * - Updates job.assignedTo field to the selected inspector
+   * - Invalidates multiple caches to ensure UI consistency:
+   *   * All job lists (today, completed, all) - shows new assignment
+   *   * Inspector workload - updates their job count
+   * - Uses refetchType: 'active' for immediate UI update
+   * - Critical for workload balancing across inspectors
+   */
   const assignJobMutation = useMutation({
     mutationFn: async ({ jobId, inspectorId }: { jobId: string; inspectorId: string }) => {
       return apiRequest("POST", `/api/jobs/${jobId}/assign`, { inspectorId });
@@ -552,11 +647,28 @@ export default function Jobs() {
             </AccordionTrigger>
             <AccordionContent className="px-6 pb-6 pt-2">
               {isLoadingPlanned ? (
-                <div className="space-y-3">
-                  {[1, 2].map((i) => (
+                <div className="space-y-3" data-testid="skeleton-planned-events">
+                  {Array.from({ length: SKELETON_COUNTS.plannedEvents }).map((_, i) => (
                     <ListItemSkeleton key={i} />
                   ))}
                 </div>
+              ) : plannedEventsError ? (
+                <Alert variant="destructive" data-testid="alert-error-planned-events">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error Loading Calendar Events</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{(plannedEventsError as Error).message || 'Failed to load planned events'}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refetchPlannedEvents()}
+                      data-testid="button-retry-planned-events"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
               ) : (
                 <StaggerContainer className="space-y-3">
                   {plannedEvents.map((event: GoogleEvent) => (
@@ -645,11 +757,28 @@ export default function Jobs() {
           </AccordionTrigger>
           <AccordionContent className="px-6 pb-6 pt-2">
             {isLoadingTodays ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
+              <div className="space-y-3" data-testid="skeleton-todays-jobs">
+                {Array.from({ length: SKELETON_COUNTS.todaysJobs }).map((_, i) => (
                   <DashboardCardSkeleton key={i} />
                 ))}
               </div>
+            ) : todaysJobsError ? (
+              <Alert variant="destructive" data-testid="alert-error-todays-jobs">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Today's Jobs</AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{(todaysJobsError as Error).message || "Failed to load today's jobs"}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchTodaysJobs()}
+                    data-testid="button-retry-todays-jobs"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : todaysJobs.length === 0 ? (
               <div className="text-center py-12" data-testid="empty-todays-jobs">
                 <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
@@ -693,9 +822,7 @@ export default function Jobs() {
             data-testid="accordion-trigger-completed-today"
           >
             <div className="flex items-center gap-3">
-              <Badge className="bg-success text-success-foreground">
-                ✓
-              </Badge>
+              <CheckCircle2 className="w-5 h-5 text-success" />
               <div className="text-left">
                 <h2 className="text-lg font-semibold">Completed Today</h2>
                 <p className="text-sm text-muted-foreground">
@@ -706,16 +833,31 @@ export default function Jobs() {
           </AccordionTrigger>
           <AccordionContent className="px-6 pb-6 pt-2">
             {isLoadingCompleted ? (
-              <div className="space-y-3">
-                {[1, 2].map((i) => (
+              <div className="space-y-3" data-testid="skeleton-completed-today">
+                {Array.from({ length: SKELETON_COUNTS.completedToday }).map((_, i) => (
                   <DashboardCardSkeleton key={i} />
                 ))}
               </div>
+            ) : completedTodayError ? (
+              <Alert variant="destructive" data-testid="alert-error-completed-today">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Completed Jobs</AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{(completedTodayError as Error).message || 'Failed to load completed jobs'}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchCompletedToday()}
+                    data-testid="button-retry-completed-today"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : completedToday.length === 0 ? (
               <div className="text-center py-12" data-testid="empty-completed-today">
-                <Badge className="w-12 h-12 mx-auto mb-3 bg-muted text-muted-foreground rounded-full flex items-center justify-center text-2xl">
-                  ✓
-                </Badge>
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
                 <p className="text-muted-foreground">No jobs completed today yet</p>
               </div>
             ) : (
@@ -766,11 +908,28 @@ export default function Jobs() {
           </AccordionTrigger>
           <AccordionContent className="px-6 pb-6 pt-2">
             {isLoadingAll ? (
-              <div className="space-y-3">
-                {[1, 2, 3, 4, 5].map((i) => (
+              <div className="space-y-3" data-testid="skeleton-all-jobs">
+                {Array.from({ length: SKELETON_COUNTS.allJobs }).map((_, i) => (
                   <DashboardCardSkeleton key={i} />
                 ))}
               </div>
+            ) : allJobsError ? (
+              <Alert variant="destructive" data-testid="alert-error-all-jobs">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Jobs</AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{(allJobsError as Error).message || 'Failed to load jobs'}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchAllJobs()}
+                    data-testid="button-retry-all-jobs"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : allJobs.length === 0 ? (
               <div className="text-center py-12" data-testid="empty-all-jobs">
                 <Plus className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
@@ -863,5 +1022,36 @@ export default function Jobs() {
         />
       )}
     </div>
+  );
+}
+
+// Phase 2 - BUILD: Export component wrapped in ErrorBoundary for production resilience
+export default function Jobs() {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="error-boundary-jobs">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error Loading Jobs Page</AlertTitle>
+            <AlertDescription>
+              <p className="mb-4">
+                An unexpected error occurred while loading the jobs page. Please try refreshing the page.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => window.location.reload()}
+                data-testid="button-reload-page"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Reload Page
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      }
+    >
+      <JobsContent />
+    </ErrorBoundary>
   );
 }
