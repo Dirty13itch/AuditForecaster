@@ -8,6 +8,7 @@ import ChecklistItem from "@/components/ChecklistItem";
 import BottomNav from "@/components/BottomNav";
 import { FinalTestingMeasurements } from "@/components/FinalTestingMeasurements";
 import { EnhancedPhotoGallery } from "@/components/photos/EnhancedPhotoGallery";
+import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,7 @@ import type { ChecklistItem as ChecklistItemType, UpdateChecklistItem, Job } fro
 export default function Inspection() {
   const { id: jobId } = useParams<{ id: string }>();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"dashboard" | "inspection" | "photos" | "forecast">("inspection");
+  const [activeTab, setActiveTab] = useState<"workflow" | "dashboard" | "inspection" | "photos" | "forecast">("workflow");
   const [voiceNoteLoadingId, setVoiceNoteLoadingId] = useState<string | null>(null);
 
   const { data: job, isLoading: isLoadingJob } = useQuery<Job>({
@@ -47,6 +48,22 @@ export default function Inspection() {
       if (!response.ok) throw new Error("Failed to fetch checklist items");
       return response.json();
     },
+    enabled: !!jobId,
+  });
+
+  // Query for test data to determine workflow progress
+  const { data: blowerDoorTests = [] } = useQuery({
+    queryKey: ["/api/blower-door-tests", jobId],
+    enabled: !!jobId,
+  });
+
+  const { data: ductLeakageTests = [] } = useQuery({
+    queryKey: ["/api/duct-leakage-tests", jobId],
+    enabled: !!jobId,
+  });
+
+  const { data: ventilationTests = [] } = useQuery({
+    queryKey: ["/api/ventilation-tests", jobId],
     enabled: !!jobId,
   });
 
@@ -375,6 +392,19 @@ export default function Inspection() {
           </div>
 
           {/* Tab Content Switching */}
+          {activeTab === "workflow" && job && (
+            <WorkflowProgress
+              job={job}
+              checklistProgress={{
+                completed: completedCount,
+                total: totalCount,
+              }}
+              hasBlowerDoorTest={Array.isArray(blowerDoorTests) && blowerDoorTests.length > 0}
+              hasDuctLeakageTest={Array.isArray(ductLeakageTests) && ductLeakageTests.length > 0}
+              hasVentilationTest={Array.isArray(ventilationTests) && ventilationTests.length > 0}
+            />
+          )}
+
           {activeTab === "inspection" && (
             <>
               {/* Final Testing Measurements Section - Only show for Final Testing jobs */}

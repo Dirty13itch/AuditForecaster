@@ -1,17 +1,17 @@
-import { Home, ClipboardList, Camera, BarChart3 } from "lucide-react";
+import { Home, ClipboardList, Camera, BarChart3, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface BottomNavProps {
-  activeTab: "dashboard" | "inspection" | "photos" | "forecast";
-  onTabChange: (tab: "dashboard" | "inspection" | "photos" | "forecast") => void;
+  activeTab: "workflow" | "dashboard" | "inspection" | "photos" | "forecast";
+  onTabChange: (tab: "workflow" | "dashboard" | "inspection" | "photos" | "forecast") => void;
 }
 
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const tabs = [
-    { id: "dashboard" as const, label: "Dashboard", icon: Home },
+    { id: "workflow" as const, label: "Workflow", icon: MapPin },
     { id: "inspection" as const, label: "Checklist", icon: ClipboardList },
     { id: "photos" as const, label: "Photos", icon: Camera },
-    { id: "forecast" as const, label: "Forecast", icon: BarChart3 },
+    { id: "dashboard" as const, label: "Overview", icon: Home },
   ];
 
   return (
