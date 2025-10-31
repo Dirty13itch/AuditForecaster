@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { useParams } from "wouter";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { DuctLeakageTest, InsertDuctLeakageTest } from "@shared/schema";
 import { 
@@ -21,6 +23,7 @@ import {
   Save, 
   AlertCircle, 
   CheckCircle,
+  XCircle,
   Home,
   Wrench,
   Activity,
@@ -29,7 +32,8 @@ import {
   Clock,
   Plus,
   Trash2,
-  Download
+  Download,
+  RefreshCw
 } from "lucide-react";
 
 interface PressurePanReading {
@@ -39,14 +43,48 @@ interface PressurePanReading {
   passFail: 'pass' | 'fail' | 'marginal';
 }
 
-function DuctLeakageTestPage() {
+// Phase 3 - OPTIMIZE: Module-level constants for compliance thresholds and calibration factors
+// Phase 6 - DOCUMENT: Minnesota 2020 Energy Code compliance thresholds
+// Minnesota 2020 Energy Code Climate Zone 6: Maximum allowed Total Duct Leakage
+const MINNESOTA_TDL_LIMIT = 4.0; // CFM25 per 100 square feet of conditioned floor area
+
+// Minnesota 2020 Energy Code Climate Zone 6: Maximum allowed Duct Leakage to Outside
+const MINNESOTA_DLO_LIMIT = 3.0; // CFM25 per 100 square feet of conditioned floor area
+
+// Phase 6 - DOCUMENT: Minneapolis Duct Blaster calibration factors
+// These factors are used in the equation: CFM = C × (ΔP)^n
+// Where C is the flow coefficient and n is the flow exponent
+const RING_CALIBRATION_FACTORS: Record<string, { C: number; n: number }> = {
+  "Open": { C: 110, n: 0.5 },      // Open fan configuration (no ring restriction)
+  "Ring 1": { C: 71, n: 0.5 },     // Ring 1 (65% of open flow)
+  "Ring 2": { C: 46, n: 0.5 },     // Ring 2 (42% of open flow)
+  "Ring 3": { C: 31, n: 0.5 },     // Ring 3 (28% of open flow)
+};
+
+// Phase 6 - DOCUMENT: Pressure pan evaluation thresholds (industry standard)
+// Based on RESNET standards for pressure pan testing
+const PRESSURE_PAN_PASS_THRESHOLD = 1.0;      // Pa - Good duct seal
+const PRESSURE_PAN_MARGINAL_THRESHOLD = 3.0;  // Pa - Acceptable with minor leakage
+// Readings above 3.0 Pa indicate significant leakage requiring repair
+
+// Phase 6 - DOCUMENT: DLO test standard house pressure
+// For accurate Duct Leakage to Outside testing, house must be depressurized to -25 Pa
+const DLO_STANDARD_HOUSE_PRESSURE = -25; // Pa
+
+// Default initial pressure pan readings for typical single-family home
+const DEFAULT_PRESSURE_PAN_READINGS: PressurePanReading[] = [
+  { location: "Master Bedroom", supplyReturn: "supply", reading: 0, passFail: "pass" },
+  { location: "Bedroom 2", supplyReturn: "supply", reading: 0, passFail: "pass" },
+  { location: "Bedroom 3", supplyReturn: "supply", reading: 0, passFail: "pass" },
+  { location: "Living Room", supplyReturn: "supply", reading: 0, passFail: "pass" },
+  { location: "Kitchen", supplyReturn: "supply", reading: 0, passFail: "pass" },
+  { location: "Hallway", supplyReturn: "return", reading: 0, passFail: "pass" },
+];
+
+function DuctLeakageTestContent() {
   const { toast } = useToast();
   const { jobId } = useParams<{ jobId: string }>();
   const [activeTab, setActiveTab] = useState("setup");
-  
-  // Minnesota 2020 Energy Code limits (accurate values)
-  const MINNESOTA_TDL_LIMIT = 4.0; // CFM25/100 sq ft for Total Duct Leakage
-  const MINNESOTA_DLO_LIMIT = 3.0; // CFM25/100 sq ft for Duct Leakage to Outside
   
   // Test data state - matching database schema
   const [testData, setTestData] = useState<Partial<InsertDuctLeakageTest>>({
@@ -66,21 +104,14 @@ function DuctLeakageTestPage() {
     totalCfmPerSqFt: 0,
     totalPercentOfFlow: 0,
     // Duct Leakage to Outside fields
-    outsideHousePressure: -25,
+    outsideHousePressure: DLO_STANDARD_HOUSE_PRESSURE,
     outsideFanPressure: 0,
     outsideRingConfiguration: "Open",
     cfm25Outside: 0,
     outsideCfmPerSqFt: 0,
     outsidePercentOfFlow: 0,
     // Pressure Pan readings (as JSON)
-    pressurePanReadings: [
-      { location: "Master Bedroom", supplyReturn: "supply", reading: 0, passFail: "pass" },
-      { location: "Bedroom 2", supplyReturn: "supply", reading: 0, passFail: "pass" },
-      { location: "Bedroom 3", supplyReturn: "supply", reading: 0, passFail: "pass" },
-      { location: "Living Room", supplyReturn: "supply", reading: 0, passFail: "pass" },
-      { location: "Kitchen", supplyReturn: "supply", reading: 0, passFail: "pass" },
-      { location: "Hallway", supplyReturn: "return", reading: 0, passFail: "pass" },
-    ] as PressurePanReading[],
+    pressurePanReadings: DEFAULT_PRESSURE_PAN_READINGS,
     // Code compliance
     codeYear: "2020",
     totalDuctLeakageLimit: MINNESOTA_TDL_LIMIT,
@@ -92,16 +123,28 @@ function DuctLeakageTestPage() {
     recommendations: "",
   });
 
-  // Fetch job data
-  const { data: job } = useQuery({
+  // Phase 5 - HARDEN: Fetch job data with retry: 2 for resilience
+  const { 
+    data: job, 
+    isLoading: loadingJob,
+    error: jobError,
+    refetch: refetchJob
+  } = useQuery({
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
+    retry: 2,
   });
 
-  // Fetch latest test data if exists
-  const { data: existingTest, isLoading: loadingTest } = useQuery({
+  // Phase 5 - HARDEN: Fetch latest test data with retry: 2
+  const { 
+    data: existingTest, 
+    isLoading: loadingTest,
+    error: testError,
+    refetch: refetchTest
+  } = useQuery({
     queryKey: ["/api/jobs", jobId, "duct-leakage-tests/latest"],
     enabled: !!jobId,
+    retry: 2,
   });
 
   // Load existing test data if available
@@ -111,7 +154,7 @@ function DuctLeakageTestPage() {
         ...existingTest,
         testDate: new Date(existingTest.testDate),
         equipmentCalibrationDate: existingTest.equipmentCalibrationDate ? new Date(existingTest.equipmentCalibrationDate) : undefined,
-        pressurePanReadings: existingTest.pressurePanReadings || [],
+        pressurePanReadings: existingTest.pressurePanReadings || DEFAULT_PRESSURE_PAN_READINGS,
       });
     } else if (job) {
       // Use job's building data if available
@@ -122,33 +165,29 @@ function DuctLeakageTestPage() {
     }
   }, [existingTest, job]);
 
-  // Calculate CFM25 from fan pressure with accurate calibration curves
-  const calculateCFM25 = (fanPressure: number, ringConfig: string): number => {
-    if (fanPressure <= 0) return 0;
+  // Phase 3 - OPTIMIZE: Memoize CFM calculation with useCallback
+  // Phase 6 - DOCUMENT: Calculate CFM25 from fan pressure using calibration curves
+  // Uses manufacturer-provided calibration factors for Minneapolis Duct Blaster
+  // Formula: CFM = C × (ΔP)^n where C and n are equipment-specific calibration factors
+  const calculateCFM25 = useCallback((fanPressure: number, ringConfig: string): number => {
+    // Phase 5 - HARDEN: Validate inputs
+    if (fanPressure <= 0 || isNaN(fanPressure)) return 0;
     
-    // Minneapolis Duct Blaster calibration factors (typical for Minnesota testing)
-    // These are more accurate than the simplified formula
-    const ringFactors: Record<string, { C: number; n: number }> = {
-      "Open": { C: 110, n: 0.5 },      // Open configuration
-      "Ring 1": { C: 71, n: 0.5 },     // Ring 1 (65% flow reduction)
-      "Ring 2": { C: 46, n: 0.5 },     // Ring 2 (42% flow reduction)
-      "Ring 3": { C: 31, n: 0.5 },     // Ring 3 (28% flow reduction)
-    };
-    
-    const config = ringFactors[ringConfig] || ringFactors["Open"];
+    const config = RING_CALIBRATION_FACTORS[ringConfig] || RING_CALIBRATION_FACTORS["Open"];
     
     // Calculate CFM at measured pressure, then convert to CFM25
+    // Assuming test is conducted at target 25 Pa pressure
     const cfmMeasured = config.C * Math.pow(fanPressure, config.n);
     
-    // If we're not at exactly 25 Pa, correct to 25 Pa using flow equation
-    // This is typically not needed as we target 25 Pa in the test
-    const cfm25 = cfmMeasured; // Assuming test is at 25 Pa
-    
-    return cfm25;
-  };
+    return cfmMeasured;
+  }, []);
 
-  // Calculate Total Duct Leakage results with accurate Minnesota compliance
-  const calculateTotalDuctLeakage = () => {
+  // Phase 3 - OPTIMIZE: Memoize Total Duct Leakage calculation with useCallback
+  // Phase 6 - DOCUMENT: Calculate Total Duct Leakage results with Minnesota 2020 Energy Code compliance
+  // TDL measures total air leakage from entire duct system (both supply and return)
+  // Result is expressed as CFM25 per 100 square feet of conditioned floor area
+  const calculateTotalDuctLeakage = useCallback(() => {
+    // Phase 5 - HARDEN: Validate conditioned area input
     if (!testData.conditionedArea || testData.conditionedArea <= 0) {
       toast({
         title: "Missing data",
@@ -159,12 +198,16 @@ function DuctLeakageTestPage() {
     }
 
     const cfm25 = calculateCFM25(testData.totalFanPressure || 0, testData.totalRingConfiguration || "Open");
-    const cfmPerSqFt = (cfm25 * 100) / testData.conditionedArea; // CFM25 per 100 sq ft
+    
+    // Calculate CFM25 per 100 square feet (Minnesota code metric)
+    const cfmPerSqFt = (cfm25 * 100) / testData.conditionedArea;
+    
+    // Calculate percentage of design airflow (secondary metric for HVAC sizing)
     const percentOfFlow = testData.systemAirflow && testData.systemAirflow > 0 
       ? (cfm25 / testData.systemAirflow) * 100 
       : 0;
     
-    // Minnesota 2020 Energy Code: ≤ 4.0 CFM25/100 sq ft for TDL
+    // Check Minnesota 2020 Energy Code compliance (≤ 4.0 CFM25/100 sq ft for TDL)
     const meetsCode = cfmPerSqFt <= MINNESOTA_TDL_LIMIT;
     
     setTestData(prev => ({
@@ -175,15 +218,38 @@ function DuctLeakageTestPage() {
       meetsCodeTDL: meetsCode,
     }));
     
+    // Phase 2 - BUILD: Replace emoji with lucide icons in toast
     toast({
       title: "TDL calculated",
-      description: `${cfmPerSqFt.toFixed(2)} CFM25/100ft² | ${meetsCode ? '✓ Passes' : '✗ Fails'} Minnesota 2020 Code (≤${MINNESOTA_TDL_LIMIT})`,
+      description: (
+        <div className="flex items-center gap-2" data-testid="toast-tdl-result">
+          <span>{cfmPerSqFt.toFixed(2)} CFM25/100ft²</span>
+          <span>|</span>
+          {meetsCode ? (
+            <>
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <span>Passes</span>
+            </>
+          ) : (
+            <>
+              <XCircle className="h-4 w-4 text-red-600" />
+              <span>Fails</span>
+            </>
+          )}
+          <span>Minnesota 2020 Code (≤{MINNESOTA_TDL_LIMIT})</span>
+        </div>
+      ),
       variant: meetsCode ? "default" : "destructive",
     });
-  };
+  }, [testData.conditionedArea, testData.totalFanPressure, testData.totalRingConfiguration, testData.systemAirflow, calculateCFM25, toast]);
 
-  // Calculate Duct Leakage to Outside results with accurate Minnesota compliance
-  const calculateLeakageToOutside = () => {
+  // Phase 3 - OPTIMIZE: Memoize Duct Leakage to Outside calculation with useCallback
+  // Phase 6 - DOCUMENT: Calculate Duct Leakage to Outside results with Minnesota 2020 Energy Code compliance
+  // DLO measures air leakage from ducts to unconditioned spaces (attic, crawlspace, outside)
+  // Test requires house to be depressurized to -25 Pa while measuring duct leakage
+  // Result is expressed as CFM25 per 100 square feet of conditioned floor area
+  const calculateLeakageToOutside = useCallback(() => {
+    // Phase 5 - HARDEN: Validate conditioned area input
     if (!testData.conditionedArea || testData.conditionedArea <= 0) {
       toast({
         title: "Missing data",
@@ -193,22 +259,27 @@ function DuctLeakageTestPage() {
       return;
     }
 
-    // For DLO test, house should be at -25 Pa
-    if (Math.abs((testData.outsideHousePressure || 0) + 25) > 2) {
+    // Phase 5 - HARDEN: Validate house pressure for accurate DLO testing
+    // DLO test requires house pressure at -25 Pa ± 2 Pa
+    if (Math.abs((testData.outsideHousePressure || 0) - DLO_STANDARD_HOUSE_PRESSURE) > 2) {
       toast({
         title: "Warning",
-        description: "House pressure should be at -25 Pa for accurate DLO testing",
+        description: `House pressure should be at ${DLO_STANDARD_HOUSE_PRESSURE} Pa for accurate DLO testing`,
         variant: "destructive",
       });
     }
 
     const cfm25 = calculateCFM25(testData.outsideFanPressure || 0, testData.outsideRingConfiguration || "Open");
-    const cfmPerSqFt = (cfm25 * 100) / testData.conditionedArea; // CFM25 per 100 sq ft
+    
+    // Calculate CFM25 per 100 square feet (Minnesota code metric)
+    const cfmPerSqFt = (cfm25 * 100) / testData.conditionedArea;
+    
+    // Calculate percentage of design airflow (secondary metric for HVAC sizing)
     const percentOfFlow = testData.systemAirflow && testData.systemAirflow > 0 
       ? (cfm25 / testData.systemAirflow) * 100 
       : 0;
     
-    // Minnesota 2020 Energy Code: ≤ 3.0 CFM25/100 sq ft for DLO
+    // Check Minnesota 2020 Energy Code compliance (≤ 3.0 CFM25/100 sq ft for DLO)
     const meetsCode = cfmPerSqFt <= MINNESOTA_DLO_LIMIT;
     
     setTestData(prev => ({
@@ -219,22 +290,43 @@ function DuctLeakageTestPage() {
       meetsCodeDLO: meetsCode,
     }));
     
+    // Phase 2 - BUILD: Replace emoji with lucide icons in toast
     toast({
       title: "DLO calculated",
-      description: `${cfmPerSqFt.toFixed(2)} CFM25/100ft² | ${meetsCode ? '✓ Passes' : '✗ Fails'} Minnesota 2020 Code (≤${MINNESOTA_DLO_LIMIT})`,
+      description: (
+        <div className="flex items-center gap-2" data-testid="toast-dlo-result">
+          <span>{cfmPerSqFt.toFixed(2)} CFM25/100ft²</span>
+          <span>|</span>
+          {meetsCode ? (
+            <>
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <span>Passes</span>
+            </>
+          ) : (
+            <>
+              <XCircle className="h-4 w-4 text-red-600" />
+              <span>Fails</span>
+            </>
+          )}
+          <span>Minnesota 2020 Code (≤{MINNESOTA_DLO_LIMIT})</span>
+        </div>
+      ),
       variant: meetsCode ? "default" : "destructive",
     });
-  };
+  }, [testData.conditionedArea, testData.outsideHousePressure, testData.outsideFanPressure, testData.outsideRingConfiguration, testData.systemAirflow, calculateCFM25, toast]);
 
-  // Evaluate pressure pan reading based on industry standards
-  const evaluatePressurePan = (reading: number): 'pass' | 'fail' | 'marginal' => {
-    if (reading <= 1.0) return 'pass';      // Good seal
-    if (reading <= 3.0) return 'marginal';  // Some leakage
-    return 'fail';                          // Significant leakage
-  };
+  // Phase 3 - OPTIMIZE: Memoize pressure pan evaluation with useCallback
+  // Phase 6 - DOCUMENT: Evaluate pressure pan reading based on RESNET industry standards
+  // Pressure pan test measures static pressure at each register with system fan on and registers sealed
+  // Lower readings indicate better duct connection seals
+  const evaluatePressurePan = useCallback((reading: number): 'pass' | 'fail' | 'marginal' => {
+    if (reading <= PRESSURE_PAN_PASS_THRESHOLD) return 'pass';      // ≤ 1.0 Pa - Good seal
+    if (reading <= PRESSURE_PAN_MARGINAL_THRESHOLD) return 'marginal';  // ≤ 3.0 Pa - Some leakage
+    return 'fail';                                                   // > 3.0 Pa - Significant leakage
+  }, []);
 
-  // Add new pressure pan reading
-  const addPressurePanReading = () => {
+  // Phase 3 - OPTIMIZE: Memoize event handlers with useCallback
+  const addPressurePanReading = useCallback(() => {
     setTestData(prev => ({
       ...prev,
       pressurePanReadings: [
@@ -242,15 +334,93 @@ function DuctLeakageTestPage() {
         { location: "", supplyReturn: "supply", reading: 0, passFail: "pass" }
       ]
     }));
-  };
+  }, []);
 
-  // Remove pressure pan reading
-  const removePressurePanReading = (index: number) => {
+  const removePressurePanReading = useCallback((index: number) => {
     setTestData(prev => ({
       ...prev,
       pressurePanReadings: (prev.pressurePanReadings as PressurePanReading[] || []).filter((_, i) => i !== index)
     }));
-  };
+  }, []);
+
+  // Phase 3 - OPTIMIZE: Memoize save handler with useCallback
+  const handleSaveTest = useCallback(() => {
+    // Phase 5 - HARDEN: Validate test data before saving
+    if (testData.testType === 'total' && !testData.cfm25Total) {
+      toast({
+        title: "Incomplete test",
+        description: "Please calculate TDL results before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (testData.testType === 'leakage_to_outside' && !testData.cfm25Outside) {
+      toast({
+        title: "Incomplete test",
+        description: "Please calculate DLO results before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (testData.testType === 'both' && (!testData.cfm25Total || !testData.cfm25Outside)) {
+      toast({
+        title: "Incomplete test",
+        description: "Please calculate both TDL and DLO results before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+    saveTestMutation.mutate(testData);
+  }, [testData]);
+
+  // Phase 3 - OPTIMIZE: Memoize PDF download handler with useCallback
+  const handleDownloadPDF = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/full-report/pdf`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `duct-leakage-test-${jobId}-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "PDF Downloaded",
+        description: "The test report has been downloaded successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Failed to download the PDF report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [jobId, toast]);
+
+  // Phase 3 - OPTIMIZE: Memoize retry handlers with useCallback
+  const handleRetryJob = useCallback(() => {
+    refetchJob();
+  }, [refetchJob]);
+
+  const handleRetryTest = useCallback(() => {
+    refetchTest();
+  }, [refetchTest]);
+
+  // Phase 3 - OPTIMIZE: Memoize tab change handler
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+  }, []);
 
   // Save test mutation
   const saveTestMutation = useMutation({
@@ -306,20 +476,13 @@ function DuctLeakageTestPage() {
         cfm25Total: 0,
         totalCfmPerSqFt: 0,
         totalPercentOfFlow: 0,
-        outsideHousePressure: -25,
+        outsideHousePressure: DLO_STANDARD_HOUSE_PRESSURE,
         outsideFanPressure: 0,
         outsideRingConfiguration: "Open",
         cfm25Outside: 0,
         outsideCfmPerSqFt: 0,
         outsidePercentOfFlow: 0,
-        pressurePanReadings: [
-          { location: "Master Bedroom", supplyReturn: "supply", reading: 0, passFail: "pass" },
-          { location: "Bedroom 2", supplyReturn: "supply", reading: 0, passFail: "pass" },
-          { location: "Bedroom 3", supplyReturn: "supply", reading: 0, passFail: "pass" },
-          { location: "Living Room", supplyReturn: "supply", reading: 0, passFail: "pass" },
-          { location: "Kitchen", supplyReturn: "supply", reading: 0, passFail: "pass" },
-          { location: "Hallway", supplyReturn: "return", reading: 0, passFail: "pass" },
-        ] as PressurePanReading[],
+        pressurePanReadings: DEFAULT_PRESSURE_PAN_READINGS,
         codeYear: "2020",
         totalDuctLeakageLimit: MINNESOTA_TDL_LIMIT,
         outsideLeakageLimit: MINNESOTA_DLO_LIMIT,
@@ -335,90 +498,97 @@ function DuctLeakageTestPage() {
     },
   });
 
-  const handleSaveTest = () => {
-    if (testData.testType === 'total' && !testData.cfm25Total) {
-      toast({
-        title: "Incomplete test",
-        description: "Please calculate TDL results before saving.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (testData.testType === 'leakage_to_outside' && !testData.cfm25Outside) {
-      toast({
-        title: "Incomplete test",
-        description: "Please calculate DLO results before saving.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (testData.testType === 'both' && (!testData.cfm25Total || !testData.cfm25Outside)) {
-      toast({
-        title: "Incomplete test",
-        description: "Please calculate both TDL and DLO results before saving.",
-        variant: "destructive",
-      });
-      return;
-    }
-    saveTestMutation.mutate(testData);
-  };
+  // Phase 2 - BUILD: Skeleton loaders for loading states
+  if (loadingJob || loadingTest) {
+    return (
+      <div className="container mx-auto p-6" data-testid="skeleton-duct-leakage-test">
+        <div className="mb-6">
+          <Skeleton className="h-10 w-64 mb-2" data-testid="skeleton-title" />
+          <Skeleton className="h-4 w-96" data-testid="skeleton-subtitle" />
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-12 w-full" data-testid="skeleton-tabs" />
+          <Skeleton className="h-96 w-full" data-testid="skeleton-content" />
+        </div>
+      </div>
+    );
+  }
 
-  const handleDownloadPDF = async () => {
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/full-report/pdf`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to generate PDF');
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `duct-leakage-test-${jobId}-${Date.now()}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      toast({
-        title: "PDF Downloaded",
-        description: "The test report has been downloaded successfully.",
-      });
-    } catch (error) {
-      toast({
-        title: "Download Failed",
-        description: "Failed to download the PDF report. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+  // Phase 2 - BUILD: Error states with retry buttons
+  if (jobError) {
+    return (
+      <div className="container mx-auto p-6" data-testid="error-job-load">
+        <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10">
+          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          <AlertTitle className="text-red-900 dark:text-red-300">Failed to Load Job</AlertTitle>
+          <AlertDescription className="text-red-800 dark:text-red-400 flex items-center justify-between">
+            <span>Unable to fetch job data. Please try again.</span>
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={handleRetryJob}
+              data-testid="button-retry-job"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (testError) {
+    return (
+      <div className="container mx-auto p-6" data-testid="error-test-load">
+        <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10">
+          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          <AlertTitle className="text-red-900 dark:text-red-300">Failed to Load Test Data</AlertTitle>
+          <AlertDescription className="text-red-800 dark:text-red-400 flex items-center justify-between">
+            <span>Unable to fetch test data. Please try again.</span>
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={handleRetryTest}
+              data-testid="button-retry-test"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6" data-testid="duct-leakage-test-page">
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
+            <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="page-title">
               <Network className="h-8 w-8" />
               Duct Leakage Test
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1" data-testid="job-address">
               {job ? `${job.address}, ${job.city}` : `Job: ${jobId}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={testData.meetsCodeTDL ? "default" : "destructive"}>
+            <Badge 
+              variant={testData.meetsCodeTDL ? "default" : "destructive"}
+              data-testid="badge-tdl-result"
+            >
               TDL: {testData.totalCfmPerSqFt || "—"} CFM25/100ft²
             </Badge>
-            <Badge variant={testData.meetsCodeDLO ? "default" : "destructive"}>
+            <Badge 
+              variant={testData.meetsCodeDLO ? "default" : "destructive"}
+              data-testid="badge-dlo-result"
+            >
               DLO: {testData.outsideCfmPerSqFt || "—"} CFM25/100ft²
             </Badge>
             {existingTest && (
-              <Badge variant="outline">
+              <Badge variant="outline" data-testid="badge-last-saved">
                 <Clock className="h-3 w-3 mr-1" />
                 Last saved: {new Date(existingTest.updatedAt || existingTest.createdAt).toLocaleString()}
               </Badge>
@@ -446,6 +616,7 @@ function DuctLeakageTestPage() {
                 disabled={deleteTestMutation.isPending}
                 data-testid="button-delete-test"
               >
+                <Trash2 className="h-4 w-4 mr-2" />
                 Delete
               </Button>
             )}
@@ -453,16 +624,16 @@ function DuctLeakageTestPage() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="setup">Setup</TabsTrigger>
-          <TabsTrigger value="tdl">Total Leakage</TabsTrigger>
-          <TabsTrigger value="dlo">Outside Leakage</TabsTrigger>
-          <TabsTrigger value="pressure-pan">Pressure Pan</TabsTrigger>
-          <TabsTrigger value="results">Results</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList className="grid w-full grid-cols-5" data-testid="tabs-list">
+          <TabsTrigger value="setup" data-testid="tab-setup">Setup</TabsTrigger>
+          <TabsTrigger value="tdl" data-testid="tab-tdl">Total Leakage</TabsTrigger>
+          <TabsTrigger value="dlo" data-testid="tab-dlo">Outside Leakage</TabsTrigger>
+          <TabsTrigger value="pressure-pan" data-testid="tab-pressure-pan">Pressure Pan</TabsTrigger>
+          <TabsTrigger value="results" data-testid="tab-results">Results</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="setup" className="space-y-4">
+        <TabsContent value="setup" className="space-y-4" data-testid="tab-content-setup">
           <Card>
             <CardHeader>
               <CardTitle>Test Setup</CardTitle>
@@ -500,9 +671,9 @@ function DuctLeakageTestPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="total">Total Duct Leakage Only</SelectItem>
-                      <SelectItem value="leakage_to_outside">Leakage to Outside Only</SelectItem>
-                      <SelectItem value="both">Both TDL and DLO</SelectItem>
+                      <SelectItem value="total" data-testid="select-option-total">Total Duct Leakage Only</SelectItem>
+                      <SelectItem value="leakage_to_outside" data-testid="select-option-dlo">Leakage to Outside Only</SelectItem>
+                      <SelectItem value="both" data-testid="select-option-both">Both TDL and DLO</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -550,10 +721,10 @@ function DuctLeakageTestPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="forced_air">Forced Air Furnace</SelectItem>
-                      <SelectItem value="heat_pump">Heat Pump</SelectItem>
-                      <SelectItem value="hydronic">Hydronic</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="forced_air" data-testid="select-option-forced-air">Forced Air Furnace</SelectItem>
+                      <SelectItem value="heat_pump" data-testid="select-option-heat-pump">Heat Pump</SelectItem>
+                      <SelectItem value="hydronic" data-testid="select-option-hydronic">Hydronic</SelectItem>
+                      <SelectItem value="other" data-testid="select-option-other">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -597,359 +768,366 @@ function DuctLeakageTestPage() {
 
               <Alert>
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Minnesota 2020 Energy Code Requirements</AlertTitle>
+                <AlertTitle>Required Field</AlertTitle>
                 <AlertDescription>
-                  • Total Duct Leakage (TDL): ≤ {MINNESOTA_TDL_LIMIT} CFM25/100 sq ft<br/>
-                  • Duct Leakage to Outside (DLO): ≤ {MINNESOTA_DLO_LIMIT} CFM25/100 sq ft<br/>
-                  • Climate Zone 6 requirements apply to all of Minnesota
+                  Conditioned area is required for calculating CFM25/100ft² compliance metrics
                 </AlertDescription>
               </Alert>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="tdl" className="space-y-4">
+        <TabsContent value="tdl" className="space-y-4" data-testid="tab-content-tdl">
           <Card>
             <CardHeader>
-              <CardTitle>Total Duct Leakage Test</CardTitle>
-              <CardDescription>Test at 25 Pa with all registers sealed</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Wind className="h-5 w-5" />
+                Total Duct Leakage (TDL)
+              </CardTitle>
+              <CardDescription>
+                Measures total air leakage from the entire duct system (supply + return)
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Test Procedure</AlertTitle>
-                <AlertDescription>
-                  1. Seal all supply and return registers with non-permeable material<br/>
-                  2. Connect duct tester fan to air handler or return plenum<br/>
-                  3. Pressurize duct system to 25 Pa with respect to house<br/>
-                  4. Record fan pressure reading and ring configuration
-                </AlertDescription>
-              </Alert>
-              
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="tdl-fan-pressure">Fan Pressure at 25 Pa (Pa)</Label>
-                  <Input
-                    id="tdl-fan-pressure"
-                    type="number"
-                    step="0.1"
-                    value={testData.totalFanPressure}
-                    onChange={(e) => setTestData({
-                      ...testData,
-                      totalFanPressure: parseFloat(e.target.value) || 0
-                    })}
-                    placeholder="Enter fan pressure reading"
-                    data-testid="input-tdl-fan-pressure"
-                  />
+                  <Label htmlFor="total-fan-pressure">Fan Pressure (Pa) *</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="total-fan-pressure"
+                      type="number"
+                      step="0.1"
+                      value={testData.totalFanPressure}
+                      onChange={(e) => setTestData({...testData, totalFanPressure: parseFloat(e.target.value) || 0})}
+                      placeholder="e.g., 25.0"
+                      data-testid="input-total-fan-pressure"
+                    />
+                    <Gauge className="h-10 w-10 text-muted-foreground" />
+                  </div>
                 </div>
                 <div>
-                  <Label htmlFor="tdl-ring">Ring Configuration</Label>
+                  <Label htmlFor="total-ring-config">Ring Configuration</Label>
                   <Select
                     value={testData.totalRingConfiguration}
-                    onValueChange={(value) => setTestData({
-                      ...testData,
-                      totalRingConfiguration: value
-                    })}
+                    onValueChange={(value) => setTestData({...testData, totalRingConfiguration: value})}
                   >
-                    <SelectTrigger id="tdl-ring" data-testid="select-tdl-ring">
+                    <SelectTrigger id="total-ring-config" data-testid="select-total-ring-config">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Open">Open (No Ring)</SelectItem>
-                      <SelectItem value="Ring 1">Ring 1 (Flow Range: 20-85 CFM)</SelectItem>
-                      <SelectItem value="Ring 2">Ring 2 (Flow Range: 10-50 CFM)</SelectItem>
-                      <SelectItem value="Ring 3">Ring 3 (Flow Range: 5-25 CFM)</SelectItem>
+                      <SelectItem value="Open" data-testid="select-option-open">Open (no restriction)</SelectItem>
+                      <SelectItem value="Ring 1" data-testid="select-option-ring1">Ring 1</SelectItem>
+                      <SelectItem value="Ring 2" data-testid="select-option-ring2">Ring 2</SelectItem>
+                      <SelectItem value="Ring 3" data-testid="select-option-ring3">Ring 3</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              
+
               <Button 
-                onClick={calculateTotalDuctLeakage}
+                onClick={calculateTotalDuctLeakage} 
                 className="w-full"
-                disabled={!testData.totalFanPressure || !testData.conditionedArea}
+                data-testid="button-calculate-tdl"
               >
                 <Calculator className="h-4 w-4 mr-2" />
-                Calculate TDL Results
+                Calculate TDL
               </Button>
-              
-              {testData.cfm25Total! > 0 && (
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{testData.cfm25Total}</div>
-                    <div className="text-sm text-muted-foreground">CFM25</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{testData.totalCfmPerSqFt}</div>
-                    <div className="text-sm text-muted-foreground">CFM25/100ft²</div>
-                    <Badge 
-                      className="mt-1" 
-                      variant={testData.meetsCodeTDL ? "default" : "destructive"}
-                    >
-                      {testData.meetsCodeTDL ? "✓ Passes" : "✗ Fails"} Code
-                    </Badge>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{testData.totalPercentOfFlow}%</div>
-                    <div className="text-sm text-muted-foreground">of System Flow</div>
-                  </div>
-                </div>
+
+              {testData.cfm25Total > 0 && (
+                <Card className="bg-muted">
+                  <CardHeader>
+                    <CardTitle className="text-lg">TDL Results</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-sm text-muted-foreground">CFM25</div>
+                        <div className="text-2xl font-bold" data-testid="text-cfm25-total">{testData.cfm25Total}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">CFM25/100ft²</div>
+                        <div className="text-2xl font-bold" data-testid="text-total-cfm-per-sqft">{testData.totalCfmPerSqFt}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">% of Flow</div>
+                        <div className="text-2xl font-bold" data-testid="text-total-percent-flow">{testData.totalPercentOfFlow}%</div>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Minnesota 2020 Code Compliance:</span>
+                      <Badge 
+                        variant={testData.meetsCodeTDL ? "default" : "destructive"}
+                        className="flex items-center gap-1"
+                        data-testid="badge-tdl-compliance"
+                      >
+                        {testData.meetsCodeTDL ? (
+                          <CheckCircle className="h-3 w-3" />
+                        ) : (
+                          <XCircle className="h-3 w-3" />
+                        )}
+                        {testData.meetsCodeTDL ? 'PASS' : 'FAIL'}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="dlo" className="space-y-4">
+        <TabsContent value="dlo" className="space-y-4" data-testid="tab-content-dlo">
           <Card>
             <CardHeader>
-              <CardTitle>Duct Leakage to Outside</CardTitle>
-              <CardDescription>Test at 25 Pa with house depressurized</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Home className="h-5 w-5" />
+                Duct Leakage to Outside (DLO)
+              </CardTitle>
+              <CardDescription>
+                Measures air leakage from ducts to unconditioned spaces (requires house at -25 Pa)
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Test Procedure</AlertTitle>
-                <AlertDescription>
-                  1. Depressurize house to -25 Pa with blower door<br/>
-                  2. Open all interior doors and close exterior doors<br/>
-                  3. Connect duct tester and pressurize ducts to 25 Pa<br/>
-                  4. The duct tester now measures only leakage to outside
-                </AlertDescription>
-              </Alert>
-              
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="dlo-house-pressure">House Pressure (Pa)</Label>
+                  <Label htmlFor="outside-house-pressure">House Pressure (Pa) *</Label>
                   <Input
-                    id="dlo-house-pressure"
+                    id="outside-house-pressure"
                     type="number"
                     step="0.1"
                     value={testData.outsideHousePressure}
-                    onChange={(e) => setTestData({
-                      ...testData,
-                      outsideHousePressure: parseFloat(e.target.value) || 0
-                    })}
-                    placeholder="Target: -25 Pa"
-                    data-testid="input-dlo-house-pressure"
+                    onChange={(e) => setTestData({...testData, outsideHousePressure: parseFloat(e.target.value) || DLO_STANDARD_HOUSE_PRESSURE})}
+                    placeholder="-25.0"
+                    data-testid="input-outside-house-pressure"
+                    className={Math.abs((testData.outsideHousePressure || 0) - DLO_STANDARD_HOUSE_PRESSURE) > 2 ? "border-amber-500" : ""}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="dlo-fan-pressure">Fan Pressure at 25 Pa (Pa)</Label>
-                  <Input
-                    id="dlo-fan-pressure"
-                    type="number"
-                    step="0.1"
-                    value={testData.outsideFanPressure}
-                    onChange={(e) => setTestData({
-                      ...testData,
-                      outsideFanPressure: parseFloat(e.target.value) || 0
-                    })}
-                    placeholder="Enter reading"
-                    data-testid="input-dlo-fan-pressure"
-                  />
+                  <Label htmlFor="outside-fan-pressure">Fan Pressure (Pa) *</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="outside-fan-pressure"
+                      type="number"
+                      step="0.1"
+                      value={testData.outsideFanPressure}
+                      onChange={(e) => setTestData({...testData, outsideFanPressure: parseFloat(e.target.value) || 0})}
+                      placeholder="e.g., 25.0"
+                      data-testid="input-outside-fan-pressure"
+                    />
+                    <Gauge className="h-10 w-10 text-muted-foreground" />
+                  </div>
                 </div>
                 <div>
-                  <Label htmlFor="dlo-ring">Ring Configuration</Label>
+                  <Label htmlFor="outside-ring-config">Ring Configuration</Label>
                   <Select
                     value={testData.outsideRingConfiguration}
-                    onValueChange={(value) => setTestData({
-                      ...testData,
-                      outsideRingConfiguration: value
-                    })}
+                    onValueChange={(value) => setTestData({...testData, outsideRingConfiguration: value})}
                   >
-                    <SelectTrigger id="dlo-ring" data-testid="select-dlo-ring">
+                    <SelectTrigger id="outside-ring-config" data-testid="select-outside-ring-config">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Open">Open (No Ring)</SelectItem>
-                      <SelectItem value="Ring 1">Ring 1 (Flow Range: 20-85 CFM)</SelectItem>
-                      <SelectItem value="Ring 2">Ring 2 (Flow Range: 10-50 CFM)</SelectItem>
-                      <SelectItem value="Ring 3">Ring 3 (Flow Range: 5-25 CFM)</SelectItem>
+                      <SelectItem value="Open" data-testid="select-option-open-dlo">Open (no restriction)</SelectItem>
+                      <SelectItem value="Ring 1" data-testid="select-option-ring1-dlo">Ring 1</SelectItem>
+                      <SelectItem value="Ring 2" data-testid="select-option-ring2-dlo">Ring 2</SelectItem>
+                      <SelectItem value="Ring 3" data-testid="select-option-ring3-dlo">Ring 3</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              
+
               <Button 
-                onClick={calculateLeakageToOutside}
+                onClick={calculateLeakageToOutside} 
                 className="w-full"
-                disabled={!testData.outsideFanPressure || !testData.conditionedArea}
+                data-testid="button-calculate-dlo"
               >
                 <Calculator className="h-4 w-4 mr-2" />
-                Calculate DLO Results
+                Calculate DLO
               </Button>
-              
-              {testData.cfm25Outside! > 0 && (
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{testData.cfm25Outside}</div>
-                    <div className="text-sm text-muted-foreground">CFM25</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{testData.outsideCfmPerSqFt}</div>
-                    <div className="text-sm text-muted-foreground">CFM25/100ft²</div>
-                    <Badge 
-                      className="mt-1" 
-                      variant={testData.meetsCodeDLO ? "default" : "destructive"}
-                    >
-                      {testData.meetsCodeDLO ? "✓ Passes" : "✗ Fails"} Code
-                    </Badge>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{testData.outsidePercentOfFlow}%</div>
-                    <div className="text-sm text-muted-foreground">of System Flow</div>
-                  </div>
-                </div>
+
+              {testData.cfm25Outside > 0 && (
+                <Card className="bg-muted">
+                  <CardHeader>
+                    <CardTitle className="text-lg">DLO Results</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-sm text-muted-foreground">CFM25</div>
+                        <div className="text-2xl font-bold" data-testid="text-cfm25-outside">{testData.cfm25Outside}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">CFM25/100ft²</div>
+                        <div className="text-2xl font-bold" data-testid="text-outside-cfm-per-sqft">{testData.outsideCfmPerSqFt}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">% of Flow</div>
+                        <div className="text-2xl font-bold" data-testid="text-outside-percent-flow">{testData.outsidePercentOfFlow}%</div>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Minnesota 2020 Code Compliance:</span>
+                      <Badge 
+                        variant={testData.meetsCodeDLO ? "default" : "destructive"}
+                        className="flex items-center gap-1"
+                        data-testid="badge-dlo-compliance"
+                      >
+                        {testData.meetsCodeDLO ? (
+                          <CheckCircle className="h-3 w-3" />
+                        ) : (
+                          <XCircle className="h-3 w-3" />
+                        )}
+                        {testData.meetsCodeDLO ? 'PASS' : 'FAIL'}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="pressure-pan" className="space-y-4">
+        <TabsContent value="pressure-pan" className="space-y-4" data-testid="tab-content-pressure-pan">
           <Card>
             <CardHeader>
-              <CardTitle>Pressure Pan Testing</CardTitle>
-              <CardDescription>Check for leakage at individual registers</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Pressure Pan Testing
+              </CardTitle>
+              <CardDescription>
+                Measure static pressure at each register to identify duct connection leaks
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Test Procedure & Evaluation</AlertTitle>
-                <AlertDescription>
-                  With house at -50 Pa, place pressure pan over each register and record pressure difference.<br/>
-                  • ≤1.0 Pa = Good (minimal leakage)<br/>
-                  • 1.0-3.0 Pa = Marginal (some leakage)<br/>
-                  • {">"}3.0 Pa = Poor (significant leakage needing sealing)
-                </AlertDescription>
-              </Alert>
-              
-              <div className="space-y-2">
-                <div className="grid grid-cols-6 gap-2 font-medium text-sm">
-                  <div className="col-span-2">Location</div>
-                  <div>Type</div>
-                  <div>Reading (Pa)</div>
-                  <div>Status</div>
-                  <div>Action</div>
-                </div>
-                
-                {(testData.pressurePanReadings as PressurePanReading[] || []).map((reading, index) => (
-                  <div key={index} className="grid grid-cols-6 gap-2">
+              {(testData.pressurePanReadings as PressurePanReading[] || []).map((reading, index) => (
+                <div key={index} className="flex gap-4 items-end">
+                  <div className="flex-1">
+                    <Label htmlFor={`location-${index}`}>Location</Label>
                     <Input
-                      className="col-span-2"
+                      id={`location-${index}`}
                       value={reading.location}
                       onChange={(e) => {
-                        const newReadings = [...(testData.pressurePanReadings as PressurePanReading[] || [])];
-                        newReadings[index].location = e.target.value;
+                        const newReadings = [...(testData.pressurePanReadings as PressurePanReading[])];
+                        newReadings[index] = { ...newReadings[index], location: e.target.value };
                         setTestData({...testData, pressurePanReadings: newReadings});
                       }}
-                      placeholder="Room/Location"
-                      data-testid={`input-pp-location-${index}`}
+                      placeholder="e.g., Master Bedroom"
+                      data-testid={`input-location-${index}`}
                     />
+                  </div>
+                  <div className="w-32">
+                    <Label htmlFor={`supply-return-${index}`}>Type</Label>
                     <Select
                       value={reading.supplyReturn}
-                      onValueChange={(value: any) => {
-                        const newReadings = [...(testData.pressurePanReadings as PressurePanReading[] || [])];
-                        newReadings[index].supplyReturn = value;
+                      onValueChange={(value: 'supply' | 'return') => {
+                        const newReadings = [...(testData.pressurePanReadings as PressurePanReading[])];
+                        newReadings[index] = { ...newReadings[index], supplyReturn: value };
                         setTestData({...testData, pressurePanReadings: newReadings});
                       }}
                     >
-                      <SelectTrigger data-testid={`select-pp-type-${index}`}>
+                      <SelectTrigger id={`supply-return-${index}`} data-testid={`select-type-${index}`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="supply">Supply</SelectItem>
-                        <SelectItem value="return">Return</SelectItem>
+                        <SelectItem value="supply" data-testid={`select-option-supply-${index}`}>Supply</SelectItem>
+                        <SelectItem value="return" data-testid={`select-option-return-${index}`}>Return</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="w-32">
+                    <Label htmlFor={`reading-${index}`}>Reading (Pa)</Label>
                     <Input
+                      id={`reading-${index}`}
                       type="number"
                       step="0.1"
                       value={reading.reading}
                       onChange={(e) => {
-                        const newReadings = [...(testData.pressurePanReadings as PressurePanReading[] || [])];
                         const newReading = parseFloat(e.target.value) || 0;
-                        newReadings[index].reading = newReading;
-                        newReadings[index].passFail = evaluatePressurePan(newReading);
+                        const newReadings = [...(testData.pressurePanReadings as PressurePanReading[])];
+                        newReadings[index] = { 
+                          ...newReadings[index], 
+                          reading: newReading,
+                          passFail: evaluatePressurePan(newReading)
+                        };
                         setTestData({...testData, pressurePanReadings: newReadings});
                       }}
-                      data-testid={`input-pp-reading-${index}`}
+                      data-testid={`input-reading-${index}`}
                     />
+                  </div>
+                  <div className="w-24">
                     <Badge 
                       variant={
                         reading.passFail === 'pass' ? 'default' : 
                         reading.passFail === 'marginal' ? 'secondary' : 
                         'destructive'
                       }
+                      data-testid={`badge-result-${index}`}
                     >
                       {reading.passFail}
                     </Badge>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => removePressurePanReading(index)}
-                      data-testid={`button-remove-pp-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
-                ))}
-              </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => removePressurePanReading(index)}
+                    data-testid={`button-remove-${index}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
               
-              <Button
+              <Button 
+                variant="outline" 
                 onClick={addPressurePanReading}
-                variant="outline"
                 className="w-full"
-                data-testid="button-add-pp-reading"
+                data-testid="button-add-pressure-pan"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Reading
               </Button>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Pressure Pan Standards</AlertTitle>
+                <AlertDescription>
+                  Pass: ≤ {PRESSURE_PAN_PASS_THRESHOLD} Pa | Marginal: ≤ {PRESSURE_PAN_MARGINAL_THRESHOLD} Pa | Fail: &gt; {PRESSURE_PAN_MARGINAL_THRESHOLD} Pa
+                </AlertDescription>
+              </Alert>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="results" className="space-y-4">
+        <TabsContent value="results" className="space-y-4" data-testid="tab-content-results">
           <div className="grid grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Test Results Summary</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Test Summary
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-semibold mb-2">Total Duct Leakage</h4>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">CFM25</span>
-                      <span className="font-medium">{testData.cfm25Total || "—"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">CFM25/100ft²</span>
-                      <span className="font-medium">{testData.totalCfmPerSqFt || "—"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">% of System Flow</span>
-                      <span className="font-medium">{testData.totalPercentOfFlow || "—"}%</span>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-sm text-muted-foreground">Test Date</div>
+                    <div className="font-medium" data-testid="text-summary-date">{testData.testDate?.toLocaleDateString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">Test Time</div>
+                    <div className="font-medium" data-testid="text-summary-time">{testData.testTime}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">Test Type</div>
+                    <div className="font-medium" data-testid="text-summary-type">
+                      {testData.testType === 'both' ? 'TDL + DLO' : 
+                       testData.testType === 'total' ? 'TDL Only' : 'DLO Only'}
                     </div>
                   </div>
-                </div>
-                
-                <Separator />
-                
-                <div>
-                  <h4 className="font-semibold mb-2">Duct Leakage to Outside</h4>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">CFM25</span>
-                      <span className="font-medium">{testData.cfm25Outside || "—"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">CFM25/100ft²</span>
-                      <span className="font-medium">{testData.outsideCfmPerSqFt || "—"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">% of System Flow</span>
-                      <span className="font-medium">{testData.outsidePercentOfFlow || "—"}%</span>
-                    </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">Conditioned Area</div>
+                    <div className="font-medium" data-testid="text-summary-area">{testData.conditionedArea} ft²</div>
                   </div>
                 </div>
               </CardContent>
@@ -957,42 +1135,69 @@ function DuctLeakageTestPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Minnesota Code Compliance</CardTitle>
-                <CardDescription>2020 Energy Code Requirements - Climate Zone 6</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5" />
+                  Code Compliance
+                </CardTitle>
+                <CardDescription>Minnesota 2020 Energy Code (Climate Zone 6)</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <Alert variant={testData.meetsCodeTDL && testData.meetsCodeDLO ? "default" : "destructive"}>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>
-                    Overall: {testData.meetsCodeTDL && testData.meetsCodeDLO ? "PASSES" : "FAILS"} Code
-                  </AlertTitle>
-                  <AlertDescription>
-                    {testData.cfm25Total || testData.cfm25Outside
-                      ? `TDL: ${testData.meetsCodeTDL ? '✓ Pass' : '✗ Fail'} | DLO: ${testData.meetsCodeDLO ? '✓ Pass' : '✗ Fail'}`
-                      : "Complete tests to check compliance"
+              <CardContent>
+                {!testData.cfm25Total && !testData.cfm25Outside ? (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Calculate TDL and/or DLO results to see compliance status
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert 
+                    className={
+                      (testData.meetsCodeTDL || !testData.cfm25Total) && 
+                      (testData.meetsCodeDLO || !testData.cfm25Outside)
+                        ? "border-green-600/20 bg-green-50/50 dark:bg-green-900/10"
+                        : "border-red-600/20 bg-red-50/50 dark:bg-red-900/10"
                     }
-                  </AlertDescription>
-                </Alert>
+                  >
+                    {(testData.meetsCodeTDL || !testData.cfm25Total) && 
+                     (testData.meetsCodeDLO || !testData.cfm25Outside) ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-600" />
+                    )}
+                    <AlertTitle data-testid="text-overall-compliance">
+                      {(testData.meetsCodeTDL || !testData.cfm25Total) && 
+                       (testData.meetsCodeDLO || !testData.cfm25Outside)
+                        ? 'System Meets Code Requirements'
+                        : 'System Does Not Meet Code Requirements'}
+                    </AlertTitle>
+                  </Alert>
+                )}
                 
-                <div className="space-y-3">
+                <div className="space-y-3 mt-4">
                   <div>
                     <h5 className="text-sm font-semibold mb-1">Total Duct Leakage (TDL)</h5>
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Code Limit</span>
-                        <span>≤ {MINNESOTA_TDL_LIMIT} CFM25/100ft²</span>
+                        <span data-testid="text-tdl-limit">≤ {MINNESOTA_TDL_LIMIT} CFM25/100ft²</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Your Result</span>
-                        <span className={testData.meetsCodeTDL ? 'text-green-600' : 'text-red-600'}>
+                        <span 
+                          className={testData.meetsCodeTDL ? 'text-green-600' : 'text-red-600'}
+                          data-testid="text-tdl-your-result"
+                        >
                           {testData.totalCfmPerSqFt || "—"} CFM25/100ft²
                         </span>
                       </div>
                       {testData.totalCfmPerSqFt && (
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Margin</span>
-                          <span className={testData.meetsCodeTDL ? 'text-green-600' : 'text-red-600'}>
-                            {(MINNESOTA_TDL_LIMIT - testData.totalCfmPerSqFt).toFixed(2)} CFM25/100ft²
+                          <span 
+                            className={testData.meetsCodeTDL ? 'text-green-600' : 'text-red-600'}
+                            data-testid="text-tdl-margin"
+                          >
+                            {(MINNESOTA_TDL_LIMIT - (testData.totalCfmPerSqFt || 0)).toFixed(2)} CFM25/100ft²
                           </span>
                         </div>
                       )}
@@ -1006,19 +1211,25 @@ function DuctLeakageTestPage() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Code Limit</span>
-                        <span>≤ {MINNESOTA_DLO_LIMIT} CFM25/100ft²</span>
+                        <span data-testid="text-dlo-limit">≤ {MINNESOTA_DLO_LIMIT} CFM25/100ft²</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Your Result</span>
-                        <span className={testData.meetsCodeDLO ? 'text-green-600' : 'text-red-600'}>
+                        <span 
+                          className={testData.meetsCodeDLO ? 'text-green-600' : 'text-red-600'}
+                          data-testid="text-dlo-your-result"
+                        >
                           {testData.outsideCfmPerSqFt || "—"} CFM25/100ft²
                         </span>
                       </div>
                       {testData.outsideCfmPerSqFt && (
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Margin</span>
-                          <span className={testData.meetsCodeDLO ? 'text-green-600' : 'text-red-600'}>
-                            {(MINNESOTA_DLO_LIMIT - testData.outsideCfmPerSqFt).toFixed(2)} CFM25/100ft²
+                          <span 
+                            className={testData.meetsCodeDLO ? 'text-green-600' : 'text-red-600'}
+                            data-testid="text-dlo-margin"
+                          >
+                            {(MINNESOTA_DLO_LIMIT - (testData.outsideCfmPerSqFt || 0)).toFixed(2)} CFM25/100ft²
                           </span>
                         </div>
                       )}
@@ -1036,11 +1247,11 @@ function DuctLeakageTestPage() {
             </CardHeader>
             <CardContent>
               {(testData.pressurePanReadings as PressurePanReading[] || []).filter(r => r.location).length > 0 ? (
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-4 gap-4" data-testid="pressure-pan-results-grid">
                   {(testData.pressurePanReadings as PressurePanReading[] || [])
                     .filter(r => r.location)
                     .map((reading, index) => (
-                      <div key={index} className="text-center">
+                      <div key={index} className="text-center" data-testid={`pressure-pan-result-${index}`}>
                         <div className="text-sm font-medium">{reading.location}</div>
                         <div className="text-xs text-muted-foreground">({reading.supplyReturn})</div>
                         <div className="text-2xl font-bold mt-1">{reading.reading} Pa</div>
@@ -1058,7 +1269,9 @@ function DuctLeakageTestPage() {
                     ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-center">No pressure pan readings recorded</p>
+                <p className="text-muted-foreground text-center" data-testid="no-pressure-pan-results">
+                  No pressure pan readings recorded
+                </p>
               )}
             </CardContent>
           </Card>
@@ -1090,7 +1303,7 @@ function DuctLeakageTestPage() {
                   data-testid="textarea-recommendations"
                 />
               </div>
-              {!testData.meetsCodeTDL || !testData.meetsCodeDLO ? (
+              {(!testData.meetsCodeTDL && testData.cfm25Total) || (!testData.meetsCodeDLO && testData.cfm25Outside) ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Suggested Improvements</AlertTitle>
@@ -1108,6 +1321,46 @@ function DuctLeakageTestPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Phase 2 - BUILD: ErrorBoundary wrapper with comprehensive fallback UI
+function DuctLeakageTestPage() {
+  const { jobId } = useParams<{ jobId: string }>();
+  
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="container mx-auto p-6" data-testid="error-boundary-fallback">
+          <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10">
+            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <AlertTitle className="text-red-900 dark:text-red-300">
+              Application Error
+            </AlertTitle>
+            <AlertDescription className="text-red-800 dark:text-red-400 space-y-2">
+              <p>The duct leakage test page encountered an unexpected error.</p>
+              <div className="flex gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.reload()}
+                  data-testid="button-reload-page"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Reload Page
+                </Button>
+                <Link href={`/jobs/${jobId}`}>
+                  <Button variant="outline" data-testid="button-back-to-job">
+                    Back to Job
+                  </Button>
+                </Link>
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      }
+    >
+      <DuctLeakageTestContent />
+    </ErrorBoundary>
   );
 }
 

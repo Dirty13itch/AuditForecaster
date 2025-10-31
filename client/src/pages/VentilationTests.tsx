@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { useParams } from "wouter";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { VentilationTest, InsertVentilationTest } from "@shared/schema";
 import { 
@@ -21,14 +23,43 @@ import {
   Save, 
   AlertCircle, 
   CheckCircle,
+  XCircle,
   Home,
   ChefHat,
   Bath,
   Activity,
-  Clock
+  RefreshCw,
+  ArrowLeft
 } from "lucide-react";
 
-function VentilationTestsPage() {
+// Phase 3 - OPTIMIZE: Module-level constants for ASHRAE 62.2 compliance thresholds
+
+// Phase 6 - DOCUMENT: ASHRAE 62.2 Floor Area Coefficient
+// Used in Qtotal formula: determines base ventilation requirement per square foot
+const ASHRAE_FLOOR_AREA_COEFFICIENT = 0.03;
+
+// Phase 6 - DOCUMENT: ASHRAE 62.2 Bedroom Factor
+// Used in Qtotal formula: accounts for occupant density based on bedroom count
+const ASHRAE_BEDROOM_FACTOR = 7.5;
+
+// Phase 6 - DOCUMENT: Minnesota 2020 Energy Code - Kitchen Exhaust Requirements
+// Intermittent operation: must provide at least 100 CFM
+const KITCHEN_INTERMITTENT_MIN_CFM = 100;
+// Continuous operation: must provide at least 25 CFM
+const KITCHEN_CONTINUOUS_MIN_CFM = 25;
+
+// Phase 6 - DOCUMENT: Minnesota 2020 Energy Code - Bathroom Exhaust Requirements
+// Intermittent operation: must provide at least 50 CFM
+const BATHROOM_INTERMITTENT_MIN_CFM = 50;
+// Continuous operation: must provide at least 20 CFM
+const BATHROOM_CONTINUOUS_MIN_CFM = 20;
+
+// Phase 6 - DOCUMENT: Default values for test initialization
+const DEFAULT_CODE_YEAR = "2020";
+const DEFAULT_BEDROOM_COUNT = 3;
+const DEFAULT_STORIES = 1;
+
+function VentilationTestsContent() {
   const { toast } = useToast();
   const { jobId } = useParams<{ jobId: string }>();
   const [activeTab, setActiveTab] = useState("house");
@@ -40,8 +71,8 @@ function VentilationTestsPage() {
     equipmentSerial: "",
     equipmentCalibrationDate: undefined,
     floorArea: 0,
-    bedrooms: 3,
-    stories: 1,
+    bedrooms: DEFAULT_BEDROOM_COUNT,
+    stories: DEFAULT_STORIES,
     requiredVentilationRate: 0,
     requiredContinuousRate: 0,
     infiltrationCredit: 0,
@@ -83,7 +114,7 @@ function VentilationTestsPage() {
     // Totals
     totalVentilationProvided: 0,
     meetsVentilationRequirement: false,
-    codeYear: "2020",
+    codeYear: DEFAULT_CODE_YEAR,
     overallCompliant: false,
     nonComplianceNotes: "",
     recommendations: "",
@@ -91,16 +122,28 @@ function VentilationTestsPage() {
     inspectorNotes: "",
   });
 
-  // Fetch job data
-  const { data: job } = useQuery({
+  // Phase 5 - HARDEN: Fetch job data with retry: 2 for resilience
+  const { 
+    data: job, 
+    isLoading: loadingJob,
+    error: jobError,
+    refetch: refetchJob
+  } = useQuery({
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
+    retry: 2,
   });
 
-  // Fetch latest test data if exists
-  const { data: existingTest, isLoading: loadingTest } = useQuery({
+  // Phase 5 - HARDEN: Fetch latest test data with retry: 2
+  const { 
+    data: existingTest, 
+    isLoading: loadingTest,
+    error: testError,
+    refetch: refetchTest
+  } = useQuery({
     queryKey: ["/api/jobs", jobId, "ventilation-tests/latest"],
     enabled: !!jobId,
+    retry: 2,
   });
 
   // Load existing test data if available
@@ -120,12 +163,15 @@ function VentilationTestsPage() {
     }
   }, [existingTest, job]);
 
-  // Calculate ASHRAE 62.2 required ventilation rate
-  // Formula: Qtotal = 0.03 * floorArea + 7.5 * (bedrooms + 1)
-  const calculateRequiredVentilation = () => {
+  // Phase 3 - OPTIMIZE: Memoize ASHRAE 62.2 required ventilation calculation
+  // Phase 6 - DOCUMENT: Calculate required whole-house ventilation per ASHRAE 62.2
+  // Formula: Qtotal = 0.03 × floor_area + 7.5 × (bedrooms + 1)
+  // This accounts for both floor area (dilution ventilation) and occupant density (bedrooms)
+  const calculateRequiredVentilation = useCallback(() => {
     const floorArea = testData.floorArea || 0;
     const bedrooms = testData.bedrooms || 0;
     
+    // Phase 5 - HARDEN: Validate inputs
     if (floorArea <= 0 || bedrooms <= 0) {
       toast({
         title: "Missing data",
@@ -135,8 +181,12 @@ function VentilationTestsPage() {
       return;
     }
 
-    const required = 0.03 * floorArea + 7.5 * (bedrooms + 1);
+    // ASHRAE 62.2 required ventilation rate calculation
+    const required = ASHRAE_FLOOR_AREA_COEFFICIENT * floorArea + ASHRAE_BEDROOM_FACTOR * (bedrooms + 1);
     const infiltrationCredit = testData.infiltrationCredit || 0;
+    
+    // Phase 6 - DOCUMENT: Adjusted required rate accounts for infiltration from blower door testing
+    // For tight homes (low ACH50), infiltration credit reduces mechanical ventilation needs
     const adjusted = Math.max(0, required - infiltrationCredit);
     
     setTestData(prev => ({
@@ -150,18 +200,20 @@ function VentilationTestsPage() {
       title: "ASHRAE 62.2 calculated",
       description: `Required: ${required.toFixed(1)} cfm | Adjusted: ${adjusted.toFixed(1)} cfm`,
     });
-  };
+  }, [testData.floorArea, testData.bedrooms, testData.infiltrationCredit, toast]);
 
-  // Calculate total ventilation provided
-  const calculateTotalVentilation = () => {
+  // Phase 3 - OPTIMIZE: Memoize total ventilation calculation
+  // Phase 6 - DOCUMENT: Calculate total ventilation provided by all systems
+  // Sum of: kitchen exhaust + bathroom exhausts + mechanical ventilation
+  const calculateTotalVentilation = useCallback(() => {
     let total = 0;
     
-    // Kitchen
+    // Kitchen exhaust contribution
     if (testData.kitchenMeasuredCFM && testData.kitchenExhaustType !== "none") {
       total += Number(testData.kitchenMeasuredCFM);
     }
     
-    // Bathrooms
+    // Bathroom exhaust contributions
     if (testData.bathroom1MeasuredCFM && testData.bathroom1Type !== "none") {
       total += Number(testData.bathroom1MeasuredCFM);
     }
@@ -175,7 +227,8 @@ function VentilationTestsPage() {
       total += Number(testData.bathroom4MeasuredCFM);
     }
     
-    // Mechanical (use greater of supply or exhaust)
+    // Phase 6 - DOCUMENT: For mechanical ventilation, use greater of supply or exhaust
+    // Balanced systems (HRV/ERV) provide both equally, unbalanced systems favor one direction
     if (testData.mechanicalVentilationType !== "none") {
       const supply = Number(testData.mechanicalMeasuredSupplyCFM) || 0;
       const exhaust = Number(testData.mechanicalMeasuredExhaustCFM) || 0;
@@ -191,39 +244,60 @@ function VentilationTestsPage() {
     }));
     
     return total;
-  };
+  }, [
+    testData.kitchenMeasuredCFM,
+    testData.kitchenExhaustType,
+    testData.bathroom1MeasuredCFM,
+    testData.bathroom1Type,
+    testData.bathroom2MeasuredCFM,
+    testData.bathroom2Type,
+    testData.bathroom3MeasuredCFM,
+    testData.bathroom3Type,
+    testData.bathroom4MeasuredCFM,
+    testData.bathroom4Type,
+    testData.mechanicalVentilationType,
+    testData.mechanicalMeasuredSupplyCFM,
+    testData.mechanicalMeasuredExhaustCFM,
+    testData.adjustedRequiredRate,
+  ]);
 
-  // Check kitchen compliance
-  const checkKitchenCompliance = () => {
+  // Phase 3 - OPTIMIZE: Memoize kitchen compliance check
+  // Phase 6 - DOCUMENT: Check kitchen exhaust compliance per Minnesota 2020 Energy Code
+  // Requirements: ≥100 CFM intermittent OR ≥25 CFM continuous
+  const checkKitchenCompliance = useCallback(() => {
     const type = testData.kitchenExhaustType;
     const measured = Number(testData.kitchenMeasuredCFM) || 0;
     
     if (!type || type === "none") return false;
     
     if (type === "intermittent") {
-      return measured >= 100;
+      return measured >= KITCHEN_INTERMITTENT_MIN_CFM;
     } else if (type === "continuous") {
-      return measured >= 25;
+      return measured >= KITCHEN_CONTINUOUS_MIN_CFM;
     }
     
     return false;
-  };
+  }, [testData.kitchenExhaustType, testData.kitchenMeasuredCFM]);
 
-  // Check bathroom compliance
-  const checkBathroomCompliance = (type: string | undefined, measured: number | undefined) => {
+  // Phase 3 - OPTIMIZE: Memoize bathroom compliance check
+  // Phase 6 - DOCUMENT: Check bathroom exhaust compliance per Minnesota 2020 Energy Code
+  // Requirements: ≥50 CFM intermittent OR ≥20 CFM continuous
+  const checkBathroomCompliance = useCallback((type: string | undefined, measured: number | undefined) => {
     if (!type || type === "none" || !measured) return false;
     
     if (type === "intermittent") {
-      return measured >= 50;
+      return measured >= BATHROOM_INTERMITTENT_MIN_CFM;
     } else if (type === "continuous") {
-      return measured >= 20;
+      return measured >= BATHROOM_CONTINUOUS_MIN_CFM;
     }
     
     return false;
-  };
+  }, []);
 
-  // Calculate all compliance
-  const calculateCompliance = () => {
+  // Phase 3 - OPTIMIZE: Memoize overall compliance calculation with useCallback
+  // Phase 6 - DOCUMENT: Calculate overall compliance with all ventilation requirements
+  // All local exhausts must meet code AND total ventilation must meet ASHRAE 62.2
+  const calculateCompliance = useCallback(() => {
     const total = calculateTotalVentilation();
     
     const kitchenCompliant = checkKitchenCompliance();
@@ -237,6 +311,7 @@ function VentilationTestsPage() {
     const overallCompliant = kitchenCompliant && bathroom1Compliant && bathroom2Compliant && 
                             bathroom3Compliant && bathroom4Compliant && meetsVentilationRequirement;
     
+    // Phase 6 - DOCUMENT: Build detailed non-compliance reasons for inspector review
     const nonComplianceReasons: string[] = [];
     if (!kitchenCompliant) nonComplianceReasons.push("Kitchen exhaust does not meet code");
     if (!bathroom1Compliant) nonComplianceReasons.push("Bathroom 1 does not meet code");
@@ -259,11 +334,26 @@ function VentilationTestsPage() {
     }));
     
     toast({
-      title: overallCompliant ? "✓ All requirements met" : "✗ Non-compliant",
+      title: overallCompliant ? "All requirements met" : "Non-compliant",
       description: overallCompliant ? "System meets all ventilation requirements" : nonComplianceReasons.join(", "),
       variant: overallCompliant ? "default" : "destructive",
+      icon: overallCompliant ? CheckCircle : XCircle,
     });
-  };
+  }, [
+    calculateTotalVentilation,
+    checkKitchenCompliance,
+    checkBathroomCompliance,
+    testData.bathroom1Type,
+    testData.bathroom1MeasuredCFM,
+    testData.bathroom2Type,
+    testData.bathroom2MeasuredCFM,
+    testData.bathroom3Type,
+    testData.bathroom3MeasuredCFM,
+    testData.bathroom4Type,
+    testData.bathroom4MeasuredCFM,
+    testData.adjustedRequiredRate,
+    toast,
+  ]);
 
   // Save test mutation
   const saveMutation = useMutation({
@@ -303,21 +393,87 @@ function VentilationTestsPage() {
     },
   });
 
-  const handleSave = () => {
+  // Phase 3 - OPTIMIZE: Wrap event handlers with useCallback
+  const handleSave = useCallback(() => {
     saveMutation.mutate(testData);
-  };
+  }, [saveMutation, testData]);
 
-  const handleFieldChange = (field: keyof InsertVentilationTest, value: any) => {
+  const handleFieldChange = useCallback((field: keyof InsertVentilationTest, value: any) => {
     setTestData(prev => ({
       ...prev,
       [field]: value,
     }));
-  };
+  }, []);
+
+  // Phase 2 - BUILD: Loading skeleton while data fetches
+  if (loadingJob || loadingTest) {
+    return (
+      <div className="container mx-auto p-6 space-y-6" data-testid="skeleton-loading">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-96" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-12 w-32" />
+        </div>
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  // Phase 2 - BUILD: Error state with retry button for job data
+  if (jobError) {
+    return (
+      <div className="container mx-auto p-6">
+        <Alert variant="destructive" data-testid="alert-job-error">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Failed to load job data</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{jobError.message || "An error occurred while loading job information"}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchJob()}
+              data-testid="button-retry-job"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Phase 2 - BUILD: Error state with retry button for test data
+  if (testError) {
+    return (
+      <div className="container mx-auto p-6">
+        <Alert variant="destructive" data-testid="alert-test-error">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Failed to load test data</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{testError.message || "An error occurred while loading ventilation test data"}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchTest()}
+              data-testid="button-retry-test"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (!jobId) {
     return (
       <div className="container mx-auto p-6">
-        <Alert variant="destructive">
+        <Alert variant="destructive" data-testid="alert-no-job">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>No Job Selected</AlertTitle>
           <AlertDescription>
@@ -330,12 +486,20 @@ function VentilationTestsPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="page-title">
-            <Wind className="h-8 w-8" />
-            Ventilation Testing
-          </h1>
+          <div className="flex items-center gap-2 mb-2">
+            <Link href="/jobs">
+              <Button variant="ghost" size="icon" data-testid="button-back-to-jobs">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="page-title">
+              <Wind className="h-8 w-8" />
+              Ventilation Testing
+            </h1>
+          </div>
           {job && (
             <p className="text-muted-foreground mt-1" data-testid="job-info">
               {job.lotAddress} - {job.builderName}
@@ -349,22 +513,23 @@ function VentilationTestsPage() {
             data-testid="button-save-test"
           >
             <Save className="h-4 w-4 mr-2" />
-            {existingTest ? "Update" : "Save"} Test
+            {saveMutation.isPending ? "Saving..." : existingTest ? "Update" : "Save"} Test
           </Button>
         </div>
       </div>
 
+      {/* Overall Compliance Alert */}
       {testData.overallCompliant !== undefined && (
         <Alert variant={testData.overallCompliant ? "default" : "destructive"} data-testid="alert-compliance">
           {testData.overallCompliant ? (
             <CheckCircle className="h-4 w-4" />
           ) : (
-            <AlertCircle className="h-4 w-4" />
+            <XCircle className="h-4 w-4" />
           )}
-          <AlertTitle>
+          <AlertTitle data-testid="alert-compliance-title">
             {testData.overallCompliant ? "Compliant" : "Non-Compliant"}
           </AlertTitle>
-          <AlertDescription>
+          <AlertDescription data-testid="alert-compliance-description">
             {testData.overallCompliant 
               ? "System meets all ASHRAE 62.2 and Minnesota 2020 Energy Code requirements"
               : testData.nonComplianceNotes || "System does not meet all requirements"}
@@ -372,8 +537,9 @@ function VentilationTestsPage() {
         </Alert>
       )}
 
+      {/* Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-5" data-testid="tabs-list">
           <TabsTrigger value="house" data-testid="tab-house">
             <Home className="h-4 w-4 mr-2" />
             House
@@ -397,8 +563,8 @@ function VentilationTestsPage() {
         </TabsList>
 
         {/* House Characteristics Tab */}
-        <TabsContent value="house" className="space-y-4">
-          <Card>
+        <TabsContent value="house" className="space-y-4" data-testid="tab-content-house">
+          <Card data-testid="card-test-info">
             <CardHeader>
               <CardTitle>Test Information</CardTitle>
               <CardDescription>Equipment and test conditions</CardDescription>
@@ -448,7 +614,7 @@ function VentilationTestsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card data-testid="card-house-characteristics">
             <CardHeader>
               <CardTitle>House Characteristics</CardTitle>
               <CardDescription>Building dimensions and ASHRAE 62.2 calculations</CardDescription>
@@ -499,7 +665,7 @@ function VentilationTestsPage() {
               </Button>
 
               {testData.requiredVentilationRate !== undefined && testData.requiredVentilationRate > 0 && (
-                <div className="space-y-2 p-4 bg-muted rounded-md">
+                <div className="space-y-2 p-4 bg-muted rounded-md" data-testid="section-calculated-requirements">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                     <div>
                       <Label className="text-xs text-muted-foreground">Required Rate</Label>
@@ -536,12 +702,12 @@ function VentilationTestsPage() {
         </TabsContent>
 
         {/* Kitchen Exhaust Tab */}
-        <TabsContent value="kitchen" className="space-y-4">
-          <Card>
+        <TabsContent value="kitchen" className="space-y-4" data-testid="tab-content-kitchen">
+          <Card data-testid="card-kitchen-exhaust">
             <CardHeader>
               <CardTitle>Kitchen Exhaust Fan</CardTitle>
               <CardDescription>
-                Requirements: ≥100 cfm (intermittent) OR ≥25 cfm (continuous)
+                Requirements: ≥{KITCHEN_INTERMITTENT_MIN_CFM} cfm (intermittent) OR ≥{KITCHEN_CONTINUOUS_MIN_CFM} cfm (continuous)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -556,8 +722,8 @@ function VentilationTestsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="intermittent">Intermittent (≥100 cfm)</SelectItem>
-                      <SelectItem value="continuous">Continuous (≥25 cfm)</SelectItem>
+                      <SelectItem value="intermittent">Intermittent (≥{KITCHEN_INTERMITTENT_MIN_CFM} cfm)</SelectItem>
+                      <SelectItem value="continuous">Continuous (≥{KITCHEN_CONTINUOUS_MIN_CFM} cfm)</SelectItem>
                       <SelectItem value="none">None</SelectItem>
                     </SelectContent>
                   </Select>
@@ -589,8 +755,19 @@ function VentilationTestsPage() {
                       <Badge 
                         variant={testData.kitchenMeetsCode ? "default" : "destructive"}
                         data-testid="badge-kitchen-compliance"
+                        className="flex items-center gap-1 w-fit"
                       >
-                        {testData.kitchenMeetsCode ? "✓ Compliant" : "✗ Non-Compliant"}
+                        {testData.kitchenMeetsCode ? (
+                          <>
+                            <CheckCircle className="h-3 w-3" />
+                            Compliant
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3 w-3" />
+                            Non-Compliant
+                          </>
+                        )}
                       </Badge>
                     )}
                   </div>
@@ -610,7 +787,7 @@ function VentilationTestsPage() {
         </TabsContent>
 
         {/* Bathrooms Tab */}
-        <TabsContent value="bathrooms" className="space-y-4">
+        <TabsContent value="bathrooms" className="space-y-4" data-testid="tab-content-bathrooms">
           {[1, 2, 3, 4].map((num) => {
             const typeField = `bathroom${num}Type` as keyof InsertVentilationTest;
             const ratedField = `bathroom${num}RatedCFM` as keyof InsertVentilationTest;
@@ -618,11 +795,11 @@ function VentilationTestsPage() {
             const meetsCodeField = `bathroom${num}MeetsCode` as keyof InsertVentilationTest;
             
             return (
-              <Card key={num}>
+              <Card key={num} data-testid={`card-bathroom${num}`}>
                 <CardHeader>
                   <CardTitle>Bathroom {num} Exhaust Fan</CardTitle>
                   <CardDescription>
-                    Requirements: ≥50 cfm (intermittent) OR ≥20 cfm (continuous)
+                    Requirements: ≥{BATHROOM_INTERMITTENT_MIN_CFM} cfm (intermittent) OR ≥{BATHROOM_CONTINUOUS_MIN_CFM} cfm (continuous)
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -637,8 +814,8 @@ function VentilationTestsPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="intermittent">Intermittent (≥50 cfm)</SelectItem>
-                          <SelectItem value="continuous">Continuous (≥20 cfm)</SelectItem>
+                          <SelectItem value="intermittent">Intermittent (≥{BATHROOM_INTERMITTENT_MIN_CFM} cfm)</SelectItem>
+                          <SelectItem value="continuous">Continuous (≥{BATHROOM_CONTINUOUS_MIN_CFM} cfm)</SelectItem>
                           <SelectItem value="none">None / N/A</SelectItem>
                         </SelectContent>
                       </Select>
@@ -670,8 +847,19 @@ function VentilationTestsPage() {
                           <Badge 
                             variant={testData[meetsCodeField] ? "default" : "destructive"}
                             data-testid={`badge-bathroom${num}-compliance`}
+                            className="flex items-center gap-1 w-fit"
                           >
-                            {testData[meetsCodeField] ? "✓ Compliant" : "✗ Non-Compliant"}
+                            {testData[meetsCodeField] ? (
+                              <>
+                                <CheckCircle className="h-3 w-3" />
+                                Compliant
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="h-3 w-3" />
+                                Non-Compliant
+                              </>
+                            )}
                           </Badge>
                         )}
                       </div>
@@ -684,8 +872,8 @@ function VentilationTestsPage() {
         </TabsContent>
 
         {/* Mechanical Ventilation Tab */}
-        <TabsContent value="mechanical" className="space-y-4">
-          <Card>
+        <TabsContent value="mechanical" className="space-y-4" data-testid="tab-content-mechanical">
+          <Card data-testid="card-mechanical-ventilation">
             <CardHeader>
               <CardTitle>Mechanical Ventilation System</CardTitle>
               <CardDescription>Whole-house ventilation system (if installed)</CardDescription>
@@ -788,8 +976,8 @@ function VentilationTestsPage() {
         </TabsContent>
 
         {/* Results Tab */}
-        <TabsContent value="results" className="space-y-4">
-          <Card>
+        <TabsContent value="results" className="space-y-4" data-testid="tab-content-results">
+          <Card data-testid="card-ventilation-summary">
             <CardHeader>
               <CardTitle>Ventilation Summary</CardTitle>
               <CardDescription>ASHRAE 62.2 and Minnesota 2020 Energy Code Compliance</CardDescription>
@@ -826,59 +1014,69 @@ function VentilationTestsPage() {
                         <Label className="text-xs text-muted-foreground">Overall Status</Label>
                         <Badge 
                           variant={testData.overallCompliant ? "default" : "destructive"}
-                          className="mt-2"
+                          className="mt-2 flex items-center gap-1 w-fit"
                           data-testid="badge-overall-compliance"
                         >
-                          {testData.overallCompliant ? "✓ Compliant" : "✗ Non-Compliant"}
+                          {testData.overallCompliant ? (
+                            <>
+                              <CheckCircle className="h-3 w-3" />
+                              Compliant
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3 w-3" />
+                              Non-Compliant
+                            </>
+                          )}
                         </Badge>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <Label>Component Compliance</Label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <div className="flex items-center justify-between p-2 border rounded">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2" data-testid="section-component-compliance">
+                        <div className="flex items-center justify-between p-2 border rounded" data-testid="component-kitchen">
                           <span>Kitchen Exhaust</span>
-                          <Badge variant={testData.kitchenMeetsCode ? "default" : "destructive"}>
-                            {testData.kitchenMeetsCode ? "✓" : "✗"}
+                          <Badge variant={testData.kitchenMeetsCode ? "default" : "destructive"} className="flex items-center gap-1">
+                            {testData.kitchenMeetsCode ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                           </Badge>
                         </div>
                         {testData.bathroom1Type && testData.bathroom1Type !== "none" && (
-                          <div className="flex items-center justify-between p-2 border rounded">
+                          <div className="flex items-center justify-between p-2 border rounded" data-testid="component-bathroom1">
                             <span>Bathroom 1</span>
-                            <Badge variant={testData.bathroom1MeetsCode ? "default" : "destructive"}>
-                              {testData.bathroom1MeetsCode ? "✓" : "✗"}
+                            <Badge variant={testData.bathroom1MeetsCode ? "default" : "destructive"} className="flex items-center gap-1">
+                              {testData.bathroom1MeetsCode ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                             </Badge>
                           </div>
                         )}
                         {testData.bathroom2Type && testData.bathroom2Type !== "none" && (
-                          <div className="flex items-center justify-between p-2 border rounded">
+                          <div className="flex items-center justify-between p-2 border rounded" data-testid="component-bathroom2">
                             <span>Bathroom 2</span>
-                            <Badge variant={testData.bathroom2MeetsCode ? "default" : "destructive"}>
-                              {testData.bathroom2MeetsCode ? "✓" : "✗"}
+                            <Badge variant={testData.bathroom2MeetsCode ? "default" : "destructive"} className="flex items-center gap-1">
+                              {testData.bathroom2MeetsCode ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                             </Badge>
                           </div>
                         )}
                         {testData.bathroom3Type && testData.bathroom3Type !== "none" && (
-                          <div className="flex items-center justify-between p-2 border rounded">
+                          <div className="flex items-center justify-between p-2 border rounded" data-testid="component-bathroom3">
                             <span>Bathroom 3</span>
-                            <Badge variant={testData.bathroom3MeetsCode ? "default" : "destructive"}>
-                              {testData.bathroom3MeetsCode ? "✓" : "✗"}
+                            <Badge variant={testData.bathroom3MeetsCode ? "default" : "destructive"} className="flex items-center gap-1">
+                              {testData.bathroom3MeetsCode ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                             </Badge>
                           </div>
                         )}
                         {testData.bathroom4Type && testData.bathroom4Type !== "none" && (
-                          <div className="flex items-center justify-between p-2 border rounded">
+                          <div className="flex items-center justify-between p-2 border rounded" data-testid="component-bathroom4">
                             <span>Bathroom 4</span>
-                            <Badge variant={testData.bathroom4MeetsCode ? "default" : "destructive"}>
-                              {testData.bathroom4MeetsCode ? "✓" : "✗"}
+                            <Badge variant={testData.bathroom4MeetsCode ? "default" : "destructive"} className="flex items-center gap-1">
+                              {testData.bathroom4MeetsCode ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                             </Badge>
                           </div>
                         )}
-                        <div className="flex items-center justify-between p-2 border rounded">
+                        <div className="flex items-center justify-between p-2 border rounded" data-testid="component-total-ventilation">
                           <span>Total Ventilation</span>
-                          <Badge variant={testData.meetsVentilationRequirement ? "default" : "destructive"}>
-                            {testData.meetsVentilationRequirement ? "✓" : "✗"}
+                          <Badge variant={testData.meetsVentilationRequirement ? "default" : "destructive"} className="flex items-center gap-1">
+                            {testData.meetsVentilationRequirement ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                           </Badge>
                         </div>
                       </div>
@@ -917,6 +1115,36 @@ function VentilationTestsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Phase 2 - BUILD: Wrap with ErrorBoundary for production resilience
+function VentilationTestsPage() {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="container mx-auto p-6">
+          <Alert variant="destructive" data-testid="alert-error-boundary">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Ventilation Testing Error</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p>An unexpected error occurred while loading the ventilation testing page.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.location.reload()}
+                data-testid="button-reload-page"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Reload Page
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      }
+    >
+      <VentilationTestsContent />
+    </ErrorBoundary>
   );
 }
 
