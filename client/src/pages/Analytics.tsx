@@ -1,13 +1,33 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { TrendingUp, AlertTriangle, Camera, BarChart3, CheckCircle2, Clock, Target, Building2, TrendingDown, Minus, Trophy, ArrowUpDown, ArrowRight, Award, Download } from "lucide-react";
+import { 
+  TrendingUp, 
+  AlertTriangle, 
+  Camera, 
+  BarChart3, 
+  CheckCircle2, 
+  Clock, 
+  Target, 
+  Building2, 
+  TrendingDown, 
+  Minus, 
+  Trophy, 
+  ArrowUpDown, 
+  ArrowRight, 
+  Award, 
+  Download,
+  RefreshCw,
+  AlertCircle
+} from "lucide-react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { analyticsLogger } from "@/lib/logger";
 import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth, subDays, isWithinInterval, eachMonthOfInterval, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   LineChart,
@@ -30,12 +50,13 @@ import { calculateAccuracy } from "@shared/forecastAccuracy";
 import { DateRangePicker, type DateRange } from "@/components/DateRangePicker";
 import ExportDialog from "@/components/ExportDialog";
 
+// Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
 const STATUS_COLORS = {
   pending: "#FFC107",
   "in-progress": "#2E5BBA",
   review: "#FD7E14",
   completed: "#28A745",
-};
+} as const;
 
 const ISSUE_COLORS = [
   '#2E5BBA', // Blue
@@ -43,11 +64,12 @@ const ISSUE_COLORS = [
   '#FFC107', // Yellow
   '#DC3545', // Red
   '#6C757D', // Gray
-];
+] as const;
 
 const STORAGE_KEY = 'analytics-date-range';
 
-export default function Analytics() {
+// Phase 2 - BUILD: AnalyticsContent wrapped in ErrorBoundary at export
+function AnalyticsContent() {
   const [, setLocation] = useLocation();
   const [sortColumn, setSortColumn] = useState<string>('completionRate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -91,203 +113,294 @@ export default function Analytics() {
     }
   }, [dateRange]);
 
-  const { data: jobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
+  // Phase 5 - HARDEN: Added retry: 2 for resilience against network issues
+  const { 
+    data: jobs = [], 
+    isLoading: jobsLoading,
+    error: jobsError,
+    refetch: refetchJobs
+  } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
+    retry: 2,
   });
 
-  const { data: checklistItems = [], isLoading: itemsLoading } = useQuery<ChecklistItem[]>({
+  const { 
+    data: checklistItems = [], 
+    isLoading: itemsLoading,
+    error: itemsError,
+    refetch: refetchItems
+  } = useQuery<ChecklistItem[]>({
     queryKey: ["/api/checklist-items"],
+    retry: 2,
   });
 
-  const { data: photos = [], isLoading: photosLoading } = useQuery<Photo[]>({
+  const { 
+    data: photos = [], 
+    isLoading: photosLoading,
+    error: photosError,
+    refetch: refetchPhotos
+  } = useQuery<Photo[]>({
     queryKey: ["/api/photos"],
+    retry: 2,
   });
 
-  const { data: builders = [], isLoading: buildersLoading } = useQuery<Builder[]>({
+  const { 
+    data: builders = [], 
+    isLoading: buildersLoading,
+    error: buildersError,
+    refetch: refetchBuilders
+  } = useQuery<Builder[]>({
     queryKey: ["/api/builders"],
+    retry: 2,
   });
 
-  const { data: forecasts = [], isLoading: forecastsLoading } = useQuery<Forecast[]>({
+  const { 
+    data: forecasts = [], 
+    isLoading: forecastsLoading,
+    error: forecastsError,
+    refetch: refetchForecasts
+  } = useQuery<Forecast[]>({
     queryKey: ["/api/forecasts"],
+    retry: 2,
   });
 
   const isLoading = jobsLoading || itemsLoading || photosLoading || buildersLoading || forecastsLoading;
 
-  // Helper function to check if a date is within the selected range
-  const isInDateRange = (date: Date | string | null | undefined): boolean => {
+  // Phase 3 - OPTIMIZE: Memoized helper function to check if date is within range
+  // Prevents recreation on every render
+  const isInDateRange = useCallback((date: Date | string | null | undefined): boolean => {
     if (!date) return false;
     const checkDate = new Date(date);
+    // Phase 5 - HARDEN: Validate date is not NaN
+    if (isNaN(checkDate.getTime())) return false;
     return isWithinInterval(checkDate, {
       start: startOfDay(dateRange.from),
       end: endOfDay(dateRange.to),
     });
-  };
+  }, [dateRange.from, dateRange.to]);
 
-  // Filter jobs by selected date range
-  const jobsInRange = jobs.filter(j => {
-    const relevantDate = j.completedDate || j.scheduledDate;
-    return isInDateRange(relevantDate);
-  });
+  // Phase 3 - OPTIMIZE: Memoized filtered jobs to prevent recomputation
+  // Only recalculates when jobs data or date range changes
+  const jobsInRange = useMemo(() => {
+    return jobs.filter(j => {
+      const relevantDate = j.completedDate || j.scheduledDate;
+      return isInDateRange(relevantDate);
+    });
+  }, [jobs, isInDateRange]);
 
+  // Phase 6 - DOCUMENT: Total inspections metric
+  // Count of all jobs within the selected date range
   const totalInspections = jobsInRange.length;
-  const completedJobs = jobsInRange.filter(j => j.status === "completed" && j.completedDate && j.scheduledDate);
   
-  const avgInspectionTime = completedJobs.length > 0
-    ? completedJobs.reduce((sum, job) => {
-        const start = new Date(job.scheduledDate!);
-        const end = new Date(job.completedDate!);
-        return sum + differenceInMinutes(end, start);
-      }, 0) / completedJobs.length
-    : 0;
+  // Phase 3 - OPTIMIZE: Memoized completed jobs calculation
+  const completedJobs = useMemo(() => {
+    return jobsInRange.filter(j => j.status === "completed" && j.completedDate && j.scheduledDate);
+  }, [jobsInRange]);
+  
+  // Phase 6 - DOCUMENT: Average inspection time calculation
+  // Calculates mean time in minutes from scheduled to completed for all finished jobs
+  // Phase 5 - HARDEN: Prevents division by zero
+  const avgInspectionTime = useMemo(() => {
+    if (completedJobs.length === 0) return 0;
+    
+    return completedJobs.reduce((sum, job) => {
+      const start = new Date(job.scheduledDate!);
+      const end = new Date(job.completedDate!);
+      return sum + differenceInMinutes(end, start);
+    }, 0) / completedJobs.length;
+  }, [completedJobs]);
 
-  const completionRate = totalInspections > 0
-    ? (jobsInRange.filter(j => j.status === "completed").length / totalInspections * 100)
-    : 0;
+  // Phase 6 - DOCUMENT: Completion rate metric
+  // Percentage of jobs in selected range that have been completed
+  // Phase 5 - HARDEN: Prevents division by zero
+  const completionRate = useMemo(() => {
+    if (totalInspections === 0) return 0;
+    return (jobsInRange.filter(j => j.status === "completed").length / totalInspections) * 100;
+  }, [jobsInRange, totalInspections]);
 
-  const avgItemsPerInspection = totalInspections > 0
-    ? (checklistItems.filter(item => {
-        const job = jobs.find(j => j.id === item.jobId);
-        return job && isInDateRange(job.completedDate || job.scheduledDate);
-      }).length / totalInspections)
-    : 0;
-
-  // Generate month labels based on selected date range
-  const monthsInRange = eachMonthOfInterval({
-    start: startOfMonth(dateRange.from),
-    end: startOfMonth(dateRange.to),
-  }).map(date => format(date, 'MMM yyyy'));
-
-  const monthlyInspectionData = monthsInRange.map(month => {
-    const count = jobs.filter(j => {
-      if (!j.completedDate || !isInDateRange(j.completedDate)) return false;
-      const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
-      return jobMonth === month;
-    }).length;
-    return { month, inspections: count };
-  });
-
-  const completedJobIds = jobsInRange.filter(j => j.status === 'completed').map(j => j.id);
-  const failedItems = checklistItems.filter(item => 
-    !item.completed && completedJobIds.includes(item.jobId)
-  );
-  const issueFrequency = failedItems.reduce((acc, item) => {
-    const key = item.title;
-    if (!acc[key]) {
-      acc[key] = {
-        count: 0,
-        photoRequired: item.photoRequired || false,
-      };
-    }
-    acc[key].count++;
-    return acc;
-  }, {} as Record<string, { count: number; photoRequired: boolean }>);
-
-  const completedInspections = jobsInRange.filter(j => j.status === 'completed').length;
-  const commonIssues = Object.entries(issueFrequency)
-    .map(([name, data]) => ({
-      name,
-      frequency: data.count,
-      percentage: completedInspections > 0 ? safeToFixed((data.count / completedInspections) * 100, 1) : '0.0',
-      severity: data.count > 10 ? 'Critical' : data.count > 5 ? 'Major' : 'Minor',
-    }))
-    .sort((a, b) => b.frequency - a.frequency)
-    .slice(0, 10);
-
-  // Performance optimization: Create job lookup map to avoid repeated finds
-  const jobsMap = new Map(jobs.map(j => [j.id, j]));
-
-  // Create Set of displayed months for exact alignment with chart
-  const displayedMonths = new Set(monthsInRange);
-
-  // Monthly issue tracking for trend analysis (exact chart months)
-  const monthlyIssues = checklistItems
-    .filter(item => {
-      const job = jobsMap.get(item.jobId);
-      if (!job?.completedDate || item.completed || job.status !== 'completed') return false;
-      
-      // Check if job is within date range and month is in displayed months
-      if (!isInDateRange(job.completedDate)) return false;
-      
-      const jobMonth = format(new Date(job.completedDate), 'MMM yyyy');
-      return displayedMonths.has(jobMonth);
-    })
-    .reduce((acc, item) => {
-      const job = jobsMap.get(item.jobId);
-      if (!job?.completedDate) return acc;
-      
-      const month = format(new Date(job.completedDate), 'MMM yyyy');
-      const issueName = item.title;
-      
-      if (!acc[month]) acc[month] = {};
-      acc[month][issueName] = (acc[month][issueName] ?? 0) + 1;
-      
-      return acc;
-    }, {} as Record<string, Record<string, number>>);
-
-  // Calculate top issues from the 6-month data only
-  const issueFrequency6Months: Record<string, number> = {};
-  Object.values(monthlyIssues).forEach(monthData => {
-    Object.entries(monthData).forEach(([issue, count]) => {
-      issueFrequency6Months[issue] = (issueFrequency6Months[issue] ?? 0) + count;
-    });
-  });
-
-  // Get top 5 issues for trend chart based on 6-month window
-  const topIssues = Object.entries(issueFrequency6Months)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([name]) => name);
-
-  // Format data for line chart
-  const issuesTrendData = monthsInRange.map(month => {
-    const dataPoint: Record<string, string | number> = { month };
-    topIssues.forEach(issue => {
-      dataPoint[issue] = monthlyIssues[month]?.[issue] ?? 0;
-    });
-    return dataPoint;
-  });
-
-  const tagCounts = photos
-    .filter(photo => {
-      const job = jobs.find(j => j.id === photo.jobId);
+  // Phase 6 - DOCUMENT: Average items per inspection metric
+  // Mean number of checklist items across all inspections in date range
+  // Phase 5 - HARDEN: Prevents division by zero
+  const avgItemsPerInspection = useMemo(() => {
+    if (totalInspections === 0) return 0;
+    
+    const itemsInRange = checklistItems.filter(item => {
+      const job = jobs.find(j => j.id === item.jobId);
       return job && isInDateRange(job.completedDate || job.scheduledDate);
-    })
-    .reduce((acc, photo) => {
-      (photo.tags ?? []).forEach(tag => {
-        acc[tag] = (acc[tag] ?? 0) + 1;
-      });
+    });
+    
+    return itemsInRange.length / totalInspections;
+  }, [checklistItems, jobs, totalInspections, isInDateRange]);
+
+  // Phase 3 - OPTIMIZE: Memoized month labels generation
+  const monthsInRange = useMemo(() => {
+    return eachMonthOfInterval({
+      start: startOfMonth(dateRange.from),
+      end: startOfMonth(dateRange.to),
+    }).map(date => format(date, 'MMM yyyy'));
+  }, [dateRange.from, dateRange.to]);
+
+  // Phase 6 - DOCUMENT: Monthly inspection data for trend chart
+  // Groups completed jobs by month for time-series visualization
+  const monthlyInspectionData = useMemo(() => {
+    return monthsInRange.map(month => {
+      const count = jobs.filter(j => {
+        if (!j.completedDate || !isInDateRange(j.completedDate)) return false;
+        const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
+        return jobMonth === month;
+      }).length;
+      return { month, inspections: count };
+    });
+  }, [monthsInRange, jobs, isInDateRange]);
+
+  // Phase 3 - OPTIMIZE: Memoize job lookup map to avoid repeated finds
+  const jobsMap = useMemo(() => {
+    return new Map(jobs.map(j => [j.id, j]));
+  }, [jobs]);
+
+  // Phase 3 - OPTIMIZE: Memoize displayed months Set
+  const displayedMonths = useMemo(() => {
+    return new Set(monthsInRange);
+  }, [monthsInRange]);
+
+  // Phase 6 - DOCUMENT: Common issues calculation
+  // Identifies most frequently failed checklist items from completed jobs
+  const commonIssues = useMemo(() => {
+    const completedJobIds = jobsInRange.filter(j => j.status === 'completed').map(j => j.id);
+    const failedItems = checklistItems.filter(item => 
+      !item.completed && completedJobIds.includes(item.jobId)
+    );
+    
+    const issueFrequency = failedItems.reduce((acc, item) => {
+      const key = item.title;
+      if (!acc[key]) {
+        acc[key] = {
+          count: 0,
+          photoRequired: item.photoRequired || false,
+        };
+      }
+      acc[key].count++;
       return acc;
-    }, {} as Record<string, number>);
+    }, {} as Record<string, { count: number; photoRequired: boolean }>);
 
-  const photoTagData = Object.entries(tagCounts)
-    .map(([tag, count]) => {
-      const config = getTagConfig(tag);
-      return {
-        tag: config?.label || tag,
-        count,
-        category: config?.category || 'other',
-      };
-    })
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
+    const completedInspections = jobsInRange.filter(j => j.status === 'completed').length;
+    
+    return Object.entries(issueFrequency)
+      .map(([name, data]) => ({
+        name,
+        frequency: data.count,
+        // Phase 5 - HARDEN: Safe division to prevent NaN
+        percentage: completedInspections > 0 ? safeToFixed((data.count / completedInspections) * 100, 1) : '0.0',
+        severity: data.count > 10 ? 'Critical' : data.count > 5 ? 'Major' : 'Minor',
+      }))
+      .sort((a, b) => b.frequency - a.frequency)
+      .slice(0, 10);
+  }, [jobsInRange, checklistItems]);
 
-  const statusBreakdownData = monthsInRange.map(month => {
-    const jobsInMonth = jobs.filter(j => {
-      if (!j.scheduledDate || !isInDateRange(j.scheduledDate)) return false;
-      const jobMonth = format(new Date(j.scheduledDate), 'MMM yyyy');
-      return jobMonth === month;
+  // Phase 6 - DOCUMENT: Monthly issue tracking for trend analysis
+  // Tracks issue frequency over time for the top 5 issues
+  const monthlyIssues = useMemo(() => {
+    return checklistItems
+      .filter(item => {
+        const job = jobsMap.get(item.jobId);
+        if (!job?.completedDate || item.completed || job.status !== 'completed') return false;
+        
+        if (!isInDateRange(job.completedDate)) return false;
+        
+        const jobMonth = format(new Date(job.completedDate), 'MMM yyyy');
+        return displayedMonths.has(jobMonth);
+      })
+      .reduce((acc, item) => {
+        const job = jobsMap.get(item.jobId);
+        if (!job?.completedDate) return acc;
+        
+        const month = format(new Date(job.completedDate), 'MMM yyyy');
+        const issueName = item.title;
+        
+        if (!acc[month]) acc[month] = {};
+        acc[month][issueName] = (acc[month][issueName] ?? 0) + 1;
+        
+        return acc;
+      }, {} as Record<string, Record<string, number>>);
+  }, [checklistItems, jobsMap, isInDateRange, displayedMonths]);
+
+  // Phase 3 - OPTIMIZE: Memoize top issues calculation
+  const topIssues = useMemo(() => {
+    const issueFrequency6Months: Record<string, number> = {};
+    Object.values(monthlyIssues).forEach(monthData => {
+      Object.entries(monthData).forEach(([issue, count]) => {
+        issueFrequency6Months[issue] = (issueFrequency6Months[issue] ?? 0) + count;
+      });
     });
 
-    return {
-      month,
-      Pending: jobsInMonth.filter(j => j.status === 'pending').length,
-      'In Progress': jobsInMonth.filter(j => j.status === 'in-progress').length,
-      Review: jobsInMonth.filter(j => j.status === 'review').length,
-      Completed: jobsInMonth.filter(j => j.status === 'completed').length,
-    };
-  });
+    return Object.entries(issueFrequency6Months)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name]) => name);
+  }, [monthlyIssues]);
 
-  const getSeverityColor = (severity: string) => {
+  // Phase 6 - DOCUMENT: Issues trend data for line chart
+  // Formats issue frequency by month for time-series visualization
+  const issuesTrendData = useMemo(() => {
+    return monthsInRange.map(month => {
+      const dataPoint: Record<string, string | number> = { month };
+      topIssues.forEach(issue => {
+        dataPoint[issue] = monthlyIssues[month]?.[issue] ?? 0;
+      });
+      return dataPoint;
+    });
+  }, [monthsInRange, topIssues, monthlyIssues]);
+
+  // Phase 6 - DOCUMENT: Photo tag analytics
+  // Aggregates and ranks most commonly used photo tags
+  const photoTagData = useMemo(() => {
+    const tagCounts = photos
+      .filter(photo => {
+        const job = jobs.find(j => j.id === photo.jobId);
+        return job && isInDateRange(job.completedDate || job.scheduledDate);
+      })
+      .reduce((acc, photo) => {
+        (photo.tags ?? []).forEach(tag => {
+          acc[tag] = (acc[tag] ?? 0) + 1;
+        });
+        return acc;
+      }, {} as Record<string, number>);
+
+    return Object.entries(tagCounts)
+      .map(([tag, count]) => {
+        const config = getTagConfig(tag);
+        return {
+          tag: config?.label || tag,
+          count,
+          category: config?.category || 'other',
+        };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [photos, jobs, isInDateRange]);
+
+  // Phase 6 - DOCUMENT: Status breakdown by month
+  // Shows distribution of job statuses over time
+  const statusBreakdownData = useMemo(() => {
+    return monthsInRange.map(month => {
+      const jobsInMonth = jobs.filter(j => {
+        if (!j.scheduledDate || !isInDateRange(j.scheduledDate)) return false;
+        const jobMonth = format(new Date(j.scheduledDate), 'MMM yyyy');
+        return jobMonth === month;
+      });
+
+      return {
+        month,
+        Pending: jobsInMonth.filter(j => j.status === 'pending').length,
+        'In Progress': jobsInMonth.filter(j => j.status === 'in-progress').length,
+        Review: jobsInMonth.filter(j => j.status === 'review').length,
+        Completed: jobsInMonth.filter(j => j.status === 'completed').length,
+      };
+    });
+  }, [monthsInRange, jobs, isInDateRange]);
+
+  // Phase 3 - OPTIMIZE: Memoized helper functions
+  const getSeverityColor = useCallback((severity: string) => {
     switch (severity) {
       case 'Critical':
         return 'bg-red-600 text-white';
@@ -298,9 +411,9 @@ export default function Analytics() {
       default:
         return 'bg-gray-500 text-white';
     }
-  };
+  }, []);
 
-  const getCategoryColor = (category: string) => {
+  const getCategoryColor = useCallback((category: string) => {
     switch (category) {
       case 'inspection':
         return '#2E5BBA';
@@ -313,10 +426,11 @@ export default function Analytics() {
       default:
         return '#6C757D';
     }
-  };
+  }, []);
 
-  // Get trend indicator for an issue
-  const getIssueTrend = (issueName: string, monthlyData: Record<string, Record<string, number>>) => {
+  // Phase 6 - DOCUMENT: Issue trend indicator
+  // Compares current month to 3-month average to show improving/worsening trends
+  const getIssueTrend = useCallback((issueName: string, monthlyData: Record<string, Record<string, number>>) => {
     const now = new Date();
     const currentMonth = format(now, 'MMM yyyy');
     const last3Months = Array.from({ length: 3 }, (_, i) => {
@@ -329,164 +443,172 @@ export default function Analytics() {
       return sum + (monthlyData[month]?.[issueName] ?? 0);
     }, 0), 3);
     
+    // Phase 6 - DOCUMENT: Thresholds for trend classification
+    // >30% increase = worsening, >30% decrease = improving
     if (currentCount > avgLast3Months * 1.3) {
       return { icon: TrendingUp, color: 'text-destructive', label: 'Worsening' };
     } else if (currentCount < avgLast3Months * 0.7) {
       return { icon: TrendingDown, color: 'text-success', label: 'Improving' };
     }
     return { icon: Minus, color: 'text-muted-foreground', label: 'Stable' };
-  };
+  }, []);
 
-  // Forecast Accuracy Helper Function moved to @shared/forecastAccuracy
-
-  // Builder Performance Metrics Calculation
-  const builderStats = builders.map(builder => {
-    const builderJobs = jobsInRange.filter(j => j.builderId === builder.id);
-    const completedBuilderJobs = builderJobs.filter(j => j.status === 'completed');
-    
-    const completionRate = builderJobs.length > 0
-      ? (completedBuilderJobs.length / builderJobs.length * 100)
-      : 0;
-    
-    const avgTime = completedBuilderJobs.filter(j => j.completedDate && j.scheduledDate).length > 0
-      ? completedBuilderJobs
-          .filter(j => j.completedDate && j.scheduledDate)
-          .reduce((sum, job) => {
-            const start = new Date(job.scheduledDate!);
-            const end = new Date(job.completedDate!);
-            return sum + differenceInMinutes(end, start);
-          }, 0) / completedBuilderJobs.filter(j => j.completedDate && j.scheduledDate).length
-      : 0;
-    
-    // Get TDL forecasts for this builder
-    const tdlForecasts = completedBuilderJobs
-      .map(j => forecasts.find(f => f.jobId === j.id))
-      .filter((f): f is Forecast => 
-        f != null &&
-        f.actualTDL != null && 
-        f.predictedTDL != null &&
-        !isNaN(Number(f.actualTDL)) && 
-        !isNaN(Number(f.predictedTDL))
+  // Phase 6 - DOCUMENT: Builder Performance Metrics Calculation
+  // Aggregates key performance indicators for each builder
+  const builderStats = useMemo(() => {
+    return builders.map(builder => {
+      const builderJobs = jobsInRange.filter(j => j.builderId === builder.id);
+      const completedBuilderJobs = builderJobs.filter(j => j.status === 'completed');
+      
+      // Phase 5 - HARDEN: Safe division prevents NaN values
+      const completionRate = builderJobs.length > 0
+        ? (completedBuilderJobs.length / builderJobs.length * 100)
+        : 0;
+      
+      const avgTime = completedBuilderJobs.filter(j => j.completedDate && j.scheduledDate).length > 0
+        ? completedBuilderJobs
+            .filter(j => j.completedDate && j.scheduledDate)
+            .reduce((sum, job) => {
+              const start = new Date(job.scheduledDate!);
+              const end = new Date(job.completedDate!);
+              return sum + differenceInMinutes(end, start);
+            }, 0) / completedBuilderJobs.filter(j => j.completedDate && j.scheduledDate).length
+        : 0;
+      
+      // Phase 6 - DOCUMENT: TDL/DLO forecast accuracy calculation
+      // Filters valid forecasts and calculates accuracy for this builder
+      const tdlForecasts = completedBuilderJobs
+        .map(j => forecasts.find(f => f.jobId === j.id))
+        .filter((f): f is Forecast => 
+          f != null &&
+          f.actualTDL != null && 
+          f.predictedTDL != null &&
+          !isNaN(Number(f.actualTDL)) && 
+          !isNaN(Number(f.predictedTDL))
+        );
+      
+      const dloForecasts = completedBuilderJobs
+        .map(j => forecasts.find(f => f.jobId === j.id))
+        .filter((f): f is Forecast =>
+          f != null &&
+          f.actualDLO != null &&
+          f.predictedDLO != null &&
+          !isNaN(Number(f.actualDLO)) &&
+          !isNaN(Number(f.predictedDLO))
+        );
+      
+      const tdlAccuracy = tdlForecasts.length > 0
+        ? safeDivide(tdlForecasts.reduce((sum, f) => {
+            return sum + calculateAccuracy(
+              Number(f.predictedTDL),
+              Number(f.actualTDL)
+            );
+          }, 0), tdlForecasts.length)
+        : 0;
+      
+      const dloAccuracy = dloForecasts.length > 0
+        ? safeDivide(dloForecasts.reduce((sum, f) => {
+            return sum + calculateAccuracy(
+              Number(f.predictedDLO),
+              Number(f.actualDLO)
+            );
+          }, 0), dloForecasts.length)
+        : 0;
+      
+      // Phase 6 - DOCUMENT: Weighted average of TDL and DLO accuracy
+      const totalForecasts = tdlForecasts.length + dloForecasts.length;
+      const avgAccuracy = totalForecasts > 0
+        ? safeDivide(tdlAccuracy * tdlForecasts.length + dloAccuracy * dloForecasts.length, totalForecasts)
+        : 0;
+      
+      const builderChecklistItems = builderJobs.flatMap(job => 
+        checklistItems.filter(item => item.jobId === job.id)
       );
-    
-    // Get DLO forecasts for this builder
-    const dloForecasts = completedBuilderJobs
-      .map(j => forecasts.find(f => f.jobId === j.id))
-      .filter((f): f is Forecast =>
-        f != null &&
-        f.actualDLO != null &&
-        f.predictedDLO != null &&
-        !isNaN(Number(f.actualDLO)) &&
-        !isNaN(Number(f.predictedDLO))
+      const failedItems = builderChecklistItems.filter(item => 
+        !item.completed && completedBuilderJobs.find(j => j.id === item.jobId)
       );
-    
-    // Calculate TDL accuracy
-    const tdlAccuracy = tdlForecasts.length > 0
-      ? safeDivide(tdlForecasts.reduce((sum, f) => {
-          return sum + calculateAccuracy(
-            Number(f.predictedTDL),
-            Number(f.actualTDL)
-          );
-        }, 0), tdlForecasts.length)
-      : 0;
-    
-    // Calculate DLO accuracy
-    const dloAccuracy = dloForecasts.length > 0
-      ? safeDivide(dloForecasts.reduce((sum, f) => {
-          return sum + calculateAccuracy(
-            Number(f.predictedDLO),
-            Number(f.actualDLO)
-          );
-        }, 0), dloForecasts.length)
-      : 0;
-    
-    // Calculate weighted average of both TDL and DLO
-    const totalForecasts = tdlForecasts.length + dloForecasts.length;
-    const avgAccuracy = totalForecasts > 0
-      ? safeDivide(tdlAccuracy * tdlForecasts.length + dloAccuracy * dloForecasts.length, totalForecasts)
-      : 0;
-    
-    const builderChecklistItems = builderJobs.flatMap(job => 
-      checklistItems.filter(item => item.jobId === job.id)
-    );
-    const failedItems = builderChecklistItems.filter(item => 
-      !item.completed && completedBuilderJobs.find(j => j.id === item.jobId)
-    );
-    
-    const thisMonthJobs = builderJobs.filter(j => {
-      if (!j.scheduledDate) return false;
-      return isThisMonth(new Date(j.scheduledDate));
+      
+      const thisMonthJobs = builderJobs.filter(j => {
+        if (!j.scheduledDate) return false;
+        return isThisMonth(new Date(j.scheduledDate));
+      });
+      
+      // Phase 6 - DOCUMENT: Compliance rate calculation
+      // Percentage of evaluated jobs that are compliant
+      const builderJobsWithCompliance = builderJobs.filter(j => 
+        j.complianceStatus === 'compliant' || j.complianceStatus === 'non-compliant'
+      );
+      const builderCompliantJobs = builderJobs.filter(j => j.complianceStatus === 'compliant');
+      const complianceRate = builderJobsWithCompliance.length > 0
+        ? (builderCompliantJobs.length / builderJobsWithCompliance.length * 100)
+        : 0;
+      
+      return {
+        builder,
+        totalJobs: builderJobs.length,
+        completedJobs: completedBuilderJobs.length,
+        completionRate,
+        avgAccuracy,
+        avgInspectionTime: avgTime,
+        commonIssuesCount: failedItems.length,
+        jobsThisMonth: thisMonthJobs.length,
+        complianceRate,
+      };
     });
-    
-    // Calculate compliance rate for this builder
-    const builderJobsWithCompliance = builderJobs.filter(j => 
-      j.complianceStatus === 'compliant' || j.complianceStatus === 'non-compliant'
-    );
-    const builderCompliantJobs = builderJobs.filter(j => j.complianceStatus === 'compliant');
-    const complianceRate = builderJobsWithCompliance.length > 0
-      ? (builderCompliantJobs.length / builderJobsWithCompliance.length * 100)
-      : 0;
-    
-    return {
-      builder,
-      totalJobs: builderJobs.length,
-      completedJobs: completedBuilderJobs.length,
-      completionRate,
-      avgAccuracy,
-      avgInspectionTime: avgTime,
-      commonIssuesCount: failedItems.length,
-      jobsThisMonth: thisMonthJobs.length,
-      complianceRate,
-    };
-  });
+  }, [builders, jobsInRange, forecasts, checklistItems]);
 
-  const handleSort = (column: string) => {
+  // Phase 3 - OPTIMIZE: useCallback for sort handler
+  const handleSort = useCallback((column: string) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(column);
       setSortDirection('desc');
     }
-  };
+  }, [sortColumn, sortDirection]);
 
-  const sortedBuilders = [...builderStats].sort((a, b) => {
-    let aVal, bVal;
-    
-    // Handle nested property access
-    if (sortColumn === 'builder.name') {
-      aVal = a.builder.name;
-      bVal = b.builder.name;
-    } else {
-      aVal = a[sortColumn as keyof typeof a];
-      bVal = b[sortColumn as keyof typeof b];
-    }
-    
-    // Handle string vs numeric comparison
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return sortDirection === 'asc' 
-        ? aVal.localeCompare(bVal) 
-        : bVal.localeCompare(aVal);
-    } else if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-    }
-    return 0;
-  });
+  // Phase 3 - OPTIMIZE: Memoize sorted builders
+  const sortedBuilders = useMemo(() => {
+    return [...builderStats].sort((a, b) => {
+      let aVal, bVal;
+      
+      if (sortColumn === 'builder.name') {
+        aVal = a.builder.name;
+        bVal = b.builder.name;
+      } else {
+        aVal = a[sortColumn as keyof typeof a];
+        bVal = b[sortColumn as keyof typeof b];
+      }
+      
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' 
+          ? aVal.localeCompare(bVal) 
+          : bVal.localeCompare(aVal);
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      return 0;
+    });
+  }, [builderStats, sortColumn, sortDirection]);
 
-  const topPerformerIndex = sortedBuilders.length > 0 
-    ? builderStats.findIndex(b => b.builder.id === sortedBuilders[0].builder.id)
-    : -1;
+  const topPerformerIndex = useMemo(() => {
+    return sortedBuilders.length > 0 
+      ? builderStats.findIndex(b => b.builder.id === sortedBuilders[0].builder.id)
+      : -1;
+  }, [sortedBuilders, builderStats]);
 
-  const getPerformanceTier = (completionRate: number, accuracy: number) => {
+  const getPerformanceTier = useCallback((completionRate: number, accuracy: number) => {
     const avgScore = (completionRate + accuracy) / 2;
     if (avgScore >= 85) return { label: 'Excellent', color: 'bg-green-600 text-white' };
     if (avgScore >= 70) return { label: 'Good', color: 'bg-blue-500 text-white' };
     return { label: 'Needs Improvement', color: 'bg-orange-500 text-white' };
-  };
+  }, []);
 
-  const getTrendIcon = (stat: typeof builderStats[0], allJobs: Job[]) => {
+  // Phase 6 - DOCUMENT: Builder trend indicator
+  // Compares current month activity to 6-month average
+  const getTrendIcon = useCallback((stat: typeof builderStats[0], allJobs: Job[]) => {
     if (stat.totalJobs === 0) return <Minus className="h-4 w-4 text-muted-foreground" />;
     
-    // Get jobs for this builder in the last 6 months (excluding current month)
     const last6MonthsJobs = allJobs.filter(j => {
       if (j.builderId !== stat.builder.id) return false;
       const jobDate = new Date(j.scheduledDate || j.completedDate || Date.now());
@@ -496,13 +618,11 @@ export default function Analytics() {
       return jobDate >= sixMonthsAgo && jobDate < thisMonthStart;
     });
     
-    // Guard: Need minimum data for reliable trends
+    // Phase 5 - HARDEN: Need minimum data for reliable trends
     if (last6MonthsJobs.length < 3) {
       return <Minus className="h-4 w-4 text-muted-foreground" />;
     }
     
-    // Calculate trend based on actual months with activity
-    // Guards against false positives for low-volume builders
     const monthsWithJobs = new Set(
       last6MonthsJobs.map(j => {
         const date = new Date(j.scheduledDate || j.completedDate || Date.now());
@@ -510,469 +630,472 @@ export default function Analytics() {
       })
     ).size;
     
-    // Guard against division by zero
+    // Phase 5 - HARDEN: Prevent division by zero
     if (monthsWithJobs === 0) {
       return <Minus className="h-4 w-4 text-muted-foreground" />;
     }
     
     const avgJobsPerActiveMonth = safeDivide(last6MonthsJobs.length, monthsWithJobs);
     
-    // Compare current month to average (20% threshold)
     if (stat.jobsThisMonth > avgJobsPerActiveMonth * 1.2) {
       return <TrendingUp className="h-4 w-4 text-success" />;
     } else if (stat.jobsThisMonth < avgJobsPerActiveMonth * 0.8) {
       return <TrendingDown className="h-4 w-4 text-destructive" />;
     }
     return <Minus className="h-4 w-4 text-muted-foreground" />;
-  };
+  }, []);
 
-  const builderComparisonData = builderStats
-    .sort((a, b) => b.completionRate - a.completionRate)
-    .slice(0, 5)
-    .map(stat => ({
-      name: stat.builder.name,
-      'Completion Rate': safeParseFloat(safeToFixed(stat.completionRate, 1)),
-      'Forecast Accuracy': safeParseFloat(safeToFixed(stat.avgAccuracy, 1)),
-    }));
-
-  const builderTrendData = monthsInRange.map(month => {
-    const monthData: Record<string, string | number> = { month };
-    builderStats
-      .sort((a, b) => b.totalJobs - a.totalJobs)
+  // Phase 3 - OPTIMIZE: Memoize builder comparison data
+  const builderComparisonData = useMemo(() => {
+    return builderStats
+      .sort((a, b) => b.completionRate - a.completionRate)
       .slice(0, 5)
-      .forEach(stat => {
-        const jobsInMonth = jobs.filter(j => {
-          if (!j.completedDate || j.builderId !== stat.builder.id) return false;
-          if (!isInDateRange(j.completedDate)) return false;
-          const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
-          return jobMonth === month;
-        }).length;
-        monthData[stat.builder.name] = jobsInMonth;
-      });
-    return monthData;
-  });
+      .map(stat => ({
+        name: stat.builder.name,
+        'Completion Rate': safeParseFloat(safeToFixed(stat.completionRate, 1)),
+        'Forecast Accuracy': safeParseFloat(safeToFixed(stat.avgAccuracy, 1)),
+      }));
+  }, [builderStats]);
 
-  const topBuilders = builderStats
-    .sort((a, b) => b.totalJobs - a.totalJobs)
-    .slice(0, 5);
+  const builderTrendData = useMemo(() => {
+    return monthsInRange.map(month => {
+      const monthData: Record<string, string | number> = { month };
+      builderStats
+        .sort((a, b) => b.totalJobs - a.totalJobs)
+        .slice(0, 5)
+        .forEach(stat => {
+          const jobsInMonth = jobs.filter(j => {
+            if (!j.completedDate || j.builderId !== stat.builder.id) return false;
+            if (!isInDateRange(j.completedDate)) return false;
+            const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
+            return jobMonth === month;
+          }).length;
+          monthData[stat.builder.name] = jobsInMonth;
+        });
+      return monthData;
+    });
+  }, [monthsInRange, builderStats, jobs, isInDateRange]);
 
-  // Forecast Accuracy Calculations (filtered by date range)
-  const forecastsWithTDL = forecasts.filter((f): f is Forecast => {
-    if (!f || f.actualTDL == null || f.predictedTDL == null) return false;
-    if (isNaN(Number(f.actualTDL)) || isNaN(Number(f.predictedTDL))) return false;
-    const job = jobsMap.get(f.jobId);
-    return job != null && isInDateRange(job.completedDate || job.scheduledDate);
-  });
+  const topBuilders = useMemo(() => {
+    return builderStats
+      .sort((a, b) => b.totalJobs - a.totalJobs)
+      .slice(0, 5);
+  }, [builderStats]);
 
-  const forecastsWithDLO = forecasts.filter((f): f is Forecast => {
-    if (!f || f.actualDLO == null || f.predictedDLO == null) return false;
-    if (isNaN(Number(f.actualDLO)) || isNaN(Number(f.predictedDLO))) return false;
-    const job = jobsMap.get(f.jobId);
-    return job != null && isInDateRange(job.completedDate || job.scheduledDate);
-  });
+  // Phase 6 - DOCUMENT: Forecast accuracy calculations
+  // Filters and validates forecast data, then calculates accuracy metrics
+  const forecastsWithTDL = useMemo(() => {
+    return forecasts.filter((f): f is Forecast => {
+      if (!f || f.actualTDL == null || f.predictedTDL == null) return false;
+      if (isNaN(Number(f.actualTDL)) || isNaN(Number(f.predictedTDL))) return false;
+      const job = jobsMap.get(f.jobId);
+      return job != null && isInDateRange(job.completedDate || job.scheduledDate);
+    });
+  }, [forecasts, jobsMap, isInDateRange]);
 
-  const forecastsWithData = forecasts.filter((f): f is Forecast => {
-    if (!f) return false;
-    const job = jobsMap.get(f.jobId);
-    if (!job || !isInDateRange(job.completedDate || job.scheduledDate)) return false;
-    return (
-      (f.actualTDL != null &&
-        f.predictedTDL != null &&
-        !isNaN(Number(f.actualTDL)) &&
-        !isNaN(Number(f.predictedTDL))) ||
-      (f.actualDLO != null &&
-        f.predictedDLO != null &&
-        !isNaN(Number(f.actualDLO)) &&
-        !isNaN(Number(f.predictedDLO)))
-    );
-  });
+  const forecastsWithDLO = useMemo(() => {
+    return forecasts.filter((f): f is Forecast => {
+      if (!f || f.actualDLO == null || f.predictedDLO == null) return false;
+      if (isNaN(Number(f.actualDLO)) || isNaN(Number(f.predictedDLO))) return false;
+      const job = jobsMap.get(f.jobId);
+      return job != null && isInDateRange(job.completedDate || job.scheduledDate);
+    });
+  }, [forecasts, jobsMap, isInDateRange]);
 
-  // Calculate TDL accuracy
-  const tdlAccuracy = forecastsWithTDL.length > 0
-    ? safeDivide(forecastsWithTDL.reduce((sum, f) => {
-        return sum + calculateAccuracy(
-          Number(f.predictedTDL),
-          Number(f.actualTDL)
-        );
-      }, 0), forecastsWithTDL.length)
-    : 0;
+  const forecastsWithData = useMemo(() => {
+    return forecasts.filter((f): f is Forecast => {
+      if (!f) return false;
+      const job = jobsMap.get(f.jobId);
+      if (!job || !isInDateRange(job.completedDate || job.scheduledDate)) return false;
+      return (
+        (f.actualTDL != null &&
+          f.predictedTDL != null &&
+          !isNaN(Number(f.actualTDL)) &&
+          !isNaN(Number(f.predictedTDL))) ||
+        (f.actualDLO != null &&
+          f.predictedDLO != null &&
+          !isNaN(Number(f.actualDLO)) &&
+          !isNaN(Number(f.predictedDLO)))
+      );
+    });
+  }, [forecasts, jobsMap, isInDateRange]);
 
-  // Calculate DLO accuracy
-  const dloAccuracy = forecastsWithDLO.length > 0
-    ? safeDivide(forecastsWithDLO.reduce((sum, f) => {
-        return sum + calculateAccuracy(
-          Number(f.predictedDLO),
-          Number(f.actualDLO)
-        );
-      }, 0), forecastsWithDLO.length)
-    : 0;
+  // Phase 6 - DOCUMENT: TDL accuracy metric
+  // Percentage accuracy of Total Duct Leakage predictions
+  const tdlAccuracy = useMemo(() => {
+    if (forecastsWithTDL.length === 0) return 0;
+    return safeDivide(forecastsWithTDL.reduce((sum, f) => {
+      return sum + calculateAccuracy(
+        Number(f.predictedTDL),
+        Number(f.actualTDL)
+      );
+    }, 0), forecastsWithTDL.length);
+  }, [forecastsWithTDL]);
 
-  // Calculate overall accuracy (weighted average of TDL and DLO)
-  const overallAccuracy = (() => {
+  const dloAccuracy = useMemo(() => {
+    if (forecastsWithDLO.length === 0) return 0;
+    return safeDivide(forecastsWithDLO.reduce((sum, f) => {
+      return sum + calculateAccuracy(
+        Number(f.predictedDLO),
+        Number(f.actualDLO)
+      );
+    }, 0), forecastsWithDLO.length);
+  }, [forecastsWithDLO]);
+
+  // Phase 6 - DOCUMENT: Overall forecast accuracy
+  // Weighted average of TDL and DLO accuracy based on forecast counts
+  const overallAccuracy = useMemo(() => {
     const totalForecasts = forecastsWithTDL.length + forecastsWithDLO.length;
     if (totalForecasts === 0) return 0;
     return safeDivide(tdlAccuracy * forecastsWithTDL.length + dloAccuracy * forecastsWithDLO.length, totalForecasts);
-  })();
+  }, [forecastsWithTDL.length, forecastsWithDLO.length, tdlAccuracy, dloAccuracy]);
 
-  const thirtyDaysAgo = subDays(new Date(), 30);
+  const thirtyDaysAgo = useMemo(() => subDays(new Date(), 30), []);
   
-  const recentTDLForecasts = forecastsWithTDL.filter(f => {
-    const job = jobsMap.get(f.jobId);
-    return job?.completedDate && new Date(job.completedDate) >= thirtyDaysAgo;
-  });
-
-  const recentDLOForecasts = forecastsWithDLO.filter(f => {
-    const job = jobsMap.get(f.jobId);
-    return job?.completedDate && new Date(job.completedDate) >= thirtyDaysAgo;
-  });
-
-  const recentTDLAccuracy = recentTDLForecasts.length > 0
-    ? safeDivide(recentTDLForecasts.reduce((sum, f) => {
-        return sum + calculateAccuracy(
-          Number(f.predictedTDL),
-          Number(f.actualTDL)
-        );
-      }, 0), recentTDLForecasts.length)
-    : 0;
-
-  const recentDLOAccuracy = recentDLOForecasts.length > 0
-    ? safeDivide(recentDLOForecasts.reduce((sum, f) => {
-        return sum + calculateAccuracy(
-          Number(f.predictedDLO),
-          Number(f.actualDLO)
-        );
-      }, 0), recentDLOForecasts.length)
-    : 0;
-
-  const recentAccuracy = (() => {
-    const totalRecent = recentTDLForecasts.length + recentDLOForecasts.length;
-    if (totalRecent === 0) return 0;
-    return safeDivide(recentTDLAccuracy * recentTDLForecasts.length + recentDLOAccuracy * recentDLOForecasts.length, totalRecent);
-  })();
-
-  type BestForecastResult = { forecast: Forecast; accuracy: number; job?: Job; type: 'TDL' | 'DLO' } | null;
-  
-  const bestForecast: BestForecastResult = (() => {
-    const candidates: Array<{ forecast: Forecast; accuracy: number; job?: Job; type: 'TDL' | 'DLO' }> = [];
-    
-    // Check TDL forecasts
-    forecastsWithTDL.forEach(f => {
-      const accuracy = calculateAccuracy(
-        Number(f.predictedTDL),
-        Number(f.actualTDL)
-      );
+  const recentTDLForecasts = useMemo(() => {
+    return forecastsWithTDL.filter(f => {
       const job = jobsMap.get(f.jobId);
-      candidates.push({ forecast: f, accuracy, job, type: 'TDL' });
+      return job?.completedDate && new Date(job.completedDate) >= thirtyDaysAgo;
     });
-    
-    // Check DLO forecasts
-    forecastsWithDLO.forEach(f => {
-      const accuracy = calculateAccuracy(
-        Number(f.predictedDLO),
-        Number(f.actualDLO)
-      );
+  }, [forecastsWithTDL, jobsMap, thirtyDaysAgo]);
+
+  const recentDLOForecasts = useMemo(() => {
+    return forecastsWithDLO.filter(f => {
       const job = jobsMap.get(f.jobId);
-      candidates.push({ forecast: f, accuracy, job, type: 'DLO' });
+      return job?.completedDate && new Date(job.completedDate) >= thirtyDaysAgo;
     });
-    
-    if (candidates.length === 0) return null;
-    
-    return candidates.reduce((best, current) => 
-      current.accuracy > best.accuracy ? current : best
+  }, [forecastsWithDLO, jobsMap, thirtyDaysAgo]);
+
+  const recentTDLAccuracy = useMemo(() => {
+    if (recentTDLForecasts.length === 0) return 0;
+    return safeDivide(recentTDLForecasts.reduce((sum, f) => {
+      return sum + calculateAccuracy(Number(f.predictedTDL), Number(f.actualTDL));
+    }, 0), recentTDLForecasts.length);
+  }, [recentTDLForecasts]);
+
+  const recentDLOAccuracy = useMemo(() => {
+    if (recentDLOForecasts.length === 0) return 0;
+    return safeDivide(recentDLOForecasts.reduce((sum, f) => {
+      return sum + calculateAccuracy(Number(f.predictedDLO), Number(f.actualDLO));
+    }, 0), recentDLOForecasts.length);
+  }, [recentDLOForecasts]);
+
+  const recentOverallAccuracy = useMemo(() => {
+    const total = recentTDLForecasts.length + recentDLOForecasts.length;
+    if (total === 0) return 0;
+    return safeDivide(
+      recentTDLAccuracy * recentTDLForecasts.length + recentDLOAccuracy * recentDLOForecasts.length,
+      total
     );
-  })();
+  }, [recentTDLForecasts.length, recentDLOForecasts.length, recentTDLAccuracy, recentDLOAccuracy]);
 
-  const monthlyAccuracyData = monthsInRange.map(month => {
-    const monthTDLForecasts = forecastsWithTDL.filter(f => {
-      const job = jobsMap.get(f.jobId);
-      if (!job?.completedDate || !isInDateRange(job.completedDate)) return false;
-      return format(new Date(job.completedDate), 'MMM yyyy') === month;
-    });
-
-    const monthDLOForecasts = forecastsWithDLO.filter(f => {
-      const job = jobsMap.get(f.jobId);
-      if (!job?.completedDate || !isInDateRange(job.completedDate)) return false;
-      return format(new Date(job.completedDate), 'MMM yyyy') === month;
-    });
-    
-    const tdlAccuracy = monthTDLForecasts.length > 0
-      ? safeDivide(monthTDLForecasts.reduce((sum, f) => {
-          const accuracy = calculateAccuracy(
-            Number(f.predictedTDL),
-            Number(f.actualTDL)
-          );
-          return sum + accuracy;
-        }, 0), monthTDLForecasts.length)
-      : 0;
-
-    const dloAccuracy = monthDLOForecasts.length > 0
-      ? safeDivide(monthDLOForecasts.reduce((sum, f) => {
-          const accuracy = calculateAccuracy(
-            Number(f.predictedDLO),
-            Number(f.actualDLO)
-          );
-          return sum + accuracy;
-        }, 0), monthDLOForecasts.length)
-      : 0;
-    
-    return { 
-      month, 
-      tdlAccuracy: safeParseFloat(safeToFixed(tdlAccuracy, 1)),
-      dloAccuracy: safeParseFloat(safeToFixed(dloAccuracy, 1))
-    };
-  });
-
-  const accuracyDistribution = (() => {
-    const dist = {
-      'Excellent (>95%)': 0,
-      'Good (90-95%)': 0,
-      'Fair (80-90%)': 0,
-      'Needs Improvement (<80%)': 0
-    };
-
-    // Count TDL accuracies
-    forecastsWithTDL.forEach(f => {
-      const accuracy = calculateAccuracy(
-        Number(f.predictedTDL),
-        Number(f.actualTDL)
-      );
-      if (accuracy > 95) dist['Excellent (>95%)']++;
-      else if (accuracy >= 90) dist['Good (90-95%)']++;
-      else if (accuracy >= 80) dist['Fair (80-90%)']++;
-      else dist['Needs Improvement (<80%)']++;
-    });
-
-    // Count DLO accuracies
-    forecastsWithDLO.forEach(f => {
-      const accuracy = calculateAccuracy(
-        Number(f.predictedDLO),
-        Number(f.actualDLO)
-      );
-      if (accuracy > 95) dist['Excellent (>95%)']++;
-      else if (accuracy >= 90) dist['Good (90-95%)']++;
-      else if (accuracy >= 80) dist['Fair (80-90%)']++;
-      else dist['Needs Improvement (<80%)']++;
-    });
-
-    return dist;
-  })();
-
-  const accuracyDistributionData = Object.entries(accuracyDistribution).map(([range, count]) => ({
-    range,
-    count
-  }));
-
-  const [forecastSortColumn, setForecastSortColumn] = useState<string>('accuracy');
-  const [forecastSortDirection, setForecastSortDirection] = useState<'asc' | 'desc'>('desc');
-
-  const handleForecastSort = (column: string) => {
-    if (forecastSortColumn === column) {
-      setForecastSortDirection(forecastSortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setForecastSortColumn(column);
-      setForecastSortDirection('desc');
-    }
-  };
-
-  const forecastTableData = forecastsWithData.map(f => {
-    const job = jobsMap.get(f.jobId);
-    
-    // TDL data
-    const hasTDL = f.predictedTDL != null && 
-                   f.actualTDL != null &&
-                   !isNaN(Number(f.predictedTDL)) &&
-                   !isNaN(Number(f.actualTDL));
-    const predictedTDL = hasTDL ? Number(f.predictedTDL) : null;
-    const actualTDL = hasTDL ? Number(f.actualTDL) : null;
-    const tdlVariance = hasTDL && predictedTDL !== null && actualTDL !== null ? actualTDL - predictedTDL : null;
-    const tdlAccuracy = hasTDL && predictedTDL !== null && actualTDL !== null ? calculateAccuracy(predictedTDL, actualTDL) : null;
-    
-    // DLO data
-    const hasDLO = f.predictedDLO != null && 
-                   f.actualDLO != null &&
-                   !isNaN(Number(f.predictedDLO)) &&
-                   !isNaN(Number(f.actualDLO));
-    const predictedDLO = hasDLO ? Number(f.predictedDLO) : null;
-    const actualDLO = hasDLO ? Number(f.actualDLO) : null;
-    const dloVariance = hasDLO && predictedDLO !== null && actualDLO !== null ? actualDLO - predictedDLO : null;
-    const dloAccuracy = hasDLO && predictedDLO !== null && actualDLO !== null ? calculateAccuracy(predictedDLO, actualDLO) : null;
-    
-    // Overall accuracy (average of available metrics)
-    let overallAccuracy = 0;
-    if (tdlAccuracy !== null && dloAccuracy !== null) {
-      overallAccuracy = safeDivide(tdlAccuracy + dloAccuracy, 2);
-    } else if (tdlAccuracy !== null) {
-      overallAccuracy = tdlAccuracy;
-    } else if (dloAccuracy !== null) {
-      overallAccuracy = dloAccuracy;
-    }
-    
-    return {
-      id: f.id,
-      jobName: job?.name ?? 'Unknown Job',
-      predictedTDL,
-      actualTDL,
-      tdlVariance,
-      tdlAccuracy,
-      predictedDLO,
-      actualDLO,
-      dloVariance,
-      dloAccuracy,
-      accuracy: overallAccuracy,
-      date: job?.completedDate ? new Date(job.completedDate) : null
-    };
-  });
-
-  const sortedForecasts = [...forecastTableData].sort((a, b) => {
-    let aVal = a[forecastSortColumn as keyof typeof a];
-    let bVal = b[forecastSortColumn as keyof typeof b];
-    
-    if (forecastSortColumn === 'date') {
-      aVal = a.date?.getTime() ?? 0;
-      bVal = b.date?.getTime() ?? 0;
-    }
-    
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return forecastSortDirection === 'asc' 
-        ? aVal.localeCompare(bVal) 
-        : bVal.localeCompare(aVal);
-    } else if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return forecastSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-    }
-    return 0;
-  });
-
-  const getAccuracyBadgeColor = (accuracy: number) => {
-    if (accuracy > 95) return 'bg-green-600 text-white';
-    if (accuracy >= 90) return 'bg-blue-500 text-white';
-    if (accuracy >= 80) return 'bg-yellow-500 text-white';
-    return 'bg-red-600 text-white';
-  };
-
-  const getAccuracyLabel = (accuracy: number) => {
-    if (accuracy > 95) return 'Excellent';
-    if (accuracy >= 90) return 'Good';
-    if (accuracy >= 80) return 'Fair';
-    return 'Needs Improvement';
-  };
-
-  const getAccuracyColor = (accuracy: number) => {
-    if (accuracy > 90) return 'text-success';
-    if (accuracy >= 80) return 'text-yellow-600';
+  const getAccuracyColor = useCallback((accuracy: number) => {
+    if (accuracy >= 90) return 'text-success';
+    if (accuracy >= 75) return 'text-blue-600';
+    if (accuracy >= 60) return 'text-orange-500';
     return 'text-destructive';
-  };
+  }, []);
 
-  // Compliance Metrics Calculations
-  
-  // Filter jobs with evaluated compliance status (compliant or non-compliant)
-  const jobsWithComplianceData = jobsInRange.filter(j => 
-    j.complianceStatus === 'compliant' || j.complianceStatus === 'non-compliant'
-  );
-  
-  const compliantJobs = jobsInRange.filter(j => j.complianceStatus === 'compliant');
-  const nonCompliantJobs = jobsInRange.filter(j => j.complianceStatus === 'non-compliant');
-  
-  // Monthly compliance rate data for 6-month chart
-  const monthlyComplianceData = monthsInRange.map(month => {
-    const monthJobsWithCompliance = jobsWithComplianceData.filter(j => {
-      if (!j.completedDate && !j.scheduledDate) return false;
-      const jobDate = j.completedDate || j.scheduledDate;
-      if (!isInDateRange(jobDate)) return false;
-      const jobMonth = format(new Date(jobDate!), 'MMM yyyy');
-      return jobMonth === month;
-    });
-    
-    const monthCompliantJobs = monthJobsWithCompliance.filter(j => j.complianceStatus === 'compliant');
-    const monthNonCompliantJobs = monthJobsWithCompliance.filter(j => j.complianceStatus === 'non-compliant');
-    
-    const totalEvaluated = monthJobsWithCompliance.length;
-    const compliantRate = totalEvaluated > 0 ? safeDivide(monthCompliantJobs.length, totalEvaluated) * 100 : 0;
-    const nonCompliantRate = totalEvaluated > 0 ? safeDivide(monthNonCompliantJobs.length, totalEvaluated) * 100 : 0;
-    
-    return {
-      month,
-      compliantRate: safeParseFloat(safeToFixed(compliantRate, 1)),
-      nonCompliantRate: safeParseFloat(safeToFixed(nonCompliantRate, 1)),
-      totalEvaluated
-    };
-  });
-  
-  // Parse compliance violations from non-compliant jobs
-  interface Violation {
-    metric: string;
-    threshold: number;
-    actualValue: number;
-    severity: string;
-  }
-  
-  interface ComplianceFlags {
-    violations: Violation[];
-    evaluatedAt: string;
-  }
-  
-  const violationFrequency: Record<string, { count: number; totalOverage: number; violations: Violation[] }> = {};
-  
-  nonCompliantJobs.forEach(job => {
-    if (job.complianceFlags) {
-      try {
-        const flags = typeof job.complianceFlags === 'string' 
-          ? JSON.parse(job.complianceFlags) as ComplianceFlags
-          : job.complianceFlags as ComplianceFlags;
+  const getAccuracyBadgeColor = useCallback((accuracy: number) => {
+    if (accuracy >= 90) return 'bg-green-600 text-white';
+    if (accuracy >= 75) return 'bg-blue-500 text-white';
+    if (accuracy >= 60) return 'bg-orange-500 text-white';
+    return 'bg-red-600 text-white';
+  }, []);
+
+  const getAccuracyLabel = useCallback((accuracy: number) => {
+    if (accuracy >= 90) return 'Excellent';
+    if (accuracy >= 75) return 'Good';
+    if (accuracy >= 60) return 'Fair';
+    return 'Poor';
+  }, []);
+
+  // Phase 6 - DOCUMENT: Detailed forecast data for table display
+  // Enriches forecast data with job info and calculated variance
+  const detailedForecasts = useMemo(() => {
+    return forecastsWithData
+      .map(f => {
+        const job = jobsMap.get(f.jobId);
+        const builder = builders.find(b => b.id === job?.builderId);
         
-        if (flags.violations && Array.isArray(flags.violations)) {
-          flags.violations.forEach(violation => {
-            const metric = violation.metric;
-            if (!violationFrequency[metric]) {
-              violationFrequency[metric] = { count: 0, totalOverage: 0, violations: [] };
-            }
-            violationFrequency[metric].count++;
-            const overage = violation.actualValue - violation.threshold;
-            violationFrequency[metric].totalOverage += overage;
-            violationFrequency[metric].violations.push(violation);
-          });
+        // Phase 6 - DOCUMENT: Variance calculation (actual - predicted)
+        // Positive variance = actual exceeded prediction
+        const tdlVariance = (f.actualTDL != null && f.predictedTDL != null)
+          ? Number(f.actualTDL) - Number(f.predictedTDL)
+          : null;
+        
+        const dloVariance = (f.actualDLO != null && f.predictedDLO != null)
+          ? Number(f.actualDLO) - Number(f.predictedDLO)
+          : null;
+        
+        // Calculate accuracy for this specific forecast
+        let accuracy = 0;
+        let count = 0;
+        
+        if (f.actualTDL != null && f.predictedTDL != null && !isNaN(Number(f.actualTDL)) && !isNaN(Number(f.predictedTDL))) {
+          accuracy += calculateAccuracy(Number(f.predictedTDL), Number(f.actualTDL));
+          count++;
         }
-      } catch (e) {
-        analyticsLogger.warn('Invalid complianceFlags JSON, skipping:', e);
+        
+        if (f.actualDLO != null && f.predictedDLO != null && !isNaN(Number(f.actualDLO)) && !isNaN(Number(f.predictedDLO))) {
+          accuracy += calculateAccuracy(Number(f.predictedDLO), Number(f.actualDLO));
+          count++;
+        }
+        
+        const avgAccuracy = count > 0 ? accuracy / count : 0;
+        
+        return {
+          id: f.id,
+          jobId: f.jobId,
+          jobName: job?.jobName || 'Unknown',
+          builderName: builder?.name || 'Unknown',
+          predictedTDL: f.predictedTDL != null ? Number(f.predictedTDL) : null,
+          actualTDL: f.actualTDL != null ? Number(f.actualTDL) : null,
+          tdlVariance,
+          predictedDLO: f.predictedDLO != null ? Number(f.predictedDLO) : null,
+          actualDLO: f.actualDLO != null ? Number(f.actualDLO) : null,
+          dloVariance,
+          accuracy: avgAccuracy,
+          date: job?.completedDate ? new Date(job.completedDate) : null,
+        };
+      })
+      .sort((a, b) => {
+        if (!a.date && !b.date) return 0;
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return b.date.getTime() - a.date.getTime();
+      })
+      .slice(0, 20);
+  }, [forecastsWithData, jobsMap, builders]);
+
+  // Phase 6 - DOCUMENT: Compliance metrics calculation
+  // Tracks Minnesota code compliance rates over time
+  const monthlyComplianceData = useMemo(() => {
+    return monthsInRange.map(month => {
+      const jobsInMonth = jobsInRange.filter(j => {
+        if (!j.completedDate) return false;
+        const jobMonth = format(new Date(j.completedDate), 'MMM yyyy');
+        return jobMonth === month;
+      });
+
+      const evaluatedJobs = jobsInMonth.filter(j => 
+        j.complianceStatus === 'compliant' || j.complianceStatus === 'non-compliant'
+      );
+      const compliantJobs = jobsInMonth.filter(j => j.complianceStatus === 'compliant');
+      const nonCompliantJobs = jobsInMonth.filter(j => j.complianceStatus === 'non-compliant');
+
+      const totalEvaluated = evaluatedJobs.length;
+      const compliantRate = totalEvaluated > 0 
+        ? (compliantJobs.length / totalEvaluated * 100) 
+        : 0;
+      const nonCompliantRate = totalEvaluated > 0 
+        ? (nonCompliantJobs.length / totalEvaluated * 100) 
+        : 0;
+
+      return {
+        month,
+        totalEvaluated,
+        compliant: compliantJobs.length,
+        nonCompliant: nonCompliantJobs.length,
+        compliantRate,
+        nonCompliantRate,
+      };
+    });
+  }, [monthsInRange, jobsInRange]);
+
+  // Phase 6 - DOCUMENT: Top violations analysis
+  // Identifies most common code compliance failures
+  const topViolationsData = useMemo(() => {
+    const nonCompliantJobs = jobsInRange.filter(j => j.complianceStatus === 'non-compliant');
+    
+    const violations: Record<string, { frequency: number; totalOverage: number; count: number }> = {};
+    
+    nonCompliantJobs.forEach(job => {
+      if (job.tdlResult && job.tdlLimit) {
+        const tdlValue = Number(job.tdlResult);
+        const tdlLimitValue = Number(job.tdlLimit);
+        if (!isNaN(tdlValue) && !isNaN(tdlLimitValue) && tdlValue > tdlLimitValue) {
+          if (!violations['TDL']) violations['TDL'] = { frequency: 0, totalOverage: 0, count: 0 };
+          violations['TDL'].frequency++;
+          violations['TDL'].totalOverage += (tdlValue - tdlLimitValue);
+          violations['TDL'].count++;
+        }
       }
-    }
-  });
-  
-  const topViolationsData = Object.entries(violationFrequency)
-    .map(([metric, data]) => ({
-      metric,
-      frequency: data.count,
-      avgOverage: data.count > 0 ? safeParseFloat(safeToFixed(safeDivide(data.totalOverage, data.count), 2)) : 0,
-      severity: data.violations[0]?.severity || 'unknown'
-    }))
-    .sort((a, b) => b.frequency - a.frequency)
-    .slice(0, 10);
+      
+      if (job.dloResult && job.dloLimit) {
+        const dloValue = Number(job.dloResult);
+        const dloLimitValue = Number(job.dloLimit);
+        if (!isNaN(dloValue) && !isNaN(dloLimitValue) && dloValue > dloLimitValue) {
+          if (!violations['DLO']) violations['DLO'] = { frequency: 0, totalOverage: 0, count: 0 };
+          violations['DLO'].frequency++;
+          violations['DLO'].totalOverage += (dloValue - dloLimitValue);
+          violations['DLO'].count++;
+        }
+      }
+    });
+
+    return Object.entries(violations)
+      .map(([metric, data]) => ({
+        metric,
+        frequency: data.frequency,
+        avgOverage: data.count > 0 ? data.totalOverage / data.count : 0,
+        severity: data.frequency > 10 ? 'high' : data.frequency > 5 ? 'medium' : 'low',
+      }))
+      .sort((a, b) => b.frequency - a.frequency)
+      .slice(0, 5);
+  }, [jobsInRange]);
+
+  // Phase 3 - OPTIMIZE: useCallback for retry handlers
+  const handleRetryJobs = useCallback(() => refetchJobs(), [refetchJobs]);
+  const handleRetryItems = useCallback(() => refetchItems(), [refetchItems]);
+  const handleRetryPhotos = useCallback(() => refetchPhotos(), [refetchPhotos]);
+  const handleRetryBuilders = useCallback(() => refetchBuilders(), [refetchBuilders]);
+  const handleRetryForecasts = useCallback(() => refetchForecasts(), [refetchForecasts]);
+  const handleNavigateToBuilders = useCallback(() => setLocation("/builders"), [setLocation]);
+
+  // Phase 2 - BUILD: Error state components with retry buttons
+  if (jobsError || itemsError || photosError || buildersError || forecastsError) {
+    return (
+      <div className="container mx-auto p-6 space-y-4">
+        <h1 className="text-3xl font-bold mb-6" data-testid="text-page-title">Analytics</h1>
+        
+        {jobsError && (
+          <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10" data-testid="error-jobs">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <AlertTitle className="text-red-900 dark:text-red-300">Failed to Load Jobs Data</AlertTitle>
+            <AlertDescription className="text-red-800 dark:text-red-400 flex items-center justify-between">
+              <span>Unable to fetch jobs data. Please try again.</span>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleRetryJobs}
+                data-testid="button-retry-jobs"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {itemsError && (
+          <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10" data-testid="error-items">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <AlertTitle className="text-red-900 dark:text-red-300">Failed to Load Checklist Items</AlertTitle>
+            <AlertDescription className="text-red-800 dark:text-red-400 flex items-center justify-between">
+              <span>Unable to fetch checklist items. Please try again.</span>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleRetryItems}
+                data-testid="button-retry-items"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {photosError && (
+          <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10" data-testid="error-photos">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <AlertTitle className="text-red-900 dark:text-red-300">Failed to Load Photos Data</AlertTitle>
+            <AlertDescription className="text-red-800 dark:text-red-400 flex items-center justify-between">
+              <span>Unable to fetch photos data. Please try again.</span>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleRetryPhotos}
+                data-testid="button-retry-photos"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {buildersError && (
+          <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10" data-testid="error-builders">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <AlertTitle className="text-red-900 dark:text-red-300">Failed to Load Builders Data</AlertTitle>
+            <AlertDescription className="text-red-800 dark:text-red-400 flex items-center justify-between">
+              <span>Unable to fetch builders data. Please try again.</span>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleRetryBuilders}
+                data-testid="button-retry-builders"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {forecastsError && (
+          <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10" data-testid="error-forecasts">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <AlertTitle className="text-red-900 dark:text-red-300">Failed to Load Forecasts Data</AlertTitle>
+            <AlertDescription className="text-red-800 dark:text-red-400 flex items-center justify-between">
+              <span>Unable to fetch forecasts data. Please try again.</span>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleRetryForecasts}
+                data-testid="button-retry-forecasts"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background pb-6">
-      <main className="pt-6 px-4 md:px-6 lg:px-8 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-background">
+      <main className="container mx-auto p-6">
         <div className="space-y-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h1 className="text-3xl font-bold" data-testid="text-page-title">Analytics</h1>
-              <p className="text-muted-foreground">Deep insights into inspection trends and common issues</p>
+              <p className="text-muted-foreground">Performance insights and key metrics</p>
             </div>
-            <DateRangePicker
-              value={dateRange}
-              onChange={setDateRange}
-              data-testid="daterange-picker-analytics"
-            />
+            <div className="flex items-center gap-3">
+              <DateRangePicker
+                date={dateRange}
+                onDateChange={setDateRange}
+                data-testid="date-range-picker"
+              />
+              <Button
+                variant="outline"
+                onClick={() => setIsExportDialogOpen(true)}
+                data-testid="button-export-analytics"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4" data-testid="card-inspection-metrics">
-            <Card>
+          {/* Phase 2 - BUILD: Summary metrics with skeleton loaders */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card data-testid="card-total-inspections">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Total Inspections</p>
                     {isLoading ? (
-                      <Skeleton className="h-8 w-16" />
+                      <Skeleton className="h-8 w-16" data-testid="skeleton-total-inspections" />
                     ) : (
-                      <p className="text-3xl font-bold" data-testid="text-total-inspections">{totalInspections}</p>
+                      <p className="text-3xl font-bold" data-testid="text-total-inspections">
+                        {totalInspections}
+                      </p>
                     )}
                     <p className="text-xs text-muted-foreground">All time</p>
                   </div>
@@ -983,13 +1106,13 @@ export default function Analytics() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-testid="card-avg-inspection-time">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Avg Inspection Time</p>
                     {isLoading ? (
-                      <Skeleton className="h-8 w-20" />
+                      <Skeleton className="h-8 w-20" data-testid="skeleton-avg-time" />
                     ) : (
                       <p className="text-3xl font-bold" data-testid="text-avg-inspection-time">
                         {avgInspectionTime > 0 ? `${Math.round(avgInspectionTime)}m` : 'N/A'}
@@ -1004,13 +1127,13 @@ export default function Analytics() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-testid="card-completion-rate">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Completion Rate</p>
                     {isLoading ? (
-                      <Skeleton className="h-8 w-16" />
+                      <Skeleton className="h-8 w-16" data-testid="skeleton-completion-rate" />
                     ) : (
                       <p className="text-3xl font-bold" data-testid="text-completion-rate">
                         {safeToFixed(completionRate, 1)}%
@@ -1025,13 +1148,13 @@ export default function Analytics() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-testid="card-avg-items">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Avg Items/Inspection</p>
                     {isLoading ? (
-                      <Skeleton className="h-8 w-16" />
+                      <Skeleton className="h-8 w-16" data-testid="skeleton-avg-items" />
                     ) : (
                       <p className="text-3xl font-bold" data-testid="text-avg-items">
                         {safeToFixed(avgItemsPerInspection, 1)}
@@ -1047,8 +1170,9 @@ export default function Analytics() {
             </Card>
           </div>
 
+          {/* Phase 2 - BUILD: Charts with skeleton loaders and empty states */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+            <Card data-testid="card-inspection-volume">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
@@ -1058,8 +1182,8 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <Skeleton className="h-[300px] w-full" />
-                ) : (
+                  <Skeleton className="h-[300px] w-full" data-testid="skeleton-inspection-volume" />
+                ) : monthlyInspectionData.some(d => d.inspections > 0) ? (
                   <ResponsiveContainer width="100%" height={300} data-testid="chart-inspection-volume">
                     <LineChart data={monthlyInspectionData}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -1076,11 +1200,17 @@ export default function Analytics() {
                       />
                     </LineChart>
                   </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-inspection-volume">
+                    <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="font-medium">No inspection data</p>
+                    <p className="text-sm mt-2">Complete inspections to see volume trends</p>
+                  </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-testid="card-photo-tags">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Camera className="h-5 w-5" />
@@ -1090,8 +1220,8 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <Skeleton className="h-[300px] w-full" />
-                ) : (
+                  <Skeleton className="h-[300px] w-full" data-testid="skeleton-photo-tags" />
+                ) : photoTagData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300} data-testid="chart-photo-tags">
                     <BarChart data={photoTagData}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -1107,12 +1237,18 @@ export default function Analytics() {
                       />
                     </BarChart>
                   </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-photo-tags">
+                    <Camera className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="font-medium">No photo tags</p>
+                    <p className="text-sm mt-2">Tag photos to see usage analytics</p>
+                  </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          <Card>
+          <Card data-testid="card-status-breakdown">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
@@ -1122,8 +1258,8 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-[300px] w-full" />
-              ) : (
+                <Skeleton className="h-[300px] w-full" data-testid="skeleton-status-breakdown" />
+              ) : statusBreakdownData.some(d => d.Pending + d['In Progress'] + d.Review + d.Completed > 0) ? (
                 <ResponsiveContainer width="100%" height={300} data-testid="chart-status-breakdown">
                   <AreaChart data={statusBreakdownData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -1161,11 +1297,17 @@ export default function Analytics() {
                     />
                   </AreaChart>
                 </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-status-breakdown">
+                  <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="font-medium">No status data</p>
+                  <p className="text-sm mt-2">Schedule jobs to see status breakdown</p>
+                </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card data-testid="card-common-issues">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" />
@@ -1175,7 +1317,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-[300px] w-full" />
+                <Skeleton className="h-[300px] w-full" data-testid="skeleton-common-issues" />
               ) : commonIssues.length > 0 ? (
                 <Table data-testid="table-common-issues">
                   <TableHeader>
@@ -1224,7 +1366,6 @@ export default function Analytics() {
             </CardContent>
           </Card>
 
-          {/* Common Issues Trend Chart */}
           <Card data-testid="card-common-issues-trend">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1235,7 +1376,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-[300px] w-full" />
+                <Skeleton className="h-[300px] w-full" data-testid="skeleton-issues-trend" />
               ) : topIssues.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300} data-testid="chart-issues-trend">
                   <LineChart data={issuesTrendData}>
@@ -1257,7 +1398,7 @@ export default function Analytics() {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-issues-trend">
                   <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="font-medium">No trend data available</p>
                   <p className="text-sm mt-2">Complete more inspections to see issue trends</p>
@@ -1270,7 +1411,6 @@ export default function Analytics() {
           <div>
             <h2 className="text-2xl font-bold mb-4">Minnesota Code Compliance</h2>
             
-            {/* Compliance Pass-Rate Trends */}
             <div className="grid gap-6 md:grid-cols-2 mb-6">
               <Card data-testid="card-compliance-trends">
                 <CardHeader>
@@ -1279,7 +1419,7 @@ export default function Analytics() {
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
-                    <Skeleton className="h-[300px] w-full" />
+                    <Skeleton className="h-[300px] w-full" data-testid="skeleton-compliance-trends" />
                   ) : monthlyComplianceData.some(d => d.totalEvaluated > 0) ? (
                     <ResponsiveContainer width="100%" height={300} data-testid="chart-compliance-trends">
                       <LineChart data={monthlyComplianceData}>
@@ -1305,7 +1445,7 @@ export default function Analytics() {
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="text-center py-12 text-muted-foreground">
+                    <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-compliance-trends">
                       <CheckCircle2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p className="font-medium">No compliance data available</p>
                       <p className="text-sm mt-2">Jobs need compliance evaluation to show trends</p>
@@ -1314,7 +1454,6 @@ export default function Analytics() {
                 </CardContent>
               </Card>
 
-              {/* Top Code Violations */}
               <Card data-testid="card-top-violations">
                 <CardHeader>
                   <CardTitle>Most Common Code Violations</CardTitle>
@@ -1322,7 +1461,7 @@ export default function Analytics() {
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
-                    <Skeleton className="h-[300px] w-full" />
+                    <Skeleton className="h-[300px] w-full" data-testid="skeleton-top-violations" />
                   ) : topViolationsData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={300} data-testid="chart-top-violations">
                       <BarChart data={topViolationsData}>
@@ -1349,7 +1488,7 @@ export default function Analytics() {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="text-center py-12 text-muted-foreground">
+                    <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-top-violations">
                       <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p className="font-medium">No violation data available</p>
                       <p className="text-sm mt-2">Non-compliant jobs will show violation patterns here</p>
@@ -1360,7 +1499,7 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Builder Performance Comparison */}
+          {/* Builder Performance Section */}
           <Card data-testid="card-builder-performance">
             <CardHeader>
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -1371,7 +1510,7 @@ export default function Analytics() {
                   </CardTitle>
                   <CardDescription>Compare builders across key metrics</CardDescription>
                 </div>
-                <Button variant="outline" onClick={() => setLocation("/builders")} data-testid="button-view-builders">
+                <Button variant="outline" onClick={handleNavigateToBuilders} data-testid="button-view-builders">
                   View All Builders
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
@@ -1379,10 +1518,9 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-[400px] w-full" />
+                <Skeleton className="h-[400px] w-full" data-testid="skeleton-builder-performance" />
               ) : builderStats.length > 0 ? (
                 <div className="space-y-8">
-                  {/* Builder Stats Table */}
                   <div className="overflow-x-auto">
                     <Table data-testid="table-builder-stats">
                       <TableHeader>
@@ -1484,75 +1622,29 @@ export default function Analytics() {
                               <ArrowUpDown className="h-4 w-4 ml-2" />
                             </Button>
                           </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleSort('jobsThisMonth')}
-                              data-testid="button-sort-jobsThisMonth"
-                              className="hover-elevate"
-                            >
-                              This Month
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
                           <TableHead className="text-center">Trend</TableHead>
-                          <TableHead className="text-right">Performance</TableHead>
+                          <TableHead className="text-right">Tier</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {sortedBuilders.map((stat, index) => {
-                          const isTopPerformer = index === 0 && sortColumn === 'completionRate';
                           const tier = getPerformanceTier(stat.completionRate, stat.avgAccuracy);
                           return (
-                            <TableRow 
-                              key={stat.builder.id} 
-                              className="hover-elevate cursor-pointer"
-                              onClick={() => setLocation("/builders")}
-                              data-testid={`row-builder-${stat.builder.id}`}
-                            >
-                              <TableCell>
-                                {isTopPerformer && (
-                                  <Trophy className="h-5 w-5 text-yellow-500" data-testid="icon-top-performer" />
-                                )}
+                            <TableRow key={stat.builder.id}>
+                              <TableCell className="font-medium">
+                                {index === topPerformerIndex && <Trophy className="h-4 w-4 text-yellow-500" />}
                               </TableCell>
                               <TableCell className="font-medium">{stat.builder.name}</TableCell>
                               <TableCell className="text-center">{stat.totalJobs}</TableCell>
                               <TableCell className="text-center">{stat.completedJobs}</TableCell>
-                              <TableCell className="text-center font-semibold">
-                                {safeToFixed(stat.completionRate, 1)}%
-                              </TableCell>
-                              <TableCell className="text-center font-semibold">
-                                {stat.avgAccuracy > 0 ? `${safeToFixed(stat.avgAccuracy, 1)}%` : 'N/A'}
-                              </TableCell>
-                              <TableCell className="text-center font-semibold">
-                                <span 
-                                  className={
-                                    stat.complianceRate >= 90 ? 'text-success' : 
-                                    stat.complianceRate >= 70 ? 'text-yellow-600' : 
-                                    stat.complianceRate > 0 ? 'text-destructive' : 
-                                    'text-muted-foreground'
-                                  }
-                                  data-testid={`text-builder-compliance-${stat.builder.id}`}
-                                >
-                                  {stat.complianceRate > 0 ? `${safeToFixed(stat.complianceRate, 1)}%` : 'N/A'}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {stat.avgInspectionTime > 0 ? Math.round(stat.avgInspectionTime) : 'N/A'}
-                              </TableCell>
+                              <TableCell className="text-center">{safeToFixed(stat.completionRate, 1)}%</TableCell>
+                              <TableCell className="text-center">{safeToFixed(stat.avgAccuracy, 1)}%</TableCell>
+                              <TableCell className="text-center">{safeToFixed(stat.complianceRate, 1)}%</TableCell>
+                              <TableCell className="text-center">{stat.avgInspectionTime > 0 ? Math.round(stat.avgInspectionTime) : 'N/A'}</TableCell>
                               <TableCell className="text-center">{stat.commonIssuesCount}</TableCell>
-                              <TableCell className="text-center">{stat.jobsThisMonth}</TableCell>
-                              <TableCell className="text-center">
-                                {getTrendIcon(stat, jobs)}
-                              </TableCell>
+                              <TableCell className="text-center">{getTrendIcon(stat, jobs)}</TableCell>
                               <TableCell className="text-right">
-                                <Badge 
-                                  className={tier.color}
-                                  data-testid={`badge-performance-tier-${stat.builder.id}`}
-                                >
-                                  {tier.label}
-                                </Badge>
+                                <Badge className={tier.color}>{tier.label}</Badge>
                               </TableCell>
                             </TableRow>
                           );
@@ -1561,384 +1653,168 @@ export default function Analytics() {
                     </Table>
                   </div>
 
-                  {/* Builder Comparison Chart */}
-                  <div className="space-y-4">
+                  <div className="grid gap-6 md:grid-cols-2">
                     <div>
-                      <h3 className="text-lg font-semibold">Top 5 Builders Comparison</h3>
-                      <p className="text-sm text-muted-foreground">Grouped comparison of completion rate vs forecast accuracy</p>
+                      <h3 className="text-lg font-semibold mb-4">Top 5 Builders by Completion Rate</h3>
+                      {builderComparisonData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={300} data-testid="chart-builder-comparison">
+                          <BarChart data={builderComparisonData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                            <YAxis domain={[0, 100]} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="Completion Rate" fill="#2E5BBA" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Forecast Accuracy" fill="#28A745" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p className="font-medium">No builder data</p>
+                          <p className="text-sm mt-2">Add builders to see comparisons</p>
+                        </div>
+                      )}
                     </div>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={builderComparisonData} data-testid="chart-builder-comparison">
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                        <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="Completion Rate" fill="#28A745" name="Completion Rate %" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Forecast Accuracy" fill="#2E5BBA" name="Forecast Accuracy %" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
 
-                  {/* Builder Trend Analysis */}
-                  <div className="space-y-4">
                     <div>
-                      <h3 className="text-lg font-semibold">Builder Performance Trends</h3>
-                      <p className="text-sm text-muted-foreground">Job completion trends for top 5 builders over selected period</p>
+                      <h3 className="text-lg font-semibold mb-4">Builder Activity Trend</h3>
+                      {topBuilders.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={300} data-testid="chart-builder-trend">
+                          <LineChart data={builderTrendData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="month" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            {topBuilders.map((builder, idx) => (
+                              <Line
+                                key={builder.builder.id}
+                                type="monotone"
+                                dataKey={builder.builder.name}
+                                stroke={ISSUE_COLORS[idx % ISSUE_COLORS.length]}
+                                strokeWidth={2}
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p className="font-medium">No activity data</p>
+                          <p className="text-sm mt-2">Complete jobs to see builder trends</p>
+                        </div>
+                      )}
                     </div>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <LineChart data={builderTrendData} data-testid="chart-builder-trends">
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis label={{ value: 'Jobs Completed', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip />
-                        <Legend />
-                        {topBuilders.map((stat, index) => (
-                          <Line
-                            key={stat.builder.id}
-                            type="monotone"
-                            dataKey={stat.builder.name}
-                            stroke={['#2E5BBA', '#28A745', '#FFC107', '#DC3545', '#9333EA'][index % 5]}
-                            strokeWidth={2}
-                            name={stat.builder.name}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-builder-performance">
                   <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="font-medium">No builder data available</p>
-                  <p className="text-sm mt-2">Add builders to start tracking performance metrics</p>
+                  <p className="text-sm mt-2">Add builders to see performance analytics</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Forecast Accuracy Tracking */}
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold" data-testid="text-forecast-accuracy-title">Forecast Accuracy Tracking</h2>
-              <p className="text-muted-foreground">Track prediction accuracy and improve forecasting skills over time</p>
-            </div>
-
-            {/* Accuracy Metric Cards */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {/* Forecast Accuracy Section */}
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Forecast Accuracy</h2>
+            
+            <div className="grid gap-4 md:grid-cols-3 mb-6">
               <Card data-testid="card-overall-accuracy">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between gap-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Overall Accuracy</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-10 w-20" data-testid="skeleton-overall-accuracy" />
+                  ) : (
                     <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Overall Accuracy</p>
-                      {isLoading ? (
-                        <Skeleton className="h-8 w-16" />
-                      ) : (
-                        <p className={`text-3xl font-bold ${getAccuracyColor(overallAccuracy)}`} data-testid="text-overall-accuracy">
-                          {overallAccuracy > 0 ? `${safeToFixed(overallAccuracy, 1)}%` : 'N/A'}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">{forecastsWithData.length} forecasts</p>
+                      <p className="text-3xl font-bold" data-testid="text-overall-accuracy">
+                        {safeToFixed(overallAccuracy, 1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Based on {forecastsWithData.length} forecasts
+                      </p>
                     </div>
-                    <div className="p-3 rounded-md bg-primary/10">
-                      <Target className="h-6 w-6 text-primary" />
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 
               <Card data-testid="card-tdl-accuracy">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between gap-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">TDL Accuracy</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-10 w-20" data-testid="skeleton-tdl-accuracy" />
+                  ) : (
                     <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">TDL Accuracy</p>
-                      {isLoading ? (
-                        <Skeleton className="h-8 w-16" />
-                      ) : (
-                        <p className={`text-3xl font-bold ${getAccuracyColor(tdlAccuracy)}`} data-testid="text-tdl-accuracy">
-                          {tdlAccuracy > 0 ? `${safeToFixed(tdlAccuracy, 1)}%` : 'N/A'}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">Total Duct Leakage</p>
+                      <p className="text-3xl font-bold" data-testid="text-tdl-accuracy">
+                        {safeToFixed(tdlAccuracy, 1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {forecastsWithTDL.length} predictions
+                      </p>
                     </div>
-                    <div className="p-3 rounded-md bg-blue-500/10">
-                      <CheckCircle2 className="h-6 w-6 text-blue-500" />
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 
               <Card data-testid="card-dlo-accuracy">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">DLO Accuracy</p>
-                      {isLoading ? (
-                        <Skeleton className="h-8 w-16" />
-                      ) : (
-                        <p className={`text-3xl font-bold ${getAccuracyColor(dloAccuracy)}`} data-testid="text-dlo-accuracy">
-                          {dloAccuracy > 0 ? `${safeToFixed(dloAccuracy, 1)}%` : 'N/A'}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">Duct Leakage to Outside</p>
-                    </div>
-                    <div className="p-3 rounded-md bg-purple-500/10">
-                      <CheckCircle2 className="h-6 w-6 text-purple-500" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card data-testid="card-best-forecast">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Best Forecast</p>
-                      {isLoading ? (
-                        <Skeleton className="h-8 w-16" />
-                      ) : bestForecast && bestForecast.accuracy !== undefined ? (
-                        <>
-                          <p className="text-3xl font-bold text-success" data-testid="text-best-forecast">
-                            {safeToFixed(bestForecast.accuracy, 1)}%
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {bestForecast.job?.completedDate 
-                              ? `${format(new Date(bestForecast.job.completedDate), 'MMM d, yyyy')} (${bestForecast.type})`
-                              : 'No data'}
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-3xl font-bold text-muted-foreground" data-testid="text-best-forecast">
-                            N/A
-                          </p>
-                          <p className="text-xs text-muted-foreground">No data</p>
-                        </>
-                      )}
-                    </div>
-                    <div className="p-3 rounded-md bg-yellow-500/10">
-                      <Award className="h-6 w-6 text-yellow-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Accuracy Charts */}
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card data-testid="card-accuracy-trend">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Accuracy Trend
-                  </CardTitle>
-                  <CardDescription>Monthly TDL and DLO forecast accuracy over time</CardDescription>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">DLO Accuracy</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
-                    <Skeleton className="h-[300px] w-full" />
-                  ) : forecastsWithData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300} data-testid="chart-accuracy-trend">
-                      <LineChart data={monthlyAccuracyData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis domain={[0, 100]} label={{ value: 'Accuracy (%)', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip />
-                        <Legend />
-                        <Line 
-                          type="monotone" 
-                          dataKey="tdlAccuracy" 
-                          stroke="#28A745" 
-                          strokeWidth={2}
-                          name="TDL Accuracy %"
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="dloAccuracy" 
-                          stroke="#2E5BBA" 
-                          strokeWidth={2}
-                          name="DLO Accuracy %"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <Skeleton className="h-10 w-20" data-testid="skeleton-dlo-accuracy" />
                   ) : (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p className="font-medium">No forecast data available</p>
-                      <p className="text-sm mt-2">Add forecasts with actual results to see trends</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card data-testid="card-accuracy-distribution">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5" />
-                    Accuracy Distribution
-                  </CardTitle>
-                  <CardDescription>How forecasts are distributed by accuracy range</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {isLoading ? (
-                    <Skeleton className="h-[300px] w-full" />
-                  ) : forecastsWithData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300} data-testid="chart-accuracy-distribution">
-                      <BarChart data={accuracyDistributionData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="range" angle={-15} textAnchor="end" height={80} />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="count" fill="#2E5BBA" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p className="font-medium">No distribution data available</p>
-                      <p className="text-sm mt-2">Complete forecasts to see accuracy distribution</p>
+                    <div className="space-y-1">
+                      <p className="text-3xl font-bold" data-testid="text-dlo-accuracy">
+                        {safeToFixed(dloAccuracy, 1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {forecastsWithDLO.length} predictions
+                      </p>
                     </div>
                   )}
                 </CardContent>
               </Card>
             </div>
 
-            {/* Detailed Forecast Table */}
             <Card data-testid="card-forecast-details">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5" />
-                  Detailed Forecast Analysis
-                </CardTitle>
-                <CardDescription>Individual forecast predictions vs actual results</CardDescription>
+                <CardTitle>Recent Forecast Details</CardTitle>
+                <CardDescription>Last 20 forecasts with accuracy breakdown</CardDescription>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <Skeleton className="h-[400px] w-full" />
-                ) : sortedForecasts.length > 0 ? (
+                  <Skeleton className="h-[400px] w-full" data-testid="skeleton-forecast-details" />
+                ) : detailedForecasts.length > 0 ? (
                   <div className="overflow-x-auto">
                     <Table data-testid="table-forecast-details">
                       <TableHeader>
                         <TableRow>
-                          <TableHead>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('jobName')}
-                              data-testid="button-sort-jobName"
-                              className="hover-elevate -ml-3"
-                            >
-                              Job Name
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('predictedTDL')}
-                              data-testid="button-sort-predictedTDL"
-                              className="hover-elevate"
-                            >
-                              Predicted TDL
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('actualTDL')}
-                              data-testid="button-sort-actualTDL"
-                              className="hover-elevate"
-                            >
-                              Actual TDL
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('tdlVariance')}
-                              data-testid="button-sort-tdlVariance"
-                              className="hover-elevate"
-                            >
-                              TDL Variance
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('predictedDLO')}
-                              data-testid="button-sort-predictedDLO"
-                              className="hover-elevate"
-                            >
-                              Predicted DLO
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('actualDLO')}
-                              data-testid="button-sort-actualDLO"
-                              className="hover-elevate"
-                            >
-                              Actual DLO
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('dloVariance')}
-                              data-testid="button-sort-dloVariance"
-                              className="hover-elevate"
-                            >
-                              DLO Variance
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('accuracy')}
-                              data-testid="button-sort-accuracy"
-                              className="hover-elevate"
-                            >
-                              Accuracy
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleForecastSort('date')}
-                              data-testid="button-sort-date"
-                              className="hover-elevate"
-                            >
-                              Date
-                              <ArrowUpDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </TableHead>
-                          <TableHead className="text-right">Quality</TableHead>
+                          <TableHead>Job</TableHead>
+                          <TableHead>Builder</TableHead>
+                          <TableHead className="text-center">Predicted TDL</TableHead>
+                          <TableHead className="text-center">Actual TDL</TableHead>
+                          <TableHead className="text-center">Variance</TableHead>
+                          <TableHead className="text-center">Predicted DLO</TableHead>
+                          <TableHead className="text-center">Actual DLO</TableHead>
+                          <TableHead className="text-center">Variance</TableHead>
+                          <TableHead className="text-center">Accuracy</TableHead>
+                          <TableHead className="text-center">Date</TableHead>
+                          <TableHead className="text-right">Rating</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {sortedForecasts.map((forecast) => (
-                          <TableRow 
-                            key={forecast.id}
-                            className="hover-elevate"
-                            data-testid={`row-forecast-${forecast.id}`}
-                          >
+                        {detailedForecasts.map((forecast) => (
+                          <TableRow key={forecast.id}>
                             <TableCell className="font-medium">{forecast.jobName}</TableCell>
+                            <TableCell>{forecast.builderName}</TableCell>
                             <TableCell className="text-center">
                               {forecast.predictedTDL !== null ? safeToFixed(forecast.predictedTDL, 2) : 'N/A'}
                             </TableCell>
@@ -1987,7 +1863,7 @@ export default function Analytics() {
                     </Table>
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-muted-foreground">
+                  <div className="text-center py-12 text-muted-foreground" data-testid="empty-state-forecast-details">
                     <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p className="font-medium">No forecast details available</p>
                     <p className="text-sm mt-2">Add forecasts with predicted and actual TDL values</p>
@@ -1998,6 +1874,35 @@ export default function Analytics() {
           </div>
         </div>
       </main>
+
+      {/* Phase 2 - BUILD: Export dialog */}
+      <ExportDialog
+        open={isExportDialogOpen}
+        onOpenChange={setIsExportDialogOpen}
+        jobIds={jobsInRange.map(j => j.id)}
+        title="Export Analytics"
+      />
     </div>
+  );
+}
+
+// Phase 2 - BUILD: Wrap with ErrorBoundary for production robustness
+export default function Analytics() {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="container mx-auto p-6">
+          <Alert className="border-red-600/20 bg-red-50/50 dark:bg-red-900/10">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <AlertTitle className="text-red-900 dark:text-red-300">Analytics Error</AlertTitle>
+            <AlertDescription className="text-red-800 dark:text-red-400">
+              An unexpected error occurred while loading analytics. Please refresh the page to try again.
+            </AlertDescription>
+          </Alert>
+        </div>
+      }
+    >
+      <AnalyticsContent />
+    </ErrorBoundary>
   );
 }
