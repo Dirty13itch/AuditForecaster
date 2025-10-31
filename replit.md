@@ -41,6 +41,19 @@ Core architectural decisions and features include:
 -   **Workflow Completion Enforcement**: Backend validation prevents job completion until ALL workflow requirements met (tests, photos, signature, checklist), with beautiful UI feedback showing missing requirements and progress tracking.
 -   **Automated Retest Workflow**: One-click retest job creation for failed blower door tests (ACH50 > 3.0), automatically pre-filling address/builder data and linking to previous failed test for tracking.
 -   **Mobile-Optimized Workflow UI**: Touch-friendly 48px minimum touch targets, responsive typography, scrollable test lists, and grid layouts optimized for field use on mobile devices (375px+ width).
+-   **Financial Management System (In Progress - Phase 1 Complete)**: Comprehensive financial module with partner contractor access control, monthly invoicing to Building Knowledge, payment tracking, AR aging, expense management with swipe interface, job cost ledger, and profitability analytics. Data model complete with 13 new/extended tables supporting builder rate cards, invoice generation, payment processing, expense classification, multifamily compliance (ENERGY STAR MFNC, MN Housing EGCC, ZERH, benchmarking), and complete job costing.
+
+## Business Context
+-   **Business Model**: Ulrich Energy Auditing (Shaun, owner) → subcontractor to → Building Knowledge (Pat, general contractor) → contractor to → M/I Homes
+-   **Invoicing**: Monthly invoices to Building Knowledge with manual review, paid bi-weekly
+-   **Employee**: Erik (inspector), paid fixed monthly amount
+-   **Job Types**: sv2, full_test, code_bdoor, rough_duct, rehab, bdoor_retest, multifamily, energy_star, other (9 total)
+-   **Calendar**: Building Knowledge calendar auto-syncs every 6 hours; Pat can manually create jobs for exceptions
+
+## Access Control & Roles
+-   **Admin (Shaun)**: Full system access including all financial modules, profitability analytics, and expense approval
+-   **Inspector (Erik)**: Field inspection permissions only - view jobs, complete inspections, upload photos, log time, view schedule
+-   **Partner Contractor (Pat - Building Knowledge)**: Inspector permissions PLUS create/edit jobs (exceptions only), upload plans/specs, download reports; NO access to financial data (pricing, margins, invoices, payments, analytics)
 
 ## External Dependencies
 

@@ -291,6 +291,19 @@ export const jobs = pgTable("jobs", {
   estimatedDuration: integer("estimated_duration"), // Duration in minutes
   territory: text("territory"), // Geographic zone/territory
   previousTestId: varchar("previous_test_id"), // Link to failed test for retest jobs
+  // Multifamily compliance tracking columns
+  multifamilyProgram: varchar("multifamily_program", { 
+    enum: ["energy_star_mfnc", "mn_housing_egcc", "zerh", "benchmarking", "none"] 
+  }),
+  certificationPath: varchar("certification_path", { 
+    enum: ["prescriptive", "eri", "ashrae"] 
+  }),
+  unitCount: integer("unit_count"),
+  sampleSize: integer("sample_size"),
+  mroOrganization: varchar("mro_organization"),
+  builderVerifiedItemsCount: integer("builder_verified_items_count"),
+  builderVerifiedItemsPhotoRequired: boolean("builder_verified_items_photo_required").default(false),
+  billedInInvoiceId: varchar("billed_in_invoice_id").references(() => invoices.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
   index("idx_jobs_plan_id").on(table.planId),
@@ -312,6 +325,8 @@ export const jobs = pgTable("jobs", {
   // Completion tracking indexes
   index("idx_jobs_field_work_complete").on(table.fieldWorkComplete),
   index("idx_jobs_photo_upload_complete").on(table.photoUploadComplete),
+  // Invoice billing index
+  index("idx_jobs_billed_in_invoice_id").on(table.billedInInvoiceId),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -470,6 +485,7 @@ export const inspectorPreferences = pgTable("inspector_preferences", {
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   category: text("category").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description"),
@@ -478,15 +494,30 @@ export const expenses = pgTable("expenses", {
   isDeductible: boolean("is_deductible").default(true),
   ocrText: text("ocr_text"),
   ocrConfidence: decimal("ocr_confidence", { precision: 5, scale: 2 }),
-  ocrAmount: decimal("ocr_amount", { precision: 10, scale: 2 }),
-  ocrVendor: text("ocr_vendor"),
-  ocrDate: timestamp("ocr_date"),
   ocrMetadata: jsonb("ocr_metadata"),
+  // New financial tracking columns
+  categoryId: varchar("category_id").references(() => expenseCategories.id, { onDelete: 'set null' }),
+  approvalStatus: varchar("approval_status", { 
+    enum: ["pending", "approved", "rejected", "reimbursed"] 
+  }).default("pending"),
+  swipeClassification: varchar("swipe_classification", { 
+    enum: ["business", "personal"] 
+  }),
+  gpsLatitude: decimal("gps_latitude", { precision: 10, scale: 8 }),
+  gpsLongitude: decimal("gps_longitude", { precision: 11, scale: 8 }),
+  receiptPath: varchar("receipt_path"),
+  ocrAmount: decimal("ocr_amount", { precision: 10, scale: 2 }),
+  ocrVendor: varchar("ocr_vendor"),
+  ocrDate: date("ocr_date"),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  approvedAt: timestamp("approved_at"),
 }, (table) => [
   index("idx_expenses_job_id").on(table.jobId),
   index("idx_expenses_date").on(table.date),
-  // Analytics-specific indexes for expenses
   index("idx_expenses_date_category").on(table.date, table.category),
+  index("idx_expenses_category_id").on(table.categoryId),
+  index("idx_expenses_approval_status").on(table.approvalStatus),
+  index("idx_expenses_user_approval").on(table.userId, table.approvalStatus),
 ]);
 
 export const mileageLogs = pgTable("mileage_logs", {
@@ -1117,63 +1148,177 @@ export const ventilationTests = pgTable("ventilation_tests", {
 ]);
 
 // Financial Management Tables
+// Builder Rate Cards - Pricing agreements with volume tiers
+export const builderRateCards = pgTable("builder_rate_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  jobType: varchar("job_type").notNull(),
+  baseRate: decimal("base_rate", { precision: 10, scale: 2 }).notNull(),
+  volumeTierStart: integer("volume_tier_start").default(0).notNull(),
+  volumeDiscount: decimal("volume_discount", { precision: 5, scale: 2 }).default("0"),
+  effectiveStartDate: date("effective_start_date").notNull(),
+  effectiveEndDate: date("effective_end_date"),
+  billingCodes: jsonb("billing_codes"), // {rush: 50, weekend: 75}
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_builder_rate_cards_builder_id").on(table.builderId),
+  index("idx_builder_rate_cards_builder_job_type").on(table.builderId, table.jobType),
+  index("idx_builder_rate_cards_effective_start").on(table.effectiveStartDate),
+]);
+
+// Invoices - Monthly invoices to Building Knowledge
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceNumber: varchar("invoice_number").notNull().unique(),
-  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
-  builderId: varchar("builder_id").references(() => builders.id, { onDelete: 'set null' }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  
-  // Amount fields
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  tax: decimal("tax", { precision: 10, scale: 2 }).default("0"),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  tax: decimal("tax", { precision: 10, scale: 2 }).default("0").notNull(),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
-  
-  // Status and dates
-  status: text("status", { 
-    enum: ["draft", "sent", "paid", "overdue", "cancelled"] 
+  status: varchar("status", { 
+    enum: ["draft", "reviewed", "sent", "paid"] 
   }).notNull().default("draft"),
-  issueDate: timestamp("issue_date").notNull(),
-  dueDate: timestamp("due_date").notNull(),
-  paidDate: timestamp("paid_date"),
-  
-  // Payment details
-  paymentMethod: text("payment_method", { 
-    enum: ["check", "credit", "ach", "cash", "other"] 
-  }),
-  paymentReference: text("payment_reference"),
-  
-  // Additional fields
-  notes: text("notes"),
-  terms: text("terms"),
-  items: jsonb("items"), // Array of line items: {description, quantity, rate, amount}
-  
+  sentAt: timestamp("sent_at"),
+  paidAt: timestamp("paid_at"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  index("idx_invoices_invoice_number").on(table.invoiceNumber),
-  index("idx_invoices_job_id").on(table.jobId),
   index("idx_invoices_builder_id").on(table.builderId),
-  index("idx_invoices_user_id").on(table.userId),
   index("idx_invoices_status").on(table.status),
-  index("idx_invoices_due_date").on(table.dueDate),
+  index("idx_invoices_invoice_number").on(table.invoiceNumber),
+  index("idx_invoices_builder_status").on(table.builderId, table.status),
+  index("idx_invoices_period_start").on(table.periodStart),
 ]);
 
-export const payments = pgTable("payments", {
+// Invoice Line Items - Line items for each invoice
+export const invoiceLineItems = pgTable("invoice_line_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: 'cascade' }),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
+  description: text("description").notNull(),
+  quantity: integer("quantity").default(1).notNull(),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  jobType: varchar("job_type"),
+}, (table) => [
+  index("idx_invoice_line_items_invoice_id").on(table.invoiceId),
+  index("idx_invoice_line_items_job_id").on(table.jobId),
+]);
+
+// Payments - Payment tracking from Building Knowledge
+export const payments = pgTable("payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").references(() => invoices.id, { onDelete: 'set null' }),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  paymentDate: timestamp("payment_date").notNull(),
-  paymentMethod: text("payment_method", { 
-    enum: ["check", "credit", "ach", "cash", "other"] 
-  }).notNull(),
-  transactionId: text("transaction_id"),
-  reference: text("reference"),
+  paymentDate: date("payment_date").notNull(),
+  paymentMethod: varchar("payment_method", { 
+    enum: ["direct_deposit", "check", "wire"] 
+  }),
+  referenceNumber: varchar("reference_number"),
   notes: text("notes"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_payments_invoice_id").on(table.invoiceId),
   index("idx_payments_payment_date").on(table.paymentDate),
+  index("idx_payments_created_by").on(table.createdBy),
+]);
+
+// AR Snapshots - AR aging snapshots (daily)
+export const arSnapshots = pgTable("ar_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  snapshotDate: date("snapshot_date").notNull(),
+  builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
+  current: decimal("current", { precision: 10, scale: 2 }).default("0").notNull(),
+  days30: decimal("days_30", { precision: 10, scale: 2 }).default("0").notNull(),
+  days60: decimal("days_60", { precision: 10, scale: 2 }).default("0").notNull(),
+  days90Plus: decimal("days_90_plus", { precision: 10, scale: 2 }).default("0").notNull(),
+  totalAR: decimal("total_ar", { precision: 10, scale: 2 }).notNull(),
+}, (table) => [
+  index("idx_ar_snapshots_snapshot_builder").on(table.snapshotDate, table.builderId),
+  index("idx_ar_snapshots_builder_id").on(table.builderId),
+]);
+
+// Expense Categories - Expense classification categories
+export const expenseCategories = pgTable("expense_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull().unique(),
+  color: varchar("color"),
+  icon: varchar("icon"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Expense Rules - Auto-classification rules
+export const expenseRules = pgTable("expense_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vendorPattern: varchar("vendor_pattern").notNull(),
+  categoryId: varchar("category_id").notNull().references(() => expenseCategories.id, { onDelete: 'cascade' }),
+  autoApprove: boolean("auto_approve").default(false).notNull(),
+  maxAutoApproveAmount: decimal("max_auto_approve_amount", { precision: 10, scale: 2 }),
+  priority: integer("priority").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_expense_rules_priority").on(table.priority),
+  index("idx_expense_rules_category_id").on(table.categoryId),
+]);
+
+// Job Cost Ledger - Job cost tracking
+export const jobCostLedger = pgTable("job_cost_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  costType: varchar("cost_type", { 
+    enum: ["labor", "travel", "equipment", "expense"] 
+  }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description"),
+  recordedAt: timestamp("recorded_at").defaultNow(),
+}, (table) => [
+  index("idx_job_cost_ledger_job_id").on(table.jobId),
+  index("idx_job_cost_ledger_job_cost_type").on(table.jobId, table.costType),
+  index("idx_job_cost_ledger_recorded_at").on(table.recordedAt),
+]);
+
+// Mileage Rate History - IRS mileage rate tracking
+export const mileageRateHistory = pgTable("mileage_rate_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  effectiveDate: date("effective_date").notNull(),
+  ratePerMile: decimal("rate_per_mile", { precision: 5, scale: 3 }).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_mileage_rate_history_effective_date").on(table.effectiveDate),
+]);
+
+// Multifamily Programs - Compliance program templates
+export const multifamilyPrograms = pgTable("multifamily_programs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  version: varchar("version"),
+  effectiveDate: date("effective_date"),
+  requiresPhotoEvidence: boolean("requires_photo_evidence").default(false).notNull(),
+  samplingRequired: boolean("sampling_required").default(false).notNull(),
+  checklistTemplateId: varchar("checklist_template_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Compliance Artifacts - Compliance document storage
+export const complianceArtifacts = pgTable("compliance_artifacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  programType: varchar("program_type", { 
+    enum: ["energy_star_mfnc", "mn_housing_egcc", "zerh", "benchmarking"] 
+  }).notNull(),
+  artifactType: varchar("artifact_type", { 
+    enum: ["checklist", "worksheet", "photo", "certificate"] 
+  }).notNull(),
+  documentPath: varchar("document_path"),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  index("idx_compliance_artifacts_job_id").on(table.jobId),
+  index("idx_compliance_artifacts_job_program").on(table.jobId, table.programType),
+  index("idx_compliance_artifacts_uploaded_by").on(table.uploadedBy),
 ]);
 
 export const financialSettings = pgTable("financial_settings", {
@@ -1670,6 +1815,9 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true 
   ocrDate: z.coerce.date().nullable().optional(),
   ocrAmount: z.union([z.string(), z.number()]).pipe(z.coerce.string()).nullable().optional(),
   ocrConfidence: z.union([z.string(), z.number()]).pipe(z.coerce.string()).nullable().optional(),
+  approvedAt: z.coerce.date().nullable().optional(),
+  gpsLatitude: z.coerce.number().nullable().optional(),
+  gpsLongitude: z.coerce.number().nullable().optional(),
 });
 export const insertMileageLogSchema = createInsertSchema(mileageLogs).omit({ id: true }).extend({
   date: z.coerce.date(),
@@ -1813,19 +1961,63 @@ export const insertBlowerDoorTestSchema = createInsertSchema(blowerDoorTests).om
 });
 
 // Financial table schemas
-export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true }).extend({
-  issueDate: z.coerce.date(),
-  dueDate: z.coerce.date(),
-  paidDate: z.coerce.date().nullable().optional(),
-  amount: z.coerce.number(),
+// Financial schemas
+export const insertBuilderRateCardSchema = createInsertSchema(builderRateCards).omit({ id: true, createdAt: true }).extend({
+  effectiveStartDate: z.coerce.date(),
+  effectiveEndDate: z.coerce.date().nullable().optional(),
+  baseRate: z.coerce.number(),
+  volumeDiscount: z.coerce.number().nullable().optional(),
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true }).extend({
+  periodStart: z.coerce.date(),
+  periodEnd: z.coerce.date(),
+  sentAt: z.coerce.date().nullable().optional(),
+  paidAt: z.coerce.date().nullable().optional(),
+  subtotal: z.coerce.number(),
   tax: z.coerce.number().nullable().optional(),
   total: z.coerce.number(),
+});
+
+export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).omit({ id: true }).extend({
+  unitPrice: z.coerce.number(),
+  lineTotal: z.coerce.number(),
 });
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true }).extend({
   paymentDate: z.coerce.date(),
   amount: z.coerce.number(),
 });
+
+export const insertArSnapshotSchema = createInsertSchema(arSnapshots).omit({ id: true }).extend({
+  snapshotDate: z.coerce.date(),
+  current: z.coerce.number(),
+  days30: z.coerce.number(),
+  days60: z.coerce.number(),
+  days90Plus: z.coerce.number(),
+  totalAR: z.coerce.number(),
+});
+
+export const insertExpenseCategorySchema = createInsertSchema(expenseCategories).omit({ id: true, createdAt: true });
+
+export const insertExpenseRuleSchema = createInsertSchema(expenseRules).omit({ id: true, createdAt: true }).extend({
+  maxAutoApproveAmount: z.coerce.number().nullable().optional(),
+});
+
+export const insertJobCostLedgerSchema = createInsertSchema(jobCostLedger).omit({ id: true, recordedAt: true }).extend({
+  amount: z.coerce.number(),
+});
+
+export const insertMileageRateHistorySchema = createInsertSchema(mileageRateHistory).omit({ id: true, createdAt: true }).extend({
+  effectiveDate: z.coerce.date(),
+  ratePerMile: z.coerce.number(),
+});
+
+export const insertMultifamilyProgramSchema = createInsertSchema(multifamilyPrograms).omit({ id: true, createdAt: true }).extend({
+  effectiveDate: z.coerce.date().nullable().optional(),
+});
+
+export const insertComplianceArtifactSchema = createInsertSchema(complianceArtifacts).omit({ id: true, uploadedAt: true });
 
 export const insertFinancialSettingsSchema = createInsertSchema(financialSettings).omit({ id: true, createdAt: true, updatedAt: true }).extend({
   taxRate: z.coerce.number().nullable().optional(),
@@ -2159,10 +2351,28 @@ export type VentilationTest = typeof ventilationTests.$inferSelect;
 export type InsertVentilationTest = z.infer<typeof insertVentilationTestSchema>;
 
 // Financial types
+export type BuilderRateCard = typeof builderRateCards.$inferSelect;
+export type InsertBuilderRateCard = z.infer<typeof insertBuilderRateCardSchema>;
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
+export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type ArSnapshot = typeof arSnapshots.$inferSelect;
+export type InsertArSnapshot = z.infer<typeof insertArSnapshotSchema>;
+export type ExpenseCategory = typeof expenseCategories.$inferSelect;
+export type InsertExpenseCategory = z.infer<typeof insertExpenseCategorySchema>;
+export type ExpenseRule = typeof expenseRules.$inferSelect;
+export type InsertExpenseRule = z.infer<typeof insertExpenseRuleSchema>;
+export type JobCostLedger = typeof jobCostLedger.$inferSelect;
+export type InsertJobCostLedger = z.infer<typeof insertJobCostLedgerSchema>;
+export type MileageRateHistory = typeof mileageRateHistory.$inferSelect;
+export type InsertMileageRateHistory = z.infer<typeof insertMileageRateHistorySchema>;
+export type MultifamilyProgram = typeof multifamilyPrograms.$inferSelect;
+export type InsertMultifamilyProgram = z.infer<typeof insertMultifamilyProgramSchema>;
+export type ComplianceArtifact = typeof complianceArtifacts.$inferSelect;
+export type InsertComplianceArtifact = z.infer<typeof insertComplianceArtifactSchema>;
 export type FinancialSettings = typeof financialSettings.$inferSelect;
 export type InsertFinancialSettings = z.infer<typeof insertFinancialSettingsSchema>;
 

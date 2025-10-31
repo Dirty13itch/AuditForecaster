@@ -16,7 +16,7 @@
   - Fuzzy builder name matching and duplicate detection
   - Manual job creation available for exceptions/last-minute changes
 - **Current Tools**: Wave accounting for invoices, Google Sheets for job tracking with prices
-- **Target Migration**: QuickBooks Online (starting fresh)
+- **New System**: Standalone financial management (no external accounting software integration)
 - **Quality Standard**: 40/40 AAA production rating maintained
 
 ### Job Types (9 Total)
@@ -38,7 +38,6 @@
 - Full access to everything
 - Approves all expenses (owner approval)
 - Reviews all invoices before sending
-- Manages QuickBooks integration
 - Views all financial analytics and profitability
 
 #### Pat (Building Knowledge - Partner Contractor)
@@ -67,9 +66,8 @@
 2. Group by job type and apply rate card pricing
 3. Manual review by Shaun (owner reviews every invoice)
 4. Generate professional PDF using @react-pdf/renderer
-5. Push to QuickBooks Online via API
-6. Email to Pat with PDF attachment
-7. Track AR (accounts receivable)
+5. Email to Pat with PDF attachment
+6. Track AR (accounts receivable)
 
 #### Components
 - Invoice Wizard (5-step process):
@@ -86,7 +84,7 @@
 
 #### Features
 - Record bi-weekly direct deposits from Building Knowledge
-- Apply payments to invoices in QuickBooks
+- Apply payments to invoices
 - Update AR aging buckets (current, 30, 60, 90+ days)
 - Track unbilled work (completed jobs not yet invoiced)
 - Payment history with reference numbers
@@ -216,68 +214,6 @@ builder_rate_cards
 - Average job duration
 - Revenue per hour worked
 - Completion rate vs scheduled
-
-## QuickBooks Online Integration
-
-### OAuth 2.0 Setup
-- Use Replit integrations for API key/secret management
-- Automatic token refresh (every 30 minutes)
-- Error handling with retry logic and alerts
-- Secure credential storage
-
-### Synced Entities
-
-#### 1. Customer Records
-- Create/update Building Knowledge customer in QB
-- Sync contact information
-- Map to internal builder record
-
-#### 2. Invoices
-- Create invoices in QB when generated in system
-- Sync invoice status (sent, viewed, paid)
-- Link to internal invoice record
-- Include line items with job details
-
-#### 3. Payments
-- Record direct deposits in QB when entered
-- Apply payments to correct invoices
-- Update AR balances
-- Sync payment methods and reference numbers
-
-#### 4. AR Aging
-- Query QB for aging buckets
-- Display in dashboard
-- Alert on overdue amounts
-
-#### 5. Expenses
-- Export approved expenses to QB
-- Map expense categories to QB chart of accounts
-- Track reimbursement status
-- Sync for tax reporting
-
-### Chart of Accounts Mapping
-- Fuel → QB account (user configurable)
-- Equipment → QB account
-- Tolls → QB account
-- Meals → QB account
-- Supplies → QB account
-- Other → QB account
-
-### Background Jobs
-1. **Token Refresh** (every 30 min)
-   - Refresh access token
-   - Alert on failure
-   - Fallback to manual reauth
-
-2. **Invoice Sync** (hourly)
-   - Push pending invoices to QB
-   - Exponential backoff on errors
-   - Manual retry option
-
-3. **Payment Sync** (daily)
-   - Pull QB payments
-   - Match to invoices
-   - Update AR status
 
 ## ENERGY STAR & Minnesota Multifamily Compliance
 
@@ -1108,157 +1044,6 @@ POST /api/compliance/sampling/calculate
 - Sampling calculation accuracy
 - E2E: multifamily job → program setup → checklist completion → artifact upload → submission
 
-### Phase 7: QuickBooks Integration
-
-#### Integration Search
-```typescript
-// Use Replit integrations for credential management
-search_integrations(query: "QuickBooks Online")
-// Store OAuth credentials securely via integrations module
-```
-
-#### QuickBooks Service
-```typescript
-// server/quickbooksService.ts
-class QuickBooksService {
-  // OAuth
-  async getAuthorizationUrl(): Promise<string>
-  async exchangeCodeForTokens(code: string): Promise<Tokens>
-  async refreshAccessToken(refreshToken: string): Promise<Tokens>
-
-  // Customers
-  async createCustomer(customer: CustomerData): Promise<QBCustomer>
-  async getCustomerByName(name: string): Promise<QBCustomer | null>
-
-  // Invoices
-  async createInvoice(invoice: InvoiceData): Promise<QBInvoice>
-  async updateInvoice(id: string, invoice: InvoiceData): Promise<QBInvoice>
-  async getInvoice(id: string): Promise<QBInvoice>
-
-  // Payments
-  async recordPayment(payment: PaymentData): Promise<QBPayment>
-  async getPaymentsByInvoice(invoiceId: string): Promise<QBPayment[]>
-
-  // AR Aging
-  async getARAgingReport(customerId: string): Promise<ARAgingData>
-
-  // Chart of Accounts
-  async getChartOfAccounts(): Promise<QBAccount[]>
-  async mapExpenseCategory(categoryId: number, qbAccountId: string): Promise<void>
-}
-```
-
-#### Token Refresh Cron
-```typescript
-// server/scheduledQuickBooksSync.ts
-import cron from 'node-cron';
-
-// Refresh tokens every 30 minutes (QB tokens expire in 1 hour)
-cron.schedule('*/30 * * * *', async () => {
-  try {
-    const tokens = await getStoredTokens();
-    if (shouldRefresh(tokens)) {
-      const newTokens = await qbService.refreshAccessToken(tokens.refresh_token);
-      await storeTokens(newTokens);
-      logger.info('QuickBooks tokens refreshed successfully');
-    }
-  } catch (error) {
-    logger.error('QuickBooks token refresh failed', error);
-    await sendAlertEmail('QuickBooks connection issue - manual reauth needed');
-  }
-});
-
-// Sync pending invoices hourly
-cron.schedule('0 * * * *', async () => {
-  const pendingInvoices = await getPendingQuickBooksSync();
-  for (const invoice of pendingInvoices) {
-    await syncInvoiceToQuickBooks(invoice); // with exponential backoff
-  }
-});
-```
-
-#### API Routes
-```typescript
-GET /api/quickbooks/auth/url
-  - Returns QB authorization URL
-  - Redirect user to QB login
-
-GET /api/quickbooks/auth/callback?code=xxx
-  - Exchange code for tokens
-  - Store tokens securely
-  - Redirect to settings page
-
-POST /api/quickbooks/sync/invoice/:id
-  - Manual sync trigger
-  - Push invoice to QB
-  - Update quickbooksId and quickbooksSyncedAt
-
-POST /api/quickbooks/sync/payment/:id
-  - Manual sync trigger
-  - Record payment in QB
-
-GET /api/quickbooks/status
-  - Returns connection status
-  - Token expiry info
-  - Last sync timestamps
-```
-
-#### Frontend Components
-```typescript
-// client/src/pages/QuickBooksSettings.tsx
-- Connection status badge (connected, disconnected, error)
-- "Connect to QuickBooks" button → OAuth flow
-- "Disconnect" button
-- Auto-sync toggles:
-  - Sync invoices automatically ✓
-  - Sync payments automatically ✓
-  - Sync expenses automatically ✓
-- Last sync timestamps
-- Manual sync all button
-- Error log viewer
-
-// client/src/pages/ExpenseCategoryMapping.tsx
-- Table: Category | QB Account | Action
-- Dropdown to select QB account per category
-- Fetch QB chart of accounts via API
-- Save mappings
-
-// client/src/components/QuickBooksSyncStatus.tsx
-- Badge component for sync status
-- Icons: synced (green check), pending (yellow clock), error (red X)
-- Tooltip with last sync time
-- Manual sync button (if error or pending)
-```
-
-#### Error Handling & Retry Logic
-```typescript
-// Exponential backoff for failed syncs
-async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
-  try {
-    const qbInvoice = await qbService.createInvoice(invoice);
-    await updateInvoiceQuickBooksId(invoice.id, qbInvoice.Id);
-    return { success: true };
-  } catch (error) {
-    if (retryCount < 3) {
-      const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-      await sleep(delay);
-      return syncInvoiceToQuickBooks(invoice, retryCount + 1);
-    } else {
-      logger.error('QuickBooks sync failed after 3 retries', { invoiceId: invoice.id, error });
-      await flagInvoiceForManualSync(invoice.id);
-      return { success: false, error };
-    }
-  }
-}
-```
-
-#### Testing
-- QuickBooks Sandbox integration tests
-- Token refresh failure simulation
-- Resilience tests (network errors, API rate limits)
-- OAuth flow E2E (login → callback → token storage)
-- Contract mocks for CI (avoid hitting QB API in tests)
-
 ## Migration Path from Wave/Google Sheets
 
 ### Step 1: Export Data
@@ -1301,26 +1086,17 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 - Fix discrepancies before cutover
 ```
 
-### Step 4: QuickBooks Cutover
+### Step 4: Go Live
 ```typescript
-// Week 1: Connect QuickBooks
-- Set up OAuth
-- Create Building Knowledge customer
-- Map chart of accounts
-
-// Week 2: Historical data sync
-- Push last 3 months of invoices to QB
-- Record historical payments
-- Verify AR balances match
-
-// Week 3: Go live
-- Generate first invoice in new system
-- Send to Pat via new workflow
+// Week 1: Generate first invoice
+- Create invoice in new system
+- Review PDF output
+- Send to Pat via new email workflow
 - Monitor for issues
 
-// Week 4: Wave sunset
-- Final reconciliation
-- Archive Wave data
+// Week 2: Wave sunset
+- Final reconciliation between systems
+- Archive Wave data as backup
 - Full migration complete
 ```
 
@@ -1343,15 +1119,7 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 - Easier local development
 - Can migrate to microservices later if needed
 
-### 2. Real-time vs Batch QuickBooks Sync
-**Decision**: Batch sync with manual triggers
-**Rationale**:
-- Avoid QB API rate limits
-- Allow manual review before sync
-- Retry logic easier with queued jobs
-- Real-time not critical for monthly invoicing
-
-### 3. Photo Storage for Compliance
+### 2. Photo Storage for Compliance
 **Decision**: Replit Object Storage (existing)
 **Rationale**:
 - Already integrated
@@ -1359,7 +1127,7 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 - Offline upload queue already implemented
 - Cost-effective
 
-### 4. Expense Classification: AI vs Rules
+### 3. Expense Classification: AI vs Rules
 **Decision**: Rule-based classification (for now)
 **Rationale**:
 - Simpler to implement and debug
@@ -1367,7 +1135,7 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 - Low expense volume (<100/month)
 - Can add ML later if needed
 
-### 5. Multifamily Checklists: Paper vs Digital
+### 4. Multifamily Checklists: Paper vs Digital
 **Decision**: Hybrid approach
 **Rationale**:
 - Inspectors familiar with paper forms
@@ -1406,7 +1174,7 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 
 ### Phase 3 (Payments & AR)
 - [ ] Payment application accuracy 100%
-- [ ] AR aging matches QuickBooks (once integrated)
+- [ ] AR aging calculations accurate
 - [ ] Unbilled work alerts sent weekly
 
 ### Phase 4 (Expenses)
@@ -1427,12 +1195,6 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 - [ ] Builder-verified items tracking functional
 - [ ] Benchmarking deadline alerts accurate
 
-### Phase 7 (QuickBooks)
-- [ ] OAuth connection success rate >95%
-- [ ] Invoice sync success rate >99%
-- [ ] Token refresh never fails for >1 hour
-- [ ] AR balances match between systems
-
 ## Timeline Estimate (Aggressive)
 
 - **Phase 0**: 2 days (permissions, feature flags)
@@ -1442,21 +1204,18 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 - **Phase 4**: 5 days (swipe UI, OCR, auto-classification)
 - **Phase 5**: 4 days (analytics queries, charts, dashboard)
 - **Phase 6**: 6 days (compliance forms, checklists, calculators)
-- **Phase 7**: 5 days (QuickBooks OAuth, sync, monitoring)
 - **Migration**: 3 days (export, import, dual-entry testing)
 
-**Total**: ~36 days (7-8 weeks) for full implementation
+**Total**: ~31 days (6-7 weeks) for full implementation
 
 ## Risk Mitigation
 
 ### Technical Risks
-1. **QuickBooks API rate limits**
-   - Mitigation: Batch syncs, exponential backoff, monitor usage
-2. **OCR accuracy on receipts**
+1. **OCR accuracy on receipts**
    - Mitigation: Manual override always available, improve over time
-3. **Mobile swipe gesture conflicts**
+2. **Mobile swipe gesture conflicts**
    - Mitigation: Thorough testing on iOS/Android, fallback to tap buttons
-4. **Large PDF generation performance**
+3. **Large PDF generation performance**
    - Mitigation: Async generation, show progress, optimize templates
 
 ### Business Risks
@@ -1464,9 +1223,7 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
    - Mitigation: Triple-layer permission checks, audit logging, testing
 2. **Invoice calculation errors**
    - Mitigation: Extensive unit tests, manual review step, reconciliation reports
-3. **QuickBooks connection breaks**
-   - Mitigation: Monitoring, alerting, fallback to manual entry, Wave backup for 90 days
-4. **Compliance checklist outdated**
+3. **Compliance checklist outdated**
    - Mitigation: Version tracking, regular updates, manual override capability
 
 ## Open Questions for Stakeholder Review
@@ -1475,12 +1232,11 @@ async function syncInvoiceToQuickBooks(invoice: Invoice, retryCount = 0) {
 2. **Tax Handling**: Is sales tax applicable? If so, what rate?
 3. **Payment Terms**: Net 30? Net 15? Display on invoice?
 4. **Email Template**: What should email to Pat say when sending invoice?
-5. **QuickBooks Account**: Is sandbox available for testing before production setup?
-6. **Compliance Forms**: Which specific ENERGY STAR checklists are most commonly used?
-7. **Builder-Verified Items**: Is photo evidence becoming mandatory soon? Should we default to "required"?
-8. **Expense Reimbursement**: How are Erik's expenses currently reimbursed? Paycheck? Separate check?
-9. **Invoice Numbering**: Any specific format preference? (Currently: INV-2025-0001)
-10. **Cash Flow Forecast**: What assumptions for labor costs per job type?
+5. **Compliance Forms**: Which specific ENERGY STAR checklists are most commonly used?
+6. **Builder-Verified Items**: Is photo evidence becoming mandatory soon? Should we default to "required"?
+7. **Expense Reimbursement**: How are Erik's expenses currently reimbursed? Paycheck? Separate check?
+8. **Invoice Numbering**: Any specific format preference? (Currently: INV-2025-0001)
+9. **Cash Flow Forecast**: What assumptions for labor costs per job type?
 
 ---
 
