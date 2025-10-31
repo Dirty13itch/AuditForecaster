@@ -32,6 +32,7 @@ interface BuilderOverviewTabProps {
 export function BuilderOverviewTab({ builder }: BuilderOverviewTabProps) {
   const { data: stats, isLoading } = useQuery<BuilderStats>({
     queryKey: ["/api/builders", builder.id, "stats"],
+    retry: 2,
   });
 
   if (isLoading) {

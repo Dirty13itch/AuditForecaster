@@ -102,6 +102,7 @@ export function BuilderAgreementsTab({ builder }: BuilderAgreementsTabProps) {
 
   const { data: agreements = [], isLoading } = useQuery<BuilderAgreement[]>({
     queryKey: ["/api/builders", builder.id, "agreements"],
+    retry: 2,
   });
 
   const form = useForm<AgreementFormValues>({

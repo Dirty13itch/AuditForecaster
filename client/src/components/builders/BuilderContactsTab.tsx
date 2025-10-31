@@ -104,6 +104,7 @@ export function BuilderContactsTab({ builder }: BuilderContactsTabProps) {
 
   const { data: contacts = [], isLoading } = useQuery<BuilderContact[]>({
     queryKey: ["/api/builders", builder.id, "contacts"],
+    retry: 2,
   });
 
   const form = useForm<ContactFormValues>({

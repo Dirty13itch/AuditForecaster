@@ -107,6 +107,7 @@ export function BuilderInteractionsTab({ builder }: BuilderInteractionsTabProps)
 
   const { data: interactions = [], isLoading } = useQuery<BuilderInteraction[]>({
     queryKey: ["/api/builders", builder.id, "interactions"],
+    retry: 2,
   });
 
   const form = useForm<InteractionFormValues>({

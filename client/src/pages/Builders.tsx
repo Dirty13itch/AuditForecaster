@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Building2, Plus, Search, ArrowLeft, Edit, Trash2 } from "lucide-react";
+import { Building2, Plus, Search, ArrowLeft, Edit, Trash2, RefreshCw, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -17,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BuilderCard } from "@/components/BuilderCard";
 import { BuilderDialog } from "@/components/BuilderDialog";
 import { BuilderOverviewTab } from "@/components/builders/BuilderOverviewTab";
@@ -29,17 +31,24 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Builder, InsertBuilder } from "@shared/schema";
 
-export default function Builders() {
+// Module-level constants for consistent configuration
+const SKELETON_COUNT = 6;
+const SEARCH_PLACEHOLDER = "Search builders by name, company, or specialization...";
+const DEFAULT_TAB = "overview";
+
+function BuildersContent() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedBuilder, setSelectedBuilder] = useState<Builder | null>(null);
   const [builderToEdit, setBuilderToEdit] = useState<Builder | null>(null);
   const [builderToDelete, setBuilderToDelete] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
 
-  const { data: builders = [], isLoading } = useQuery<Builder[]>({
+  // Main builders query with retry configuration for resilience
+  const { data: builders = [], isLoading, error, refetch } = useQuery<Builder[]>({
     queryKey: ["/api/builders"],
+    retry: 2,
   });
 
   const createMutation = useMutation({
@@ -117,70 +126,105 @@ export default function Builders() {
     },
   });
 
-  const handleSubmit = (data: InsertBuilder) => {
+  // Memoized event handlers to prevent unnecessary re-renders
+  const handleSubmit = useCallback((data: InsertBuilder) => {
     if (builderToEdit) {
       updateMutation.mutate({ id: builderToEdit.id, data });
     } else {
       createMutation.mutate(data);
     }
-  };
+  }, [builderToEdit, updateMutation, createMutation]);
 
-  const handleEdit = (builder: Builder) => {
+  const handleEdit = useCallback((builder: Builder) => {
     setBuilderToEdit(builder);
     setSelectedBuilder(null);
     setIsAddDialogOpen(true);
-  };
+  }, []);
 
-  const handleDelete = (builderId: string) => {
+  const handleDelete = useCallback((builderId: string) => {
     setBuilderToDelete(builderId);
-  };
+  }, []);
 
-  const confirmDelete = () => {
+  const confirmDelete = useCallback(() => {
     if (builderToDelete) {
       deleteMutation.mutate(builderToDelete);
     }
-  };
+  }, [builderToDelete, deleteMutation]);
 
-  const handleViewDetails = (builder: Builder) => {
+  const handleViewDetails = useCallback((builder: Builder) => {
     setSelectedBuilder(builder);
-    setActiveTab("overview");
-  };
+    setActiveTab(DEFAULT_TAB);
+  }, []);
 
-  const handleBackToList = () => {
+  const handleBackToList = useCallback(() => {
     setSelectedBuilder(null);
-    setActiveTab("overview");
-  };
+    setActiveTab(DEFAULT_TAB);
+  }, []);
 
-  const handleAddNew = () => {
+  const handleAddNew = useCallback(() => {
     setBuilderToEdit(null);
     setIsAddDialogOpen(true);
-  };
+  }, []);
 
-  const getInitials = (name: string) => {
+  const handleDialogClose = useCallback((open: boolean) => {
+    setIsAddDialogOpen(open);
+    if (!open) setBuilderToEdit(null);
+  }, []);
+
+  const handleDeleteDialogClose = useCallback((open: boolean) => {
+    if (!open) setBuilderToDelete(null);
+  }, []);
+
+  // Utility function to generate initials from builder name
+  const getInitials = useCallback((name: string) => {
     return name
       .split(" ")
       .map((part) => part[0])
       .join("")
       .toUpperCase()
       .slice(0, 2);
-  };
+  }, []);
 
-  const filteredBuilders = builders.filter((builder) => {
+  // Memoized filtered builders list to prevent recalculation on every render
+  const filteredBuilders = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return (
+    return builders.filter((builder) =>
       builder.name.toLowerCase().includes(query) ||
       builder.companyName.toLowerCase().includes(query) ||
       builder.email?.toLowerCase().includes(query) ||
       builder.tradeSpecialization?.toLowerCase().includes(query)
     );
-  });
+  }, [builders, searchQuery]);
 
-  // If a builder is selected, show the tabbed detail view
+  // Error state with retry functionality
+  if (error) {
+    return (
+      <div className="p-4 md:p-6 max-w-7xl mx-auto">
+        <Alert variant="destructive" data-testid="alert-builders-error">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>Failed to load builders: {error instanceof Error ? error.message : 'Unknown error'}</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refetch()}
+              data-testid="button-retry-builders"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Builder detail view - shows tabbed interface for selected builder
   if (selectedBuilder) {
     return (
       <div className="p-4 md:p-6 max-w-7xl mx-auto">
         <div className="flex flex-col gap-6">
-          {/* Header with builder info and back button */}
+          {/* Header with builder info and action buttons */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-4 w-full sm:w-auto">
               <Button
@@ -227,7 +271,7 @@ export default function Builders() {
             </div>
           </div>
 
-          {/* Tabbed interface */}
+          {/* Tabbed interface for builder details - 6 tabs for comprehensive management */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="w-full grid grid-cols-3 lg:grid-cols-6 h-auto gap-1" data-testid="tabs-list">
               <TabsTrigger value="overview" className="text-xs sm:text-sm" data-testid="tab-overview">
@@ -281,7 +325,7 @@ export default function Builders() {
     );
   }
 
-  // Default view: Builder list
+  // Default view: Builder list with search and grid layout
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col gap-6">
@@ -311,7 +355,7 @@ export default function Builders() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search builders by name, company, or specialization..."
+            placeholder={SEARCH_PLACEHOLDER}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -321,8 +365,8 @@ export default function Builders() {
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} className="p-6">
+            {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
+              <Card key={i} className="p-6" data-testid={`skeleton-builder-${i}`}>
                 <div className="flex items-start gap-4 mb-4">
                   <Skeleton className="h-12 w-12 rounded-full" />
                   <div className="flex-1 space-y-2">
@@ -383,10 +427,7 @@ export default function Builders() {
 
       <BuilderDialog
         open={isAddDialogOpen}
-        onOpenChange={(open) => {
-          setIsAddDialogOpen(open);
-          if (!open) setBuilderToEdit(null);
-        }}
+        onOpenChange={handleDialogClose}
         builder={builderToEdit}
         onSubmit={handleSubmit}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
@@ -394,7 +435,7 @@ export default function Builders() {
 
       <AlertDialog
         open={!!builderToDelete}
-        onOpenChange={(open) => !open && setBuilderToDelete(null)}
+        onOpenChange={handleDeleteDialogClose}
       >
         <AlertDialogContent data-testid="dialog-delete-confirm">
           <AlertDialogHeader>
@@ -419,5 +460,14 @@ export default function Builders() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// Wrap entire component in ErrorBoundary for production-grade error handling
+export default function Builders() {
+  return (
+    <ErrorBoundary>
+      <BuildersContent />
+    </ErrorBoundary>
   );
 }

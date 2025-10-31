@@ -53,6 +53,7 @@ interface BuilderHierarchyTabProps {
 export function BuilderHierarchyTab({ builder }: BuilderHierarchyTabProps) {
   const { data: hierarchy, isLoading } = useQuery<BuilderHierarchy>({
     queryKey: ["/api/builders", builder.id, "hierarchy"],
+    retry: 2,
   });
 
   const [expandedDevelopments, setExpandedDevelopments] = useState<Set<string>>(

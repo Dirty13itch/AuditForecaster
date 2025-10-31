@@ -84,6 +84,7 @@ export function BuilderProgramsTab({ builder }: BuilderProgramsTabProps) {
 
   const { data: programs = [], isLoading } = useQuery<BuilderProgram[]>({
     queryKey: ["/api/builders", builder.id, "programs"],
+    retry: 2,
   });
 
   const form = useForm<ProgramFormValues>({
