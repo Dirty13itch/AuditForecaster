@@ -191,7 +191,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     // Check if we've exceeded max reconnect attempts
     if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      console.warn('[WebSocket] Max reconnect attempts reached, falling back to polling');
       wsUnavailableRef.current = true;
       startPolling();
       return;
@@ -204,7 +203,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
-        console.log('[WebSocket] Connection established');
         setIsConnected(true);
         reconnectAttemptsRef.current = 0;
         wsUnavailableRef.current = false;
@@ -226,26 +224,22 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           } else if (data.type === "ping") {
             // Respond to ping
             ws.send(JSON.stringify({ type: "pong" }));
-          } else if (data.type === "connected") {
-            console.log('[WebSocket] Connection acknowledged by server');
           }
         } catch (error) {
-          console.error('[WebSocket] Error parsing message:', error);
+          // Invalid WebSocket message format
         }
       };
 
       ws.onerror = (error) => {
-        console.error('[WebSocket] Connection error:', error);
+        // WebSocket connection error
       };
 
       ws.onclose = (event) => {
-        console.log('[WebSocket] Connection closed', { code: event.code, reason: event.reason });
         setIsConnected(false);
         wsRef.current = null;
         
         // Check if server indicates service is unavailable (code 1011)
         if (event.code === 1011) {
-          console.warn('[WebSocket] Service unavailable, falling back to polling');
           wsUnavailableRef.current = true;
           startPolling();
           return;
@@ -258,8 +252,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         // First attempt: 1s, then 2s, 4s, 8s, 16s
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000);
         
-        console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
-        
         // Attempt to reconnect with exponential backoff
         reconnectTimeoutRef.current = setTimeout(() => {
           connectWebSocket();
@@ -268,7 +260,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       wsRef.current = ws;
     } catch (error) {
-      console.error('[WebSocket] Failed to create connection:', error);
       setIsConnected(false);
       wsUnavailableRef.current = true;
       

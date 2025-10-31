@@ -618,7 +618,7 @@ function AppContent() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchCsrfToken().catch(err => {
-        console.error('[App] Failed to pre-fetch CSRF token:', err);
+        // CSRF token will be fetched on first API request if not available
       });
     }
   }, [isAuthenticated]);

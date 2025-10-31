@@ -72,7 +72,7 @@ export default function BenchmarkingDeadlineTracker() {
       try {
         setData(JSON.parse(savedData));
       } catch (error) {
-        console.error("Failed to load saved data:", error);
+        // Invalid saved data format
       }
     } else if (job) {
       // Initialize from job data if available

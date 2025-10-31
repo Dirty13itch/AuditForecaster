@@ -154,7 +154,6 @@ export class ConditionalLogicEngine {
           if (!visited.has(dependent)) {
             if (hasCycle(dependent)) return true;
           } else if (recursionStack.has(dependent)) {
-            console.error(`Circular dependency detected: ${fieldId} -> ${dependent}`);
             return true;
           }
         }

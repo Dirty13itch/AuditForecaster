@@ -140,7 +140,7 @@ export default function Expenses() {
           form.setValue('date', parsedDate);
         }
       } catch (error) {
-        console.error('Failed to parse OCR date:', error);
+        // Invalid date format from OCR
       }
     }
 
@@ -156,7 +156,7 @@ export default function Expenses() {
           form.setValue('ocrDate', parsedDate);
         }
       } catch (error) {
-        console.error('Failed to set OCR date:', error);
+        // Invalid OCR date format
       }
     }
     form.setValue('ocrMetadata', {
@@ -293,8 +293,6 @@ export default function Expenses() {
   })).filter(stat => stat.total > 0);
 
   const onSubmit = (data: InsertExpense) => {
-    console.log('[EXPENSE FORM] Submitting data:', data);
-    console.log('[EXPENSE FORM] Form state:', form.getValues());
     if (selectedExpense) {
       updateMutation.mutate({ id: selectedExpense.id, data });
     } else {

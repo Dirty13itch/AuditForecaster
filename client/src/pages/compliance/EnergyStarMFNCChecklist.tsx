@@ -186,7 +186,7 @@ export default function EnergyStarMFNCChecklist() {
       try {
         setSections(JSON.parse(savedData));
       } catch (error) {
-        console.error("Failed to load saved checklist data:", error);
+        // Invalid saved data format
       }
     }
   }, [jobId]);

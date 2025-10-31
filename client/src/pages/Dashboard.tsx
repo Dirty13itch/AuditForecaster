@@ -783,6 +783,7 @@ export default function Dashboard() {
                 showLegend={true}
                 animate={true}
                 live={isLiveMode}
+                loading={trendsLoading}
               />
               <ChartWidget
                 title="Job Status Distribution"
@@ -796,6 +797,7 @@ export default function Dashboard() {
                 showLegend={true}
                 animate={true}
                 interactive={true}
+                loading={jobsLoading}
                 onDataPointClick={(data) => {
                   toast({
                     title: data.name,
@@ -819,6 +821,7 @@ export default function Dashboard() {
               showLegend={true}
               animate={true}
               interactive={true}
+              loading={builderPerfLoading}
             />
           </TabsContent>
 
@@ -836,6 +839,7 @@ export default function Dashboard() {
               height={350}
               showLegend={true}
               animate={true}
+              loading={analyticsLoading}
               annotations={[
                 { x: "Current", label: "Target: < 5 ACH50", color: "hsl(var(--warning))" },
               ]}
@@ -854,6 +858,7 @@ export default function Dashboard() {
               stacked={false}
               showLegend={true}
               animate={true}
+              loading={revenueExpenseLoading}
             />
           </TabsContent>
         </Tabs>

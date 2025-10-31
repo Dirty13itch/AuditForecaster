@@ -203,13 +203,13 @@ class IndexedDBManager {
         }
       },
       blocked() {
-        console.warn('Database upgrade blocked by open connections');
+        // Database upgrade blocked by open connections
       },
       blocking() {
-        console.warn('Database upgrade blocking other connections');
+        // Database upgrade blocking other connections
       },
       terminated() {
-        console.error('Database connection terminated unexpectedly');
+        // Database connection terminated unexpectedly
       }
     });
     
@@ -670,10 +670,8 @@ export const indexedDB = new IndexedDBManager();
 // Export helper functions
 export async function initializeOfflineStorage(): Promise<void> {
   await indexedDB.init();
-  console.log('[IndexedDB] Offline storage initialized');
 }
 
 export async function clearOfflineStorage(): Promise<void> {
   await indexedDB.clearAllData();
-  console.log('[IndexedDB] Offline storage cleared');
 }

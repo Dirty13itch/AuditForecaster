@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Calendar as BigCalendar, dateFnsLocalizer, View, Event } from "react-big-calendar";
-import { format, parse, startOfWeek, getDay, addMonths, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { format, parse, startOfWeek, endOfWeek, getDay, addMonths, subMonths, addWeeks, addDays, startOfMonth, endOfMonth, startOfDay, endOfDay, addHours } from "date-fns";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2, Users, Activity, TrendingUp, BarChart3, Wind, Wrench, RotateCcw, AlertTriangle, Building2, Star, FileText, Check, CheckCheck, X, RotateCw } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2, Users, Activity, TrendingUp, BarChart3, Wind, Wrench, RotateCcw, AlertTriangle, Building2, Star, FileText, Check, CheckCheck, X, RotateCw, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -182,8 +183,38 @@ export default function Schedule() {
   // Configurable sync interval (default: 10 minutes)
   const SYNC_INTERVAL_MS = Number(import.meta.env.VITE_SYNC_INTERVAL_MS) || 10 * 60 * 1000;
 
-  const startDate = startOfMonth(date);
-  const endDate = endOfMonth(date);
+  // View-aware date range helper - returns correct boundaries based on view
+  const getViewDateRange = useMemo(() => (viewType: string, currentDate: Date) => {
+    switch (viewType) {
+      case 'day':
+        return {
+          start: startOfDay(currentDate),
+          end: endOfDay(currentDate)
+        };
+      case 'week':
+        return {
+          start: startOfWeek(currentDate, { weekStartsOn: 0 }),
+          end: endOfWeek(currentDate, { weekStartsOn: 0 })
+        };
+      case 'agenda':
+        return {
+          start: startOfDay(currentDate),
+          end: addDays(startOfDay(currentDate), 14) // 2 weeks ahead
+        };
+      case 'month':
+      default:
+        return {
+          start: startOfMonth(currentDate),
+          end: endOfMonth(currentDate)
+        };
+    }
+  }, []);
+
+  // Use view-aware date ranges instead of hardcoded month boundaries
+  const { start: startDate, end: endDate } = useMemo(() => 
+    getViewDateRange(view, date), 
+    [getViewDateRange, view, date]
+  );
   
   // Auto-switch view based on screen size
   useEffect(() => {
@@ -199,7 +230,7 @@ export default function Schedule() {
   });
 
   const { data: inspectorWorkloads = [], isLoading: workloadsLoading } = useQuery<any[]>({
-    queryKey: ['/api/inspectors/workload', startDate.toISOString(), endDate.toISOString()],
+    queryKey: ['/api/inspectors/workload', { view, start: startDate.toISOString(), end: endDate.toISOString() }],
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: startDate.toISOString(),
@@ -214,8 +245,8 @@ export default function Schedule() {
     enabled: isAdmin,
   });
 
-  const { data: scheduleEvents = [], isLoading: eventsLoading } = useQuery<ScheduleEvent[]>({
-    queryKey: ['/api/schedule-events', startDate.toISOString(), endDate.toISOString()],
+  const { data: scheduleEvents = [], isLoading: eventsLoading, error: eventsError } = useQuery<ScheduleEvent[]>({
+    queryKey: ['/api/schedule-events', { view, start: startDate.toISOString(), end: endDate.toISOString() }],
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: startDate.toISOString(),
@@ -232,7 +263,7 @@ export default function Schedule() {
   });
 
   const { data: googleOnlyEvents = [], isLoading: googleEventsLoading, error: googleEventsError, refetch: refetchGoogleEvents } = useQuery<GoogleEvent[]>({
-    queryKey: ['/api/google-events', startDate.toISOString(), endDate.toISOString()],
+    queryKey: ['/api/google-events', { view, start: startDate.toISOString(), end: endDate.toISOString() }],
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: startDate.toISOString(),
@@ -246,7 +277,6 @@ export default function Schedule() {
         // Failed to fetch Google events - get error message
         const errorData = await response.json().catch(() => ({ message: response.statusText }));
         const errorMessage = errorData.message || 'Failed to fetch Google Calendar events';
-        console.error('[Schedule] Google Calendar error:', errorMessage, errorData);
         setSyncStatus('error');
         setSyncError(errorMessage); // Store error message for display
         // Throw error so useQuery can handle it properly
@@ -852,12 +882,6 @@ export default function Schedule() {
 
       // Wait for completion mutation if needed
       if (completionFieldsChanged && job) {
-        console.log('[Schedule] Updating completion fields:', {
-          jobId: job.id,
-          fieldWorkComplete: eventFormData.fieldWorkComplete,
-          photoUploadComplete: eventFormData.photoUploadComplete,
-        });
-        
         await updateJobCompletionMutation.mutateAsync({
           jobId: job.id,
           fieldWorkComplete: eventFormData.fieldWorkComplete,
@@ -886,8 +910,6 @@ export default function Schedule() {
       setEventDialogOpen(false);
     } catch (error) {
       // Error toasts are already handled by mutation onError callbacks
-      // Just log for debugging
-      console.error('[Schedule] Failed to save event:', error);
       // Keep dialog open so user can retry
     }
   }, [selectedEvent, eventFormData, checkConflict, updateEventMutation, createEventMutation, updateJobCompletionMutation, toast]);
@@ -1043,14 +1065,38 @@ export default function Schedule() {
   }, [handleDropOnCalendar, startDate]);
 
   const handleNavigate = useCallback((action: 'PREV' | 'NEXT' | 'TODAY') => {
-    if (action === 'PREV') {
-      setDate(subMonths(date, 1));
+    let newDate = date;
+    
+    if (action === 'TODAY') {
+      newDate = new Date();
+    } else if (action === 'PREV') {
+      switch (view) {
+        case 'day':
+          newDate = addDays(date, -1);
+          break;
+        case 'week':
+          newDate = addWeeks(date, -1);
+          break;
+        case 'month':
+        default:
+          newDate = addMonths(date, -1);
+      }
     } else if (action === 'NEXT') {
-      setDate(addMonths(date, 1));
-    } else {
-      setDate(new Date());
+      switch (view) {
+        case 'day':
+          newDate = addDays(date, 1);
+          break;
+        case 'week':
+          newDate = addWeeks(date, 1);
+          break;
+        case 'month':
+        default:
+          newDate = addMonths(date, 1);
+      }
     }
-  }, [date]);
+    
+    setDate(newDate);
+  }, [date, view]);
 
   // Initial sync on mount
   useEffect(() => {
@@ -1134,13 +1180,11 @@ export default function Schedule() {
     };
   }, [syncStatusTimeoutId]);
 
-  if (jobsLoading || eventsLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-muted-foreground">Loading schedule...</div>
-      </div>
-    );
-  }
+  // Show skeleton loaders while loading
+  const isLoading = jobsLoading || eventsLoading;
+  
+  // Check for errors
+  const hasError = eventsError;
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -1149,6 +1193,37 @@ export default function Schedule() {
           <OfflineBanner />
         </div>
         
+        {isLoading ? (
+          <div className="flex-1 p-4">
+            <div className="space-y-4 w-full">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-10 w-48" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-10 w-24" />
+                  <Skeleton className="h-10 w-32" />
+                </div>
+              </div>
+              <Skeleton className="h-[600px] w-full" />
+            </div>
+          </div>
+        ) : hasError ? (
+          <Card className="m-4">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <AlertCircle className="h-16 w-16 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Failed to load schedule</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                There was an error loading your calendar events
+              </p>
+              <Button onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+              }}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
         <div className="flex flex-1 overflow-hidden">
           {/* Left sidebar: Unscheduled Jobs (for all users on desktop) */}
           {!isMobile && (
@@ -1635,6 +1710,7 @@ export default function Schedule() {
           handleGoogleCalendarSync();
         }}
       />
+      )}
       </div>
     </DndProvider>
   );

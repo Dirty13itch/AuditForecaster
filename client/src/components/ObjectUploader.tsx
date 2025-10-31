@@ -249,7 +249,6 @@ export function ObjectUploader({
             }
             // If compression was skipped (same file returned), leave metadata unchanged
           } catch (error) {
-            console.error("Image compression failed:", error);
             // Continue with original file if compression fails
           }
         }

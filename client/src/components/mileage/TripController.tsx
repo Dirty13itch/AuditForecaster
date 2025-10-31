@@ -89,7 +89,7 @@ export function TripController() {
     try {
       await startMonitoring();
     } catch (error) {
-      console.error('Failed to start tracking:', error);
+      // Error will be handled by the tracking system
     }
   };
 
@@ -116,7 +116,6 @@ export function TripController() {
         description: 'GPS tracking has been restarted',
       });
     } catch (error) {
-      console.error('Failed to restart tracking:', error);
       toast({
         title: 'Error',
         description: 'Failed to restart GPS tracking',

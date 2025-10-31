@@ -106,7 +106,7 @@ export default function MNHousingEGCCWorksheet() {
       try {
         setWorksheet(JSON.parse(savedData));
       } catch (error) {
-        console.error("Failed to load saved worksheet:", error);
+        // Invalid saved data format
       }
     }
   }, [jobId]);

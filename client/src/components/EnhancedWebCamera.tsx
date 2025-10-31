@@ -169,11 +169,9 @@ export function EnhancedWebCamera({
         setMaxZoom(capabilities.zoom.max || 1);
       }
 
-      // Log actual resolution
+      // Get actual resolution
       const settings = videoTrack.getSettings();
-      console.log(`Camera resolution: ${settings.width}x${settings.height}`);
     } catch (error) {
-      console.error("Camera error:", error);
       toast({
         title: "Camera access denied",
         description: "Please allow camera access to take photos",
@@ -202,7 +200,7 @@ export function EnhancedWebCamera({
           advanced: [{ zoom: value[0] }]
         });
       } catch (error) {
-        console.error("Zoom error:", error);
+        // Zoom not supported on this device
       }
     }
   };
@@ -217,7 +215,7 @@ export function EnhancedWebCamera({
         });
         setFlashEnabled(!flashEnabled);
       } catch (error) {
-        console.error("Flash error:", error);
+        // Flash not supported on this device
       }
     }
   };

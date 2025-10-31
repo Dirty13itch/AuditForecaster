@@ -143,7 +143,6 @@ export function ReceiptUpload({ value, onChange, onOcrComplete, disabled }: Rece
         ...parsedData,
       };
     } catch (error) {
-      console.error('OCR processing error:', error);
       throw error;
     }
   };
@@ -224,7 +223,6 @@ export function ReceiptUpload({ value, onChange, onOcrComplete, disabled }: Rece
             description: `Extracted data with ${Math.round(ocrResult.confidence)}% confidence`,
           });
         } catch (ocrError) {
-          console.error('OCR error:', ocrError);
           toast({
             title: "OCR processing failed",
             description: "Could not extract text from receipt. You can enter data manually.",

@@ -144,7 +144,7 @@ export default function ZERHComplianceTracker() {
       try {
         setTracker(JSON.parse(savedData));
       } catch (error) {
-        console.error("Failed to load saved tracker:", error);
+        // Invalid saved data format
       }
     }
   }, [jobId]);

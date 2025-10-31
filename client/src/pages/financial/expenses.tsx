@@ -283,7 +283,7 @@ export default function ExpensesPage() {
           form.setValue("date", parsedDate);
         }
       } catch (error) {
-        console.error("Failed to parse OCR date:", error);
+        // Invalid date format from OCR
       }
     }
 
@@ -299,7 +299,7 @@ export default function ExpensesPage() {
           form.setValue("ocrDate", parsedDate);
         }
       } catch (error) {
-        console.error("Failed to set OCR date:", error);
+        // Invalid OCR date format
       }
     }
   };

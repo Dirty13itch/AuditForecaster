@@ -105,7 +105,6 @@ export function PhotoComparison({ photo1, photo2, onClose }: PhotoComparisonProp
   const copyAnnotations = (direction: "left-to-right" | "right-to-left") => {
     // This would trigger an API call to copy annotations
     // Implementation would depend on the annotation system
-    console.log(`Copying annotations ${direction}`);
   };
 
   const renderSideBySide = () => (

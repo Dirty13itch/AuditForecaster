@@ -34,8 +34,6 @@ export async function extractReceiptData(imageUrl: string): Promise<ReceiptOCRRe
       confidence: combinedConfidence,
     };
   } catch (error) {
-    console.error('[OCR] Failed to process receipt image:', error);
-    
     return {
       amount: null,
       vendor: null,

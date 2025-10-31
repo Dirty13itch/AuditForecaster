@@ -7,7 +7,6 @@ let sentryEnabled = false;
 
 export function initSentry() {
   if (!SENTRY_DSN) {
-    console.warn('[Sentry] SENTRY_DSN not configured - error tracking disabled');
     return;
   }
 
@@ -31,7 +30,6 @@ export function initSentry() {
 
     beforeSend(event, hint) {
       if (NODE_ENV === 'development') {
-        console.log('[Sentry] Would send error:', event);
         return null;
       }
       return event;
@@ -39,7 +37,6 @@ export function initSentry() {
   });
 
   sentryEnabled = true;
-  console.log('[Sentry] Initialized for environment:', NODE_ENV);
 }
 
 export function isSentryEnabled(): boolean {
