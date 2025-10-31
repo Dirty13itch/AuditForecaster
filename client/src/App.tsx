@@ -34,6 +34,7 @@ const PhotoCleanup = lazy(() => import("@/pages/PhotoCleanup"));
 const Forecast = lazy(() => import("@/pages/Forecast"));
 const Jobs = lazy(() => import("@/pages/Jobs"));
 const Gamification = lazy(() => import("@/pages/Gamification"));
+const Achievements = lazy(() => import("@/pages/Achievements"));
 const Challenges = lazy(() => import("@/pages/Challenges"));
 const Schedule = lazy(() => import("@/pages/Schedule"));
 const RouteView = lazy(() => import("@/pages/RouteView"));
@@ -461,6 +462,11 @@ function Router() {
       <Route path="/gamification" component={() => (
         <RouteErrorBoundary>
           <Gamification />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/achievements" component={() => (
+        <RouteErrorBoundary>
+          <Achievements />
         </RouteErrorBoundary>
       )} />
       <Route path="/challenges" component={() => (
