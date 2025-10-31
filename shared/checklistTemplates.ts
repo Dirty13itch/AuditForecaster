@@ -399,7 +399,19 @@ export const MULTIFAMILY_PROJECT_TEMPLATE: ChecklistTemplate = {
   ],
 };
 
-// Map inspection types to templates
+// Job type enum matching database
+export type JobType = 
+  | "sv2"           // Pre-Drywall (Site Visit 2)
+  | "full_test"     // Final Testing with all tests
+  | "code_bdoor"    // Code inspection + blower door
+  | "rough_duct"    // Rough duct inspection
+  | "rehab"         // Rehabilitation inspection
+  | "bdoor_retest"  // Blower door retest only
+  | "multifamily"   // Multifamily units
+  | "energy_star"   // Energy Star certification
+  | "other";        // Other/custom
+
+// Map inspection types to templates (legacy support)
 export const CHECKLIST_TEMPLATES: Record<string, ChecklistTemplate> = {
   "Pre-Drywall Inspection": PRE_DRYWALL_TEMPLATE,
   "Final Testing": FINAL_TESTING_TEMPLATE,
@@ -410,6 +422,41 @@ export const CHECKLIST_TEMPLATES: Record<string, ChecklistTemplate> = {
   "Multifamily Project": MULTIFAMILY_PROJECT_TEMPLATE,
 };
 
+// Map job types (database enum) to checklist templates
+export const JOB_TYPE_TO_TEMPLATE: Record<JobType, ChecklistTemplate> = {
+  sv2: PRE_DRYWALL_TEMPLATE,
+  full_test: FINAL_TESTING_TEMPLATE,
+  code_bdoor: FINAL_TESTING_TEMPLATE, // Use final testing checklist
+  rough_duct: {
+    inspectionType: "Rough Duct Inspection",
+    items: [
+      { itemNumber: 1, title: "Duct Layout: Verify layout matches plans, proper sizing", photoRequired: true },
+      { itemNumber: 2, title: "Duct Material: Check material type and condition", photoRequired: true },
+      { itemNumber: 3, title: "Duct Sealing: All joints sealed with mastic (not tape)", photoRequired: true, defaultNotes: "Mastic required on all joints and seams before insulation" },
+      { itemNumber: 4, title: "Duct Support: Properly supported every 4-6 feet", photoRequired: true },
+      { itemNumber: 5, title: "Register Boots: Sealed to framing or drywall", photoRequired: true },
+      { itemNumber: 6, title: "Return Air: Properly sized and sealed", photoRequired: true },
+      { itemNumber: 7, title: "Flex Duct: No kinks, proper extension, supported", photoRequired: true },
+      { itemNumber: 8, title: "Insulation: Ducts in unconditioned space to be insulated R-8 minimum", photoRequired: true },
+      { itemNumber: 9, title: "Plenums: Properly sealed and insulated", photoRequired: false },
+      { itemNumber: 10, title: "Overall Quality: Workmanship and code compliance", photoRequired: false },
+    ],
+  },
+  rehab: FINAL_TESTING_TEMPLATE, // Use final testing checklist for rehab
+  bdoor_retest: BLOWER_DOOR_RETEST_TEMPLATE,
+  multifamily: MULTIFAMILY_PROJECT_TEMPLATE,
+  energy_star: FINAL_TESTING_TEMPLATE, // Energy Star uses comprehensive final testing
+  other: FINAL_TESTING_TEMPLATE, // Default to final testing for custom jobs
+};
+
 export function getTemplateForInspectionType(inspectionType: string): ChecklistTemplate | undefined {
   return CHECKLIST_TEMPLATES[inspectionType];
+}
+
+/**
+ * Get checklist template for a job type (database enum)
+ * This is the primary function to use for checklist generation
+ */
+export function getTemplateForJobType(jobType: JobType): ChecklistTemplate {
+  return JOB_TYPE_TO_TEMPLATE[jobType] || FINAL_TESTING_TEMPLATE;
 }

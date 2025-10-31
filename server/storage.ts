@@ -3613,11 +3613,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generateChecklistFromTemplate(jobId: string, inspectionType: string): Promise<ChecklistItem[]> {
-    const { getTemplateForInspectionType } = await import('@shared/checklistTemplates');
-    const template = getTemplateForInspectionType(inspectionType);
+    // Use new workflow-based template system
+    const { getWorkflowTemplate } = await import('@shared/workflowTemplates');
     
-    if (!template) {
-      // No template for this inspection type, return empty array
+    // inspectionType is actually the job type (sv2, full_test, etc.)
+    const workflow = getWorkflowTemplate(inspectionType as any);
+    const template = workflow.checklistTemplate;
+    
+    if (!template || !template.items || template.items.length === 0) {
+      serverLogger.warn(`No checklist template found for job type: ${inspectionType}`);
       return [];
     }
 
@@ -3634,6 +3638,8 @@ export class DatabaseStorage implements IStorage {
       voiceNoteDuration: null,
     }));
 
+    serverLogger.info(`Creating ${itemsToCreate.length} checklist items for job ${jobId} (${inspectionType} - ${workflow.displayName})`);
+    
     const result = await db.insert(checklistItems).values(itemsToCreate).returning();
     return result;
   }
