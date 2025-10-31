@@ -33,7 +33,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  role: text("role", { enum: ["admin", "inspector", "manager", "viewer"] })
+  role: text("role", { enum: ["admin", "inspector", "partner_contractor"] })
     .notNull()
     .default("inspector"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1558,6 +1558,32 @@ export const unitCertifications = pgTable("unit_certifications", {
   index("idx_unit_certifications_qualified").on(table.qualified),
 ]);
 
+// Feature Flags table for Phase 0 Access Control
+export const featureFlags = pgTable("feature_flags", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  featureName: varchar("feature_name").notNull().unique(),
+  enabled: boolean("enabled").notNull().default(false),
+  rolloutPercentage: integer("rollout_percentage").notNull().default(0),
+  enabledForUsers: jsonb("enabled_for_users").$type<string[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_feature_flags_feature_name").on(table.featureName),
+  index("idx_feature_flags_enabled").on(table.enabled),
+]);
+
+// System Configuration table for Phase 0 Access Control
+export const systemConfig = pgTable("system_config", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  key: varchar("key").notNull().unique(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+}, (table) => [
+  index("idx_system_config_key").on(table.key),
+  index("idx_system_config_updated_by").on(table.updatedBy),
+]);
+
 // For Replit Auth upsert operations
 export const upsertUserSchema = createInsertSchema(users).pick({
   id: true,
@@ -2005,6 +2031,18 @@ export const insertVentilationTestSchema = createInsertSchema(ventilationTests).
   totalVentilationProvided: z.coerce.number().nullable().optional(),
 });
 
+// Feature Flags and System Config insert schemas
+export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export const insertSystemConfigSchema = createInsertSchema(systemConfig).omit({ 
+  id: true, 
+  updatedAt: true 
+});
+
 // Calendar import schemas
 export const approveEventSchema = z.object({
   builderId: z.string().min(1, "Builder is required"),
@@ -2175,6 +2213,12 @@ export type QaChecklistResponse = typeof qaChecklistResponses.$inferSelect;
 export type InsertQaChecklistResponse = z.infer<typeof insertQaChecklistResponseSchema>;
 export type QaPerformanceMetric = typeof qaPerformanceMetrics.$inferSelect;
 export type InsertQaPerformanceMetric = z.infer<typeof insertQaPerformanceMetricSchema>;
+
+// Feature Flag and System Config Types
+export type FeatureFlag = typeof featureFlags.$inferSelect;
+export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
+export type SystemConfig = typeof systemConfig.$inferSelect;
+export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
 
 export interface CalendarImportLogsResponse {
   logs: CalendarImportLog[];

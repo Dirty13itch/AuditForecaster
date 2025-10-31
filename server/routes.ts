@@ -11,6 +11,7 @@ import { healthz, readyz, status } from "./health";
 import { generateToken, csrfSynchronisedProtection } from "./csrf";
 import { createAuditLog } from "./auditLogger";
 import { requireRole, checkResourceOwnership, canEdit, canCreate, canDelete, type UserRole } from "./permissions";
+import { requirePermission, blockFinancialAccess } from "./middleware/permissions";
 import { validateContactRole, categorizeAgreementExpiration } from "./builderService";
 import {
   insertBuilderSchema,
@@ -2138,7 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/jobs", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+  app.post("/api/jobs", isAuthenticated, requirePermission('create_job'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertJobSchema.parse(req.body);
       // Sanitize builderId - convert empty string to undefined (which becomes null in DB)
@@ -2394,7 +2395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/jobs/:id/status", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
+  app.patch("/api/jobs/:id/status", isAuthenticated, requirePermission('edit_job'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existingJob = await storage.getJob(req.params.id);
       if (!existingJob) {
@@ -4788,8 +4789,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Financial Management Endpoints
+  // SECURITY: All financial routes protected by blockFinancialAccess() - admin only
   // Invoices
-  app.get("/api/invoices", isAuthenticated, async (req: any, res) => {
+  app.get("/api/invoices", isAuthenticated, blockFinancialAccess(), async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { status, builderId, jobId, limit, offset } = req.query;
@@ -4822,7 +4824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+  app.post("/api/invoices", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       
@@ -4846,7 +4848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/invoices/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/invoices/:id", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) {
@@ -4859,7 +4861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/invoices/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.put("/api/invoices/:id", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertInvoiceSchema.partial().parse(req.body);
       const invoice = await storage.updateInvoice(req.params.id, validated);
@@ -4877,7 +4879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices/:id/mark-paid", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/invoices/:id/mark-paid", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
     try {
       const paymentDetails = insertPaymentSchema.partial().parse(req.body);
       const invoice = await storage.markInvoiceAsPaid(req.params.id, paymentDetails);
@@ -4895,7 +4897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/invoices/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/invoices/:id", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
     try {
       const deleted = await storage.deleteInvoice(req.params.id);
       if (!deleted) {
@@ -4909,7 +4911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Payments
-  app.get("/api/payments", isAuthenticated, async (req, res) => {
+  app.get("/api/payments", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { invoiceId, limit, offset } = req.query;
 
@@ -4935,7 +4937,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payments", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/payments", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertPaymentSchema.parse(req.body);
       const payment = await storage.createPayment(validated);
@@ -9842,7 +9844,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Analytics Dashboard Endpoints
-  app.get("/api/analytics/overview", isAuthenticated, async (req, res) => {
+  // SECURITY: All analytics routes protected by blockFinancialAccess() - admin only
+  app.get("/api/analytics/overview", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -9856,7 +9859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/trends", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/trends", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query;
       const periodStr = (period as string) || 'daily';
@@ -9876,7 +9879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/kpis", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/kpis", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const kpis = await storage.getKPIMetrics();
       res.json(kpis);
@@ -9886,7 +9889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/analytics/custom-report", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+  app.post("/api/analytics/custom-report", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { 
         reportType, 
@@ -9935,7 +9938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // New Analytics Endpoints for Dashboard
-  app.get("/api/analytics/dashboard", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/dashboard", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const summary = await storage.getDashboardSummary();
       res.json(summary);
@@ -9945,7 +9948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/metrics", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/metrics", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -9959,7 +9962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/leaderboard", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/leaderboard", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const leaderboard = await storage.getBuilderLeaderboard();
       res.json(leaderboard);
@@ -9969,7 +9972,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/forecasts", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/forecasts", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { metric, lookbackDays } = req.query;
       const metricStr = (metric as string) || 'revenue';
@@ -9983,7 +9986,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/builder-performance", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/builder-performance", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { limit } = req.query;
       const maxBuilders = limit ? parseInt(limit as string) : 10;
@@ -9996,7 +9999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/financial", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/financial", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -10010,7 +10013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/photos", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/photos", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -10024,7 +10027,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/inspector-performance", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/inspector-performance", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { inspectorId, startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -10042,7 +10045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/compliance", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/compliance", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
@@ -10056,7 +10059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/revenue-expense", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/revenue-expense", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query;
       const periodStr = (period as string) || 'monthly';
@@ -10075,7 +10078,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/export", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/export", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { format, type } = req.query;
       const typeStr = (type as string) || 'dashboard';

@@ -128,6 +128,10 @@ import {
   type InsertInspectorPreferences,
   type PendingCalendarEvent,
   type InsertPendingCalendarEvent,
+  type FeatureFlag,
+  type InsertFeatureFlag,
+  type SystemConfig,
+  type InsertSystemConfig,
   notifications,
   notificationPreferences,
   scheduledExports,
@@ -135,6 +139,8 @@ import {
   assignmentHistory,
   inspectorPreferences,
   pendingCalendarEvents,
+  featureFlags,
+  systemConfig,
   users,
   builders,
   builderContacts,
@@ -983,6 +989,15 @@ export interface IStorage {
   }>;
   getUserXP(userId: string): Promise<number>;
   getUserStatistics(userId: string): Promise<Record<string, number>>;
+  
+  // Feature Flags Operations
+  getFeatureFlag(featureName: string): Promise<FeatureFlag | null>;
+  isFeatureEnabled(featureName: string, userId?: string): Promise<boolean>;
+  setFeatureFlag(featureName: string, enabled: boolean): Promise<void>;
+  
+  // System Configuration Operations
+  getSystemConfig(key: string): Promise<any>;
+  setSystemConfig(key: string, value: any, updatedBy: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -8195,6 +8210,94 @@ export class DatabaseStorage implements IStorage {
       .from(scheduledExports)
       .where(eq(scheduledExports.enabled, true))
       .orderBy(asc(scheduledExports.nextRun));
+  }
+
+  // Feature Flags Implementation
+  async getFeatureFlag(featureName: string): Promise<FeatureFlag | null> {
+    const result = await db.select()
+      .from(featureFlags)
+      .where(eq(featureFlags.featureName, featureName))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async isFeatureEnabled(featureName: string, userId?: string): Promise<boolean> {
+    const flag = await this.getFeatureFlag(featureName);
+    
+    if (!flag) {
+      return false;
+    }
+    
+    // If not enabled globally, return false
+    if (!flag.enabled) {
+      return false;
+    }
+    
+    // If no user ID provided, return global enabled status
+    if (!userId) {
+      return flag.enabled;
+    }
+    
+    // Check if user is in the enabled users list
+    const enabledForUsers = flag.enabledForUsers || [];
+    if (enabledForUsers.length > 0 && !enabledForUsers.includes(userId)) {
+      return false;
+    }
+    
+    // Check rollout percentage
+    if (flag.rolloutPercentage < 100) {
+      // Simple hash-based rollout based on user ID
+      const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const bucket = hash % 100;
+      return bucket < flag.rolloutPercentage;
+    }
+    
+    return true;
+  }
+
+  async setFeatureFlag(featureName: string, enabled: boolean): Promise<void> {
+    const existing = await this.getFeatureFlag(featureName);
+    
+    if (existing) {
+      await db.update(featureFlags)
+        .set({ enabled, updatedAt: new Date() })
+        .where(eq(featureFlags.featureName, featureName));
+    } else {
+      await db.insert(featureFlags).values({
+        featureName,
+        enabled,
+        rolloutPercentage: enabled ? 100 : 0,
+        enabledForUsers: [],
+      });
+    }
+  }
+
+  // System Configuration Implementation
+  async getSystemConfig(key: string): Promise<any> {
+    const result = await db.select()
+      .from(systemConfig)
+      .where(eq(systemConfig.key, key))
+      .limit(1);
+    return result[0]?.value || null;
+  }
+
+  async setSystemConfig(key: string, value: any, updatedBy: string): Promise<void> {
+    const existing = await db.select()
+      .from(systemConfig)
+      .where(eq(systemConfig.key, key))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      await db.update(systemConfig)
+        .set({ value, updatedBy, updatedAt: new Date() })
+        .where(eq(systemConfig.key, key));
+    } else {
+      await db.insert(systemConfig).values({
+        key,
+        value,
+        updatedBy,
+      });
+    }
   }
 }
 
