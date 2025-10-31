@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle, Plus } from "lucide-react";
@@ -184,12 +184,17 @@ export default function Inspection() {
     createRetestMutation.mutate(test.id);
   };
 
-  const completedCount = checklistItems.filter((item) => item.completed).length;
+  const completedCount = useMemo(
+    () => checklistItems.filter((item) => item.completed).length,
+    [checklistItems]
+  );
   const totalCount = checklistItems.length;
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
-  // Check if all workflow requirements are met
-  const canCompleteJob = job ? (() => {
+  // Check if all workflow requirements are met (memoized for performance)
+  const canCompleteJob = useMemo(() => {
+    if (!job) return false;
+
     const workflow = getWorkflowTemplate(job.inspectionType as JobType);
     
     // Check completion requirements
@@ -210,7 +215,7 @@ export default function Inspection() {
     });
     
     return requirementsMet && testsMet;
-  })() : false;
+  }, [job, completedCount, totalCount, blowerDoorTests.length, ductLeakageTests.length, ventilationTests.length]);
 
   const handleToggle = (id: string) => {
     const item = checklistItems.find((i) => i.id === id);
