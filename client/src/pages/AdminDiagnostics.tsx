@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardCardSkeleton } from "@/components/ui/skeleton-variants";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -28,6 +30,11 @@ import {
   Clock,
 } from "lucide-react";
 
+// Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
+const MAX_ERRORS_DISPLAYED = 20;
+const SCROLL_AREA_HEIGHT = 500;
+
+// Phase 6 - DOCUMENT: Interface definitions for type safety across diagnostic data
 interface ValidationResult {
   component: string;
   status: 'pass' | 'fail' | 'warning';
@@ -112,6 +119,8 @@ interface DomainTestResult {
   explanation: string;
 }
 
+// Phase 6 - DOCUMENT: StatusBadge provides visual indicator for system health states
+// Maps status values to appropriate badge variants and icons
 function StatusBadge({ status }: { status: 'pass' | 'fail' | 'warning' | 'healthy' | 'unhealthy' | 'degraded' }) {
   const variants = {
     pass: { variant: 'default' as const, icon: CheckCircle2, className: 'bg-secondary text-secondary-foreground' },
@@ -133,16 +142,38 @@ function StatusBadge({ status }: { status: 'pass' | 'fail' | 'warning' | 'health
   );
 }
 
-export default function AdminDiagnostics() {
+// Phase 6 - DOCUMENT: DiagnosticsSkeleton provides loading state for entire page
+// Shows placeholder content while authentication diagnostics data is being fetched
+function DiagnosticsSkeleton() {
+  return (
+    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" data-testid="skeleton-diagnostics">
+      <Skeleton className="h-12 w-64" data-testid="skeleton-title" />
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3, 4, 5, 6].map(i => (
+          <DashboardCardSkeleton key={i} data-testid={`skeleton-card-${i}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Phase 2 - BUILD: Main component content extracted for ErrorBoundary wrapping
+function AdminDiagnosticsContent() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [testDomain, setTestDomain] = useState('');
   const [domainTestResult, setDomainTestResult] = useState<DomainTestResult | null>(null);
 
-  const { data: diagnostics, isLoading, refetch, isFetching } = useQuery<DiagnosticsData>({
+  // Phase 5 - HARDEN: Query includes retry: 2 for resilience against transient failures
+  // Phase 6 - DOCUMENT: Fetches comprehensive authentication diagnostics including OIDC config, 
+  // domain strategies, session statistics, and recent error logs
+  const { data: diagnostics, isLoading, refetch, isFetching, error: diagnosticsError } = useQuery<DiagnosticsData>({
     queryKey: ["/api/auth/diagnostics"],
+    retry: 2,
   });
 
+  // Phase 6 - DOCUMENT: Tests domain recognition against configured authentication strategies
+  // Validates whether a given domain would be matched by the OIDC authentication system
   const testDomainMutation = useMutation({
     mutationFn: async (domain: string) => {
       const response = await apiRequest("POST", "/api/auth/test-domain", { domain });
@@ -150,57 +181,102 @@ export default function AdminDiagnostics() {
     },
     onSuccess: (data) => {
       setDomainTestResult(data);
+      toast({
+        title: "Domain Test Complete",
+        description: data.recognized ? "Domain is recognized" : "Domain is not recognized",
+        variant: data.recognized ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: "Domain Test Failed",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  const handleTestDomain = () => {
-    if (!testDomain.trim()) {
+  // Phase 3 - OPTIMIZE: useCallback prevents function recreation on every render
+  // Phase 5 - HARDEN: Input validation ensures empty domains are rejected
+  // Phase 6 - DOCUMENT: Validates and submits domain for authentication strategy matching test
+  const handleTestDomain = useCallback(() => {
+    const trimmedDomain = testDomain.trim();
+    
+    if (!trimmedDomain) {
       toast({
-        title: "Error",
+        title: "Validation Error",
         description: "Please enter a domain to test",
         variant: "destructive",
       });
       return;
     }
-    testDomainMutation.mutate(testDomain.trim());
-  };
 
-  const handleRefresh = () => {
+    // Phase 5 - HARDEN: Basic domain format validation
+    if (trimmedDomain.includes(' ') || trimmedDomain.length > 253) {
+      toast({
+        title: "Invalid Domain",
+        description: "Please enter a valid domain name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    testDomainMutation.mutate(trimmedDomain);
+  }, [testDomain, testDomainMutation, toast]);
+
+  // Phase 3 - OPTIMIZE: useCallback for refresh handler
+  // Phase 6 - DOCUMENT: Clears test results and refetches all diagnostic data
+  const handleRefresh = useCallback(() => {
     setDomainTestResult(null);
     refetch();
     toast({
-      title: "Refreshing",
-      description: "Diagnostics data is being refreshed...",
+      title: "Refreshing Diagnostics",
+      description: "Fetching latest system status...",
     });
-  };
+  }, [refetch, toast]);
 
-  const handleTestLoginFlow = () => {
+  // Phase 3 - OPTIMIZE: useCallback for login flow test
+  // Phase 6 - DOCUMENT: Opens login flow in new window for end-to-end authentication testing
+  const handleTestLoginFlow = useCallback(() => {
     window.open('/api/login', '_blank');
     toast({
       title: "Login Flow Test",
       description: "A new window has been opened to test the login flow",
     });
-  };
+  }, [toast]);
 
+  // Phase 3 - OPTIMIZE: useMemo for computed overall status
+  // Phase 6 - DOCUMENT: Derives overall system health status from validation report
+  const overallStatus = useMemo(() => {
+    return diagnostics?.validationReport?.overall || 'degraded';
+  }, [diagnostics?.validationReport?.overall]);
+
+  // Phase 3 - OPTIMIZE: useMemo for critical failures display
+  // Phase 6 - DOCUMENT: Extracts critical failures that require immediate attention
+  const hasCriticalFailures = useMemo(() => {
+    return (diagnostics?.validationReport?.criticalFailures?.length || 0) > 0;
+  }, [diagnostics?.validationReport?.criticalFailures]);
+
+  // Phase 3 - OPTIMIZE: useMemo for displayed errors (limit to MAX_ERRORS_DISPLAYED)
+  // Phase 6 - DOCUMENT: Slices recent auth errors to prevent performance issues with large error lists
+  const displayedErrors = useMemo(() => {
+    return diagnostics?.recentAuthErrors?.slice(0, MAX_ERRORS_DISPLAYED) || [];
+  }, [diagnostics?.recentAuthErrors]);
+
+  // Phase 5 - HARDEN: Access control - admin-only page
+  // Phase 6 - DOCUMENT: Restricts page access to users with admin role
   if (user?.role !== 'admin') {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4">
+      <div className="flex items-center justify-center min-h-screen p-4" data-testid="container-access-denied">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-destructive" />
+              <Shield className="h-5 w-5 text-destructive" data-testid="icon-access-denied" />
               Access Denied
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground" data-testid="text-access-denied">
               This page is only accessible to administrators.
             </p>
           </CardContent>
@@ -209,36 +285,32 @@ export default function AdminDiagnostics() {
     );
   }
 
+  // Phase 2 - BUILD: Enhanced loading skeleton state
   if (isLoading) {
-    return (
-      <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-        <Skeleton className="h-12 w-64" />
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <Skeleton key={i} className="h-48" />
-          ))}
-        </div>
-      </div>
-    );
+    return <DiagnosticsSkeleton />;
   }
 
-  if (!diagnostics) {
+  // Phase 2 - BUILD: Enhanced error state with retry capability
+  // Phase 5 - HARDEN: Comprehensive error handling with user-friendly messaging
+  if (!diagnostics || diagnosticsError) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4">
+      <div className="flex items-center justify-center min-h-screen p-4" data-testid="container-error">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-destructive" />
+              <AlertCircle className="h-5 w-5 text-destructive" data-testid="icon-error" />
               Error Loading Diagnostics
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">
-              Failed to load authentication diagnostics data.
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground" data-testid="text-error-message">
+              {diagnosticsError instanceof Error 
+                ? diagnosticsError.message 
+                : "Failed to load authentication diagnostics data. This may indicate a server connectivity issue."}
             </p>
-            <Button onClick={handleRefresh} data-testid="button-retry">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
+            <Button onClick={handleRefresh} data-testid="button-retry" disabled={isFetching}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+              {isFetching ? 'Retrying...' : 'Retry'}
             </Button>
           </CardContent>
         </Card>
@@ -246,19 +318,17 @@ export default function AdminDiagnostics() {
     );
   }
 
-  const overallStatus = diagnostics.validationReport.overall;
-
   return (
     <div className="min-h-screen bg-background">
       <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-        {/* Header */}
+        {/* Phase 6 - DOCUMENT: Page header with system status and refresh controls */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-3" data-testid="text-page-title">
-              <Server className="h-8 w-8" />
+              <Server className="h-8 w-8" data-testid="icon-page-title" />
               Authentication Diagnostics
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1" data-testid="text-page-subtitle">
               System health and configuration overview
             </p>
           </div>
@@ -275,19 +345,19 @@ export default function AdminDiagnostics() {
           </div>
         </div>
 
-        {/* Critical Failures Alert */}
-        {diagnostics.validationReport.criticalFailures.length > 0 && (
-          <Card className="border-destructive">
+        {/* Phase 6 - DOCUMENT: Critical failures alert - shown when system has blocking issues */}
+        {hasCriticalFailures && (
+          <Card className="border-destructive" data-testid="card-critical-failures">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
-                <XCircle className="h-5 w-5" />
+                <XCircle className="h-5 w-5" data-testid="icon-critical-failures" />
                 Critical Failures Detected
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2" data-testid="list-critical-failures">
                 {diagnostics.validationReport.criticalFailures.map((failure, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
+                  <li key={idx} className="flex items-start gap-2" data-testid={`item-critical-failure-${idx}`}>
                     <ChevronRight className="h-4 w-4 mt-0.5 flex-shrink-0" />
                     <span className="text-sm">{failure}</span>
                   </li>
@@ -297,6 +367,7 @@ export default function AdminDiagnostics() {
           </Card>
         )}
 
+        {/* Phase 6 - DOCUMENT: Tabbed interface organizing diagnostics into logical sections */}
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-5" data-testid="tabs-diagnostics">
             <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
@@ -306,28 +377,29 @@ export default function AdminDiagnostics() {
             <TabsTrigger value="errors" data-testid="tab-errors">Errors</TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
+          {/* Phase 6 - DOCUMENT: Overview tab - validation results, environment config, domain tester */}
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Phase 6 - DOCUMENT: Validation results grid showing health checks for each component */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="grid-validation-results">
               {diagnostics.validationReport.results.map((result, idx) => (
                 <Card key={idx} data-testid={`card-validation-${idx}`}>
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
+                    <CardTitle className="text-sm font-medium" data-testid={`text-component-${idx}`}>
                       {result.component}
                     </CardTitle>
                     <StatusBadge status={result.status} />
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground mb-2">
+                    <p className="text-sm text-muted-foreground mb-2" data-testid={`text-message-${idx}`}>
                       {result.message}
                     </p>
                     {result.error && (
-                      <div className="mt-2 p-2 bg-destructive/10 rounded text-xs text-destructive" data-testid="text-error">
+                      <div className="mt-2 p-2 bg-destructive/10 rounded text-xs text-destructive" data-testid={`text-error-${idx}`}>
                         <strong>Error:</strong> {result.error}
                       </div>
                     )}
                     {result.fix && (
-                      <div className="mt-2 p-2 bg-secondary rounded text-xs" data-testid="text-fix">
+                      <div className="mt-2 p-2 bg-secondary rounded text-xs" data-testid={`text-fix-${idx}`}>
                         <strong>Fix:</strong> {result.fix}
                       </div>
                     )}
@@ -336,11 +408,11 @@ export default function AdminDiagnostics() {
               ))}
             </div>
 
-            {/* Environment Variables */}
-            <Card>
+            {/* Phase 6 - DOCUMENT: Environment configuration showing critical system variables */}
+            <Card data-testid="card-environment">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Key className="h-5 w-5" />
+                  <Key className="h-5 w-5" data-testid="icon-environment" />
                   Environment Configuration
                 </CardTitle>
                 <CardDescription>Current environment variable status</CardDescription>
@@ -385,11 +457,11 @@ export default function AdminDiagnostics() {
               </CardContent>
             </Card>
 
-            {/* Domain Tester */}
-            <Card>
+            {/* Phase 6 - DOCUMENT: Domain tester for validating domain recognition against auth strategies */}
+            <Card data-testid="card-domain-tester">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Search className="h-5 w-5" />
+                  <Search className="h-5 w-5" data-testid="icon-domain-tester" />
                   Domain Tester
                 </CardTitle>
                 <CardDescription>
@@ -405,6 +477,7 @@ export default function AdminDiagnostics() {
                       onChange={(e) => setTestDomain(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleTestDomain()}
                       data-testid="input-test-domain"
+                      disabled={testDomainMutation.isPending}
                     />
                   </div>
                   <Button 
@@ -426,6 +499,7 @@ export default function AdminDiagnostics() {
                   </Button>
                 </div>
 
+                {/* Phase 6 - DOCUMENT: Domain test results showing match status and details */}
                 {domainTestResult && (
                   <div 
                     className={`p-4 rounded border ${
@@ -437,9 +511,9 @@ export default function AdminDiagnostics() {
                   >
                     <div className="flex items-center gap-2 mb-3">
                       {domainTestResult.recognized ? (
-                        <CheckCircle2 className="h-5 w-5 text-secondary-foreground" />
+                        <CheckCircle2 className="h-5 w-5 text-secondary-foreground" data-testid="icon-domain-success" />
                       ) : (
-                        <XCircle className="h-5 w-5 text-destructive" />
+                        <XCircle className="h-5 w-5 text-destructive" data-testid="icon-domain-failure" />
                       )}
                       <p className="font-semibold" data-testid="text-domain-recognized">
                         {domainTestResult.recognized ? 'Domain Recognized' : 'Domain Not Recognized'}
@@ -476,11 +550,11 @@ export default function AdminDiagnostics() {
               </CardContent>
             </Card>
 
-            {/* Auth Flow Simulator */}
-            <Card>
+            {/* Phase 6 - DOCUMENT: Auth flow simulator for testing complete OIDC flow */}
+            <Card data-testid="card-auth-simulator">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
+                  <Shield className="h-5 w-5" data-testid="icon-auth-simulator" />
                   Auth Flow Simulator
                 </CardTitle>
                 <CardDescription>
@@ -492,7 +566,7 @@ export default function AdminDiagnostics() {
                   Test Login Flow
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
-                <p className="text-xs text-muted-foreground mt-4">
+                <p className="text-xs text-muted-foreground mt-4" data-testid="text-auth-simulator-help">
                   This will open the login page in a new window. You can test the complete authentication flow
                   including OIDC redirect, callback handling, and session creation.
                 </p>
@@ -500,12 +574,12 @@ export default function AdminDiagnostics() {
             </Card>
           </TabsContent>
 
-          {/* OIDC Configuration Tab */}
+          {/* Phase 6 - DOCUMENT: OIDC Configuration tab showing OpenID Connect endpoints and capabilities */}
           <TabsContent value="oidc" className="space-y-6">
-            <Card>
+            <Card data-testid="card-oidc-config">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Server className="h-5 w-5" />
+                  <Server className="h-5 w-5" data-testid="icon-oidc" />
                   OpenID Connect Configuration
                 </CardTitle>
                 <CardDescription>
@@ -592,12 +666,12 @@ export default function AdminDiagnostics() {
             </Card>
           </TabsContent>
 
-          {/* Domains Tab */}
+          {/* Phase 6 - DOCUMENT: Domains tab showing registered auth strategies and domain mapping tests */}
           <TabsContent value="domains" className="space-y-6">
-            <Card>
+            <Card data-testid="card-strategies">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
+                  <Globe className="h-5 w-5" data-testid="icon-strategies" />
                   Registered Strategies
                 </CardTitle>
                 <CardDescription>
@@ -606,24 +680,30 @@ export default function AdminDiagnostics() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3" data-testid="list-strategies">
-                  {diagnostics.registeredStrategies.map((strategy, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-secondary/50 rounded">
-                      <div>
-                        <p className="font-mono text-sm" data-testid={`text-strategy-domain-${idx}`}>
-                          {strategy.domain}
-                        </p>
-                        <p className="text-xs text-muted-foreground" data-testid={`text-strategy-name-${idx}`}>
-                          {strategy.name}
-                        </p>
+                  {diagnostics.registeredStrategies.length === 0 ? (
+                    <p className="text-muted-foreground text-sm" data-testid="text-no-strategies">
+                      No authentication strategies registered
+                    </p>
+                  ) : (
+                    diagnostics.registeredStrategies.map((strategy, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-secondary/50 rounded" data-testid={`item-strategy-${idx}`}>
+                        <div>
+                          <p className="font-mono text-sm" data-testid={`text-strategy-domain-${idx}`}>
+                            {strategy.domain}
+                          </p>
+                          <p className="text-xs text-muted-foreground" data-testid={`text-strategy-name-${idx}`}>
+                            {strategy.name}
+                          </p>
+                        </div>
+                        <Badge variant="default" data-testid={`badge-strategy-${idx}`}>Active</Badge>
                       </div>
-                      <Badge variant="default" data-testid={`badge-strategy-${idx}`}>Active</Badge>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-testid="card-domain-mapping">
               <CardHeader>
                 <CardTitle>Domain Mapping Tests</CardTitle>
                 <CardDescription>
@@ -632,44 +712,50 @@ export default function AdminDiagnostics() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4" data-testid="list-domain-tests">
-                  {diagnostics.domainMappingTests.map((test, idx) => (
-                    <div key={idx}>
-                      <Label className="text-sm font-semibold" data-testid={`text-domain-base-${idx}`}>
-                        Base Domain: {test.domain}
-                      </Label>
-                      <div className="mt-2 space-y-2">
-                        {test.tests.map((t, tidx) => (
-                          <div key={tidx} className="flex items-center justify-between p-2 bg-muted rounded">
-                            <span className="font-mono text-sm" data-testid={`text-hostname-${idx}-${tidx}`}>
-                              {t.hostname}
-                            </span>
-                            {t.wouldMatch ? (
-                              <Badge variant="default" className="bg-secondary text-secondary-foreground" data-testid={`badge-match-${idx}-${tidx}`}>
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                Match
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" data-testid={`badge-no-match-${idx}-${tidx}`}>
-                                <XCircle className="h-3 w-3 mr-1" />
-                                No Match
-                              </Badge>
-                            )}
-                          </div>
-                        ))}
+                  {diagnostics.domainMappingTests.length === 0 ? (
+                    <p className="text-muted-foreground text-sm" data-testid="text-no-mapping-tests">
+                      No domain mapping tests available
+                    </p>
+                  ) : (
+                    diagnostics.domainMappingTests.map((test, idx) => (
+                      <div key={idx}>
+                        <Label className="text-sm font-semibold" data-testid={`text-domain-base-${idx}`}>
+                          Base Domain: {test.domain}
+                        </Label>
+                        <div className="mt-2 space-y-2">
+                          {test.tests.map((t, tidx) => (
+                            <div key={tidx} className="flex items-center justify-between p-2 bg-muted rounded" data-testid={`item-mapping-${idx}-${tidx}`}>
+                              <span className="font-mono text-sm" data-testid={`text-hostname-${idx}-${tidx}`}>
+                                {t.hostname}
+                              </span>
+                              {t.wouldMatch ? (
+                                <Badge variant="default" className="bg-secondary text-secondary-foreground" data-testid={`badge-match-${idx}-${tidx}`}>
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  Match
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" data-testid={`badge-no-match-${idx}-${tidx}`}>
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  No Match
+                                </Badge>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Sessions Tab */}
+          {/* Phase 6 - DOCUMENT: Sessions tab displaying session store type and statistics */}
           <TabsContent value="sessions" className="space-y-6">
-            <Card>
+            <Card data-testid="card-sessions">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
+                  <Database className="h-5 w-5" data-testid="icon-sessions" />
                   Session Store Information
                 </CardTitle>
                 <CardDescription>
@@ -721,31 +807,31 @@ export default function AdminDiagnostics() {
             </Card>
           </TabsContent>
 
-          {/* Errors Tab */}
+          {/* Phase 6 - DOCUMENT: Errors tab listing recent authentication failures with timestamps */}
           <TabsContent value="errors" className="space-y-6">
-            <Card>
+            <Card data-testid="card-errors">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
+                  <AlertTriangle className="h-5 w-5" data-testid="icon-errors" />
                   Recent Authentication Errors
                 </CardTitle>
-                <CardDescription>
-                  Last {Math.min(diagnostics.recentAuthErrors.length, 20)} authentication errors
+                <CardDescription data-testid="text-errors-subtitle">
+                  Last {Math.min(displayedErrors.length, MAX_ERRORS_DISPLAYED)} authentication errors
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {diagnostics.recentAuthErrors.length === 0 ? (
-                  <div className="text-center py-8" data-testid="text-no-errors">
-                    <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-secondary-foreground" />
-                    <p className="text-muted-foreground">No recent authentication errors</p>
+                {displayedErrors.length === 0 ? (
+                  <div className="text-center py-8" data-testid="container-no-errors">
+                    <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-secondary-foreground" data-testid="icon-no-errors" />
+                    <p className="text-muted-foreground" data-testid="text-no-errors">No recent authentication errors</p>
                   </div>
                 ) : (
-                  <ScrollArea className="h-[500px]">
+                  <ScrollArea className={`h-[${SCROLL_AREA_HEIGHT}px]`} data-testid="scroll-errors">
                     <div className="space-y-3" data-testid="list-errors">
-                      {diagnostics.recentAuthErrors.slice(0, 20).map((error, idx) => (
-                        <div key={idx} className="p-3 bg-destructive/10 rounded border border-destructive/20">
+                      {displayedErrors.map((error, idx) => (
+                        <div key={idx} className="p-3 bg-destructive/10 rounded border border-destructive/20" data-testid={`item-error-${idx}`}>
                           <div className="flex items-start gap-3">
-                            <XCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                            <XCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" data-testid={`icon-error-${idx}`} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-mono break-words" data-testid={`text-error-msg-${idx}`}>
                                 {error.error}
@@ -756,7 +842,7 @@ export default function AdminDiagnostics() {
                                 </p>
                               )}
                               <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                                <Clock className="h-3 w-3" />
+                                <Clock className="h-3 w-3" data-testid={`icon-error-time-${idx}`} />
                                 <span data-testid={`text-error-time-${idx}`}>
                                   {new Date(error.timestamp).toLocaleString()}
                                 </span>
@@ -773,11 +859,20 @@ export default function AdminDiagnostics() {
           </TabsContent>
         </Tabs>
 
-        {/* Footer timestamp */}
-        <div className="text-center text-xs text-muted-foreground">
+        {/* Phase 6 - DOCUMENT: Footer timestamp showing when diagnostics were last updated */}
+        <div className="text-center text-xs text-muted-foreground" data-testid="text-last-updated">
           Last updated: {new Date(diagnostics.timestamp).toLocaleString()}
         </div>
       </div>
     </div>
+  );
+}
+
+// Phase 2 - BUILD: Wrap main component in ErrorBoundary for production resilience
+export default function AdminDiagnostics() {
+  return (
+    <ErrorBoundary>
+      <AdminDiagnosticsContent />
+    </ErrorBoundary>
   );
 }
