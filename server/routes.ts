@@ -2300,7 +2300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let completionData = undefined;
       if (isCompletingNow) {
         const [checklistItems, blowerDoorTests, ductLeakageTests, ventilationTests] = await Promise.all([
-          storage.getChecklistItems(req.params.id),
+          storage.getChecklistItemsByJob(req.params.id),
           storage.getBlowerDoorTests(req.params.id),
           storage.getDuctLeakageTests(req.params.id),
           storage.getVentilationTests(req.params.id)
