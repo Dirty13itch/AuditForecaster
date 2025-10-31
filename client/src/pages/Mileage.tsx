@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertMileageLogSchema, type InsertMileageLog, type MileageLog } from "@shared/schema";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   Card,
   CardContent,
@@ -46,6 +47,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,6 +80,8 @@ import {
   ArrowRight,
   ListTodo,
   AlertCircle,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Link } from "wouter";
@@ -76,10 +89,13 @@ import { TripController } from "@/components/mileage/TripController";
 
 const IRS_RATE = 0.70; // 2025 IRS standard mileage rate
 
-export default function Mileage() {
+function MileageContent() {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedLog, setSelectedLog] = useState<MileageLog | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [logToDelete, setLogToDelete] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     return {
@@ -108,16 +124,35 @@ export default function Mileage() {
   const startOdometer = form.watch("startOdometer");
   const endOdometer = form.watch("endOdometer");
 
-  // Auto-calculate distance when odometers change
-  if (startOdometer && endOdometer && endOdometer > startOdometer) {
-    const calculatedDistance = endOdometer - startOdometer;
-    if (form.getValues("distance") !== calculatedDistance.toString()) {
-      form.setValue("distance", calculatedDistance.toString());
+  // Auto-calculate distance when odometers change (using useEffect for proper optimization)
+  // This effect watches the start and end odometer readings and automatically calculates
+  // the distance traveled. It only updates the form value if:
+  // 1. Both odometer readings are present
+  // 2. End odometer is greater than start (prevents negative distances)
+  // 3. The calculated distance differs from the current form value (prevents infinite loops)
+  useEffect(() => {
+    if (startOdometer && endOdometer) {
+      const startNum = parseFloat(startOdometer.toString());
+      const endNum = parseFloat(endOdometer.toString());
+      
+      if (!isNaN(startNum) && !isNaN(endNum) && endNum > startNum) {
+        const calculatedDistance = endNum - startNum;
+        const currentDistance = form.getValues("distance");
+        // Only update if the calculated value differs from current value to prevent re-render cycles
+        if (currentDistance !== calculatedDistance.toString()) {
+          form.setValue("distance", calculatedDistance.toString());
+        }
+      } else if (!isNaN(startNum) && !isNaN(endNum) && endNum <= startNum) {
+        // Clear distance when end odometer is less than or equal to start
+        form.setValue("distance", "");
+      }
     }
-  }
+  }, [startOdometer, endOdometer, form]);
 
-  // Fetch mileage logs
-  const { data: logs, isLoading } = useQuery({
+  // Fetch mileage logs for the selected date range
+  // Uses hierarchical query key for proper cache invalidation
+  // Retries 2 times on failure for resilience against network issues
+  const { data: logs, isLoading, error: logsError } = useQuery({
     queryKey: ["/api/mileage-logs", dateRange],
     queryFn: async ({ queryKey }) => {
       const params = new URLSearchParams({
@@ -128,11 +163,14 @@ export default function Mileage() {
       if (!response.ok) throw new Error("Failed to fetch mileage logs");
       return response.json();
     },
+    retry: 2, // Retry failed requests twice before showing error
   });
 
-  // Fetch jobs for linking
-  const { data: jobs } = useQuery({
+  // Fetch jobs for linking trips to specific jobs
+  // Provides dropdown options in the trip creation/edit dialog
+  const { data: jobs, isLoading: jobsLoading, error: jobsError } = useQuery({
     queryKey: ["/api/jobs"],
+    retry: 2, // Retry for resilience
   });
 
   // Fetch unclassified drives count
@@ -173,17 +211,6 @@ export default function Mileage() {
       }>;
     },
   });
-
-  // Show error toast if summary fails to load (useEffect to prevent re-render spam)
-  useEffect(() => {
-    if (summaryError) {
-      toast({
-        title: "Error",
-        description: "Failed to load monthly summary",
-        variant: "destructive",
-      });
-    }
-  }, [summaryError, toast]);
 
   // Create mileage log mutation
   const createMutation = useMutation({
@@ -230,6 +257,13 @@ export default function Mileage() {
       setShowAddDialog(false);
       setSelectedLog(null);
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   // Delete mileage log mutation
@@ -246,29 +280,80 @@ export default function Mileage() {
         title: "Success",
         description: "Mileage log deleted",
       });
+      setDeleteDialogOpen(false);
+      setLogToDelete(null);
+      setDeleteError(null);
+    },
+    onError: (error: Error) => {
+      // CRITICAL: Keep dialog open on error for inline retry
+      setDeleteError(error.message);
+      toast({
+        title: "Failed to delete",
+        description: "Please try again",
+        variant: "destructive",
+      });
     },
   });
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
+  // Memoized formatters for performance optimization
+  // Cache the Intl.NumberFormat instances themselves to avoid recreating them on every call
+  // This provides significant performance improvement when formatting many numbers
+  const currencyFormatter = useMemo(() => 
+    new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(amount);
-  };
+    }),
+  []);
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat("en-US").format(num);
-  };
+  const numberFormatter = useMemo(() => 
+    new Intl.NumberFormat("en-US"),
+  []);
 
-  const onSubmit = (data: InsertMileageLog) => {
+  // Memoized formatting functions that reuse the cached formatter instances
+  const formatCurrency = useCallback((amount: number) => 
+    currencyFormatter.format(amount),
+  [currencyFormatter]);
+
+  const formatNumber = useCallback((num: number) => 
+    numberFormatter.format(num),
+  [numberFormatter]);
+
+  // Handler functions wrapped in useCallback for performance
+  const onSubmit = useCallback((data: InsertMileageLog) => {
+    // CRITICAL: Validate odometer readings before submission
+    if (data.startOdometer && data.endOdometer) {
+      const startNum = parseFloat(data.startOdometer.toString());
+      const endNum = parseFloat(data.endOdometer.toString());
+      
+      if (!isNaN(startNum) && !isNaN(endNum) && endNum <= startNum) {
+        toast({
+          title: "Invalid Odometer Reading",
+          description: "End odometer must be greater than start odometer",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    // Validate distance is positive
+    const distance = parseFloat(data.distance || "0");
+    if (distance <= 0) {
+      toast({
+        title: "Invalid Distance",
+        description: "Distance must be greater than zero",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (selectedLog) {
       updateMutation.mutate({ id: selectedLog.id, data });
     } else {
       createMutation.mutate(data);
     }
-  };
+  }, [selectedLog, createMutation, updateMutation, toast]);
 
-  const useSameAsLast = () => {
+  const useSameAsLast = useCallback(() => {
     if (lastLog) {
       form.setValue("startLocation", lastLog.startLocation);
       form.setValue("endLocation", lastLog.endLocation);
@@ -281,9 +366,9 @@ export default function Mileage() {
         description: "Used details from last trip",
       });
     }
-  };
+  }, [lastLog, form, toast]);
 
-  const exportReport = () => {
+  const exportReport = useCallback(() => {
     const month = format(dateRange.startDate, 'yyyy-MM');
     const url = `/api/mileage/export?month=${month}&format=csv`;
     window.location.href = url;
@@ -291,7 +376,24 @@ export default function Mileage() {
       title: "Exporting",
       description: "Your mileage report is being downloaded",
     });
-  };
+  }, [dateRange, toast]);
+
+  const handleDelete = useCallback((logId: string) => {
+    setLogToDelete(logId);
+    setDeleteError(null); // Clear any previous errors
+    setDeleteDialogOpen(true);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (logToDelete) {
+      setDeleteError(null); // Clear error before retrying
+      deleteMutation.mutate(logToDelete);
+    }
+  }, [logToDelete, deleteMutation]);
+
+  // Check if form should be disabled during mutations
+  // This prevents double-submission and provides clear feedback that an operation is in progress
+  const isFormDisabled = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
@@ -496,10 +598,31 @@ export default function Mileage() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-20 w-full" />
+                  <div className="space-y-3" data-testid="skeleton-trip-table">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 flex-1" />
+                        <Skeleton className="h-6 w-20" />
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-8 w-24" />
+                      </div>
                     ))}
+                  </div>
+                ) : logsError ? (
+                  <div className="text-center py-12" data-testid="error-logs">
+                    <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+                    <p className="text-lg font-semibold mb-2">Failed to load mileage logs</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Could not retrieve your trip history
+                    </p>
+                    <Button
+                      onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/mileage-logs'] })}
+                      data-testid="button-retry-logs"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry
+                    </Button>
                   </div>
                 ) : logs?.length > 0 ? (
                   <div className="overflow-x-auto">
@@ -570,16 +693,22 @@ export default function Mileage() {
                                     setShowAddDialog(true);
                                   }}
                                   data-testid={`button-edit-${log.id}`}
+                                  disabled={deleteMutation.isPending}
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => deleteMutation.mutate(log.id)}
+                                  onClick={() => handleDelete(log.id)}
+                                  disabled={deleteMutation.isPending && logToDelete === log.id}
                                   data-testid={`button-delete-${log.id}`}
                                 >
-                                  <Trash className="h-4 w-4 text-red-500" />
+                                  {deleteMutation.isPending && logToDelete === log.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin text-red-500" />
+                                  ) : (
+                                    <Trash className="h-4 w-4 text-red-500" />
+                                  )}
                                 </Button>
                               </div>
                             </TableCell>
@@ -769,6 +898,7 @@ export default function Mileage() {
                           {...field}
                           value={field.value ? format(new Date(field.value), "yyyy-MM-dd") : ""}
                           onChange={(e) => field.onChange(new Date(e.target.value))}
+                          disabled={isFormDisabled}
                           data-testid="input-date"
                         />
                       </FormControl>
@@ -788,13 +918,14 @@ export default function Mileage() {
                           onValueChange={field.onChange}
                           defaultValue={field.value}
                           className="flex space-x-4"
+                          disabled={isFormDisabled}
                         >
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="business" id="business" />
+                            <RadioGroupItem value="business" id="business" disabled={isFormDisabled} />
                             <Label htmlFor="business">Business</Label>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="personal" id="personal" />
+                            <RadioGroupItem value="personal" id="personal" disabled={isFormDisabled} />
                             <Label htmlFor="personal">Personal</Label>
                           </div>
                         </RadioGroup>
@@ -816,6 +947,7 @@ export default function Mileage() {
                         <Input
                           placeholder="123 Main St, City"
                           {...field}
+                          disabled={isFormDisabled}
                           data-testid="input-start-location"
                         />
                       </FormControl>
@@ -834,6 +966,7 @@ export default function Mileage() {
                         <Input
                           placeholder="456 Oak Ave, City"
                           {...field}
+                          disabled={isFormDisabled}
                           data-testid="input-end-location"
                         />
                       </FormControl>
@@ -856,6 +989,7 @@ export default function Mileage() {
                           placeholder="0"
                           {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value))}
+                          disabled={isFormDisabled}
                           data-testid="input-start-odometer"
                         />
                       </FormControl>
@@ -877,6 +1011,7 @@ export default function Mileage() {
                           placeholder="0"
                           {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value))}
+                          disabled={isFormDisabled}
                           data-testid="input-end-odometer"
                         />
                       </FormControl>
@@ -899,6 +1034,7 @@ export default function Mileage() {
                           placeholder="0"
                           {...field}
                           onChange={(e) => field.onChange(e.target.value)}
+                          disabled={isFormDisabled}
                           data-testid="input-distance"
                         />
                       </FormControl>
@@ -915,24 +1051,33 @@ export default function Mileage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Link to Job (Optional)</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-job">
-                          <SelectValue placeholder="Select a job" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">No Job</SelectItem>
-                        {jobs?.map((job: any) => (
-                          <SelectItem key={job.id} value={job.id}>
-                            {job.address} - {job.builderName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {jobsLoading ? (
+                      <Skeleton className="h-10 w-full" data-testid="skeleton-job-select" />
+                    ) : jobsError ? (
+                      <div className="p-2 border rounded-md bg-destructive/10 text-sm text-destructive">
+                        Failed to load jobs
+                      </div>
+                    ) : (
+                      <Select 
+                        onValueChange={field.onChange} 
+                        defaultValue={field.value}
+                        disabled={isFormDisabled}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-job">
+                            <SelectValue placeholder="Select a job" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">No Job</SelectItem>
+                          {jobs?.map((job: any) => (
+                            <SelectItem key={job.id} value={job.id}>
+                              {job.address} - {job.builderName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -948,6 +1093,7 @@ export default function Mileage() {
                       <Textarea
                         placeholder="Purpose of trip, client visited, etc."
                         {...field}
+                        disabled={isFormDisabled}
                         data-testid="input-notes"
                       />
                     </FormControl>
@@ -977,23 +1123,113 @@ export default function Mileage() {
                     setSelectedLog(null);
                     form.reset();
                   }}
+                  disabled={isFormDisabled}
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  disabled={isFormDisabled}
+                  data-testid="button-submit-mileage"
                 >
-                  {createMutation.isPending || updateMutation.isPending ? 
-                    "Saving..." : 
+                  {isFormDisabled ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
                     selectedLog ? "Update Log" : "Save Log"
-                  }
+                  )}
                 </Button>
               </div>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => {
+        setDeleteDialogOpen(open);
+        if (!open) {
+          setLogToDelete(null);
+          setDeleteError(null);
+        }
+      }}>
+        <AlertDialogContent data-testid="dialog-delete-confirmation">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Mileage Log?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this mileage log from your records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {/* Error message inline in dialog */}
+          {deleteError && (
+            <Alert variant="destructive" data-testid="alert-delete-error">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Delete failed:</strong> {deleteError}
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setLogToDelete(null);
+                setDeleteError(null);
+              }}
+              disabled={deleteMutation.isPending}
+              data-testid="button-cancel-delete"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                onClick={(e) => {
+                  e.preventDefault(); // Prevent default close
+                  confirmDelete();    // Execute mutation
+                }}
+                disabled={deleteMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-delete"
+              >
+                {deleteMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : deleteError ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry Delete
+                  </>
+                ) : (
+                  "Delete"
+                )}
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+export default function Mileage() {
+  return (
+    <ErrorBoundary 
+      fallback={
+        <div className="flex flex-col items-center justify-center h-screen gap-4">
+          <AlertCircle className="h-12 w-12 text-destructive" />
+          <h2 className="text-xl font-semibold">Failed to load Mileage</h2>
+          <p className="text-muted-foreground">Something went wrong loading the page.</p>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      }
+    >
+      <MileageContent />
+    </ErrorBoundary>
   );
 }
