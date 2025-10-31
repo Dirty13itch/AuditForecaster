@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Calendar, Trash2, Play, Power, PowerOff, Clock, Mail, FileText, CheckCircle2, XCircle, Edit } from "lucide-react";
+import { Plus, Calendar, Trash2, Play, Power, PowerOff, Clock, Mail, FileText, CheckCircle2, XCircle, Edit, AlertCircle, RefreshCw } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,11 +16,65 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { insertScheduledExportSchema, updateScheduledExportSchema, type ScheduledExport } from "@shared/schema";
 import { format } from "date-fns";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-// Extended form schema with validation
+// Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
+// Phase 6 - DOCUMENT: Export data type options available for automated exports
+const DATA_TYPE_OPTIONS = [
+  { value: "jobs", label: "Jobs" },
+  { value: "financial", label: "Financial" },
+  { value: "equipment", label: "Equipment" },
+  { value: "qa-scores", label: "QA Scores" },
+  { value: "analytics", label: "Analytics" },
+  { value: "photos", label: "Photos" },
+] as const;
+
+// Phase 6 - DOCUMENT: Supported export file formats
+const FORMAT_OPTIONS = [
+  { value: "csv", label: "CSV" },
+  { value: "xlsx", label: "Excel (XLSX)" },
+  { value: "pdf", label: "PDF" },
+  { value: "json", label: "JSON" },
+] as const;
+
+// Phase 6 - DOCUMENT: Export scheduling frequency options
+// Daily = runs every day at specified time
+// Weekly = runs on specific day of week
+// Monthly = runs on specific day of month
+const FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+] as const;
+
+// Phase 6 - DOCUMENT: Day of week options for weekly exports (0=Sunday, 6=Saturday)
+const DAY_OF_WEEK_OPTIONS = [
+  { value: "0", label: "Sunday" },
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+] as const;
+
+// Phase 3 - OPTIMIZE: Skeleton loader counts for consistent loading UX
+const SKELETON_COUNTS = {
+  cards: 3,
+} as const;
+
+// Phase 6 - DOCUMENT: Export status text for UI display
+const EXPORT_STATUS = {
+  active: "Active",
+  disabled: "Disabled",
+} as const;
+
+// Phase 5 - HARDEN: Extended form schema with comprehensive validation
+// Validates time format (HH:mm), email recipients, and conditional day fields based on frequency
 const formSchema = insertScheduledExportSchema.extend({
   time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Time must be in HH:mm format (00:00 to 23:59)"),
   recipients: z.string().min(1, "At least one recipient is required").transform((val) => {
@@ -51,6 +105,7 @@ const formSchema = insertScheduledExportSchema.extend({
   path: ["dayOfMonth"],
 });
 
+// Phase 5 - HARDEN: Edit form schema with same validation rules as create
 const editFormSchema = updateScheduledExportSchema.extend({
   time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Time must be in HH:mm format (00:00 to 23:59)").optional(),
   recipients: z.string().optional().transform((val) => {
@@ -85,48 +140,24 @@ const editFormSchema = updateScheduledExportSchema.extend({
 type FormValues = z.infer<typeof formSchema>;
 type EditFormValues = z.infer<typeof editFormSchema>;
 
-const DATA_TYPE_OPTIONS = [
-  { value: "jobs", label: "Jobs" },
-  { value: "financial", label: "Financial" },
-  { value: "equipment", label: "Equipment" },
-  { value: "qa-scores", label: "QA Scores" },
-  { value: "analytics", label: "Analytics" },
-  { value: "photos", label: "Photos" },
-];
-
-const FORMAT_OPTIONS = [
-  { value: "csv", label: "CSV" },
-  { value: "xlsx", label: "Excel (XLSX)" },
-  { value: "pdf", label: "PDF" },
-  { value: "json", label: "JSON" },
-];
-
-const FREQUENCY_OPTIONS = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-];
-
-const DAY_OF_WEEK_OPTIONS = [
-  { value: "0", label: "Sunday" },
-  { value: "1", label: "Monday" },
-  { value: "2", label: "Tuesday" },
-  { value: "3", label: "Wednesday" },
-  { value: "4", label: "Thursday" },
-  { value: "5", label: "Friday" },
-  { value: "6", label: "Saturday" },
-];
-
-export default function ScheduledExports() {
+// Phase 2 - BUILD: Main component wrapped in ErrorBoundary at export
+function ScheduledExportsContent() {
   const { toast } = useToast();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingExport, setEditingExport] = useState<ScheduledExport | null>(null);
   const [deleteExportId, setDeleteExportId] = useState<string | null>(null);
 
-  // Fetch scheduled exports
-  const { data: exports, isLoading } = useQuery<ScheduledExport[]>({
+  // Phase 5 - HARDEN: Query has retry: 2 for resilience against transient failures
+  // Phase 6 - DOCUMENT: Fetch all scheduled exports from the server
+  const { 
+    data: exports, 
+    isLoading,
+    error: exportsError,
+    refetch: refetchExports,
+  } = useQuery<ScheduledExport[]>({
     queryKey: ["/api/scheduled-exports"],
+    retry: 2,
   });
 
   // Create form
@@ -155,7 +186,7 @@ export default function ScheduledExports() {
   const watchFrequency = createForm.watch("frequency");
   const watchEditFrequency = editForm.watch("frequency");
 
-  // Create mutation
+  // Phase 6 - DOCUMENT: Create mutation - adds new scheduled export to server
   const createMutation = useMutation({
     mutationFn: async (data: FormValues) => {
       const response = await apiRequest("POST", "/api/scheduled-exports", data);
@@ -179,7 +210,7 @@ export default function ScheduledExports() {
     },
   });
 
-  // Update mutation
+  // Phase 6 - DOCUMENT: Update mutation - modifies existing scheduled export
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: EditFormValues }) => {
       const response = await apiRequest("PATCH", `/api/scheduled-exports/${id}`, data);
@@ -204,7 +235,7 @@ export default function ScheduledExports() {
     },
   });
 
-  // Delete mutation
+  // Phase 6 - DOCUMENT: Delete mutation - permanently removes scheduled export
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest("DELETE", `/api/scheduled-exports/${id}`);
@@ -227,7 +258,7 @@ export default function ScheduledExports() {
     },
   });
 
-  // Enable mutation
+  // Phase 6 - DOCUMENT: Enable mutation - activates a disabled export schedule
   const enableMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest("POST", `/api/scheduled-exports/${id}/enable`);
@@ -249,7 +280,7 @@ export default function ScheduledExports() {
     },
   });
 
-  // Disable mutation
+  // Phase 6 - DOCUMENT: Disable mutation - pauses export schedule without deleting
   const disableMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest("POST", `/api/scheduled-exports/${id}/disable`);
@@ -271,7 +302,7 @@ export default function ScheduledExports() {
     },
   });
 
-  // Test run mutation
+  // Phase 6 - DOCUMENT: Test mutation - triggers immediate one-time export run for testing
   const testMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest("POST", `/api/scheduled-exports/${id}/test`);
@@ -292,11 +323,12 @@ export default function ScheduledExports() {
     },
   });
 
-  const handleCreate = (data: FormValues) => {
+  // Phase 3 - OPTIMIZE: useCallback for all event handlers to prevent unnecessary re-renders
+  const handleCreate = useCallback((data: FormValues) => {
     createMutation.mutate(data);
-  };
+  }, [createMutation]);
 
-  const handleEdit = (exportItem: ScheduledExport) => {
+  const handleEdit = useCallback((exportItem: ScheduledExport) => {
     setEditingExport(exportItem);
     editForm.reset({
       name: exportItem.name,
@@ -311,45 +343,115 @@ export default function ScheduledExports() {
       options: exportItem.options ? JSON.stringify(exportItem.options, null, 2) : null,
     });
     setIsEditDialogOpen(true);
-  };
+  }, [editForm]);
 
-  const handleUpdate = (data: EditFormValues) => {
+  const handleUpdate = useCallback((data: EditFormValues) => {
     if (!editingExport) return;
     updateMutation.mutate({ id: editingExport.id, data });
-  };
+  }, [editingExport, updateMutation]);
 
-  const handleToggleEnabled = (exportItem: ScheduledExport) => {
+  const handleToggleEnabled = useCallback((exportItem: ScheduledExport) => {
     if (exportItem.enabled) {
       disableMutation.mutate(exportItem.id);
     } else {
       enableMutation.mutate(exportItem.id);
     }
-  };
+  }, [disableMutation, enableMutation]);
 
-  const formatNextRun = (nextRun: string | null) => {
+  const handleOpenCreateDialog = useCallback(() => {
+    setIsCreateDialogOpen(true);
+  }, []);
+
+  const handleCloseCreateDialog = useCallback(() => {
+    setIsCreateDialogOpen(false);
+  }, []);
+
+  const handleCloseEditDialog = useCallback(() => {
+    setIsEditDialogOpen(false);
+  }, []);
+
+  const handleDeleteClick = useCallback((id: string) => {
+    setDeleteExportId(id);
+  }, []);
+
+  const handleCancelDelete = useCallback(() => {
+    setDeleteExportId(null);
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (deleteExportId) {
+      deleteMutation.mutate(deleteExportId);
+    }
+  }, [deleteExportId, deleteMutation]);
+
+  const handleTestExport = useCallback((id: string) => {
+    testMutation.mutate(id);
+  }, [testMutation]);
+
+  const handleRetryExports = useCallback(() => {
+    refetchExports();
+  }, [refetchExports]);
+
+  // Phase 3 - OPTIMIZE: Memoize date formatting functions
+  // Phase 6 - DOCUMENT: Format next run date for display or show "Not scheduled" if null
+  const formatNextRun = useCallback((nextRun: string | null) => {
     if (!nextRun) return "Not scheduled";
     try {
       return format(new Date(nextRun), "MMM d, yyyy 'at' h:mm a");
     } catch {
       return "Invalid date";
     }
-  };
+  }, []);
 
-  const formatLastRun = (lastRun: string | null) => {
+  // Phase 6 - DOCUMENT: Format last run date for display or show "Never run" if null
+  const formatLastRun = useCallback((lastRun: string | null) => {
     if (!lastRun) return "Never run";
     try {
       return format(new Date(lastRun), "MMM d, yyyy 'at' h:mm a");
     } catch {
       return "Invalid date";
     }
-  };
+  }, []);
+
+  // Phase 2 - BUILD: Error state with retry button for query failures
+  if (exportsError) {
+    return (
+      <div className="flex flex-col h-screen">
+        <header className="flex items-center justify-between p-4 border-b">
+          <div>
+            <h1 className="text-2xl font-semibold" data-testid="text-page-title">Scheduled Exports</h1>
+            <p className="text-sm text-muted-foreground">Manage automated data exports</p>
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-4">
+          <Alert variant="destructive" className="max-w-2xl" data-testid="alert-error">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Failed to Load Scheduled Exports</AlertTitle>
+            <AlertDescription className="mt-2">
+              {exportsError instanceof Error ? exportsError.message : "An unexpected error occurred while loading scheduled exports."}
+            </AlertDescription>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetryExports}
+              className="mt-4"
+              data-testid="button-retry-exports"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          </Alert>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen">
       <header className="flex items-center justify-between p-4 border-b">
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-page-title">Scheduled Exports</h1>
-          <p className="text-sm text-muted-foreground">Manage automated data exports</p>
+          <p className="text-sm text-muted-foreground" data-testid="text-page-description">Manage automated data exports</p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
@@ -358,7 +460,7 @@ export default function ScheduledExports() {
               Create Export
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-create-export">
             <DialogHeader>
               <DialogTitle>Create Scheduled Export</DialogTitle>
               <DialogDescription>
@@ -396,7 +498,7 @@ export default function ScheduledExports() {
                           </FormControl>
                           <SelectContent>
                             {DATA_TYPE_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
+                              <SelectItem key={option.value} value={option.value} data-testid={`option-dataType-${option.value}`}>
                                 {option.label}
                               </SelectItem>
                             ))}
@@ -421,7 +523,7 @@ export default function ScheduledExports() {
                           </FormControl>
                           <SelectContent>
                             {FORMAT_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
+                              <SelectItem key={option.value} value={option.value} data-testid={`option-format-${option.value}`}>
                                 {option.label}
                               </SelectItem>
                             ))}
@@ -448,7 +550,7 @@ export default function ScheduledExports() {
                           </FormControl>
                           <SelectContent>
                             {FREQUENCY_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
+                              <SelectItem key={option.value} value={option.value} data-testid={`option-frequency-${option.value}`}>
                                 {option.label}
                               </SelectItem>
                             ))}
@@ -493,7 +595,7 @@ export default function ScheduledExports() {
                           </FormControl>
                           <SelectContent>
                             {DAY_OF_WEEK_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
+                              <SelectItem key={option.value} value={option.value} data-testid={`option-dayOfWeek-${option.value}`}>
                                 {option.label}
                               </SelectItem>
                             ))}
@@ -592,7 +694,7 @@ export default function ScheduledExports() {
                   <Button 
                     type="button" 
                     variant="outline" 
-                    onClick={() => setIsCreateDialogOpen(false)}
+                    onClick={handleCloseCreateDialog}
                     data-testid="button-cancel-create"
                   >
                     Cancel
@@ -613,27 +715,32 @@ export default function ScheduledExports() {
 
       <main className="flex-1 overflow-auto p-4">
         {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i}>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="loading-skeleton">
+            {Array.from({ length: SKELETON_COUNTS.cards }).map((_, i) => (
+              <Card key={i} data-testid={`skeleton-card-${i}`}>
                 <CardHeader>
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-6 w-3/4" data-testid={`skeleton-title-${i}`} />
+                  <Skeleton className="h-4 w-1/2 mt-2" data-testid={`skeleton-description-${i}`} />
                 </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-20 w-full" />
+                <CardContent className="space-y-3">
+                  <Skeleton className="h-4 w-full" data-testid={`skeleton-content-1-${i}`} />
+                  <Skeleton className="h-4 w-5/6" data-testid={`skeleton-content-2-${i}`} />
+                  <Skeleton className="h-4 w-4/6" data-testid={`skeleton-content-3-${i}`} />
                 </CardContent>
+                <CardFooter>
+                  <Skeleton className="h-9 w-full" data-testid={`skeleton-footer-${i}`} />
+                </CardFooter>
               </Card>
             ))}
           </div>
         ) : !exports || exports.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center" data-testid="empty-state">
             <Calendar className="w-16 h-16 text-muted-foreground mb-4" />
-            <h3 className="text-xl font-semibold mb-2">No Scheduled Exports</h3>
-            <p className="text-muted-foreground mb-4">
+            <h3 className="text-xl font-semibold mb-2" data-testid="text-empty-title">No Scheduled Exports</h3>
+            <p className="text-muted-foreground mb-4" data-testid="text-empty-description">
               Create your first automated export to start receiving data on a regular schedule.
             </p>
-            <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-create-first">
+            <Button onClick={handleOpenCreateDialog} data-testid="button-create-first">
               <Plus className="w-4 h-4 mr-2" />
               Create Your First Export
             </Button>
@@ -666,7 +773,7 @@ export default function ScheduledExports() {
                       variant={exportItem.enabled ? "default" : "secondary"}
                       data-testid={`badge-status-${exportItem.id}`}
                     >
-                      {exportItem.enabled ? "Active" : "Disabled"}
+                      {exportItem.enabled ? EXPORT_STATUS.active : EXPORT_STATUS.disabled}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -768,7 +875,7 @@ export default function ScheduledExports() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => testMutation.mutate(exportItem.id)}
+                    onClick={() => handleTestExport(exportItem.id)}
                     disabled={testMutation.isPending}
                     data-testid={`button-test-${exportItem.id}`}
                   >
@@ -778,7 +885,7 @@ export default function ScheduledExports() {
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => setDeleteExportId(exportItem.id)}
+                    onClick={() => handleDeleteClick(exportItem.id)}
                     data-testid={`button-delete-${exportItem.id}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -792,7 +899,7 @@ export default function ScheduledExports() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-edit-export">
           <DialogHeader>
             <DialogTitle>Edit Scheduled Export</DialogTitle>
             <DialogDescription>
@@ -830,7 +937,7 @@ export default function ScheduledExports() {
                         </FormControl>
                         <SelectContent>
                           {DATA_TYPE_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
+                            <SelectItem key={option.value} value={option.value} data-testid={`option-edit-dataType-${option.value}`}>
                               {option.label}
                             </SelectItem>
                           ))}
@@ -855,7 +962,7 @@ export default function ScheduledExports() {
                         </FormControl>
                         <SelectContent>
                           {FORMAT_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
+                            <SelectItem key={option.value} value={option.value} data-testid={`option-edit-format-${option.value}`}>
                               {option.label}
                             </SelectItem>
                           ))}
@@ -882,7 +989,7 @@ export default function ScheduledExports() {
                         </FormControl>
                         <SelectContent>
                           {FREQUENCY_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
+                            <SelectItem key={option.value} value={option.value} data-testid={`option-edit-frequency-${option.value}`}>
                               {option.label}
                             </SelectItem>
                           ))}
@@ -927,7 +1034,7 @@ export default function ScheduledExports() {
                         </FormControl>
                         <SelectContent>
                           {DAY_OF_WEEK_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
+                            <SelectItem key={option.value} value={option.value} data-testid={`option-edit-dayOfWeek-${option.value}`}>
                               {option.label}
                             </SelectItem>
                           ))}
@@ -1026,7 +1133,7 @@ export default function ScheduledExports() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => setIsEditDialogOpen(false)}
+                  onClick={handleCloseEditDialog}
                   data-testid="button-cancel-edit"
                 >
                   Cancel
@@ -1045,8 +1152,8 @@ export default function ScheduledExports() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteExportId} onOpenChange={() => setDeleteExportId(null)}>
-        <AlertDialogContent>
+      <AlertDialog open={!!deleteExportId} onOpenChange={handleCancelDelete}>
+        <AlertDialogContent data-testid="dialog-delete-confirm">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Scheduled Export?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1056,7 +1163,7 @@ export default function ScheduledExports() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteExportId && deleteMutation.mutate(deleteExportId)}
+              onClick={handleConfirmDelete}
               disabled={deleteMutation.isPending}
               data-testid="button-confirm-delete"
             >
@@ -1066,5 +1173,14 @@ export default function ScheduledExports() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// Phase 2 - BUILD: Export with ErrorBoundary wrapper for production-grade error handling
+export default function ScheduledExports() {
+  return (
+    <ErrorBoundary>
+      <ScheduledExportsContent />
+    </ErrorBoundary>
   );
 }
