@@ -148,6 +148,10 @@ import {
   type BuilderProfitability,
   type CashFlowForecast,
   type InspectorUtilization,
+  type MultifamilyProgram,
+  type InsertMultifamilyProgram,
+  type ComplianceArtifact,
+  type InsertComplianceArtifact,
   notifications,
   notificationPreferences,
   scheduledExports,
@@ -221,6 +225,8 @@ import {
   qaChecklistItems,
   qaChecklistResponses,
   qaPerformanceMetrics,
+  multifamilyPrograms,
+  complianceArtifacts,
 } from "@shared/schema";
 import { calculateScore } from "@shared/scoring";
 import { type PaginationParams, type PaginatedResult, type PhotoFilterParams, type PhotoCursorPaginationParams, type CursorPaginationParams, type CursorPaginatedResult } from "@shared/pagination";
@@ -1092,6 +1098,16 @@ export interface IStorage {
   getBuilderProfitability(startDate?: Date, endDate?: Date): Promise<BuilderProfitability[]>;
   getCashFlowForecast(daysAhead?: number): Promise<CashFlowForecast>;
   getInspectorUtilization(userId: string, startDate?: Date, endDate?: Date): Promise<InspectorUtilization>;
+  
+  // Multifamily Compliance Methods - Phase 6.2
+  createMultifamilyProgram(data: InsertMultifamilyProgram): Promise<MultifamilyProgram>;
+  getMultifamilyProgram(id: string): Promise<MultifamilyProgram | null>;
+  updateMultifamilyProgram(id: string, data: Partial<InsertMultifamilyProgram>): Promise<MultifamilyProgram | null>;
+  updateBuilderVerifiedItems(jobId: string, count: number, photoRequired: boolean): Promise<void>;
+  uploadComplianceArtifact(data: InsertComplianceArtifact): Promise<ComplianceArtifact>;
+  getBenchmarkingDeadlines(buildingSize: number): Promise<{ class: string; deadline: Date }>;
+  getEnergyStarChecklistTemplate(version: string, path: string): Promise<{ id: number; name: string; items: string[] }>;
+  calculateSampleSize(unitCount: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -9453,6 +9469,257 @@ export class DatabaseStorage implements IStorage {
       return utilization;
     } catch (error) {
       serverLogger.error('[Storage/getInspectorUtilization] Failed to calculate inspector utilization', { error });
+      throw error;
+    }
+  }
+
+  // ===========================
+  // Multifamily Compliance Methods - Phase 6.2
+  // ===========================
+
+  async createMultifamilyProgram(data: InsertMultifamilyProgram): Promise<MultifamilyProgram> {
+    try {
+      serverLogger.info('[Storage/createMultifamilyProgram] Creating multifamily program', { 
+        name: data.name, 
+        version: data.version 
+      });
+
+      const [program] = await db.insert(multifamilyPrograms)
+        .values(data)
+        .returning();
+
+      serverLogger.info('[Storage/createMultifamilyProgram] Multifamily program created', { 
+        id: program.id,
+        name: program.name,
+        version: program.version
+      });
+
+      return program;
+    } catch (error) {
+      serverLogger.error('[Storage/createMultifamilyProgram] Failed to create multifamily program', { error, data });
+      throw error;
+    }
+  }
+
+  async getMultifamilyProgram(id: string): Promise<MultifamilyProgram | null> {
+    try {
+      serverLogger.info('[Storage/getMultifamilyProgram] Retrieving multifamily program', { id });
+
+      const [program] = await db.select()
+        .from(multifamilyPrograms)
+        .where(eq(multifamilyPrograms.id, id))
+        .limit(1);
+
+      if (!program) {
+        serverLogger.info('[Storage/getMultifamilyProgram] Multifamily program not found', { id });
+        return null;
+      }
+
+      serverLogger.info('[Storage/getMultifamilyProgram] Multifamily program retrieved', { 
+        id: program.id,
+        name: program.name,
+        version: program.version
+      });
+
+      return program;
+    } catch (error) {
+      serverLogger.error('[Storage/getMultifamilyProgram] Failed to retrieve multifamily program', { error, id });
+      throw error;
+    }
+  }
+
+  async updateMultifamilyProgram(id: string, data: Partial<InsertMultifamilyProgram>): Promise<MultifamilyProgram | null> {
+    try {
+      serverLogger.info('[Storage/updateMultifamilyProgram] Updating multifamily program', { 
+        id, 
+        fields: Object.keys(data) 
+      });
+
+      const [program] = await db.update(multifamilyPrograms)
+        .set(data)
+        .where(eq(multifamilyPrograms.id, id))
+        .returning();
+
+      if (!program) {
+        serverLogger.info('[Storage/updateMultifamilyProgram] Multifamily program not found', { id });
+        return null;
+      }
+
+      serverLogger.info('[Storage/updateMultifamilyProgram] Multifamily program updated', { 
+        id: program.id,
+        name: program.name,
+        version: program.version
+      });
+
+      return program;
+    } catch (error) {
+      serverLogger.error('[Storage/updateMultifamilyProgram] Failed to update multifamily program', { error, id, data });
+      throw error;
+    }
+  }
+
+  async updateBuilderVerifiedItems(jobId: string, count: number, photoRequired: boolean): Promise<void> {
+    try {
+      // Validate count is between 0-8 (ENERGY STAR limit)
+      if (count < 0 || count > 8) {
+        const error = new Error(`Builder verified items count must be between 0-8, received: ${count}`);
+        serverLogger.error('[Storage/updateBuilderVerifiedItems] Invalid count', { jobId, count });
+        throw error;
+      }
+
+      serverLogger.info('[Storage/updateBuilderVerifiedItems] Updating builder verified items', { 
+        jobId, 
+        count, 
+        photoRequired 
+      });
+
+      await db.update(jobs)
+        .set({
+          builderVerifiedItemsCount: count,
+          builderVerifiedItemsPhotoRequired: photoRequired
+        })
+        .where(eq(jobs.id, jobId));
+
+      serverLogger.info('[Storage/updateBuilderVerifiedItems] Builder verified items updated successfully', { 
+        jobId, 
+        count, 
+        photoRequired 
+      });
+    } catch (error) {
+      serverLogger.error('[Storage/updateBuilderVerifiedItems] Failed to update builder verified items', { 
+        error, 
+        jobId, 
+        count, 
+        photoRequired 
+      });
+      throw error;
+    }
+  }
+
+  async uploadComplianceArtifact(data: InsertComplianceArtifact): Promise<ComplianceArtifact> {
+    try {
+      serverLogger.info('[Storage/uploadComplianceArtifact] Uploading compliance artifact', { 
+        jobId: data.jobId, 
+        programType: data.programType, 
+        artifactType: data.artifactType 
+      });
+
+      const [artifact] = await db.insert(complianceArtifacts)
+        .values(data)
+        .returning();
+
+      serverLogger.info('[Storage/uploadComplianceArtifact] Compliance artifact uploaded', { 
+        id: artifact.id,
+        jobId: artifact.jobId,
+        programType: artifact.programType,
+        artifactType: artifact.artifactType
+      });
+
+      return artifact;
+    } catch (error) {
+      serverLogger.error('[Storage/uploadComplianceArtifact] Failed to upload compliance artifact', { error, data });
+      throw error;
+    }
+  }
+
+  async getBenchmarkingDeadlines(buildingSize: number): Promise<{ class: string; deadline: Date }> {
+    try {
+      serverLogger.info('[Storage/getBenchmarkingDeadlines] Calculating benchmarking deadlines', { buildingSize });
+
+      let result: { class: string; deadline: Date };
+
+      if (buildingSize >= 100000) {
+        result = { class: 'Class 1', deadline: new Date('2025-06-01') };
+      } else if (buildingSize >= 50000) {
+        result = { class: 'Class 2', deadline: new Date('2026-06-01') };
+      } else {
+        const error = new Error('Building size must be at least 50,000 sq ft for benchmarking requirements');
+        serverLogger.error('[Storage/getBenchmarkingDeadlines] Building size too small', { buildingSize });
+        throw error;
+      }
+
+      serverLogger.info('[Storage/getBenchmarkingDeadlines] Benchmarking deadline calculated', { 
+        buildingSize, 
+        class: result.class, 
+        deadline: result.deadline 
+      });
+
+      return result;
+    } catch (error) {
+      serverLogger.error('[Storage/getBenchmarkingDeadlines] Failed to calculate benchmarking deadlines', { 
+        error, 
+        buildingSize 
+      });
+      throw error;
+    }
+  }
+
+  async getEnergyStarChecklistTemplate(version: string, path: string): Promise<{ id: number; name: string; items: string[] }> {
+    try {
+      serverLogger.info('[Storage/getEnergyStarChecklistTemplate] Retrieving ENERGY STAR checklist template', { 
+        version, 
+        path 
+      });
+
+      // Mock data for now - actual checklist integration can come later
+      const template = {
+        id: 1,
+        name: `ENERGY STAR MFNC ${version} - ${path} Path`,
+        items: [
+          'Thermal Enclosure System Rater Checklist',
+          'HVAC System Quality Installation Rater Checklist',
+          'Water Management System Builder Checklist',
+          'Indoor airPLUS Verification Checklist'
+        ]
+      };
+
+      serverLogger.info('[Storage/getEnergyStarChecklistTemplate] Checklist template retrieved', { 
+        version, 
+        path, 
+        templateName: template.name,
+        itemCount: template.items.length
+      });
+
+      return template;
+    } catch (error) {
+      serverLogger.error('[Storage/getEnergyStarChecklistTemplate] Failed to retrieve checklist template', { 
+        error, 
+        version, 
+        path 
+      });
+      throw error;
+    }
+  }
+
+  async calculateSampleSize(unitCount: number): Promise<number> {
+    try {
+      serverLogger.info('[Storage/calculateSampleSize] Calculating sample size', { unitCount });
+
+      let sampleSize: number;
+
+      // ENERGY STAR MFNC sampling protocol
+      if (unitCount <= 7) {
+        sampleSize = unitCount; // 100%
+      } else if (unitCount <= 20) {
+        sampleSize = 7;
+      } else if (unitCount <= 50) {
+        sampleSize = 9;
+      } else if (unitCount <= 100) {
+        sampleSize = 11;
+      } else {
+        // 100+ units: 13 + 1 per 50 additional
+        sampleSize = 13 + Math.floor((unitCount - 100) / 50);
+      }
+
+      serverLogger.info('[Storage/calculateSampleSize] Sample size calculated', { 
+        unitCount, 
+        sampleSize,
+        percentage: ((sampleSize / unitCount) * 100).toFixed(1) + '%'
+      });
+
+      return sampleSize;
+    } catch (error) {
+      serverLogger.error('[Storage/calculateSampleSize] Failed to calculate sample size', { error, unitCount });
       throw error;
     }
   }

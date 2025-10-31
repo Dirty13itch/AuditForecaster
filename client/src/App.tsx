@@ -86,6 +86,14 @@ const ConflictResolution = lazy(() => import("@/pages/ConflictResolution"));
 const CustomReports = lazy(() => import("@/pages/CustomReports"));
 const KPISettings = lazy(() => import("@/pages/KPISettings"));
 const NotificationTest = lazy(() => import("@/pages/NotificationTest"));
+const MultifamilyProgramSetup = lazy(() => import("@/pages/compliance/MultifamilyProgramSetup"));
+const BuilderVerifiedItemsTracker = lazy(() => import("@/pages/compliance/BuilderVerifiedItemsTracker"));
+const SamplingProtocolCalculator = lazy(() => import("@/pages/compliance/SamplingProtocolCalculator"));
+const EnergyStarMFNCChecklist = lazy(() => import("@/pages/compliance/EnergyStarMFNCChecklist"));
+const MNHousingEGCCWorksheet = lazy(() => import("@/pages/compliance/MNHousingEGCCWorksheet"));
+const ZERHComplianceTracker = lazy(() => import("@/pages/compliance/ZERHComplianceTracker"));
+const BenchmarkingDeadlineTracker = lazy(() => import("@/pages/compliance/BenchmarkingDeadlineTracker"));
+const ComplianceDocumentsLibrary = lazy(() => import("@/pages/compliance/ComplianceDocumentsLibrary"));
 
 const LoadingFallback = () => (
   <div className="flex h-full items-center justify-center">
@@ -467,6 +475,46 @@ function Router() {
       <Route path="/notification-test" component={() => (
         <RouteErrorBoundary>
           <NotificationTest />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/multifamily-setup" component={() => (
+        <RouteErrorBoundary>
+          <MultifamilyProgramSetup />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/builder-verified-items/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <BuilderVerifiedItemsTracker />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/sampling-calculator" component={() => (
+        <RouteErrorBoundary>
+          <SamplingProtocolCalculator />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/energy-star-checklist/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <EnergyStarMFNCChecklist />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/mn-housing-egcc/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <MNHousingEGCCWorksheet />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/zerh-tracker/:jobId" component={() => (
+        <RouteErrorBoundary>
+          <ZERHComplianceTracker />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/benchmarking-tracker/:buildingId" component={() => (
+        <RouteErrorBoundary>
+          <BenchmarkingDeadlineTracker />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance/documents" component={() => (
+        <RouteErrorBoundary>
+          <ComplianceDocumentsLibrary />
         </RouteErrorBoundary>
       )} />
       <Route component={() => (

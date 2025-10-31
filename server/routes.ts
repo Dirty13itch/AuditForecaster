@@ -69,6 +69,8 @@ import {
   insertReportFieldValueSchema,
   insertScheduledExportSchema,
   updateScheduledExportSchema,
+  insertMultifamilyProgramSchema,
+  insertComplianceArtifactSchema,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -8374,6 +8376,274 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logError('Compliance/History', error, { entityType: req.params.entityType, entityId: req.params.entityId });
       const { status, message } = handleDatabaseError(error, 'fetch compliance history');
+      res.status(status).json({ message });
+    }
+  });
+
+  // ===========================
+  // Phase 6.3: Minnesota Compliance Suite - Multifamily Program CRUD
+  // ===========================
+
+  // POST /api/multifamily-programs - Create multifamily program (admin only)
+  app.post("/api/multifamily-programs", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      serverLogger.info('[API/MultifamilyPrograms/Create] Request received', { 
+        body: req.body 
+      });
+
+      const validated = insertMultifamilyProgramSchema.parse(req.body);
+      const program = await storage.createMultifamilyProgram(validated);
+      
+      serverLogger.info('[API/MultifamilyPrograms/Create] Program created successfully', { 
+        id: program.id,
+        name: program.name,
+        version: program.version
+      });
+
+      res.status(201).json(program);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/MultifamilyPrograms/Create] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('MultifamilyPrograms/Create', error);
+      const { status, message } = handleDatabaseError(error, 'create multifamily program');
+      res.status(status).json({ message });
+    }
+  });
+
+  // PATCH /api/multifamily-programs/:id - Update multifamily program (admin only)
+  app.patch("/api/multifamily-programs/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req, res) => {
+    try {
+      serverLogger.info('[API/MultifamilyPrograms/Update] Request received', { 
+        id: req.params.id,
+        body: req.body 
+      });
+
+      const validated = insertMultifamilyProgramSchema.partial().parse(req.body);
+      const program = await storage.updateMultifamilyProgram(req.params.id, validated);
+      
+      if (!program) {
+        serverLogger.warn('[API/MultifamilyPrograms/Update] Program not found', { 
+          id: req.params.id 
+        });
+        return res.status(404).json({ message: "Multifamily program not found" });
+      }
+
+      serverLogger.info('[API/MultifamilyPrograms/Update] Program updated successfully', { 
+        id: program.id,
+        name: program.name,
+        version: program.version
+      });
+
+      res.json(program);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/MultifamilyPrograms/Update] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('MultifamilyPrograms/Update', error, { id: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'update multifamily program');
+      res.status(status).json({ message });
+    }
+  });
+
+  // GET /api/multifamily-programs/:id - Get multifamily program (all authenticated users)
+  app.get("/api/multifamily-programs/:id", isAuthenticated, async (req, res) => {
+    try {
+      serverLogger.info('[API/MultifamilyPrograms/Get] Request received', { 
+        id: req.params.id 
+      });
+
+      const program = await storage.getMultifamilyProgram(req.params.id);
+      
+      if (!program) {
+        serverLogger.warn('[API/MultifamilyPrograms/Get] Program not found', { 
+          id: req.params.id 
+        });
+        return res.status(404).json({ message: "Multifamily program not found" });
+      }
+
+      serverLogger.info('[API/MultifamilyPrograms/Get] Program retrieved successfully', { 
+        id: program.id,
+        name: program.name,
+        version: program.version
+      });
+
+      res.json(program);
+    } catch (error) {
+      logError('MultifamilyPrograms/Get', error, { id: req.params.id });
+      const { status, message } = handleDatabaseError(error, 'fetch multifamily program');
+      res.status(status).json({ message });
+    }
+  });
+
+  // ===========================
+  // Phase 6.3: Compliance Artifacts & Utility Endpoints
+  // ===========================
+
+  // POST /api/compliance/artifacts - Upload compliance artifact
+  app.post("/api/compliance/artifacts", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      serverLogger.info('[API/ComplianceArtifacts/Upload] Request received', { 
+        jobId: req.body.jobId,
+        programType: req.body.programType,
+        artifactType: req.body.artifactType
+      });
+
+      const validated = insertComplianceArtifactSchema.parse({
+        ...req.body,
+        uploadedBy: req.user?.claims?.sub,
+      });
+
+      // Role-based access: inspectors can only upload for their own jobs, admins can upload for all
+      if (req.user?.role !== 'admin') {
+        const job = await storage.getJob(validated.jobId);
+        if (!job) {
+          serverLogger.warn('[API/ComplianceArtifacts/Upload] Job not found', { 
+            jobId: validated.jobId 
+          });
+          return res.status(404).json({ message: "Job not found" });
+        }
+        
+        if (job.assignedTo !== req.user?.claims?.sub) {
+          serverLogger.warn('[API/ComplianceArtifacts/Upload] Access denied - inspector not assigned to job', { 
+            jobId: validated.jobId,
+            userId: req.user?.claims?.sub,
+            assignedTo: job.assignedTo
+          });
+          return res.status(403).json({ message: "You can only upload artifacts for jobs assigned to you" });
+        }
+      }
+
+      const artifact = await storage.uploadComplianceArtifact(validated);
+      
+      serverLogger.info('[API/ComplianceArtifacts/Upload] Artifact uploaded successfully', { 
+        id: artifact.id,
+        jobId: artifact.jobId,
+        programType: artifact.programType,
+        artifactType: artifact.artifactType
+      });
+
+      res.status(201).json(artifact);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/ComplianceArtifacts/Upload] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('ComplianceArtifacts/Upload', error);
+      const { status, message } = handleDatabaseError(error, 'upload compliance artifact');
+      res.status(status).json({ message });
+    }
+  });
+
+  // GET /api/compliance/benchmarking/deadlines - Get benchmarking deadlines based on square footage
+  app.get("/api/compliance/benchmarking/deadlines", isAuthenticated, async (req, res) => {
+    try {
+      serverLogger.info('[API/Compliance/BenchmarkingDeadlines] Request received', { 
+        sqft: req.query.sqft 
+      });
+
+      const querySchema = z.object({ 
+        sqft: z.coerce.number().min(50000, 'Building size must be at least 50,000 sq ft for benchmarking requirements')
+      });
+      
+      const { sqft } = querySchema.parse(req.query);
+      const result = await storage.getBenchmarkingDeadlines(sqft);
+      
+      serverLogger.info('[API/Compliance/BenchmarkingDeadlines] Deadlines calculated successfully', { 
+        sqft,
+        class: result.class,
+        deadline: result.deadline
+      });
+
+      res.json(result);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/Compliance/BenchmarkingDeadlines] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Compliance/BenchmarkingDeadlines', error, { sqft: req.query.sqft });
+      const { status, message } = handleDatabaseError(error, 'calculate benchmarking deadlines');
+      res.status(status).json({ message });
+    }
+  });
+
+  // GET /api/compliance/energy-star/checklists - Get ENERGY STAR checklist template
+  app.get("/api/compliance/energy-star/checklists", isAuthenticated, async (req, res) => {
+    try {
+      serverLogger.info('[API/Compliance/EnergyStarChecklists] Request received', { 
+        version: req.query.version,
+        path: req.query.path
+      });
+
+      const querySchema = z.object({ 
+        version: z.string().min(1, 'Version is required'),
+        path: z.string().min(1, 'Path is required (e.g., "prescriptive", "ERI", "ASHRAE")')
+      });
+      
+      const { version, path } = querySchema.parse(req.query);
+      const template = await storage.getEnergyStarChecklistTemplate(version, path);
+      
+      serverLogger.info('[API/Compliance/EnergyStarChecklists] Template retrieved successfully', { 
+        version,
+        path,
+        templateId: template.id,
+        itemCount: template.items.length
+      });
+
+      res.json(template);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/Compliance/EnergyStarChecklists] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Compliance/EnergyStarChecklists', error, { 
+        version: req.query.version,
+        path: req.query.path
+      });
+      const { status, message } = handleDatabaseError(error, 'fetch ENERGY STAR checklist template');
+      res.status(status).json({ message });
+    }
+  });
+
+  // POST /api/compliance/sampling/calculate - Calculate sample size for multifamily units
+  app.post("/api/compliance/sampling/calculate", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      serverLogger.info('[API/Compliance/SamplingCalculate] Request received', { 
+        unitCount: req.body.unitCount 
+      });
+
+      const bodySchema = z.object({ 
+        unitCount: z.number().int().positive('Unit count must be a positive integer')
+      });
+      
+      const { unitCount } = bodySchema.parse(req.body);
+      const sampleSize = await storage.calculateSampleSize(unitCount);
+      
+      serverLogger.info('[API/Compliance/SamplingCalculate] Sample size calculated successfully', { 
+        unitCount,
+        sampleSize
+      });
+
+      res.json({ 
+        unitCount, 
+        sampleSize, 
+        protocol: 'ENERGY STAR MFNC' 
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/Compliance/SamplingCalculate] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Compliance/SamplingCalculate', error, { unitCount: req.body.unitCount });
+      const { status, message } = handleDatabaseError(error, 'calculate sample size');
       res.status(status).json({ message });
     }
   });

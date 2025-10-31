@@ -1336,12 +1336,12 @@ export const mileageRateHistory = pgTable("mileage_rate_history", {
 // Multifamily Programs - Compliance program templates
 export const multifamilyPrograms = pgTable("multifamily_programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name").notNull(),
-  version: varchar("version"),
-  effectiveDate: date("effective_date"),
-  requiresPhotoEvidence: boolean("requires_photo_evidence").default(false).notNull(),
-  samplingRequired: boolean("sampling_required").default(false).notNull(),
-  checklistTemplateId: varchar("checklist_template_id"),
+  name: varchar("name", { length: 100 }).notNull(),
+  version: varchar("version", { length: 50 }).notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  requiresPhotoEvidence: boolean("requires_photo_evidence").default(false),
+  samplingRequired: boolean("sampling_required").default(false),
+  checklistTemplateId: integer("checklist_template_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1350,12 +1350,14 @@ export const complianceArtifacts = pgTable("compliance_artifacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   programType: varchar("program_type", { 
-    enum: ["energy_star_mfnc", "mn_housing_egcc", "zerh", "benchmarking"] 
+    length: 50,
+    enum: ["energy_star_mfnc", "egcc", "zerh", "benchmarking"] 
   }).notNull(),
   artifactType: varchar("artifact_type", { 
+    length: 50,
     enum: ["checklist", "worksheet", "photo", "certificate"] 
   }).notNull(),
-  documentPath: varchar("document_path"),
+  documentPath: varchar("document_path", { length: 500 }).notNull(),
   uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 }, (table) => [
@@ -2057,7 +2059,7 @@ export const insertMileageRateHistorySchema = createInsertSchema(mileageRateHist
 });
 
 export const insertMultifamilyProgramSchema = createInsertSchema(multifamilyPrograms).omit({ id: true, createdAt: true }).extend({
-  effectiveDate: z.coerce.date().nullable().optional(),
+  effectiveDate: z.coerce.date(),
 });
 
 export const insertComplianceArtifactSchema = createInsertSchema(complianceArtifacts).omit({ id: true, uploadedAt: true });
