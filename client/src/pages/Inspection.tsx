@@ -700,14 +700,23 @@ export default function Inspection() {
                       className="w-full"
                       size="lg"
                       variant="default"
-                      disabled={!canCompleteJob}
+                      disabled={!canCompleteJob || completeJobMutation.isPending}
                       onClick={handleCompleteJob}
                       data-testid="button-complete-job"
                     >
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Mark Job Complete
+                      {completeJobMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Completing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Mark Job Complete
+                        </>
+                      )}
                     </Button>
-                    {!canCompleteJob && (
+                    {!canCompleteJob && !completeJobMutation.isPending && (
                       <p className="text-sm text-muted-foreground mt-2 text-center">
                         Complete all workflow requirements first
                       </p>
