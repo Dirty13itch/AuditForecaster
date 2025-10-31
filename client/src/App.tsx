@@ -46,6 +46,7 @@ const Invoices = lazy(() => import("@/pages/financial/invoices"));
 const Payments = lazy(() => import("@/pages/financial/payments"));
 const ARAgingReport = lazy(() => import("@/pages/financial/ar-aging"));
 const UnbilledWorkTracker = lazy(() => import("@/pages/financial/unbilled-work"));
+const ExpensesSwipe = lazy(() => import("@/pages/financial/expenses"));
 const Expenses = lazy(() => import("@/pages/Expenses"));
 const Mileage = lazy(() => import("@/pages/Mileage"));
 const MileageClassify = lazy(() => import("@/pages/MileageClassify"));
@@ -180,6 +181,11 @@ function Router() {
       <Route path="/financial/unbilled-work" component={() => (
         <RouteErrorBoundary>
           <UnbilledWorkTracker />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/financial/expenses" component={() => (
+        <RouteErrorBoundary>
+          <ExpensesSwipe />
         </RouteErrorBoundary>
       )} />
       <Route path="/expenses" component={() => (

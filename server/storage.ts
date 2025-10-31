@@ -456,12 +456,15 @@ export interface IStorage {
 
   createExpense(expense: InsertExpense): Promise<Expense>;
   getExpense(id: string): Promise<Expense | undefined>;
+  getExpenses(filters: { userId?: string, isApproved?: boolean, categoryId?: string, startDate?: string, endDate?: string }): Promise<Expense[]>;
   getAllExpenses(): Promise<Expense[]>;
   getExpensesPaginated(params: PaginationParams): Promise<PaginatedResult<Expense>>;
   getExpensesByJob(jobId: string): Promise<Expense[]>;
   getExpensesByJobPaginated(jobId: string, params: PaginationParams): Promise<PaginatedResult<Expense>>;
   updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined>;
+  approveExpense(id: string, approverId: string): Promise<Expense | undefined>;
   deleteExpense(id: string): Promise<boolean>;
+  autoClassifyExpense(description: string, vendor?: string, amount?: string, mileage?: number): Promise<{ categoryId: string | null, confidence: number }>;
 
   createMileageLog(log: InsertMileageLog): Promise<MileageLog>;
   getMileageLog(id: string): Promise<MileageLog | undefined>;
@@ -2226,8 +2229,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createExpense(insertExpense: InsertExpense): Promise<Expense> {
-    const result = await db.insert(expenses).values(insertExpense).returning();
-    return result[0];
+    try {
+      // Auto-classify if categoryId not provided
+      if (!insertExpense.categoryId && insertExpense.description) {
+        serverLogger.info(`[Storage/createExpense] Auto-classifying expense: ${insertExpense.description}`);
+        const classification = await this.autoClassifyExpense(
+          insertExpense.description,
+          insertExpense.ocrVendor || undefined,
+          insertExpense.amount?.toString(),
+          undefined
+        );
+        
+        if (classification.categoryId) {
+          serverLogger.info(`[Storage/createExpense] Auto-classified to category ${classification.categoryId} with ${classification.confidence}% confidence`);
+          insertExpense.categoryId = classification.categoryId;
+        }
+      }
+      
+      const result = await db.insert(expenses).values(insertExpense).returning();
+      serverLogger.info(`[Storage/createExpense] Created expense ${result[0].id} for user ${insertExpense.userId}`);
+      return result[0];
+    } catch (error) {
+      serverLogger.error(`[Storage/createExpense] Failed to create expense:`, error);
+      throw error;
+    }
   }
 
   async getExpense(id: string): Promise<Expense | undefined> {
@@ -2293,16 +2318,165 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateExpense(id: string, updates: Partial<InsertExpense>): Promise<Expense | undefined> {
-    const result = await db.update(expenses)
-      .set(updates)
-      .where(eq(expenses.id, id))
-      .returning();
-    return result[0];
+    try {
+      // Check if expense exists and is not approved
+      const existing = await this.getExpense(id);
+      if (!existing) {
+        serverLogger.warn(`[Storage/updateExpense] Expense ${id} not found`);
+        return undefined;
+      }
+      
+      // Prevent updating approved expenses
+      if (existing.approvalStatus === 'approved') {
+        serverLogger.error(`[Storage/updateExpense] Cannot update approved expense ${id}`);
+        throw new Error('Cannot update approved expense');
+      }
+      
+      const result = await db.update(expenses)
+        .set(updates)
+        .where(eq(expenses.id, id))
+        .returning();
+      
+      serverLogger.info(`[Storage/updateExpense] Updated expense ${id}`);
+      return result[0];
+    } catch (error) {
+      serverLogger.error(`[Storage/updateExpense] Failed to update expense ${id}:`, error);
+      throw error;
+    }
   }
 
   async deleteExpense(id: string): Promise<boolean> {
     const result = await db.delete(expenses).where(eq(expenses.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getExpenses(filters: { userId?: string, isApproved?: boolean, categoryId?: string, startDate?: string, endDate?: string }): Promise<Expense[]> {
+    try {
+      const conditions = [];
+      
+      // Filter by userId (inspector-scoped access)
+      if (filters.userId) {
+        conditions.push(eq(expenses.userId, filters.userId));
+      }
+      
+      // Filter by approval status
+      // Note: Schema uses approvalStatus enum, not isApproved boolean
+      if (filters.isApproved !== undefined) {
+        if (filters.isApproved === true) {
+          conditions.push(eq(expenses.approvalStatus, 'approved'));
+        } else {
+          conditions.push(sql`${expenses.approvalStatus} != 'approved'`);
+        }
+      }
+      
+      // Filter by categoryId
+      if (filters.categoryId) {
+        conditions.push(eq(expenses.categoryId, filters.categoryId));
+      }
+      
+      // Filter by date range
+      if (filters.startDate) {
+        conditions.push(gte(expenses.date, new Date(filters.startDate)));
+      }
+      if (filters.endDate) {
+        conditions.push(lte(expenses.date, new Date(filters.endDate)));
+      }
+      
+      const result = await db.select()
+        .from(expenses)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(expenses.date));
+      
+      serverLogger.info(`[Storage/getExpenses] Found ${result.length} expenses with filters:`, filters);
+      return result;
+    } catch (error) {
+      serverLogger.error(`[Storage/getExpenses] Failed to query expenses:`, error);
+      throw error;
+    }
+  }
+
+  async approveExpense(id: string, approverId: string): Promise<Expense | undefined> {
+    try {
+      // Check if expense exists
+      const existing = await this.getExpense(id);
+      if (!existing) {
+        serverLogger.warn(`[Storage/approveExpense] Expense ${id} not found`);
+        return undefined;
+      }
+      
+      // Update expense with approval details
+      const result = await db.update(expenses)
+        .set({
+          approvalStatus: 'approved',
+          approvedBy: approverId,
+          approvedAt: new Date()
+        })
+        .where(eq(expenses.id, id))
+        .returning();
+      
+      serverLogger.info(`[Storage/approveExpense] Approved expense ${id} by ${approverId}`);
+      return result[0];
+    } catch (error) {
+      serverLogger.error(`[Storage/approveExpense] Failed to approve expense ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async autoClassifyExpense(description: string, vendor?: string, amount?: string, mileage?: number): Promise<{ categoryId: string | null, confidence: number }> {
+    try {
+      // Query expense rules ordered by priority ASC (higher priority = lower number)
+      const rules = await db.select()
+        .from(expenseRules)
+        .orderBy(asc(expenseRules.priority));
+      
+      serverLogger.info(`[Storage/autoClassifyExpense] Checking ${rules.length} rules for: "${description}", vendor: "${vendor}"`);
+      
+      // Match patterns against description/vendor
+      for (const rule of rules) {
+        const pattern = rule.vendorPattern?.toLowerCase() || '';
+        const desc = description?.toLowerCase() || '';
+        const vend = vendor?.toLowerCase() || '';
+        
+        // Check if pattern matches description or vendor using case-insensitive substring match
+        // Note: Schema uses vendorPattern (varchar), not matchPatterns (text[])
+        if (pattern && (desc.includes(pattern) || vend.includes(pattern))) {
+          // Calculate confidence based on match quality
+          let confidence = 70; // Base confidence for any match
+          
+          // Boost confidence for exact vendor match
+          if (vend === pattern) {
+            confidence = 95;
+          } else if (vend.includes(pattern)) {
+            confidence = 85;
+          } else if (desc === pattern) {
+            confidence = 90;
+          } else if (desc.includes(pattern)) {
+            confidence = 75;
+          }
+          
+          serverLogger.info(`[Storage/autoClassifyExpense] Matched rule ${rule.id} (pattern: "${pattern}") with ${confidence}% confidence -> category ${rule.categoryId}`);
+          
+          return {
+            categoryId: rule.categoryId,
+            confidence
+          };
+        }
+      }
+      
+      // No match found
+      serverLogger.info(`[Storage/autoClassifyExpense] No matching rule found for: "${description}"`);
+      return {
+        categoryId: null,
+        confidence: 0
+      };
+    } catch (error) {
+      serverLogger.error(`[Storage/autoClassifyExpense] Failed to auto-classify expense:`, error);
+      // Return null result on error instead of throwing
+      return {
+        categoryId: null,
+        confidence: 0
+      };
+    }
   }
 
   async createMileageLog(insertLog: InsertMileageLog): Promise<MileageLog> {

@@ -5350,6 +5350,258 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Expense Management Routes
+  // POST /api/expenses - Create new expense with auto-classification
+  app.post("/api/expenses", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userRole = req.user.role as UserRole;
+
+      // Block partner contractors from creating expenses
+      if (userRole === 'partner_contractor') {
+        serverLogger.warn('[Expenses/Create] Partner contractor attempted to create expense', {
+          userId,
+          userRole,
+        });
+        return res.status(403).json({ 
+          message: 'Forbidden: Partner contractors cannot create expenses' 
+        });
+      }
+
+      // Validate and parse request body
+      const validated = insertExpenseSchema.parse(req.body);
+      
+      // Force userId to authenticated user for inspectors, admins can create for others
+      const expenseData = {
+        ...validated,
+        userId: userRole === 'admin' ? (validated.userId || userId) : userId,
+      };
+
+      serverLogger.info('[Expenses/Create] Creating expense', {
+        userId: expenseData.userId,
+        createdBy: userId,
+        amount: expenseData.amount,
+        description: expenseData.description,
+      });
+
+      const expense = await storage.createExpense(expenseData);
+      
+      serverLogger.info('[Expenses/Create] Expense created successfully', {
+        expenseId: expense.id,
+        userId: expense.userId,
+        categoryId: expense.categoryId,
+      });
+
+      res.status(201).json(expense);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create expense');
+      res.status(status).json({ message });
+    }
+  });
+
+  // GET /api/expenses - Query expenses with role-based filtering
+  app.get("/api/expenses", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userRole = req.user.role as UserRole;
+
+      // Block partner contractors from viewing expenses
+      if (userRole === 'partner_contractor') {
+        serverLogger.warn('[Expenses/Query] Partner contractor attempted to view expenses', {
+          userId,
+          userRole,
+        });
+        return res.status(403).json({ 
+          message: 'Forbidden: You do not have access to financial data' 
+        });
+      }
+
+      // Parse query parameters
+      const { isApproved, categoryId, startDate, endDate } = req.query;
+
+      // Build filters
+      const filters: any = {};
+      
+      // Inspectors can only see their own expenses, admins can see all
+      if (userRole === 'inspector') {
+        filters.userId = userId;
+      }
+      
+      if (isApproved !== undefined) {
+        filters.isApproved = isApproved === 'true';
+      }
+      
+      if (categoryId && typeof categoryId === 'string') {
+        filters.categoryId = categoryId;
+      }
+      
+      if (startDate && typeof startDate === 'string') {
+        filters.startDate = startDate;
+      }
+      
+      if (endDate && typeof endDate === 'string') {
+        filters.endDate = endDate;
+      }
+
+      serverLogger.info('[Expenses/Query] Fetching expenses with filters', {
+        userId,
+        userRole,
+        filters,
+      });
+
+      const expenses = await storage.getExpenses(filters);
+      
+      serverLogger.info('[Expenses/Query] Retrieved expenses', {
+        userId,
+        count: expenses.length,
+      });
+
+      res.json(expenses);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch expenses');
+      res.status(status).json({ message });
+    }
+  });
+
+  // PATCH /api/expenses/:id/approve - Admin approves expense
+  app.patch("/api/expenses/:id/approve", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const expenseId = req.params.id;
+      const approverId = req.user.id;
+
+      serverLogger.info('[Expenses/Approve] Admin approving expense', {
+        expenseId,
+        approverId,
+      });
+
+      const expense = await storage.approveExpense(expenseId, approverId);
+      
+      if (!expense) {
+        serverLogger.warn('[Expenses/Approve] Expense not found', {
+          expenseId,
+          approverId,
+        });
+        return res.status(404).json({ message: 'Expense not found' });
+      }
+
+      serverLogger.info('[Expenses/Approve] Expense approved successfully', {
+        expenseId,
+        approverId,
+        userId: expense.userId,
+      });
+
+      res.json(expense);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'approve expense');
+      res.status(status).json({ message });
+    }
+  });
+
+  // PATCH /api/expenses/:id - Update pending expense
+  app.patch("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const expenseId = req.params.id;
+      const userId = req.user.id;
+      const userRole = req.user.role as UserRole;
+
+      // Block partner contractors from updating expenses
+      if (userRole === 'partner_contractor') {
+        serverLogger.warn('[Expenses/Update] Partner contractor attempted to update expense', {
+          userId,
+          userRole,
+          expenseId,
+        });
+        return res.status(403).json({ 
+          message: 'Forbidden: Partner contractors cannot update expenses' 
+        });
+      }
+
+      // SECURITY: Restrict updates to safe fields only - NEVER allow approvalStatus, approvedBy, approvedAt, userId changes
+      // Only these fields can be updated by inspectors/admins via this endpoint
+      const safeUpdateSchema = insertExpenseSchema.pick({
+        amount: true,
+        description: true,
+        category: true,
+        categoryId: true,
+        date: true,
+        receiptUrl: true,
+        receiptPath: true,
+        ocrText: true,
+        ocrConfidence: true,
+        ocrMetadata: true,
+        ocrAmount: true,
+        ocrVendor: true,
+        ocrDate: true,
+        gpsLatitude: true,
+        gpsLongitude: true,
+        swipeClassification: true,
+        isDeductible: true,
+      }).partial();
+
+      // Validate and parse request body with restricted schema
+      const validated = safeUpdateSchema.parse(req.body);
+
+      // Check ownership for inspectors
+      if (userRole === 'inspector') {
+        const existingExpense = await storage.getExpenses({ userId });
+        const expense = existingExpense.find(e => e.id === expenseId);
+        
+        if (!expense) {
+          serverLogger.warn('[Expenses/Update] Inspector attempted to update non-existent or unauthorized expense', {
+            userId,
+            expenseId,
+          });
+          return res.status(404).json({ message: 'Expense not found' });
+        }
+
+        if (expense.userId !== userId) {
+          serverLogger.warn('[Expenses/Update] Inspector attempted to update another user\'s expense', {
+            userId,
+            expenseId,
+            expenseUserId: expense.userId,
+          });
+          return res.status(403).json({ 
+            message: 'Forbidden: You can only update your own expenses' 
+          });
+        }
+      }
+
+      serverLogger.info('[Expenses/Update] Updating expense', {
+        expenseId,
+        userId,
+        userRole,
+      });
+
+      const updatedExpense = await storage.updateExpense(expenseId, validated);
+      
+      if (!updatedExpense) {
+        serverLogger.warn('[Expenses/Update] Expense not found or cannot be updated', {
+          expenseId,
+          userId,
+        });
+        return res.status(404).json({ message: 'Expense not found or already approved' });
+      }
+
+      serverLogger.info('[Expenses/Update] Expense updated successfully', {
+        expenseId,
+        userId,
+      });
+
+      res.json(updatedExpense);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update expense');
+      res.status(status).json({ message });
+    }
+  });
+
   // Financial Reports
   app.get("/api/financial-summary", isAuthenticated, async (req: any, res) => {
     try {
