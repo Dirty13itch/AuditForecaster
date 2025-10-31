@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle, Plus } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import TopBar from "@/components/TopBar";
 import ChecklistItem from "@/components/ChecklistItem";
@@ -9,6 +9,8 @@ import BottomNav from "@/components/BottomNav";
 import { FinalTestingMeasurements } from "@/components/FinalTestingMeasurements";
 import { EnhancedPhotoGallery } from "@/components/photos/EnhancedPhotoGallery";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
+import { CompletionGate } from "@/components/CompletionGate";
+import { JobCompletionCelebration } from "@/components/JobCompletionCelebration";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { clientLogger } from "@/lib/logger";
+import { getWorkflowTemplate, type JobType } from '@shared/workflowTemplates';
 import type { ChecklistItem as ChecklistItemType, UpdateChecklistItem, Job } from "@shared/schema";
 
 export default function Inspection() {
@@ -24,6 +27,7 @@ export default function Inspection() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"workflow" | "dashboard" | "inspection" | "photos" | "forecast">("workflow");
   const [voiceNoteLoadingId, setVoiceNoteLoadingId] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   const { data: job, isLoading: isLoadingJob } = useQuery<Job>({
     queryKey: ["/api/jobs", jobId],
@@ -99,9 +103,90 @@ export default function Inspection() {
     },
   });
 
+  const completeJobMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PUT", `/api/jobs/${jobId}`, { status: 'completed' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs', jobId] });
+      setShowCelebration(true);
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Cannot Complete Job",
+        description: error.message || "Please complete all requirements first",
+      });
+    },
+  });
+
+  const createRetestMutation = useMutation({
+    mutationFn: async (testId: string) => {
+      if (!job) throw new Error("Job data not available");
+      return apiRequest("POST", "/api/jobs", {
+        name: `${job.name} - Retest`,
+        address: job.address,
+        contractor: job.contractor,
+        builderId: job.builderId,
+        inspectionType: 'Blower Door',
+        jobType: 'bdoor_retest',
+        status: 'pending',
+        notes: `Retest following failed blower door test ${testId}. Previous ACH50 exceeded 3.0.`,
+        previousTestId: testId,
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+      toast({
+        title: "Retest Job Created",
+        description: `Job "${data.name}" created successfully. Navigate to Jobs page to schedule.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to create retest job",
+      });
+    },
+  });
+
+  const handleCompleteJob = () => {
+    completeJobMutation.mutate();
+  };
+
+  const handleCreateRetestJob = (test: any) => {
+    createRetestMutation.mutate(test.id);
+  };
+
   const completedCount = checklistItems.filter((item) => item.completed).length;
   const totalCount = checklistItems.length;
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+  // Check if all workflow requirements are met
+  const canCompleteJob = job ? (() => {
+    const workflow = getWorkflowTemplate(job.inspectionType as JobType);
+    
+    // Check completion requirements
+    const requirementsMet = 
+      (!workflow.completionRequirements.allChecklistItemsCompleted || 
+        (completedCount === totalCount && totalCount > 0)) &&
+      (!workflow.completionRequirements.photoUploadRequired || 
+        job.photoUploadComplete === true) &&
+      (!workflow.completionRequirements.builderSignatureRequired || 
+        !!job.builderSignatureUrl);
+    
+    // Check required tests
+    const testsMet = workflow.requiredTests.every(test => {
+      if (test.testType === 'blower_door') return blowerDoorTests.length > 0;
+      if (test.testType === 'duct_leakage') return ductLeakageTests.length > 0;
+      if (test.testType === 'ventilation') return ventilationTests.length > 0;
+      return true;
+    });
+    
+    return requirementsMet && testsMet;
+  })() : false;
 
   const handleToggle = (id: string) => {
     const item = checklistItems.find((i) => i.id === id);
@@ -393,16 +478,96 @@ export default function Inspection() {
 
           {/* Tab Content Switching */}
           {activeTab === "workflow" && job && (
-            <WorkflowProgress
-              job={job}
-              checklistProgress={{
-                completed: completedCount,
-                total: totalCount,
-              }}
-              hasBlowerDoorTest={Array.isArray(blowerDoorTests) && blowerDoorTests.length > 0}
-              hasDuctLeakageTest={Array.isArray(ductLeakageTests) && ductLeakageTests.length > 0}
-              hasVentilationTest={Array.isArray(ventilationTests) && ventilationTests.length > 0}
-            />
+            <>
+              <WorkflowProgress
+                job={job}
+                checklistProgress={{
+                  completed: completedCount,
+                  total: totalCount,
+                }}
+                hasBlowerDoorTest={Array.isArray(blowerDoorTests) && blowerDoorTests.length > 0}
+                hasDuctLeakageTest={Array.isArray(ductLeakageTests) && ductLeakageTests.length > 0}
+                hasVentilationTest={Array.isArray(ventilationTests) && ventilationTests.length > 0}
+              />
+              
+              {/* Completion Requirements */}
+              <CompletionGate
+                job={job}
+                checklistProgress={{ completed: completedCount, total: totalCount }}
+                hasBlowerDoorTest={blowerDoorTests.length > 0}
+                hasDuctLeakageTest={ductLeakageTests.length > 0}
+                hasVentilationTest={ventilationTests.length > 0}
+              />
+
+              {/* Blower Door Test Results Display */}
+              {blowerDoorTests.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Blower Door Tests</h3>
+                  {blowerDoorTests.map((test: any) => (
+                    <div key={test.id}>
+                      <Card data-testid={`card-blower-door-test-${test.id}`}>
+                        <CardHeader>
+                          <CardTitle className="text-base">
+                            Blower Door Test - {format(parseISO(test.testDate), "MMM d, yyyy")}
+                          </CardTitle>
+                          <CardDescription>
+                            Test results for building envelope air tightness
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">ACH50</p>
+                              <p className="text-lg font-semibold">{test.ach50?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">CFM50</p>
+                              <p className="text-lg font-semibold">{test.cfm50?.toFixed(0) || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Status</p>
+                              <Badge variant={test.ach50 && test.ach50 <= 3.0 ? "default" : "destructive"}>
+                                {test.ach50 && test.ach50 <= 3.0 ? "Pass" : "Fail"}
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Retest Button for Failed Tests */}
+                      {test.ach50 && test.ach50 > 3.0 && job.status !== 'completed' && (
+                        <Card className="mt-4 border-l-4 border-l-amber-500" data-testid={`card-retest-prompt-${test.id}`}>
+                          <CardHeader>
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="w-5 h-5 text-amber-600" />
+                              <CardTitle className="text-base">Test Failed - Retest Required</CardTitle>
+                            </div>
+                            <CardDescription>
+                              ACH50 of {test.ach50.toFixed(2)} exceeds Minnesota 2020 Energy Code requirement of ≤3.0
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <Button
+                              onClick={() => handleCreateRetestJob(test)}
+                              variant="default"
+                              className="w-full"
+                              disabled={createRetestMutation.isPending}
+                              data-testid={`button-create-retest-${test.id}`}
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              {createRetestMutation.isPending ? 'Creating...' : 'Create Retest Job'}
+                            </Button>
+                            <p className="text-sm text-muted-foreground mt-2 text-center">
+                              Automatically creates bdoor_retest job with previous results linked
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {activeTab === "inspection" && (
@@ -500,6 +665,32 @@ export default function Inspection() {
                   </div>
                 </CardContent>
               </Card>
+              
+              {job?.status !== 'completed' && (
+                <Card data-testid="card-complete-job">
+                  <CardHeader>
+                    <CardTitle className="text-base">Complete Inspection</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      variant="default"
+                      disabled={!canCompleteJob}
+                      onClick={handleCompleteJob}
+                      data-testid="button-complete-job"
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Mark Job Complete
+                    </Button>
+                    {!canCompleteJob && (
+                      <p className="text-sm text-muted-foreground mt-2 text-center">
+                        Complete all workflow requirements first
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
@@ -512,6 +703,14 @@ export default function Inspection() {
       </main>
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Completion Celebration */}
+      {showCelebration && job && (
+        <JobCompletionCelebration
+          job={job}
+          onClose={() => setShowCelebration(false)}
+        />
+      )}
     </div>
   );
 }

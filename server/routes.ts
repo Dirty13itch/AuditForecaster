@@ -2293,14 +2293,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validated.builderId = undefined;
       }
 
-      // CRITICAL: Validate job update including status transition protection
-      const updateValidation = validateJobUpdate(existingJob, validated);
+      // Check if status is changing to "completed"
+      const isCompletingNow = validated.status === 'completed' && existingJob.status !== 'completed';
+
+      // Fetch completion data if completing the job
+      let completionData = undefined;
+      if (isCompletingNow) {
+        const [checklistItems, blowerDoorTests, ductLeakageTests, ventilationTests] = await Promise.all([
+          storage.getChecklistItems(req.params.id),
+          storage.getBlowerDoorTests(req.params.id),
+          storage.getDuctLeakageTests(req.params.id),
+          storage.getVentilationTests(req.params.id)
+        ]);
+        completionData = { checklistItems, blowerDoorTests, ductLeakageTests, ventilationTests };
+      }
+
+      // CRITICAL: Validate job update including status transition protection and completion requirements
+      const updateValidation = validateJobUpdate(existingJob, validated, completionData);
       if (!updateValidation.valid) {
         return res.status(400).json({ message: updateValidation.error });
       }
-
-      // Check if status is changing to "completed"
-      const isCompletingNow = validated.status === 'completed' && existingJob.status !== 'completed';
 
       // Set completedDate if not already set and job is being completed
       if (isCompletingNow && !validated.completedDate) {

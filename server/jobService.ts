@@ -7,6 +7,7 @@
 
 import type { Job, InsertJob } from "@shared/schema";
 import { serverLogger } from "./logger";
+import { getWorkflowTemplate, type JobType } from '@shared/workflowTemplates';
 
 // Job status type from schema
 export type JobStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'review';
@@ -349,13 +350,157 @@ export function validateJobCreation(job: Partial<InsertJob>): ValidationResult {
 }
 
 /**
+ * Completion Requirement Type
+ * Represents a single requirement for job completion
+ */
+export interface CompletionRequirement {
+  type: 'test' | 'photo' | 'signature' | 'checklist';
+  name: string;
+  met: boolean;
+}
+
+/**
+ * Completion Validation Result
+ * Contains overall validation status and detailed requirements
+ */
+export interface CompletionValidation {
+  canComplete: boolean;
+  requirements: CompletionRequirement[];
+  missingCount: number;
+}
+
+/**
+ * Validates that a job meets all workflow requirements before completion
+ * Returns detailed validation with list of missing requirements
+ * 
+ * @param job - The job being validated for completion
+ * @param checklistItems - Array of checklist items with completed status
+ * @param blowerDoorTests - Array of blower door test records
+ * @param ductLeakageTests - Array of duct leakage test records
+ * @param ventilationTests - Array of ventilation test records
+ * @returns CompletionValidation with canComplete status and detailed requirements
+ */
+export function validateJobCompletion(
+  job: Job,
+  checklistItems: any[],
+  blowerDoorTests: any[],
+  ductLeakageTests: any[],
+  ventilationTests: any[]
+): CompletionValidation {
+  const requirements: CompletionRequirement[] = [];
+  
+  // Get workflow template for this job type
+  // Map job.jobType to WorkflowTemplate JobType - default to 'other' if not found
+  const jobTypeMapping: Record<string, JobType> = {
+    'sv2': 'sv2',
+    'full_test': 'full_test',
+    'code_bdoor': 'code_bdoor',
+    'rough_duct': 'rough_duct',
+    'rehab': 'rehab',
+    'bdoor_retest': 'bdoor_retest',
+    'multifamily': 'multifamily',
+    'energy_star': 'energy_star',
+  };
+  
+  const mappedJobType = jobTypeMapping[job.jobType || ''] || 'other';
+  const template = getWorkflowTemplate(mappedJobType);
+  const { completionRequirements, requiredTests } = template;
+
+  // Check required tests
+  if (completionRequirements.allRequiredTestsCompleted) {
+    // Check for blower door test
+    const needsBlowerDoor = requiredTests.some(t => t.testType === 'blower_door');
+    if (needsBlowerDoor) {
+      const hasBlowerDoor = blowerDoorTests.length > 0;
+      requirements.push({
+        type: 'test',
+        name: 'Blower Door Test',
+        met: hasBlowerDoor,
+      });
+    }
+
+    // Check for duct leakage test
+    const needsDuctLeakage = requiredTests.some(t => t.testType === 'duct_leakage');
+    if (needsDuctLeakage) {
+      const hasDuctLeakage = ductLeakageTests.length > 0;
+      requirements.push({
+        type: 'test',
+        name: 'Duct Leakage Test',
+        met: hasDuctLeakage,
+      });
+    }
+
+    // Check for ventilation test
+    const needsVentilation = requiredTests.some(t => t.testType === 'ventilation');
+    if (needsVentilation) {
+      const hasVentilation = ventilationTests.length > 0;
+      requirements.push({
+        type: 'test',
+        name: 'Ventilation Test',
+        met: hasVentilation,
+      });
+    }
+  }
+
+  // Check photo upload requirement
+  if (completionRequirements.photoUploadRequired) {
+    const photosMet = job.photoUploadComplete === true;
+    requirements.push({
+      type: 'photo',
+      name: 'Photo Upload',
+      met: photosMet,
+    });
+  }
+
+  // Check builder signature requirement
+  if (completionRequirements.builderSignatureRequired) {
+    const signatureMet = job.builderSignatureUrl !== null && job.builderSignatureUrl !== undefined && job.builderSignatureUrl.length > 0;
+    requirements.push({
+      type: 'signature',
+      name: 'Builder Signature',
+      met: signatureMet,
+    });
+  }
+
+  // Check checklist items completion
+  if (completionRequirements.allChecklistItemsCompleted) {
+    const allChecklistComplete = checklistItems.length > 0 && checklistItems.every(item => item.completed === true);
+    requirements.push({
+      type: 'checklist',
+      name: 'All Checklist Items',
+      met: allChecklistComplete,
+    });
+  }
+
+  // Calculate results
+  const missingCount = requirements.filter(r => !r.met).length;
+  const canComplete = missingCount === 0;
+
+  return {
+    canComplete,
+    requirements,
+    missingCount,
+  };
+}
+
+/**
  * Job Update Validation
  * 
- * Validates job updates including status transitions
+ * Validates job updates including status transitions and workflow completion requirements
+ * 
+ * @param currentJob - The existing job record
+ * @param updates - The proposed updates
+ * @param completionData - Optional data required for completion validation (required when transitioning to 'completed')
  */
 export function validateJobUpdate(
   currentJob: Job,
-  updates: Partial<Job>
+  updates: Partial<Job>,
+  completionData?: {
+    checklistItems: any[];
+    blowerDoorTests: any[];
+    ductLeakageTests: any[];
+    ventilationTests: any[];
+  }
 ): ValidationResult {
   // Cannot update ID
   if (updates.id && updates.id !== currentJob.id) {
@@ -385,6 +530,30 @@ export function validateJobUpdate(
     );
     if (!transitionValidation.valid) {
       return transitionValidation;
+    }
+
+    // Validate workflow completion requirements when transitioning to 'completed'
+    if (updates.status === 'completed' && completionData) {
+      const mergedJob = { ...currentJob, ...updates };
+      const completionValidation = validateJobCompletion(
+        mergedJob,
+        completionData.checklistItems,
+        completionData.blowerDoorTests,
+        completionData.ductLeakageTests,
+        completionData.ventilationTests
+      );
+
+      if (!completionValidation.canComplete) {
+        const missingItems = completionValidation.requirements
+          .filter(r => !r.met)
+          .map(r => r.name)
+          .join(', ');
+        
+        return {
+          valid: false,
+          error: `Cannot complete job. Missing requirements: ${missingItems}. Please complete all required items before marking the job as complete.`,
+        };
+      }
     }
   }
 

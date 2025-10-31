@@ -165,7 +165,7 @@ export function WorkflowProgress({
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <CardTitle className="text-lg" data-testid="text-workflow-name">{workflow.displayName}</CardTitle>
+              <CardTitle className="text-lg md:text-xl" data-testid="text-workflow-name">{workflow.displayName}</CardTitle>
               <CardDescription className="mt-1" data-testid="text-workflow-description">{workflow.description}</CardDescription>
             </div>
             <Badge variant="outline" className="shrink-0" data-testid="badge-workflow-duration">
@@ -214,7 +214,7 @@ export function WorkflowProgress({
                 <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <CardTitle className="text-lg" data-testid="text-workflow-complete">
+                <CardTitle className="text-base md:text-lg" data-testid="text-workflow-complete">
                   Workflow Complete!
                 </CardTitle>
                 <CardDescription className="mt-1" data-testid="text-workflow-complete-description">
@@ -232,7 +232,7 @@ export function WorkflowProgress({
                 <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <CardTitle className="text-lg" data-testid="text-current-step-name">
+                <CardTitle className="text-base md:text-lg" data-testid="text-current-step-name">
                   Step {currentStep.stepNumber}: {currentStep.name}
                 </CardTitle>
                 <CardDescription className="mt-1" data-testid="text-current-step-description">
@@ -264,13 +264,13 @@ export function WorkflowProgress({
       {workflow.requiredTests.length > 0 && (
         <Card data-testid="card-required-tests">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
               <TestTube className="w-5 h-5" />
               Required Tests
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[300px] overflow-y-auto md:max-h-none md:overflow-visible scroll-smooth">
               {workflow.requiredTests.map((test, index) => (
                 <div 
                   key={index} 
@@ -313,13 +313,13 @@ export function WorkflowProgress({
       {/* All Steps Timeline */}
       <Card data-testid="card-steps-timeline">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-base md:text-lg flex items-center gap-2">
             <MapPin className="w-5 h-5" />
             Workflow Steps
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {workflow.steps.map((step, index) => (
               <div 
                 key={index}
@@ -363,7 +363,7 @@ export function WorkflowProgress({
       {workflow.guidanceNotes && (
         <Card className="border-l-4 border-l-amber-500 dark:border-l-amber-400" data-testid="card-guidance">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-300">
+            <CardTitle className="text-base md:text-lg flex items-center gap-2 text-amber-700 dark:text-amber-300">
               <AlertCircle className="w-5 h-5" />
               Field Inspector Guidance
             </CardTitle>

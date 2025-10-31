@@ -37,6 +37,10 @@ Core architectural decisions and features include:
 -   **Scheduled Exports System**: Production-grade automated data export system with cron scheduling, multi-format support (CSV, JSON), and email delivery.
 -   **Ventilation Testing System**: Production-grade ASHRAE 62.2 whole-house ventilation compliance testing for RESNET-certified inspectors.
 -   **Jobs Management System**: Production-grade job tracking with automated compliance evaluation, inspector assignment workflows, and billing-ready notifications.
+-   **Job-Type-Specific Workflow System**: Guided step-by-step workflows with 9 job templates (sv2, full_test, code_bdoor, rough_duct, rehab, bdoor_retest, multifamily, energy_star, other), each with custom checklists (0-52 items), required tests, photo requirements, and completion enforcement.
+-   **Workflow Completion Enforcement**: Backend validation prevents job completion until ALL workflow requirements met (tests, photos, signature, checklist), with beautiful UI feedback showing missing requirements and progress tracking.
+-   **Automated Retest Workflow**: One-click retest job creation for failed blower door tests (ACH50 > 3.0), automatically pre-filling address/builder data and linking to previous failed test for tracking.
+-   **Mobile-Optimized Workflow UI**: Touch-friendly 48px minimum touch targets, responsive typography, scrollable test lists, and grid layouts optimized for field use on mobile devices (375px+ width).
 
 ## External Dependencies
 
