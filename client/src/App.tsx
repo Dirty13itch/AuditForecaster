@@ -94,6 +94,7 @@ const MNHousingEGCCWorksheet = lazy(() => import("@/pages/compliance/MNHousingEG
 const ZERHComplianceTracker = lazy(() => import("@/pages/compliance/ZERHComplianceTracker"));
 const BenchmarkingDeadlineTracker = lazy(() => import("@/pages/compliance/BenchmarkingDeadlineTracker"));
 const ComplianceDocumentsLibrary = lazy(() => import("@/pages/compliance/ComplianceDocumentsLibrary"));
+const ComplianceHub = lazy(() => import("@/pages/ComplianceHub"));
 
 const LoadingFallback = () => (
   <div className="flex h-full items-center justify-center">
@@ -475,6 +476,11 @@ function Router() {
       <Route path="/notification-test" component={() => (
         <RouteErrorBoundary>
           <NotificationTest />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/compliance" component={() => (
+        <RouteErrorBoundary>
+          <ComplianceHub />
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/multifamily-setup" component={() => (

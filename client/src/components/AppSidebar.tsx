@@ -83,6 +83,11 @@ const menuItems = [
     icon: Target,
   },
   {
+    title: "Compliance",
+    url: "/compliance",
+    icon: ShieldCheck,
+  },
+  {
     title: "Financials",
     url: "/financials",
     icon: DollarSign,
