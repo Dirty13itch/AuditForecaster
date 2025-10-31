@@ -290,6 +290,7 @@ export const jobs = pgTable("jobs", {
   assignedBy: varchar("assigned_by").references(() => users.id, { onDelete: 'set null' }),
   estimatedDuration: integer("estimated_duration"), // Duration in minutes
   territory: text("territory"), // Geographic zone/territory
+  previousTestId: varchar("previous_test_id"), // Link to failed test for retest jobs
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
   index("idx_jobs_plan_id").on(table.planId),

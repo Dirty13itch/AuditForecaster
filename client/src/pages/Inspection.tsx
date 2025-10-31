@@ -58,16 +58,40 @@ export default function Inspection() {
   // Query for test data to determine workflow progress
   const { data: blowerDoorTests = [] } = useQuery({
     queryKey: ["/api/blower-door-tests", jobId],
+    queryFn: async () => {
+      if (!jobId) throw new Error("Job ID is required");
+      const response = await fetch(`/api/blower-door-tests?jobId=${jobId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch blower door tests");
+      return response.json();
+    },
     enabled: !!jobId,
   });
 
   const { data: ductLeakageTests = [] } = useQuery({
     queryKey: ["/api/duct-leakage-tests", jobId],
+    queryFn: async () => {
+      if (!jobId) throw new Error("Job ID is required");
+      const response = await fetch(`/api/duct-leakage-tests?jobId=${jobId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch duct leakage tests");
+      return response.json();
+    },
     enabled: !!jobId,
   });
 
   const { data: ventilationTests = [] } = useQuery({
     queryKey: ["/api/ventilation-tests", jobId],
+    queryFn: async () => {
+      if (!jobId) throw new Error("Job ID is required");
+      const response = await fetch(`/api/ventilation-tests?jobId=${jobId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch ventilation tests");
+      return response.json();
+    },
     enabled: !!jobId,
   });
 
@@ -518,16 +542,16 @@ export default function Inspection() {
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div>
                               <p className="text-sm text-muted-foreground">ACH50</p>
-                              <p className="text-lg font-semibold">{test.ach50?.toFixed(2) || 'N/A'}</p>
+                              <p className="text-lg font-semibold">{test.ach50 ? Number(test.ach50).toFixed(2) : 'N/A'}</p>
                             </div>
                             <div>
                               <p className="text-sm text-muted-foreground">CFM50</p>
-                              <p className="text-lg font-semibold">{test.cfm50?.toFixed(0) || 'N/A'}</p>
+                              <p className="text-lg font-semibold">{test.cfm50 ? Number(test.cfm50).toFixed(0) : 'N/A'}</p>
                             </div>
                             <div>
                               <p className="text-sm text-muted-foreground">Status</p>
-                              <Badge variant={test.ach50 && test.ach50 <= 3.0 ? "default" : "destructive"}>
-                                {test.ach50 && test.ach50 <= 3.0 ? "Pass" : "Fail"}
+                              <Badge variant={test.ach50 && Number(test.ach50) <= 3.0 ? "default" : "destructive"}>
+                                {test.ach50 && Number(test.ach50) <= 3.0 ? "Pass" : "Fail"}
                               </Badge>
                             </div>
                           </div>
@@ -535,7 +559,7 @@ export default function Inspection() {
                       </Card>
 
                       {/* Retest Button for Failed Tests */}
-                      {test.ach50 && test.ach50 > 3.0 && job.status !== 'completed' && (
+                      {test.ach50 && Number(test.ach50) > 3.0 && job.status !== 'completed' && (
                         <Card className="mt-4 border-l-4 border-l-amber-500" data-testid={`card-retest-prompt-${test.id}`}>
                           <CardHeader>
                             <div className="flex items-center gap-2">
@@ -543,7 +567,7 @@ export default function Inspection() {
                               <CardTitle className="text-base">Test Failed - Retest Required</CardTitle>
                             </div>
                             <CardDescription>
-                              ACH50 of {test.ach50.toFixed(2)} exceeds Minnesota 2020 Energy Code requirement of ≤3.0
+                              ACH50 of {Number(test.ach50).toFixed(2)} exceeds Minnesota 2020 Energy Code requirement of ≤3.0
                             </CardDescription>
                           </CardHeader>
                           <CardContent>
