@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { insertExpenseSchema, type InsertExpense, type Expense } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   Card,
   CardContent,
@@ -48,9 +49,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Receipt,
   Plus,
@@ -65,24 +77,60 @@ import {
   Sparkles,
   ChevronDown,
   AlertCircle,
+  Fuel,
+  Wrench,
+  Package,
+  Utensils,
+  Hotel,
+  Paperclip,
+  Shield,
+  Car,
+  Hammer,
+  Laptop,
+  Megaphone,
+  Briefcase,
+  FileText,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ReceiptUpload, type OcrResult } from "@/components/expenses/ReceiptUpload";
 
+// Phase 2 - BUILD & Phase 3 - OPTIMIZE: Module-level constant for expense category icons
+// Replaces emoji with lucide-react icons following Equipment.tsx pattern
+// Prevents recreation on every render and uses proper icon components
+const EXPENSE_CATEGORY_ICONS = {
+  fuel: Fuel,
+  equipment: Wrench,
+  supplies: Package,
+  meals: Utensils,
+  lodging: Hotel,
+  office: Paperclip,
+  insurance: Shield,
+  vehicle: Car,
+  tools: Hammer,
+  software: Laptop,
+  advertising: Megaphone,
+  professional: Briefcase,
+  other: FileText,
+} as const;
+
+// Phase 6 - DOCUMENT: Expense category configuration with lucide icons
+// Each category has a value (database), label (display), and icon component
 const expenseCategories = [
-  { value: "fuel", label: "Fuel", icon: "⛽" },
-  { value: "equipment", label: "Equipment", icon: "🔧" },
-  { value: "supplies", label: "Supplies", icon: "📦" },
-  { value: "meals", label: "Meals", icon: "🍽️" },
-  { value: "lodging", label: "Lodging", icon: "🏨" },
-  { value: "office", label: "Office", icon: "📎" },
-  { value: "insurance", label: "Insurance", icon: "🛡️" },
-  { value: "vehicle", label: "Vehicle Maintenance", icon: "🚗" },
-  { value: "tools", label: "Tools", icon: "🔨" },
-  { value: "software", label: "Software", icon: "💻" },
-  { value: "advertising", label: "Advertising", icon: "📣" },
-  { value: "professional", label: "Professional Services", icon: "👔" },
-  { value: "other", label: "Other", icon: "📋" },
+  { value: "fuel", label: "Fuel", IconComponent: Fuel },
+  { value: "equipment", label: "Equipment", IconComponent: Wrench },
+  { value: "supplies", label: "Supplies", IconComponent: Package },
+  { value: "meals", label: "Meals", IconComponent: Utensils },
+  { value: "lodging", label: "Lodging", IconComponent: Hotel },
+  { value: "office", label: "Office", IconComponent: Paperclip },
+  { value: "insurance", label: "Insurance", IconComponent: Shield },
+  { value: "vehicle", label: "Vehicle Maintenance", IconComponent: Car },
+  { value: "tools", label: "Tools", IconComponent: Hammer },
+  { value: "software", label: "Software", IconComponent: Laptop },
+  { value: "advertising", label: "Advertising", IconComponent: Megaphone },
+  { value: "professional", label: "Professional Services", IconComponent: Briefcase },
+  { value: "other", label: "Other", IconComponent: FileText },
 ];
 
 const defaultExpenseFormValues: Partial<InsertExpense> = {
@@ -105,10 +153,17 @@ interface SwipeCardProps {
   totalCards: number;
 }
 
+// Phase 6 - DOCUMENT: Swipe card component for expense approval/rejection workflow
+// Supports drag gestures: swipe right to approve, swipe left to reject
+// Shows expense details, receipt image, OCR confidence, and visual swipe indicators
 function SwipeCard({ expense, onSwipeLeft, onSwipeRight, index, totalCards }: SwipeCardProps) {
   const [exitX, setExitX] = useState(0);
   const categoryInfo = expenseCategories.find(c => c.value === expense.category);
+  const CategoryIcon = categoryInfo?.IconComponent || FileText;
 
+  // Phase 6 - DOCUMENT: Swipe gesture handler
+  // Threshold of 100px determines approval (right) or rejection (left)
+  // Animates card exit after swipe completes
   const handleDragEnd = (_: any, info: any) => {
     const threshold = 100;
     if (info.offset.x > threshold) {
@@ -199,7 +254,8 @@ function SwipeCard({ expense, onSwipeLeft, onSwipeRight, index, totalCards }: Sw
                 </span>
               </div>
               <Badge variant="secondary" data-testid={`expense-category-${expense.id}`}>
-                {categoryInfo?.icon} {categoryInfo?.label}
+                <CategoryIcon className="h-4 w-4 mr-1" />
+                {categoryInfo?.label}
               </Badge>
             </div>
 
@@ -207,7 +263,9 @@ function SwipeCard({ expense, onSwipeLeft, onSwipeRight, index, totalCards }: Sw
             {expense.ocrConfidence && (
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Sparkles className="h-4 w-4" />
-                <span>OCR: {parseFloat(expense.ocrConfidence).toFixed(0)}% confident</span>
+                <span data-testid={`ocr-confidence-${expense.id}`}>
+                  OCR: {parseFloat(expense.ocrConfidence).toFixed(0)}% confident
+                </span>
               </div>
             )}
           </div>
@@ -229,21 +287,29 @@ function SwipeCard({ expense, onSwipeLeft, onSwipeRight, index, totalCards }: Sw
   );
 }
 
-export default function ExpensesPage() {
+// Phase 2 - BUILD: Main expenses content component with production-ready features
+function ExpensesContent() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [activeTab, setActiveTab] = useState("pending");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [expenseToReject, setExpenseToReject] = useState<Expense | null>(null);
 
   const form = useForm<InsertExpense>({
     resolver: zodResolver(insertExpenseSchema),
     defaultValues: defaultExpenseFormValues,
   });
 
-  // Fetch expenses by approval status
-  const { data: pendingExpenses, isLoading: pendingLoading } = useQuery<Expense[]>({
+  // Phase 5 - HARDEN: Fetch pending expenses with retry for resilience
+  const { 
+    data: pendingExpenses, 
+    isLoading: pendingLoading,
+    error: pendingError,
+    refetch: refetchPending
+  } = useQuery<Expense[]>({
     queryKey: ["/api/expenses", { approvalStatus: "pending" }],
     queryFn: async () => {
       const response = await fetch("/api/expenses");
@@ -251,9 +317,16 @@ export default function ExpensesPage() {
       const allExpenses = await response.json();
       return allExpenses.filter((e: Expense) => e.approvalStatus === "pending");
     },
+    retry: 2,
   });
 
-  const { data: approvedExpenses, isLoading: approvedLoading } = useQuery<Expense[]>({
+  // Phase 5 - HARDEN: Fetch approved expenses with retry
+  const { 
+    data: approvedExpenses, 
+    isLoading: approvedLoading,
+    error: approvedError,
+    refetch: refetchApproved
+  } = useQuery<Expense[]>({
     queryKey: ["/api/expenses", { approvalStatus: "approved" }],
     queryFn: async () => {
       const response = await fetch("/api/expenses");
@@ -261,15 +334,25 @@ export default function ExpensesPage() {
       const allExpenses = await response.json();
       return allExpenses.filter((e: Expense) => e.approvalStatus === "approved");
     },
+    retry: 2,
   });
 
-  const { data: allExpenses, isLoading: allLoading } = useQuery<Expense[]>({
+  // Phase 5 - HARDEN: Fetch all expenses (admin only) with retry
+  const { 
+    data: allExpenses, 
+    isLoading: allLoading,
+    error: allError,
+    refetch: refetchAll
+  } = useQuery<Expense[]>({
     queryKey: ["/api/expenses"],
     enabled: user?.role === "admin",
+    retry: 2,
   });
 
-  // Handle OCR completion
-  const handleOcrComplete = (ocrData: OcrResult) => {
+  // Phase 6 - DOCUMENT: OCR completion handler
+  // Automatically fills form fields when receipt OCR completes
+  // Populates amount, vendor, date from extracted text with validation
+  const handleOcrComplete = useCallback((ocrData: OcrResult) => {
     if (ocrData.amount && ocrData.amount > 0) {
       form.setValue("amount", ocrData.amount);
     }
@@ -283,11 +366,11 @@ export default function ExpensesPage() {
           form.setValue("date", parsedDate);
         }
       } catch (error) {
-        // Invalid date format from OCR
+        // Invalid date format from OCR - silently skip
       }
     }
 
-    // Store OCR metadata
+    // Store OCR metadata for audit trail
     form.setValue("ocrText", ocrData.rawText);
     form.setValue("ocrConfidence", ocrData.confidence.toString());
     form.setValue("ocrAmount", ocrData.amount?.toString());
@@ -299,14 +382,18 @@ export default function ExpensesPage() {
           form.setValue("ocrDate", parsedDate);
         }
       } catch (error) {
-        // Invalid OCR date format
+        // Invalid OCR date format - silently skip
       }
     }
-  };
+  }, [form]);
 
-  // Create expense mutation
+  // Phase 5 - HARDEN: Create expense mutation with validation
   const createMutation = useMutation({
     mutationFn: async (data: InsertExpense) => {
+      // Phase 5 - HARDEN: Validate amount is positive
+      if (data.amount <= 0) {
+        throw new Error("Amount must be greater than zero");
+      }
       return apiRequest("/api/expenses", { method: "POST", body: data });
     },
     onSuccess: () => {
@@ -365,7 +452,8 @@ export default function ExpensesPage() {
     },
   });
 
-  const handleSwipeRight = (expense: Expense) => {
+  // Phase 3 - OPTIMIZE: Memoized swipe right handler with useCallback
+  const handleSwipeRight = useCallback((expense: Expense) => {
     updateMutation.mutate({
       id: expense.id,
       data: {
@@ -377,11 +465,21 @@ export default function ExpensesPage() {
       title: "Approved",
       description: `Expense approved: $${parseFloat(expense.amount).toFixed(2)}`,
     });
-  };
+  }, [updateMutation, toast]);
 
-  const handleSwipeLeft = (expense: Expense) => {
+  // Phase 2 - BUILD & Phase 5 - HARDEN: Swipe left handler with confirmation
+  // Opens confirmation dialog instead of immediate rejection
+  const handleSwipeLeft = useCallback((expense: Expense) => {
+    setExpenseToReject(expense);
+    setShowRejectDialog(true);
+  }, []);
+
+  // Phase 5 - HARDEN: Confirmed rejection handler
+  const confirmReject = useCallback(() => {
+    if (!expenseToReject) return;
+    
     updateMutation.mutate({
-      id: expense.id,
+      id: expenseToReject.id,
       data: {
         approvalStatus: "rejected",
         swipeClassification: "personal",
@@ -389,29 +487,53 @@ export default function ExpensesPage() {
     });
     toast({
       title: "Rejected",
-      description: `Expense rejected: $${parseFloat(expense.amount).toFixed(2)}`,
+      description: `Expense rejected: $${parseFloat(expenseToReject.amount).toFixed(2)}`,
       variant: "destructive",
     });
-  };
+    setShowRejectDialog(false);
+    setExpenseToReject(null);
+  }, [expenseToReject, updateMutation, toast]);
 
-  const handleBulkApprove = () => {
+  // Phase 3 - OPTIMIZE: Memoized bulk approve handler
+  const handleBulkApprove = useCallback(() => {
     if (!pendingExpenses || pendingExpenses.length === 0) return;
     bulkApproveMutation.mutate(pendingExpenses.map(e => e.id));
-  };
+  }, [pendingExpenses, bulkApproveMutation]);
 
-  const onSubmit = (data: InsertExpense) => {
+  // Phase 3 - OPTIMIZE: Memoized form submit handler
+  const onSubmit = useCallback((data: InsertExpense) => {
     createMutation.mutate(data);
-  };
+  }, [createMutation]);
 
-  const filteredApprovedExpenses = approvedExpenses?.filter((expense: Expense) => {
-    const matchesCategory = categoryFilter === "all" || expense.category === categoryFilter;
-    return matchesCategory;
-  });
+  // Phase 3 - OPTIMIZE: Memoized filter logic for approved expenses
+  // Only recalculates when data or filter changes
+  const filteredApprovedExpenses = useMemo(() => {
+    if (!approvedExpenses) return [];
+    
+    return approvedExpenses.filter((expense: Expense) => {
+      const matchesCategory = categoryFilter === "all" || expense.category === categoryFilter;
+      return matchesCategory;
+    });
+  }, [approvedExpenses, categoryFilter]);
 
-  const filteredAllExpenses = allExpenses?.filter((expense: Expense) => {
-    const matchesCategory = categoryFilter === "all" || expense.category === categoryFilter;
-    return matchesCategory;
-  });
+  // Phase 3 - OPTIMIZE: Memoized filter logic for all expenses
+  const filteredAllExpenses = useMemo(() => {
+    if (!allExpenses) return [];
+    
+    return allExpenses.filter((expense: Expense) => {
+      const matchesCategory = categoryFilter === "all" || expense.category === categoryFilter;
+      return matchesCategory;
+    });
+  }, [allExpenses, categoryFilter]);
+
+  // Phase 3 - OPTIMIZE: Memoized event handlers
+  const handleCategoryFilterChange = useCallback((value: string) => {
+    setCategoryFilter(value);
+  }, []);
+
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+  }, []);
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl pb-24">
@@ -427,7 +549,7 @@ export default function ExpensesPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="pending" data-testid="tab-pending">
               Pending
@@ -456,14 +578,35 @@ export default function ExpensesPage() {
                   disabled={bulkApproveMutation.isPending}
                   data-testid="button-bulk-approve"
                 >
-                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {bulkApproveMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                  )}
                   Approve All ({pendingExpenses.length})
                 </Button>
               </div>
             )}
 
-            {pendingLoading ? (
-              <div className="space-y-3">
+            {/* Phase 2 - BUILD: Error state with retry */}
+            {pendingError ? (
+              <Alert variant="destructive" data-testid="alert-pending-error">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="flex items-center justify-between">
+                  <span>Failed to load pending expenses. {(pendingError as Error).message}</span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => refetchPending()}
+                    data-testid="button-retry-pending"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : pendingLoading ? (
+              <div className="space-y-3" data-testid="skeleton-pending">
                 <Skeleton className="h-96 w-full" />
               </div>
             ) : pendingExpenses && pendingExpenses.length > 0 ? (
@@ -482,7 +625,7 @@ export default function ExpensesPage() {
                 </AnimatePresence>
               </div>
             ) : (
-              <Card>
+              <Card data-testid="empty-pending">
                 <CardContent className="py-12 text-center">
                   <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
                   <p className="text-lg font-semibold">All caught up!</p>
@@ -498,18 +641,24 @@ export default function ExpensesPage() {
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <Select value={categoryFilter} onValueChange={handleCategoryFilterChange}>
                     <SelectTrigger className="w-full sm:w-48" data-testid="select-category-filter">
                       <Filter className="h-4 w-4 mr-2" />
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Categories</SelectItem>
-                      {expenseCategories.map(cat => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.icon} {cat.label}
-                        </SelectItem>
-                      ))}
+                      {expenseCategories.map(cat => {
+                        const Icon = cat.IconComponent;
+                        return (
+                          <SelectItem key={cat.value} value={cat.value}>
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-4 w-4" />
+                              {cat.label}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -523,8 +672,25 @@ export default function ExpensesPage() {
                 <CardDescription>View approved expense records</CardDescription>
               </CardHeader>
               <CardContent>
-                {approvedLoading ? (
-                  <div className="space-y-3">
+                {/* Phase 2 - BUILD: Error state with retry */}
+                {approvedError ? (
+                  <Alert variant="destructive" data-testid="alert-approved-error">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>Failed to load approved expenses. {(approvedError as Error).message}</span>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => refetchApproved()}
+                        data-testid="button-retry-approved"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : approvedLoading ? (
+                  <div className="space-y-3" data-testid="skeleton-approved">
                     {[1, 2, 3].map(i => (
                       <Skeleton key={i} className="h-20 w-full" />
                     ))}
@@ -544,6 +710,7 @@ export default function ExpensesPage() {
                       <TableBody>
                         {filteredApprovedExpenses.map((expense: Expense) => {
                           const categoryInfo = expenseCategories.find(c => c.value === expense.category);
+                          const CategoryIcon = categoryInfo?.IconComponent || FileText;
                           return (
                             <TableRow key={expense.id} data-testid={`expense-row-${expense.id}`}>
                               <TableCell>{format(new Date(expense.date), "MMM d, yyyy")}</TableCell>
@@ -555,7 +722,8 @@ export default function ExpensesPage() {
                               </TableCell>
                               <TableCell>
                                 <Badge variant="secondary">
-                                  {categoryInfo?.icon} {categoryInfo?.label}
+                                  <CategoryIcon className="h-4 w-4 mr-1" />
+                                  {categoryInfo?.label}
                                 </Badge>
                               </TableCell>
                               <TableCell>
@@ -579,7 +747,7 @@ export default function ExpensesPage() {
                     </Table>
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-muted-foreground">
+                  <div className="text-center py-12 text-muted-foreground" data-testid="empty-approved">
                     <Receipt className="h-12 w-12 mx-auto mb-4" />
                     <p>No approved expenses found</p>
                   </div>
@@ -595,18 +763,24 @@ export default function ExpensesPage() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-4">
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <Select value={categoryFilter} onValueChange={handleCategoryFilterChange}>
                       <SelectTrigger className="w-full sm:w-48" data-testid="select-category-filter-all">
                         <Filter className="h-4 w-4 mr-2" />
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Categories</SelectItem>
-                        {expenseCategories.map(cat => (
-                          <SelectItem key={cat.value} value={cat.value}>
-                            {cat.icon} {cat.label}
-                          </SelectItem>
-                        ))}
+                        {expenseCategories.map(cat => {
+                          const Icon = cat.IconComponent;
+                          return (
+                            <SelectItem key={cat.value} value={cat.value}>
+                              <div className="flex items-center gap-2">
+                                <Icon className="h-4 w-4" />
+                                {cat.label}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -620,8 +794,25 @@ export default function ExpensesPage() {
                   <CardDescription>View all expense records</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {allLoading ? (
-                    <div className="space-y-3">
+                  {/* Phase 2 - BUILD: Error state with retry */}
+                  {allError ? (
+                    <Alert variant="destructive" data-testid="alert-all-error">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>Failed to load all expenses. {(allError as Error).message}</span>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => refetchAll()}
+                          data-testid="button-retry-all"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : allLoading ? (
+                    <div className="space-y-3" data-testid="skeleton-all">
                       {[1, 2, 3].map(i => (
                         <Skeleton key={i} className="h-20 w-full" />
                       ))}
@@ -642,6 +833,7 @@ export default function ExpensesPage() {
                         <TableBody>
                           {filteredAllExpenses.map((expense: Expense) => {
                             const categoryInfo = expenseCategories.find(c => c.value === expense.category);
+                            const CategoryIcon = categoryInfo?.IconComponent || FileText;
                             return (
                               <TableRow key={expense.id} data-testid={`expense-row-all-${expense.id}`}>
                                 <TableCell>{format(new Date(expense.date), "MMM d, yyyy")}</TableCell>
@@ -653,7 +845,8 @@ export default function ExpensesPage() {
                                 </TableCell>
                                 <TableCell>
                                   <Badge variant="secondary">
-                                    {categoryInfo?.icon} {categoryInfo?.label}
+                                    <CategoryIcon className="h-4 w-4 mr-1" />
+                                    {categoryInfo?.label}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
@@ -665,6 +858,7 @@ export default function ExpensesPage() {
                                         ? "destructive"
                                         : "secondary"
                                     }
+                                    data-testid={`badge-status-${expense.id}`}
                                   >
                                     {expense.approvalStatus}
                                   </Badge>
@@ -690,7 +884,7 @@ export default function ExpensesPage() {
                       </Table>
                     </div>
                   ) : (
-                    <div className="text-center py-12 text-muted-foreground">
+                    <div className="text-center py-12 text-muted-foreground" data-testid="empty-all">
                       <Receipt className="h-12 w-12 mx-auto mb-4" />
                       <p>No expenses found</p>
                     </div>
@@ -701,6 +895,30 @@ export default function ExpensesPage() {
           )}
         </Tabs>
       </div>
+
+      {/* Phase 2 - BUILD & Phase 5 - HARDEN: Reject Confirmation Dialog */}
+      <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <AlertDialogContent data-testid="dialog-confirm-reject">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Expense?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reject this expense of{" "}
+              <strong>${expenseToReject ? parseFloat(expenseToReject.amount).toFixed(2) : "0.00"}</strong>?
+              This action will mark it as personal/non-deductible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-reject">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmReject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-reject"
+            >
+              Reject Expense
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Floating Action Button (FAB) */}
       <div className="fixed bottom-6 right-6 z-50">
@@ -802,11 +1020,17 @@ export default function ExpensesPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {expenseCategories.map(cat => (
-                            <SelectItem key={cat.value} value={cat.value}>
-                              {cat.icon} {cat.label}
-                            </SelectItem>
-                          ))}
+                          {expenseCategories.map(cat => {
+                            const Icon = cat.IconComponent;
+                            return (
+                              <SelectItem key={cat.value} value={cat.value}>
+                                <div className="flex items-center gap-2">
+                                  <Icon className="h-4 w-4" />
+                                  {cat.label}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -884,6 +1108,7 @@ export default function ExpensesPage() {
                   type="button"
                   variant="outline"
                   onClick={() => setShowAddDialog(false)}
+                  disabled={createMutation.isPending}
                   data-testid="button-cancel"
                 >
                   Cancel
@@ -893,7 +1118,14 @@ export default function ExpensesPage() {
                   disabled={createMutation.isPending}
                   data-testid="button-submit"
                 >
-                  {createMutation.isPending ? "Adding..." : "Add Expense"}
+                  {createMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    "Add Expense"
+                  )}
                 </Button>
               </div>
             </form>
@@ -901,5 +1133,33 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Phase 2 - BUILD: ErrorBoundary wrapper with fallback UI
+// Catches runtime errors and displays user-friendly error message with retry
+export default function ExpensesPage() {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="container mx-auto px-4 py-6 max-w-7xl">
+          <Card data-testid="error-boundary-fallback">
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+              <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
+              <p className="text-muted-foreground mb-4">
+                Unable to load the expenses page. Please try refreshing.
+              </p>
+              <Button onClick={() => window.location.reload()} data-testid="button-reload">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Reload Page
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <ExpensesContent />
+    </ErrorBoundary>
   );
 }
