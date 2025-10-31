@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format, addDays, startOfDay, endOfDay, formatDistanceToNow } from "date-fns";
@@ -57,7 +57,32 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Builder, InsertBuilder } from "@shared/schema";
+
+// Module Constants - Centralized configuration for inspector assignment and workload visualization
+const INSPECTORS = {
+  SHAUN: { id: 'shaun-id', name: 'Shaun' },
+  ERIK: { id: 'erik-id', name: 'Erik' },
+} as const;
+
+const WORKLOAD_THRESHOLDS = {
+  HIGH: 6,
+  MEDIUM: 4,
+} as const;
+
+const WORKLOAD_COLORS = {
+  HIGH: '#dc2626',
+  MEDIUM: '#eab308',
+  LOW: '#16a34a',
+} as const;
+
+const CONFIDENCE_THRESHOLDS = {
+  HIGH: 85,
+  MEDIUM: 60,
+} as const;
+
+const SYNC_INTERVAL_MS = 120000; // 2 minutes
 
 interface PendingEvent {
   id: string;
@@ -93,7 +118,7 @@ interface BulkAssignmentPayload {
   inspectorName: string;
 }
 
-export default function CalendarManagement() {
+function CalendarManagementContent() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
@@ -107,7 +132,7 @@ export default function CalendarManagement() {
   const [bulkActionConfirmOpen, setBulkActionConfirmOpen] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<'shaun' | 'erik' | 'reject' | null>(null);
 
-  // Filter states
+  // Filter states - Control event list visibility based on status, builder, type, confidence
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [builderFilter, setBuilderFilter] = useState<string>('all');
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('all');
@@ -116,7 +141,7 @@ export default function CalendarManagement() {
   const [dateRangeStart, setDateRangeStart] = useState<string>('');
   const [dateRangeEnd, setDateRangeEnd] = useState<string>('');
 
-  // Redirect non-admin users
+  // Redirect non-admin users to home page with error notification
   useEffect(() => {
     if (!authLoading && userRole !== 'admin') {
       toast({
@@ -128,8 +153,9 @@ export default function CalendarManagement() {
     }
   }, [userRole, authLoading, navigate, toast]);
 
-  // Fetch pending events with filters
-  const buildQueryString = () => {
+  // Memoized query string builder - Constructs URL params from filter state
+  // Prevents unnecessary rebuilds on every render
+  const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (statusFilter !== 'all') params.append('status', statusFilter);
     if (builderFilter === 'unmatched') {
@@ -138,17 +164,19 @@ export default function CalendarManagement() {
       params.append('builderId', builderFilter);
     }
     if (jobTypeFilter !== 'all') params.append('jobType', jobTypeFilter);
+    
+    // Map confidence filter to min/max confidence score ranges
     if (confidenceFilter !== 'all') {
       switch (confidenceFilter) {
         case 'high':
-          params.append('minConfidence', '85');
+          params.append('minConfidence', String(CONFIDENCE_THRESHOLDS.HIGH));
           break;
         case 'medium':
-          params.append('minConfidence', '60');
-          params.append('maxConfidence', '85');
+          params.append('minConfidence', String(CONFIDENCE_THRESHOLDS.MEDIUM));
+          params.append('maxConfidence', String(CONFIDENCE_THRESHOLDS.HIGH));
           break;
         case 'low':
-          params.append('maxConfidence', '60');
+          params.append('maxConfidence', String(CONFIDENCE_THRESHOLDS.MEDIUM));
           params.append('minConfidence', '1');
           break;
         case 'unmatched':
@@ -160,25 +188,32 @@ export default function CalendarManagement() {
     if (dateRangeEnd) params.append('endDate', dateRangeEnd);
     if (sortBy) params.append('sort', sortBy);
     return params.toString();
-  };
+  }, [statusFilter, builderFilter, jobTypeFilter, confidenceFilter, dateRangeStart, dateRangeEnd, sortBy]);
 
-  const { data: pendingEvents = [], isLoading: eventsLoading, refetch: refetchEvents } = useQuery<PendingEvent[]>({
-    queryKey: ['/api/pending-events', buildQueryString()],
-    refetchInterval: 120000, // 2 minutes
+  // Fetch pending events with retry for reliability
+  const { data: pendingEvents = [], isLoading: eventsLoading, error: eventsError, refetch: refetchEvents } = useQuery<PendingEvent[]>({
+    queryKey: ['/api/pending-events', queryString],
+    refetchInterval: SYNC_INTERVAL_MS,
+    retry: 2,
   });
 
-  const { data: builders = [] } = useQuery<Builder[]>({
+  // Fetch builders list with retry
+  const { data: builders = [], error: buildersError } = useQuery<Builder[]>({
     queryKey: ['/api/builders'],
+    retry: 2,
   });
 
-  const weekStart = startOfDay(new Date());
-  const weekEnd = endOfDay(addDays(weekStart, 6));
+  // Calculate 7-day workload window for inspector assignment decisions
+  const weekStart = useMemo(() => startOfDay(new Date()), []);
+  const weekEnd = useMemo(() => endOfDay(addDays(weekStart, 6)), [weekStart]);
 
-  const { data: weeklyWorkload = [] } = useQuery<WeeklyWorkloadData[]>({
+  // Fetch weekly workload data with retry
+  const { data: weeklyWorkload = [], error: workloadError } = useQuery<WeeklyWorkloadData[]>({
     queryKey: ['/api/weekly-workload', format(weekStart, 'yyyy-MM-dd'), format(weekEnd, 'yyyy-MM-dd')],
+    retry: 2,
   });
 
-  // Sync now mutation
+  // Sync calendar events from Google Calendar
   const syncMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest('POST', '/api/calendar/sync-now');
@@ -202,7 +237,7 @@ export default function CalendarManagement() {
     },
   });
 
-  // Assign event mutation
+  // Assign individual event to inspector
   const assignMutation = useMutation({
     mutationFn: async ({ eventId, payload }: { eventId: string; payload: AssignmentPayload }) => {
       const res = await apiRequest('POST', `/api/pending-events/${eventId}/assign`, payload);
@@ -227,7 +262,7 @@ export default function CalendarManagement() {
     },
   });
 
-  // Bulk assign mutation
+  // Bulk assign multiple events to inspector
   const bulkAssignMutation = useMutation({
     mutationFn: async (payload: BulkAssignmentPayload) => {
       const res = await apiRequest('POST', '/api/pending-events/bulk-assign', payload);
@@ -251,7 +286,7 @@ export default function CalendarManagement() {
     },
   });
 
-  // Create builder and assign mutation
+  // Create new builder and assign event in single transaction
   const createBuilderAndAssignMutation = useMutation({
     mutationFn: async ({ builderData, eventId, inspectorId, inspectorName }: {
       builderData: InsertBuilder;
@@ -289,34 +324,35 @@ export default function CalendarManagement() {
     },
   });
 
-  // Sync on mount
+  // Trigger initial sync on component mount
   useEffect(() => {
     syncMutation.mutate();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSyncNow = () => {
+  // Stable handler references with useCallback to prevent child re-renders
+  const handleSyncNow = useCallback(() => {
     syncMutation.mutate();
-  };
+  }, [syncMutation]);
 
-  const handleAssignToInspector = (eventId: string, inspectorId: string, inspectorName: string) => {
+  const handleAssignToInspector = useCallback((eventId: string, inspectorId: string, inspectorName: string) => {
     assignMutation.mutate({
       eventId,
       payload: { inspectorId, inspectorName },
     });
-  };
+  }, [assignMutation]);
 
-  const handleBulkAssign = () => {
+  const handleBulkAssign = useCallback(() => {
     if (!bulkActionType) return;
 
     let inspectorId = '';
     let inspectorName = '';
 
     if (bulkActionType === 'shaun') {
-      inspectorId = 'shaun-id';
-      inspectorName = 'Shaun';
+      inspectorId = INSPECTORS.SHAUN.id;
+      inspectorName = INSPECTORS.SHAUN.name;
     } else if (bulkActionType === 'erik') {
-      inspectorId = 'erik-id';
-      inspectorName = 'Erik';
+      inspectorId = INSPECTORS.ERIK.id;
+      inspectorName = INSPECTORS.ERIK.name;
     }
 
     if (bulkActionType === 'reject') {
@@ -334,65 +370,100 @@ export default function CalendarManagement() {
       inspectorName,
     });
     setBulkActionConfirmOpen(false);
-  };
+  }, [bulkActionType, selectedEventIds, bulkAssignMutation, toast]);
 
-  const handleSelectAll = (checked: boolean) => {
+  const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
       const allIds = new Set(pendingEvents.filter(e => e.status === 'pending').map(e => e.id));
       setSelectedEventIds(allIds);
     } else {
       setSelectedEventIds(new Set());
     }
-  };
+  }, [pendingEvents]);
 
-  const handleSelectEvent = (eventId: string, checked: boolean) => {
-    const newSelected = new Set(selectedEventIds);
-    if (checked) {
-      newSelected.add(eventId);
-    } else {
-      newSelected.delete(eventId);
-    }
-    setSelectedEventIds(newSelected);
-  };
+  const handleSelectEvent = useCallback((eventId: string, checked: boolean) => {
+    setSelectedEventIds(prev => {
+      const newSelected = new Set(prev);
+      if (checked) {
+        newSelected.add(eventId);
+      } else {
+        newSelected.delete(eventId);
+      }
+      return newSelected;
+    });
+  }, []);
 
-  const getConfidenceBadge = (score: number, matched: boolean) => {
+  // Memoized confidence badge renderer - Returns appropriate badge based on match score
+  const getConfidenceBadge = useCallback((score: number, matched: boolean) => {
     if (!matched || score === 0) {
-      return <Badge variant="secondary" data-testid={`badge-confidence-unmatched`}>Unmatched</Badge>;
+      return <Badge variant="secondary" data-testid="badge-confidence-unmatched">Unmatched</Badge>;
     }
-    if (score > 85) {
-      return <Badge className="bg-green-600 hover:bg-green-700" data-testid={`badge-confidence-high`}>High ({score}%)</Badge>;
+    if (score > CONFIDENCE_THRESHOLDS.HIGH) {
+      return <Badge className="bg-green-600 hover:bg-green-700" data-testid="badge-confidence-high">High ({score}%)</Badge>;
     }
-    if (score >= 60) {
-      return <Badge className="bg-yellow-600 hover:bg-yellow-700" data-testid={`badge-confidence-medium`}>Medium ({score}%)</Badge>;
+    if (score >= CONFIDENCE_THRESHOLDS.MEDIUM) {
+      return <Badge className="bg-yellow-600 hover:bg-yellow-700" data-testid="badge-confidence-medium">Medium ({score}%)</Badge>;
     }
-    return <Badge className="bg-red-600 hover:bg-red-700" data-testid={`badge-confidence-low`}>Low ({score}%)</Badge>;
-  };
+    return <Badge className="bg-red-600 hover:bg-red-700" data-testid="badge-confidence-low">Low ({score}%)</Badge>;
+  }, []);
 
-  const getWorkloadColor = (count: number) => {
-    if (count > 6) return '#dc2626'; // red
-    if (count >= 4) return '#eab308'; // yellow
-    return '#16a34a'; // green
-  };
+  // Memoized workload color mapper - Color-codes workload chart bars by threshold
+  const getWorkloadColor = useCallback((count: number) => {
+    if (count > WORKLOAD_THRESHOLDS.HIGH) return WORKLOAD_COLORS.HIGH;
+    if (count >= WORKLOAD_THRESHOLDS.MEDIUM) return WORKLOAD_COLORS.MEDIUM;
+    return WORKLOAD_COLORS.LOW;
+  }, []);
 
+  // Show skeleton while checking auth
   if (authLoading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-6 max-w-7xl mx-auto" data-testid="container-loading">
         <Skeleton className="h-12 w-64 mb-6" />
         <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
+  // Non-admin users redirected by useEffect, return null to prevent flash
   if (userRole !== 'admin') {
     return null;
   }
 
+  // Compute event status counts for stats cards
   const pendingCount = pendingEvents.filter(e => e.status === 'pending').length;
   const assignedCount = pendingEvents.filter(e => e.status === 'assigned').length;
   const rejectedCount = pendingEvents.filter(e => e.status === 'rejected').length;
 
+  // Show error state if any critical query failed
+  if (eventsError || buildersError || workloadError) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto" data-testid="container-error">
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Error Loading Calendar Management
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              {eventsError?.message || buildersError?.message || workloadError?.message || 'Failed to load data'}
+            </p>
+            <Button onClick={() => {
+              refetchEvents();
+              syncMutation.mutate();
+            }} data-testid="button-retry-load">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6" data-testid="container-calendar-management">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -451,7 +522,7 @@ export default function CalendarManagement() {
         </Card>
       </div>
 
-      {/* Week Overview Dashboard */}
+      {/* Week Overview Dashboard - Color-coded workload chart for assignment balance */}
       <Card>
         <CardHeader>
           <CardTitle>7-Day Workload Overview</CardTitle>
@@ -480,14 +551,14 @@ export default function CalendarManagement() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+            <div className="h-[300px] flex items-center justify-center text-muted-foreground" data-testid="text-no-workload">
               No workload data available
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Filters */}
+      {/* Filters - Multi-dimensional event filtering controls */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -601,7 +672,7 @@ export default function CalendarManagement() {
         </CardContent>
       </Card>
 
-      {/* Pending Events Table */}
+      {/* Pending Events Table - Main event list with bulk selection and assignment */}
       <Card>
         <CardHeader>
           <CardTitle>Pending Events ({pendingEvents.length})</CardTitle>
@@ -609,13 +680,13 @@ export default function CalendarManagement() {
         </CardHeader>
         <CardContent>
           {eventsLoading ? (
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="container-events-loading">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
           ) : pendingEvents.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-muted-foreground" data-testid="text-no-events">
               No pending events found
             </div>
           ) : (
@@ -677,7 +748,7 @@ export default function CalendarManagement() {
                             <Button
                               size="sm"
                               variant="default"
-                              onClick={() => handleAssignToInspector(event.id, 'shaun-id', 'Shaun')}
+                              onClick={() => handleAssignToInspector(event.id, INSPECTORS.SHAUN.id, INSPECTORS.SHAUN.name)}
                               disabled={assignMutation.isPending}
                               data-testid={`button-assign-shaun-${event.id}`}
                             >
@@ -687,7 +758,7 @@ export default function CalendarManagement() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleAssignToInspector(event.id, 'erik-id', 'Erik')}
+                              onClick={() => handleAssignToInspector(event.id, INSPECTORS.ERIK.id, INSPECTORS.ERIK.name)}
                               disabled={assignMutation.isPending}
                               data-testid={`button-assign-erik-${event.id}`}
                             >
@@ -706,7 +777,7 @@ export default function CalendarManagement() {
         </CardContent>
       </Card>
 
-      {/* Bulk Action Toolbar */}
+      {/* Bulk Action Toolbar - Fixed bottom toolbar for multi-select operations */}
       {selectedEventIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
           <Card className="shadow-lg">
@@ -763,7 +834,7 @@ export default function CalendarManagement() {
         </div>
       )}
 
-      {/* Assignment Modal */}
+      {/* Assignment Modal - Detailed event review and inspector assignment */}
       <Dialog open={isAssignmentModalOpen} onOpenChange={setIsAssignmentModalOpen}>
         <DialogContent className="max-w-2xl" data-testid="dialog-assignment">
           <DialogHeader>
@@ -807,6 +878,7 @@ export default function CalendarManagement() {
                 </div>
               </div>
 
+              {/* Builder Quick-Add Prompt - Show when builder match is missing */}
               {!selectedEvent.matchedBuilderId && selectedEvent.parsedBuilderName && (
                 <div className="p-4 border border-warning rounded-md bg-warning/10">
                   <div className="flex items-start gap-3">
@@ -827,6 +899,7 @@ export default function CalendarManagement() {
                 </div>
               )}
 
+              {/* Workload Comparison - Show inspector load for selected event date */}
               <div>
                 <Label className="text-sm font-medium text-muted-foreground mb-2 block">Workload Comparison</Label>
                 <div className="grid grid-cols-2 gap-4">
@@ -870,7 +943,7 @@ export default function CalendarManagement() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => selectedEvent && handleAssignToInspector(selectedEvent.id, 'erik-id', 'Erik')}
+              onClick={() => selectedEvent && handleAssignToInspector(selectedEvent.id, INSPECTORS.ERIK.id, INSPECTORS.ERIK.name)}
               disabled={assignMutation.isPending}
               data-testid="button-assign-erik-modal"
             >
@@ -878,7 +951,7 @@ export default function CalendarManagement() {
               Assign to Erik
             </Button>
             <Button
-              onClick={() => selectedEvent && handleAssignToInspector(selectedEvent.id, 'shaun-id', 'Shaun')}
+              onClick={() => selectedEvent && handleAssignToInspector(selectedEvent.id, INSPECTORS.SHAUN.id, INSPECTORS.SHAUN.name)}
               disabled={assignMutation.isPending}
               data-testid="button-assign-shaun-modal"
             >
@@ -889,7 +962,7 @@ export default function CalendarManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Quick Add Builder Modal */}
+      {/* Quick Add Builder Modal - Inline builder creation during assignment */}
       <Dialog open={isQuickAddBuilderOpen} onOpenChange={setIsQuickAddBuilderOpen}>
         <DialogContent data-testid="dialog-quick-add-builder">
           <DialogHeader>
@@ -900,13 +973,12 @@ export default function CalendarManagement() {
             initialName={selectedEvent?.parsedBuilderName || ''}
             onSubmit={(builderData, assignTo) => {
               if (!selectedEvent) return;
-              const inspectorId = assignTo === 'shaun' ? 'shaun-id' : 'erik-id';
-              const inspectorName = assignTo === 'shaun' ? 'Shaun' : 'Erik';
+              const inspector = assignTo === 'shaun' ? INSPECTORS.SHAUN : INSPECTORS.ERIK;
               createBuilderAndAssignMutation.mutate({
                 builderData,
                 eventId: selectedEvent.id,
-                inspectorId,
-                inspectorName,
+                inspectorId: inspector.id,
+                inspectorName: inspector.name,
               });
             }}
             onCancel={() => setIsQuickAddBuilderOpen(false)}
@@ -915,7 +987,7 @@ export default function CalendarManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Action Confirmation */}
+      {/* Bulk Action Confirmation - Safety prompt before bulk operations */}
       <AlertDialog open={bulkActionConfirmOpen} onOpenChange={setBulkActionConfirmOpen}>
         <AlertDialogContent data-testid="dialog-bulk-confirm">
           <AlertDialogHeader>
@@ -945,6 +1017,7 @@ interface QuickAddBuilderFormProps {
   isLoading: boolean;
 }
 
+// QuickAddBuilderForm - Streamlined form for creating builders during event assignment
 function QuickAddBuilderForm({ initialName, onSubmit, onCancel, isLoading }: QuickAddBuilderFormProps) {
   const [name, setName] = useState(initialName);
   const [companyName, setCompanyName] = useState(initialName);
@@ -953,6 +1026,9 @@ function QuickAddBuilderForm({ initialName, onSubmit, onCancel, isLoading }: Qui
   const [abbreviations, setAbbreviations] = useState('');
 
   const handleSubmit = (assignTo: 'shaun' | 'erik') => {
+    // Validate required fields before submission
+    if (!name || !companyName) return;
+
     const builderData: InsertBuilder = {
       name,
       companyName,
@@ -1044,5 +1120,14 @@ function QuickAddBuilderForm({ initialName, onSubmit, onCancel, isLoading }: Qui
         </Button>
       </div>
     </div>
+  );
+}
+
+// Default export with ErrorBoundary wrapper for production resilience
+export default function CalendarManagement() {
+  return (
+    <ErrorBoundary>
+      <CalendarManagementContent />
+    </ErrorBoundary>
   );
 }
