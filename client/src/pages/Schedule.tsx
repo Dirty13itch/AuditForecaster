@@ -93,12 +93,13 @@ const CustomEvent = ({ event }: { event: CalendarEvent }) => {
   
   const jobTypeVisuals = getJobTypeVisuals(job.inspectionType);
   const IconComponent = getIconComponent(jobTypeVisuals.icon);
-  const syncIcon = event.resource.googleEventId ? ' 🔗' : '';
+  const isSynced = !!event.resource.googleEventId;
   
   return (
     <div className="flex items-center gap-1 px-1">
       <IconComponent className="w-3 h-3 flex-shrink-0" />
-      <span className="truncate text-xs">{event.title}{syncIcon}</span>
+      <span className="truncate text-xs">{event.title}</span>
+      {isSynced && <Cloud className="w-3 h-3 flex-shrink-0 opacity-60" />}
     </div>
   );
 };
@@ -844,7 +845,12 @@ export default function Schedule() {
   }, []);
 
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
-  }, []);
+    // Open unassigned queue sheet to allow creating a new event
+    if (isMobile) {
+      setUnassignedQueueOpen(true);
+    }
+    // Desktop users can drag-and-drop from sidebar
+  }, [isMobile]);
 
   const handleSaveEvent = useCallback(async () => {
     if (!selectedEvent) return;
