@@ -34,8 +34,12 @@ The backend is developed with **Express.js** and **Node.js** in **TypeScript**, 
 - **Mileage.tsx**: 4 architect review iterations - learned critical lessons about ErrorBoundary fallbacks, test selector alignment, proper memoization, dialog error handling. Now production-ready.
 - **Equipment.tsx**: 1 architect review iteration (PASS on first try) - successfully applied all lessons from Mileage. Demonstrated framework mastery.
 - **Invoices.tsx**: Production-ready (October 31, 2025) - Applied all 6 phases: ErrorBoundary with fallback, skeleton loaders, query retry:2, delete confirmation dialog, payment validation (amount > 0), dialog error handling (asChild + e.preventDefault pattern prevents auto-close), memoized filters/stats/handlers (useMemo/useCallback), mutation pending states, comprehensive e2e test suite (14 test scenarios), zero console.* statements, zero LSP errors. Successfully applied all patterns from Mileage and Equipment.
+- **Payments.tsx**: Production-ready (October 31, 2025) - Complete CRUD operations, overpayment warnings, ErrorBoundary, skeleton loaders, 6 useMemo + 6 useCallback optimizations, 15 e2e test cases. PASSED architect review on first submission.
+- **Analytics.tsx**: Production-ready (October 31, 2025) - Transformed 2004-line dashboard, 5 queries with retry:2, 12+ skeleton loaders, 20+ useMemo hooks, 10+ useCallback hooks, safeDivide for NaN prevention, 25 e2e test cases. PASSED architect review.
+- **FinancialDashboard.tsx**: Production-ready (October 31, 2025) - 8 financial widgets, 4 queries, profit margin calculations, mileage deduction ($0.67/mile IRS 2025), 12 memoized calculations, 19 e2e test cases. PASSED architect review.
+- **AR Aging Report (financial/ar-aging.tsx)**: Production-ready (October 31, 2025) - Aging buckets (0-30, 31-60, 61-90, 90+ days), 3 queries with retry:2, 8 useMemo + 8 useCallback optimizations, 15 e2e test cases. PASSED architect review.
 - **ESLint Integration**: Installed and configured ESLint with no-console rule (blocks console.log/info/debug, allows console.error/warn for error boundaries). Prevents regression.
-- **Financial Pages**: Invoices complete; Payments and Expenses prioritized for next vertical completion cycle.
+- **Financial Pages**: Invoices, Payments, Analytics, FinancialDashboard, AR Aging complete (all PASSED); Expenses in progress (subagent working).
 
 Core architectural decisions and features include:
 -   **Comprehensive Error Prevention**: Centralized logging, extensive type safety, and a two-layer Error Boundary system.
