@@ -114,6 +114,9 @@ export function useCalculateSampleSize() {
 /**
  * Calculate sample size for multifamily unit testing (query variant)
  * Use this for automatic calculation when unitCount changes
+ * 
+ * Phase 5 - HARDEN: retry: 2 configuration ensures resilience during
+ * network issues common in field operations
  */
 export function useSampleSize(unitCount: number | null) {
   return useQuery<{ unitCount: number; sampleSize: number; protocol: string }>({
@@ -123,6 +126,7 @@ export function useSampleSize(unitCount: number | null) {
       return await response.json();
     },
     enabled: !!unitCount && unitCount > 0,
+    retry: 2,
   });
 }
 
