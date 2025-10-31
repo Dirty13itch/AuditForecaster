@@ -89,6 +89,7 @@ import {
   type InsertBuilderRateCard,
   type Payment,
   type InsertPayment,
+  type ArSnapshot,
   type FinancialSettings,
   type InsertFinancialSettings,
   type ExpenseCategory,
@@ -197,6 +198,7 @@ import {
   invoiceLineItems,
   builderRateCards,
   payments,
+  arSnapshots,
   financialSettings,
   expenseCategories,
   expenseRules,
@@ -771,6 +773,10 @@ export interface IStorage {
   getPaymentsPaginated(params: PaginationParams): Promise<PaginatedResult<Payment>>;
   updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment | undefined>;
   deletePayment(id: string): Promise<boolean>;
+  recordPayment(data: InsertPayment): Promise<Payment>;
+  calculateARAging(builderId?: string, asOfDate?: Date): Promise<ArSnapshot[]>;
+  createARSnapshot(): Promise<void>;
+  getUnbilledWorkValue(builderId?: string): Promise<{ count: number; amount: number }>;
   
   // Invoice Line Items
   createInvoiceLineItem(lineItem: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
@@ -5177,6 +5183,261 @@ export class DatabaseStorage implements IStorage {
       .where(eq(payments.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  async recordPayment(data: InsertPayment): Promise<Payment> {
+    try {
+      serverLogger.info(`[Storage/recordPayment] Recording payment for invoice ${data.invoiceId}`, { amount: data.amount });
+      
+      // Insert payment record
+      const [payment] = await db.insert(payments)
+        .values(data)
+        .returning();
+      
+      if (!data.invoiceId) {
+        serverLogger.warn('[Storage/recordPayment] Payment created without invoice ID');
+        return payment;
+      }
+      
+      // Get invoice
+      const invoice = await this.getInvoice(data.invoiceId);
+      if (!invoice) {
+        serverLogger.error(`[Storage/recordPayment] Invoice not found: ${data.invoiceId}`);
+        return payment;
+      }
+      
+      // Calculate total payments for this invoice
+      const paymentsResult = await db.select({
+        total: sql<string>`COALESCE(SUM(${payments.amount}), 0)`
+      })
+        .from(payments)
+        .where(eq(payments.invoiceId, data.invoiceId));
+      
+      const totalPaid = parseFloat(paymentsResult[0]?.total || '0');
+      const invoiceTotal = parseFloat(invoice.total);
+      
+      serverLogger.info(`[Storage/recordPayment] Payment totals`, { 
+        totalPaid, 
+        invoiceTotal, 
+        invoiceId: data.invoiceId 
+      });
+      
+      // If fully paid, update invoice status
+      if (totalPaid >= invoiceTotal) {
+        await db.update(invoices)
+          .set({
+            status: 'paid',
+            paidAt: data.paymentDate,
+          })
+          .where(eq(invoices.id, data.invoiceId));
+        
+        serverLogger.info(`[Storage/recordPayment] Invoice marked as paid: ${data.invoiceId}`);
+      }
+      
+      return payment;
+    } catch (error) {
+      serverLogger.error('[Storage/recordPayment] Failed to record payment', { error, data });
+      throw error;
+    }
+  }
+
+  async calculateARAging(builderId?: string, asOfDate?: Date): Promise<ArSnapshot[]> {
+    try {
+      const today = asOfDate || new Date();
+      serverLogger.info('[Storage/calculateARAging] Calculating AR aging', { builderId, asOfDate: today });
+      
+      // Get unpaid invoices (status 'sent' means sent but not paid)
+      let query = db.select()
+        .from(invoices)
+        .where(eq(invoices.status, 'sent'));
+      
+      if (builderId) {
+        query = db.select()
+          .from(invoices)
+          .where(and(
+            eq(invoices.status, 'sent'),
+            eq(invoices.builderId, builderId)
+          ));
+      }
+      
+      const unpaidInvoices = await query;
+      
+      // Group by builder and calculate aging buckets
+      const builderArMap = new Map<string, {
+        builderId: string;
+        current: number;
+        days30: number;
+        days60: number;
+        days90Plus: number;
+        totalAR: number;
+      }>();
+      
+      for (const invoice of unpaidInvoices) {
+        // Calculate days overdue from invoice date
+        const invoiceDate = new Date(invoice.invoiceDate);
+        const daysSince = Math.floor((today.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // Get payments for this invoice
+        const paymentsResult = await db.select({
+          total: sql<string>`COALESCE(SUM(${payments.amount}), 0)`
+        })
+          .from(payments)
+          .where(eq(payments.invoiceId, invoice.id));
+        
+        const paidAmount = parseFloat(paymentsResult[0]?.total || '0');
+        const invoiceTotal = parseFloat(invoice.total);
+        const balance = invoiceTotal - paidAmount;
+        
+        // Skip if fully paid (shouldn't happen if status is 'sent')
+        if (balance <= 0) continue;
+        
+        // Get or create builder AR entry
+        let builderAr = builderArMap.get(invoice.builderId);
+        if (!builderAr) {
+          builderAr = {
+            builderId: invoice.builderId,
+            current: 0,
+            days30: 0,
+            days60: 0,
+            days90Plus: 0,
+            totalAR: 0,
+          };
+          builderArMap.set(invoice.builderId, builderAr);
+        }
+        
+        // Bucket the balance based on days
+        if (daysSince < 30) {
+          builderAr.current += balance;
+        } else if (daysSince < 60) {
+          builderAr.days30 += balance;
+        } else if (daysSince < 90) {
+          builderAr.days60 += balance;
+        } else {
+          builderAr.days90Plus += balance;
+        }
+        
+        builderAr.totalAR += balance;
+      }
+      
+      // Convert map to array of ArSnapshot objects
+      const arSnapshots: ArSnapshot[] = Array.from(builderArMap.values()).map(ar => ({
+        id: '', // Will be generated on insert
+        snapshotDate: today.toISOString().split('T')[0],
+        builderId: ar.builderId,
+        current: ar.current.toFixed(2),
+        days30: ar.days30.toFixed(2),
+        days60: ar.days60.toFixed(2),
+        days90Plus: ar.days90Plus.toFixed(2),
+        totalAR: ar.totalAR.toFixed(2),
+      }));
+      
+      serverLogger.info(`[Storage/calculateARAging] Calculated AR for ${arSnapshots.length} builders`);
+      return arSnapshots;
+    } catch (error) {
+      serverLogger.error('[Storage/calculateARAging] Failed to calculate AR aging', { error });
+      throw error;
+    }
+  }
+
+  async createARSnapshot(): Promise<void> {
+    try {
+      serverLogger.info('[Storage/createARSnapshot] Creating AR snapshot');
+      
+      // Calculate current AR for all builders
+      const arData = await this.calculateARAging();
+      
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Insert/update snapshots for each builder
+      for (const ar of arData) {
+        await db.insert(arSnapshots)
+          .values({
+            snapshotDate: today,
+            builderId: ar.builderId,
+            current: ar.current,
+            days30: ar.days30,
+            days60: ar.days60,
+            days90Plus: ar.days90Plus,
+            totalAR: ar.totalAR,
+          })
+          .onConflictDoUpdate({
+            target: [arSnapshots.snapshotDate, arSnapshots.builderId],
+            set: {
+              current: ar.current,
+              days30: ar.days30,
+              days60: ar.days60,
+              days90Plus: ar.days90Plus,
+              totalAR: ar.totalAR,
+            },
+          });
+      }
+      
+      serverLogger.info(`[Storage/createARSnapshot] Created/updated ${arData.length} AR snapshots`);
+    } catch (error) {
+      serverLogger.error('[Storage/createARSnapshot] Failed to create AR snapshot', { error });
+      throw error;
+    }
+  }
+
+  async getUnbilledWorkValue(builderId?: string): Promise<{ count: number; amount: number }> {
+    try {
+      serverLogger.info('[Storage/getUnbilledWorkValue] Calculating unbilled work value', { builderId });
+      
+      // Query completed jobs that haven't been billed
+      let query = db.select()
+        .from(jobs)
+        .where(and(
+          eq(jobs.status, 'completed'),
+          isNull(jobs.billedInInvoiceId)
+        ));
+      
+      if (builderId) {
+        query = db.select()
+          .from(jobs)
+          .where(and(
+            eq(jobs.status, 'completed'),
+            isNull(jobs.billedInInvoiceId),
+            eq(jobs.builderId, builderId)
+          ));
+      }
+      
+      const unbilledJobs = await query;
+      
+      let totalAmount = 0;
+      let jobsWithPricing = 0;
+      
+      // Calculate value for each job
+      for (const job of unbilledJobs) {
+        if (!job.builderId || !job.jobType) {
+          serverLogger.warn(`[Storage/getUnbilledWorkValue] Job ${job.id} missing builderId or jobType`);
+          continue;
+        }
+        
+        // Get active rate card for this builder and job type
+        const rateCard = await this.getActiveRateCard(job.builderId, job.jobType, new Date());
+        
+        if (rateCard && rateCard.rate) {
+          totalAmount += parseFloat(rateCard.rate);
+          jobsWithPricing++;
+        } else {
+          serverLogger.warn(`[Storage/getUnbilledWorkValue] No rate card found for builder ${job.builderId} and job type ${job.jobType}`);
+        }
+      }
+      
+      serverLogger.info('[Storage/getUnbilledWorkValue] Calculation complete', { 
+        totalJobs: unbilledJobs.length,
+        jobsWithPricing,
+        totalAmount 
+      });
+      
+      return {
+        count: unbilledJobs.length,
+        amount: totalAmount,
+      };
+    } catch (error) {
+      serverLogger.error('[Storage/getUnbilledWorkValue] Failed to calculate unbilled work value', { error });
+      throw error;
+    }
   }
 
   // Invoice Line Items

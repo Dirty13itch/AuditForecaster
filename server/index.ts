@@ -5,6 +5,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import cron from "node-cron";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { serverLogger } from "./logger";
@@ -542,6 +543,78 @@ async function startServer() {
           serverLogger.info('[Server] Periodic job status metrics initialized');
         } catch (error) {
           serverLogger.error('[Server] Failed to initialize job status metrics:', error);
+        }
+
+        // Initialize financial cron jobs
+        try {
+          // Daily AR snapshot at midnight
+          cron.schedule('0 0 * * *', async () => {
+            try {
+              serverLogger.info('[ARSnapshot] Running daily AR snapshot');
+              await storage.createARSnapshot();
+              serverLogger.info('[ARSnapshot] Daily AR snapshot completed successfully');
+            } catch (error) {
+              serverLogger.error('[ARSnapshot] Failed to create daily AR snapshot', { error });
+            }
+          });
+
+          // Weekly unbilled work reminder on Monday 9am
+          cron.schedule('0 9 * * 1', async () => {
+            try {
+              serverLogger.info('[UnbilledWorkReminder] Running weekly unbilled work check');
+              const { count, amount } = await storage.getUnbilledWorkValue();
+              
+              if (count > 10) {
+                serverLogger.warn('[UnbilledWorkReminder] High unbilled work detected', { count, amount });
+                
+                // Get admin users
+                const adminUsers = await storage.getUsersByRole('admin');
+                const adminEmail = adminUsers[0]?.email;
+                
+                if (!adminEmail) {
+                  serverLogger.error('[UnbilledWorkReminder] No admin email found');
+                  return;
+                }
+                
+                // Prepare email content
+                const emailSubject = 'Weekly Unbilled Work Reminder';
+                const emailBody = `You have ${count} completed jobs worth $${amount.toFixed(2)} that haven't been invoiced yet. Visit /financial/unbilled-work to create invoices.`;
+                
+                // Log email details to console
+                serverLogger.info('[UnbilledWorkReminder] Unbilled work email notification', { 
+                  email: adminEmail, 
+                  subject: emailSubject, 
+                  body: emailBody,
+                  count,
+                  amount: amount.toFixed(2)
+                });
+                
+                // Send actual email if SENDGRID_API_KEY is configured
+                if (process.env.SENDGRID_API_KEY) {
+                  try {
+                    const { emailService } = await import('./email/emailService');
+                    await emailService.sendEmail(adminEmail, emailSubject, emailBody);
+                    serverLogger.info('[UnbilledWorkReminder] Email sent successfully', { email: adminEmail });
+                  } catch (emailError) {
+                    serverLogger.error('[UnbilledWorkReminder] Failed to send email', { error: emailError });
+                  }
+                } else {
+                  serverLogger.info('[UnbilledWorkReminder] SENDGRID_API_KEY not configured, email not sent');
+                }
+              } else {
+                serverLogger.info('[UnbilledWorkReminder] Unbilled work below threshold', { count });
+              }
+            } catch (error) {
+              serverLogger.error('[UnbilledWorkReminder] Failed to check unbilled work', { error });
+            }
+          });
+
+          serverLogger.info('[Server] Financial cron jobs initialized', { 
+            arSnapshot: '0 0 * * *',
+            unbilledWorkReminder: '0 9 * * 1'
+          });
+        } catch (error) {
+          serverLogger.error('[Server] Failed to initialize financial cron jobs:', error);
         }
         
         resolve();

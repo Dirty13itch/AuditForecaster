@@ -5049,17 +5049,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payments", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/payments", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertPaymentSchema.parse(req.body);
-      const payment = await storage.createPayment(validated);
+      const payment = await storage.recordPayment({
+        ...validated,
+        createdBy: req.user.id,
+      });
       res.status(201).json(payment);
     } catch (error) {
       if (error instanceof ZodError) {
         const { status, message } = handleValidationError(error);
         return res.status(status).json({ message });
       }
+      logError('Payments/Create', error);
       const { status, message } = handleDatabaseError(error, 'create payment');
+      res.status(status).json({ message });
+    }
+  });
+
+  // AR Aging
+  app.get("/api/ar/aging", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const { builderId, asOfDate } = req.query;
+      
+      const parsedAsOfDate = asOfDate && typeof asOfDate === 'string' 
+        ? new Date(asOfDate) 
+        : undefined;
+      
+      const arSnapshots = await storage.calculateARAging(
+        builderId && typeof builderId === 'string' ? builderId : undefined,
+        parsedAsOfDate
+      );
+      
+      res.json(arSnapshots);
+    } catch (error) {
+      logError('AR/Aging', error);
+      const { status, message } = handleDatabaseError(error, 'calculate AR aging');
+      res.status(status).json({ message });
+    }
+  });
+
+  // AR Unbilled Work Value
+  app.get("/api/ar/unbilled", isAuthenticated, blockFinancialAccess(), async (req, res) => {
+    try {
+      const { builderId } = req.query;
+      
+      const result = await storage.getUnbilledWorkValue(
+        builderId && typeof builderId === 'string' ? builderId : undefined
+      );
+      
+      res.json(result);
+    } catch (error) {
+      logError('AR/Unbilled', error);
+      const { status, message } = handleDatabaseError(error, 'get unbilled work value');
       res.status(status).json({ message });
     }
   });
