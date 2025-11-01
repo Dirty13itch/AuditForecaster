@@ -80,6 +80,7 @@ import { calendarEventNotificationTemplate } from "./email/templates/calendarEve
 import { paginationParamsSchema, cursorPaginationParamsSchema, photoCursorPaginationParamsSchema } from "@shared/pagination";
 import {
   idParamSchema,
+  flexibleIdParamSchema,
   dateRangeQuerySchema,
   scheduleEventsQuerySchema,
   googleEventsQuerySchema
@@ -708,7 +709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/builders/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const { id } = idParamSchema.parse(req.params);
+      const { id } = flexibleIdParamSchema.parse(req.params);
       const builder = await storage.getBuilder(id);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found. It may have been deleted." });
@@ -723,8 +724,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       if (error instanceof ZodError) {
         const { status, message } = handleValidationError(error);
+        serverLogger.warn('[Builders/GET] Validation error', { error: error instanceof ZodError ? error.errors : error, builderId: req.params.id });
         return res.status(status).json({ message });
       }
+      serverLogger.error('[Builders/GET] Database error', { error, builderId: req.params.id });
       const { status, message } = handleDatabaseError(error, 'fetch builder');
       res.status(status).json({ message });
     }
@@ -732,8 +735,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/builders/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
+      // Validate ID parameter (accepts UUID v4 or slug format)
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
       const validated = insertBuilderSchema.partial().parse(req.body);
-      const builder = await storage.updateBuilder(req.params.id, validated);
+      const builder = await storage.updateBuilder(id, validated);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found. It may have been deleted." });
       }
@@ -743,7 +749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id,
         action: 'builder.update',
         resourceType: 'builder',
-        resourceId: req.params.id,
+        resourceId: id,
         changes: validated,
         metadata: { builderName: builder.name, companyName: builder.companyName },
       }, storage);
@@ -752,8 +758,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       if (error instanceof ZodError) {
         const { status, message } = handleValidationError(error);
+        serverLogger.warn('[Builders/PUT] Validation error', { error: error instanceof ZodError ? error.errors : error, builderId: req.params.id });
         return res.status(status).json({ message });
       }
+      serverLogger.error('[Builders/PUT] Database error', { error, builderId: req.params.id });
       const { status, message } = handleDatabaseError(error, 'update builder');
       res.status(status).json({ message });
     }
@@ -761,8 +769,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/builders/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const builder = await storage.getBuilder(req.params.id);
-      const deleted = await storage.deleteBuilder(req.params.id);
+      // Validate ID parameter (accepts UUID v4 or slug format)
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      const builder = await storage.getBuilder(id);
+      const deleted = await storage.deleteBuilder(id);
       if (!deleted) {
         return res.status(404).json({ message: "Builder not found. It may have already been deleted." });
       }
@@ -773,13 +784,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user.id,
           action: 'builder.delete',
           resourceType: 'builder',
-          resourceId: req.params.id,
+          resourceId: id,
           metadata: { builderName: builder.name, companyName: builder.companyName },
         }, storage);
       }
       
       res.status(204).send();
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        serverLogger.warn('[Builders/DELETE] Validation error', { error: error instanceof ZodError ? error.errors : error, builderId: req.params.id });
+        return res.status(status).json({ message });
+      }
+      serverLogger.error('[Builders/DELETE] Database error', { error, builderId: req.params.id });
       const { status, message } = handleDatabaseError(error, 'delete builder');
       res.status(status).json({ message });
     }
@@ -2289,7 +2306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
-      const { id } = idParamSchema.parse(req.params);
+      const { id } = flexibleIdParamSchema.parse(req.params);
       const job = await storage.getJob(id);
       if (!job) {
         return res.status(404).json({ message: "Job not found. It may have been deleted or the link may be outdated." });
@@ -2306,8 +2323,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       if (error instanceof ZodError) {
         const { status, message } = handleValidationError(error);
+        serverLogger.warn('[Jobs] GET /api/jobs/:id validation error', { error: error.errors, jobId: req.params.id });
         return res.status(status).json({ message });
       }
+      serverLogger.error('[Jobs] GET /api/jobs/:id database error', { error, jobId: req.params.id });
       const { status, message } = handleDatabaseError(error, 'fetch job');
       res.status(status).json({ message });
     }
@@ -2315,8 +2334,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
+      // Validate ID parameter (accepts UUID v4 or slug format)
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
       // Load existing job to check if status is changing to completed
-      const existingJob = await storage.getJob(req.params.id);
+      const existingJob = await storage.getJob(id);
       if (!existingJob) {
         return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
@@ -2341,10 +2363,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let completionData = undefined;
       if (isCompletingNow) {
         const [checklistItems, blowerDoorTests, ductLeakageTests, ventilationTests] = await Promise.all([
-          storage.getChecklistItemsByJob(req.params.id),
-          storage.getBlowerDoorTests(req.params.id),
-          storage.getDuctLeakageTests(req.params.id),
-          storage.getVentilationTests(req.params.id)
+          storage.getChecklistItemsByJob(id),
+          storage.getBlowerDoorTests(id),
+          storage.getDuctLeakageTests(id),
+          storage.getVentilationTests(id)
         ]);
         completionData = { checklistItems, blowerDoorTests, ductLeakageTests, ventilationTests };
       }
@@ -2371,7 +2393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Update the job
-      const job = await storage.updateJob(req.params.id, validated);
+      const job = await storage.updateJob(id, validated);
       if (!job) {
         return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
@@ -2382,7 +2404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user.id,
           action: 'job.status_changed',
           resourceType: 'job',
-          resourceId: req.params.id,
+          resourceId: id,
           changes: { from: existingJob.status, to: validated.status },
           metadata: { jobName: existingJob.name, address: existingJob.address },
         }, storage);
@@ -2392,7 +2414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user.id,
           action: 'job.update',
           resourceType: 'job',
-          resourceId: req.params.id,
+          resourceId: id,
           changes: validated,
           metadata: { jobName: existingJob.name },
         }, storage);
@@ -2402,8 +2424,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       if (error instanceof ZodError) {
         const { status, message } = handleValidationError(error);
+        serverLogger.warn('[Jobs/PUT] Validation error', { error: error instanceof ZodError ? error.errors : error, jobId: req.params.id });
         return res.status(status).json({ message });
       }
+      serverLogger.error('[Jobs/PUT] Database error', { error, jobId: req.params.id });
       const { status, message } = handleDatabaseError(error, 'update job');
       res.status(status).json({ message });
     }
@@ -2474,7 +2498,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
-      const job = await storage.getJob(req.params.id);
+      // Validate ID parameter (accepts UUID v4 or slug format)
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      const job = await storage.getJob(id);
       if (!job) {
         return res.status(404).json({ message: "Job not found. It may have already been deleted." });
       }
@@ -2486,7 +2513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: 'Forbidden: You can only delete your own jobs' });
       }
       
-      const deleted = await storage.deleteJob(req.params.id);
+      const deleted = await storage.deleteJob(id);
       if (!deleted) {
         return res.status(404).json({ message: "Job not found. It may have already been deleted." });
       }
@@ -2496,12 +2523,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id,
         action: 'job.delete',
         resourceType: 'job',
-        resourceId: req.params.id,
+        resourceId: id,
         metadata: { jobName: job.name, address: job.address, status: job.status },
       }, storage);
       
       res.status(204).send();
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        serverLogger.warn('[Jobs/DELETE] Validation error', { error: error instanceof ZodError ? error.errors : error, jobId: req.params.id });
+        return res.status(status).json({ message });
+      }
+      serverLogger.error('[Jobs/DELETE] Database error', { error, jobId: req.params.id });
       const { status, message } = handleDatabaseError(error, 'delete job');
       res.status(status).json({ message });
     }

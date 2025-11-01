@@ -6,11 +6,25 @@ import { z } from "zod";
  */
 
 /**
- * UUID validation - used for entity IDs (jobs, builders, etc.)
+ * UUID validation - used for strict UUID entity IDs
  */
 export const uuidSchema = z.string().uuid({
   message: "Invalid ID format. Must be a valid UUID."
 });
+
+/**
+ * Flexible ID validation - accepts UUID v4 OR slug format
+ * Used for entities that support custom IDs (jobs, builders, etc.)
+ * Accepts:
+ * - UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx (where y is 8, 9, a, or b)
+ * - Slug format: lowercase alphanumeric with hyphens (e.g., "job-123", "mi-homes-001")
+ */
+export const flexibleIdSchema = z.string().regex(
+  /^([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}|[a-z0-9-]+)$/i,
+  {
+    message: "Invalid ID format. Must be a valid UUID v4 or slug format (lowercase letters, numbers, and hyphens)."
+  }
+);
 
 /**
  * ISO date string validation - accepts both full datetime and date-only formats
@@ -34,11 +48,20 @@ export const isoDateSchema = z.string().refine(
 );
 
 /**
- * Path parameter validation for single ID
+ * Path parameter validation for single ID (UUID format required)
  * Usage: const { id } = idParamSchema.parse(req.params);
  */
 export const idParamSchema = z.object({
   id: uuidSchema
+});
+
+/**
+ * Path parameter validation for flexible IDs (any string)
+ * Used for entities that support custom IDs like jobs
+ * Usage: const { id } = flexibleIdParamSchema.parse(req.params);
+ */
+export const flexibleIdParamSchema = z.object({
+  id: flexibleIdSchema
 });
 
 /**
