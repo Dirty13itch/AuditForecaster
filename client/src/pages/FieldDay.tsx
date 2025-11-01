@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder } from "@shared/schema";
 import { cn } from "@/lib/utils";
-import { useSwipeGesture } from "@/hooks/useSwipeGesture";
+import { SwipeableFieldDayCard } from "@/components/SwipeableFieldDayCard";
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => format(new Date(), 'yyyy-MM-dd');
@@ -33,93 +33,6 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   failed: { label: "Failed", variant: "destructive", color: "bg-red-500" },
   reschedule: { label: "Reschedule", variant: "outline", color: "bg-orange-500" }
 };
-
-interface JobCardProps {
-  job: Job & { builder?: Builder };
-  isSelected: boolean;
-  onSelect: () => void;
-  onNavigate: () => void;
-}
-
-function FieldDayJobCard({ job, isSelected, onSelect, onNavigate }: JobCardProps) {
-  const handleCardClick = (e: React.MouseEvent) => {
-    // Check if clicking the selection area (left side of card) vs navigation area (right side)
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const cardWidth = rect.width;
-    
-    // Left 80% selects, right 20% navigates to inspection details
-    if (clickX < cardWidth * 0.8) {
-      onSelect();
-    } else {
-      onNavigate();
-    }
-  };
-
-  return (
-    <Card 
-      className={cn(
-        "hover-elevate active-elevate-2 cursor-pointer relative transition-all",
-        isSelected && "ring-2 ring-primary ring-offset-2"
-      )}
-      onClick={handleCardClick}
-      data-testid={`card-field-day-job-${job.id}`}
-    >
-      {/* Selection indicator */}
-      {isSelected && (
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-          <Check className="h-5 w-5 text-primary-foreground" />
-        </div>
-      )}
-      
-      <CardHeader className={cn("pb-3", isSelected && "pl-14")}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <CardTitle className="text-xl font-bold truncate" data-testid="text-builder-name">
-              {job.builder?.name || job.builderName || "Unknown Builder"}
-            </CardTitle>
-            <CardDescription className="flex items-start gap-1 mt-1" data-testid="text-address">
-              <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span className="line-clamp-2">{job.address}</span>
-            </CardDescription>
-          </div>
-          {STATUS_CONFIG[job.status] && (
-            <Badge 
-              variant={STATUS_CONFIG[job.status].variant}
-              data-testid={`badge-status-${job.id}`}
-            >
-              {STATUS_CONFIG[job.status].label}
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-
-      <CardContent className={cn("space-y-4", isSelected && "pl-14")}>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary" data-testid={`badge-job-type-${job.id}`}>
-            {JOB_TYPE_LABELS[job.jobType] || job.jobType}
-          </Badge>
-          {job.pricing && (
-            <Badge variant="outline" data-testid={`badge-pricing-${job.id}`}>
-              ${parseFloat(job.pricing).toFixed(2)}
-            </Badge>
-          )}
-        </div>
-
-        {job.notes && (
-          <p className="text-sm text-muted-foreground line-clamp-2" data-testid={`text-notes-${job.id}`}>
-            {job.notes}
-          </p>
-        )}
-        
-        {/* Tap hint for navigation */}
-        <div className="text-xs text-muted-foreground text-right">
-          Tap right edge for details →
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function JobListSkeleton({ count = 3 }: { count?: number }) {
   return (
@@ -260,12 +173,15 @@ export default function FieldDay() {
         ) : myJobs && myJobs.length > 0 ? (
           <div className="space-y-4">
             {myJobs.map((job) => (
-              <FieldDayJobCard
+              <SwipeableFieldDayCard
                 key={job.id}
                 job={job}
                 isSelected={selectedJobId === job.id}
                 onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
                 onNavigate={() => navigate(`/inspection/${job.id}`)}
+                onStatusUpdate={(status) => {
+                  updateJobMutation.mutate({ jobId: job.id, status });
+                }}
               />
             ))}
           </div>
@@ -307,12 +223,15 @@ export default function FieldDay() {
           ) : allJobs && allJobs.length > 0 ? (
             <div className="space-y-4">
               {allJobs.map((job) => (
-                <FieldDayJobCard
+                <SwipeableFieldDayCard
                   key={job.id}
                   job={job}
                   isSelected={selectedJobId === job.id}
                   onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
                   onNavigate={() => navigate(`/inspection/${job.id}`)}
+                  onStatusUpdate={(status) => {
+                    updateJobMutation.mutate({ jobId: job.id, status });
+                  }}
                 />
               ))}
             </div>

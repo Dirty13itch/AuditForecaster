@@ -4,8 +4,7 @@ import {
   AutoExpandSection, 
   NegativeResponseIndicator 
 } from '@/hooks/useAutoExpandOnNegative';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
+import { ColorCodedResponse, ResponseBadge } from '@/components/ColorCodedResponse';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -69,21 +68,13 @@ export function InspectionQuestionWithAutoExpand({
     onPhotoCapture?.();
   };
 
-  // Get response icon and color
-  const getResponseDisplay = () => {
-    switch (response) {
-      case 'pass':
-        return { icon: CheckCircle, color: 'text-success', bgColor: 'bg-success/10' };
-      case 'fail':
-        return { icon: XCircle, color: 'text-destructive', bgColor: 'bg-destructive/10' };
-      case 'na':
-        return { icon: MinusCircle, color: 'text-muted-foreground', bgColor: 'bg-muted' };
-      default:
-        return null;
-    }
+  // Map response value to ResponseBadge type
+  const getBadgeValue = () => {
+    if (response === 'pass') return 'pass';
+    if (response === 'fail') return 'fail'; 
+    if (response === 'na') return 'na';
+    return null;
   };
-
-  const responseDisplay = getResponseDisplay();
 
   return (
     <Card 
@@ -100,72 +91,23 @@ export function InspectionQuestionWithAutoExpand({
             {question}
             {required && <span className="text-destructive ml-1">*</span>}
           </CardTitle>
-          {responseDisplay && (
-            <div className={cn(
-              "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
-              responseDisplay.bgColor
-            )}>
-              <responseDisplay.icon className={cn("h-3.5 w-3.5", responseDisplay.color)} />
-              <span className={responseDisplay.color}>
-                {response.toUpperCase()}
-              </span>
-            </div>
+          {getBadgeValue() && (
+            <ResponseBadge value={getBadgeValue() as 'pass' | 'fail' | 'na'} size="sm" />
           )}
         </div>
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {/* Response Options */}
-        <RadioGroup 
-          value={response} 
-          onValueChange={handleResponseChange}
-          className="flex flex-row gap-4"
-          data-testid={`radio-group-${questionId}`}
-        >
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem 
-              value="pass" 
-              id={`pass-${questionId}`}
-              className="border-success data-[state=checked]:bg-success data-[state=checked]:border-success"
-              data-testid={`radio-pass-${questionId}`}
-            />
-            <Label 
-              htmlFor={`pass-${questionId}`} 
-              className="cursor-pointer text-sm font-medium"
-            >
-              Pass
-            </Label>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem 
-              value="fail" 
-              id={`fail-${questionId}`}
-              className="border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive"
-              data-testid={`radio-fail-${questionId}`}
-            />
-            <Label 
-              htmlFor={`fail-${questionId}`} 
-              className="cursor-pointer text-sm font-medium"
-            >
-              Fail
-            </Label>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem 
-              value="na" 
-              id={`na-${questionId}`}
-              data-testid={`radio-na-${questionId}`}
-            />
-            <Label 
-              htmlFor={`na-${questionId}`} 
-              className="cursor-pointer text-sm font-medium"
-            >
-              N/A
-            </Label>
-          </div>
-        </RadioGroup>
+        {/* Response Options with Color-Coded Visual System */}
+        <ColorCodedResponse
+          value={response}
+          onChange={handleResponseChange}
+          options={['pass', 'fail', 'na']}
+          id={questionId}
+          size="md"
+          orientation="horizontal"
+          showIcons={true}
+        />
 
         {/* Auto-expand indicator for negative responses */}
         <NegativeResponseIndicator 
