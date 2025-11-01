@@ -23,26 +23,47 @@ import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { useGlobalShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import type { ShortcutConfig } from "@/hooks/useKeyboardShortcuts";
+import {
+  RouteLoadingFallback,
+  DashboardLoadingFallback,
+  PhotoGridLoadingFallback,
+  CanvasLoadingFallback,
+  ChartLoadingFallback,
+} from "@/components/LoadingStates";
 
+// Landing page - always loaded (needed immediately)
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 
+// Tier 1: Critical paths - Field work essentials
+// These are prioritized for field inspectors doing their daily work
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const Inspection = lazy(() => import("@/pages/Inspection"));
-const Photos = lazy(() => import("@/pages/Photos"));
-const PhotoAnnotation = lazy(() => import("@/pages/PhotoAnnotation"));
-const PhotoCleanup = lazy(() => import("@/pages/PhotoCleanup"));
-const Forecast = lazy(() => import("@/pages/Forecast"));
+const FieldDay = lazy(() => import("@/pages/FieldDay"));
 const Jobs = lazy(() => import("@/pages/Jobs"));
-const Gamification = lazy(() => import("@/pages/Gamification"));
-const Achievements = lazy(() => import("@/pages/Achievements"));
-const Challenges = lazy(() => import("@/pages/Challenges"));
+const Inspection = lazy(() => import("@/pages/Inspection"));
+
+// Tier 2: Common workflows - Photo and documentation
+const Photos = lazy(() => import("@/pages/Photos"));
 const Schedule = lazy(() => import("@/pages/Schedule"));
-const RouteView = lazy(() => import("@/pages/RouteView"));
 const Builders = lazy(() => import("@/pages/Builders"));
-const BuilderReview = lazy(() => import("@/pages/BuilderReview"));
-const Plans = lazy(() => import("@/pages/Plans"));
-const Financials = lazy(() => import("@/pages/Financials"));
+const Equipment = lazy(() => import("@/pages/Equipment"));
+
+// Tier 3: Heavy visualization and editing tools
+// These contain heavy libraries like Konva, Recharts, PDF generation
+const PhotoAnnotation = lazy(() => 
+  import(/* webpackChunkName: "photo-annotation" */ "@/pages/PhotoAnnotation")
+);
+const Analytics = lazy(() => 
+  import(/* webpackChunkName: "analytics" */ "@/pages/Analytics")
+);
+const Reports = lazy(() => 
+  import(/* webpackChunkName: "reports" */ "@/pages/Reports")
+);
+const CalendarManagement = lazy(() => 
+  import(/* webpackChunkName: "calendar" */ "@/pages/CalendarManagement")
+);
+
+// Tier 4: Financial and reporting features
 const FinancialDashboard = lazy(() => import("@/pages/FinancialDashboard"));
 const Invoices = lazy(() => import("@/pages/financial/invoices"));
 const Payments = lazy(() => import("@/pages/financial/payments"));
@@ -53,42 +74,65 @@ const FinancialAnalytics = lazy(() => import("@/pages/financial/analytics"));
 const Expenses = lazy(() => import("@/pages/Expenses"));
 const Mileage = lazy(() => import("@/pages/Mileage"));
 const MileageClassify = lazy(() => import("@/pages/MileageClassify"));
-const Reports = lazy(() => import("@/pages/Reports"));
+
+// Tier 5: Administrative and settings pages
+const SettingsHub = lazy(() => 
+  import(/* webpackChunkName: "settings" */ "@/pages/SettingsHub")
+);
+const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
+const AdminDiagnostics = lazy(() => import("@/pages/AdminDiagnostics"));
+const BackgroundJobs = lazy(() => import("@/pages/BackgroundJobs"));
+const AuditLogs = lazy(() => import("@/pages/AuditLogs"));
+const KPISettings = lazy(() => import("@/pages/KPISettings"));
+
+// Tier 6: Specialized features and testing
+const BlowerDoorTest = lazy(() => import("@/pages/BlowerDoorTest"));
+const DuctLeakageTest = lazy(() => import("@/pages/DuctLeakageTest"));
+const VentilationTests = lazy(() => import("@/pages/VentilationTests"));
+const PhotoCleanup = lazy(() => import("@/pages/PhotoCleanup"));
+const Forecast = lazy(() => import("@/pages/Forecast"));
+const RouteView = lazy(() => import("@/pages/RouteView"));
+const BuilderReview = lazy(() => import("@/pages/BuilderReview"));
+const Plans = lazy(() => import("@/pages/Plans"));
+const Financials = lazy(() => import("@/pages/Financials"));
+
+// Tier 7: Report templates and instances
 const ReportInstancePage = lazy(() => import("@/pages/ReportInstance"));
 const ReportTemplates = lazy(() => import("@/pages/ReportTemplates"));
 const ReportTemplateDetail = lazy(() => import("@/pages/ReportTemplateDetail"));
 const ReportTemplateDesigner = lazy(() => import("@/pages/ReportTemplateDesigner"));
 const ReportFillout = lazy(() => import("@/pages/ReportFillout"));
 const ScheduledExports = lazy(() => import("@/pages/ScheduledExports"));
-const BlowerDoorTest = lazy(() => import("@/pages/BlowerDoorTest"));
-const DuctLeakageTest = lazy(() => import("@/pages/DuctLeakageTest"));
-const VentilationTests = lazy(() => import("@/pages/VentilationTests"));
-const Analytics = lazy(() => import("@/pages/Analytics"));
-const AuditLogs = lazy(() => import("@/pages/AuditLogs"));
-const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
-const AdminDiagnostics = lazy(() => import("@/pages/AdminDiagnostics"));
-const BackgroundJobs = lazy(() => import("@/pages/BackgroundJobs"));
+const CustomReports = lazy(() => import("@/pages/CustomReports"));
+
+// Tier 8: Calendar and import features
 const CalendarPOC = lazy(() => import("@/pages/CalendarPOC"));
 const CalendarReview = lazy(() => import("@/pages/CalendarReview"));
 const CalendarImportHistory = lazy(() => import("@/pages/CalendarImportHistory"));
 const CalendarImportQueuePage = lazy(() => import("@/pages/CalendarImportQueuePage"));
-const CalendarManagement = lazy(() => import("@/pages/CalendarManagement"));
+
+// Tier 9: Tax credit and compliance
 const TaxCredit45L = lazy(() => import("@/pages/TaxCredit45L"));
 const TaxCreditProject = lazy(() => import("@/pages/TaxCreditProject"));
 const TaxCreditCompliance = lazy(() => import("@/pages/TaxCreditCompliance"));
 const TaxCreditReports = lazy(() => import("@/pages/TaxCreditReports"));
-const Equipment = lazy(() => import("@/pages/Equipment"));
-const EquipmentDetails = lazy(() => import("@/pages/EquipmentDetails"));
-const CalibrationSchedule = lazy(() => import("@/pages/CalibrationSchedule"));
+const ComplianceHub = lazy(() => import("@/pages/ComplianceHub"));
+
+// Tier 10: Quality assurance
 const QualityAssurance = lazy(() => import("@/pages/QualityAssurance"));
 const QAScoring = lazy(() => import("@/pages/QAScoring"));
 const QAChecklists = lazy(() => import("@/pages/QAChecklists"));
 const QAPerformance = lazy(() => import("@/pages/QAPerformance"));
 const QAReview = lazy(() => import("@/components/QAReview"));
-const ConflictResolution = lazy(() => import("@/pages/ConflictResolution"));
-const CustomReports = lazy(() => import("@/pages/CustomReports"));
-const KPISettings = lazy(() => import("@/pages/KPISettings"));
-const NotificationTest = lazy(() => import("@/pages/NotificationTest"));
+const CalibrationSchedule = lazy(() => import("@/pages/CalibrationSchedule"));
+const EquipmentDetails = lazy(() => import("@/pages/EquipmentDetails"));
+
+// Tier 11: Gamification
+const Gamification = lazy(() => import("@/pages/Gamification"));
+const Achievements = lazy(() => import("@/pages/Achievements"));
+const Challenges = lazy(() => import("@/pages/Challenges"));
+
+// Tier 12: Compliance sub-modules
 const MultifamilyProgramSetup = lazy(() => import("@/pages/compliance/MultifamilyProgramSetup"));
 const BuilderVerifiedItemsTracker = lazy(() => import("@/pages/compliance/BuilderVerifiedItemsTracker"));
 const SamplingProtocolCalculator = lazy(() => import("@/pages/compliance/SamplingProtocolCalculator"));
@@ -97,19 +141,14 @@ const MNHousingEGCCWorksheet = lazy(() => import("@/pages/compliance/MNHousingEG
 const ZERHComplianceTracker = lazy(() => import("@/pages/compliance/ZERHComplianceTracker"));
 const BenchmarkingDeadlineTracker = lazy(() => import("@/pages/compliance/BenchmarkingDeadlineTracker"));
 const ComplianceDocumentsLibrary = lazy(() => import("@/pages/compliance/ComplianceDocumentsLibrary"));
-const ComplianceHub = lazy(() => import("@/pages/ComplianceHub"));
-const FieldDay = lazy(() => import("@/pages/FieldDay"));
-const SettingsHub = lazy(() => import("@/pages/SettingsHub"));
+
+// Tier 13: Miscellaneous and testing
+const ConflictResolution = lazy(() => import("@/pages/ConflictResolution"));
+const NotificationTest = lazy(() => import("@/pages/NotificationTest"));
 const OfflineTest = lazy(() => import("@/pages/offline-test"));
 
-const LoadingFallback = () => (
-  <div className="flex h-full items-center justify-center">
-    <div className="text-center space-y-4">
-      <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
-      <p className="text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-);
+// Generic loading fallback for most routes
+const LoadingFallback = () => <RouteLoadingFallback />;
 
 function Router() {
   return (

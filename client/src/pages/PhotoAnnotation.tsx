@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { Stage, Layer, Line, Rect, Circle, Text, Arrow, Transformer } from "react-konva";
+// Use lazy-loaded Konva components to reduce initial bundle size
+import { Stage, Layer, Line, Rect, Circle, Text, Arrow, Transformer } from "@/components/LazyCanvas";
 import { useParams, useLocation } from "wouter";
 import { useInputDialog } from "@/components/InputDialog";
 import { useQuery, useMutation } from "@tanstack/react-query";

@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+// Use lazy-loaded chart components to reduce initial bundle size
 import {
   LineChart,
   Line,
@@ -42,7 +43,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from "recharts";
+} from "@/components/LazyChart";
 import type { Job, ChecklistItem, Photo, Builder, Forecast } from "@shared/schema";
 import { getTagConfig } from "@shared/photoTags";
 import { safeToFixed, safeParseFloat, safeDivide } from "@shared/numberUtils";
