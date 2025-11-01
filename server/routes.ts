@@ -848,10 +848,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/builders/:id/merge", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    const mergeSchema = z.object({
+      targetBuilderId: z.string().uuid("Target builder ID must be a valid UUID"),
+    });
+
     try {
-      const { targetBuilderId } = req.body;
-      if (!targetBuilderId) {
-        return res.status(400).json({ message: "Target builder ID is required" });
+      const { targetBuilderId } = mergeSchema.parse(req.body);
+      
+      // Prevent self-merge
+      if (targetBuilderId === req.params.id) {
+        return res.status(400).json({ message: "Cannot merge a builder with itself" });
       }
       
       const sourceBuilder = await storage.getBuilder(req.params.id);
@@ -877,6 +883,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true, message: "Builder merged successfully" });
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'merge builders');
       res.status(status).json({ message });
     }
@@ -7218,8 +7228,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Photo Annotations endpoint
   app.post("/api/photos/:id/annotations", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    // Define explicit annotation shape
+    const annotationItemSchema = z.object({
+      x: z.number().min(0, "X coordinate must be non-negative"),
+      y: z.number().min(0, "Y coordinate must be non-negative"),
+      text: z.string().max(500, "Annotation text too long").optional(),
+      type: z.enum(["arrow", "circle", "rectangle", "text"]).optional(),
+      color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid color format").optional(),
+    });
+    
+    const annotationsSchema = z.object({
+      annotations: z.array(annotationItemSchema).max(100, "Too many annotations").optional(),
+    });
+
     try {
-      const { annotations } = req.body;
+      const { annotations } = annotationsSchema.parse(req.body);
       
       const photo = await storage.updatePhotoAnnotations(req.params.id, annotations);
       if (!photo) {
@@ -7228,6 +7251,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(photo);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'update photo annotations');
       res.status(status).json({ message });
     }
@@ -7235,8 +7262,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // OCR Processing endpoint
   app.post("/api/photos/:id/ocr", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    // OCR validation with proper bounds and length limits
+    const ocrSchema = z.object({
+      ocrText: z.string().max(10000, "OCR text too long").optional(),
+      ocrConfidence: z.number().min(0, "Confidence must be between 0 and 1").max(1, "Confidence must be between 0 and 1").optional(),
+      ocrMetadata: z.object({
+        language: z.string().optional(),
+        engine: z.string().optional(),
+        processingTime: z.number().optional(),
+      }).optional(),
+    });
+
     try {
-      const { ocrText, ocrConfidence, ocrMetadata } = req.body;
+      const { ocrText, ocrConfidence, ocrMetadata } = ocrSchema.parse(req.body);
       
       const photo = await storage.updatePhotoOCR(
         req.params.id,
@@ -7251,6 +7289,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(photo);
     } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
       const { status, message } = handleDatabaseError(error, 'update photo OCR');
       res.status(status).json({ message });
     }
