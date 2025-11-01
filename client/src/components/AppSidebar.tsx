@@ -138,6 +138,12 @@ const menuItems = [
     icon: Settings,
   },
   {
+    title: "Settings Hub",
+    url: "/settings-hub",
+    icon: Settings,
+    adminOnly: true,
+  },
+  {
     title: "Diagnostics",
     url: "/admin/diagnostics",
     icon: Activity,

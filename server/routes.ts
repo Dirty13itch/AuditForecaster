@@ -107,6 +107,7 @@ import { exportService, type ExportOptions } from "./exportService";
 import { createReadStream } from "fs";
 import { unlink } from "fs/promises";
 import rateLimit from "express-rate-limit";
+import { registerSettingsRoutes } from "./routes/settings";
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
@@ -11821,6 +11822,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Register Settings routes
+  registerSettingsRoutes(app);
+  
   const httpServer = createServer(app);
 
   return httpServer;

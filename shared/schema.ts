@@ -83,6 +83,80 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Organizations table for multi-tenant architecture
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  logoUrl: text("logo_url"),
+  resnetCertification: text("resnet_certification"),
+  insuranceProvider: text("insurance_provider"),
+  insurancePolicyNumber: text("insurance_policy_number"),
+  serviceAreas: text("service_areas").array(),
+  primaryContactEmail: text("primary_contact_email").notNull(),
+  phone: text("phone"),
+  address: text("address"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_organizations_name").on(table.name),
+]);
+
+// Organization users join table for multi-tenant relationships
+export const organizationUsers = pgTable("organization_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text("role", { enum: ["owner", "admin", "inspector", "contractor"] }).notNull(),
+  permissions: jsonb("permissions").default({}), // Granular permissions JSON
+  invitedBy: varchar("invited_by").references(() => users.id, { onDelete: 'set null' }),
+  invitedAt: timestamp("invited_at"),
+  joinedAt: timestamp("joined_at"),
+  status: text("status", { enum: ["pending", "active", "deactivated"] }).notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_organization_users_org_id").on(table.organizationId),
+  index("idx_organization_users_user_id").on(table.userId),
+  index("idx_organization_users_org_user").on(table.organizationId, table.userId),
+  index("idx_organization_users_status").on(table.status),
+]);
+
+// Organization settings for configurable behavior
+export const organizationSettings = pgTable("organization_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  category: text("category", { 
+    enum: ["financial", "workflow", "integration", "security", "notification"] 
+  }).notNull(),
+  key: text("key").notNull(),
+  value: jsonb("value").notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_organization_settings_org_id").on(table.organizationId),
+  index("idx_organization_settings_category").on(table.category),
+  index("idx_organization_settings_org_category").on(table.organizationId, table.category),
+]);
+
+// User invitations for team management
+export const userInvitations = pgTable("user_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  email: text("email").notNull(),
+  role: text("role", { enum: ["owner", "admin", "inspector", "contractor"] }).notNull(),
+  token: text("token").notNull(),
+  invitedBy: varchar("invited_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  status: text("status", { enum: ["pending", "accepted", "expired", "cancelled"] }).notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_user_invitations_org_id").on(table.organizationId),
+  index("idx_user_invitations_token").on(table.token),
+  index("idx_user_invitations_email").on(table.email),
+  index("idx_user_invitations_status").on(table.status),
+]);
+
 export const builders = pgTable("builders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -2500,6 +2574,39 @@ export type EquipmentCalibration = typeof equipmentCalibrations.$inferSelect;
 export type InsertEquipmentCalibration = z.infer<typeof insertEquipmentCalibrationSchema>;
 export type EquipmentMaintenance = typeof equipmentMaintenance.$inferSelect;
 export type InsertEquipmentMaintenance = z.infer<typeof insertEquipmentMaintenanceSchema>;
+
+// Organization types
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertOrganizationUserSchema = createInsertSchema(organizationUsers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertOrganizationSettingSchema = createInsertSchema(organizationSettings).omit({
+  id: true,
+  updatedAt: true
+});
+
+export const insertUserInvitationSchema = createInsertSchema(userInvitations).omit({
+  id: true,
+  token: true,
+  createdAt: true
+});
+
+export type Organization = typeof organizations.$inferSelect;
+export type OrganizationUser = typeof organizationUsers.$inferSelect;
+export type OrganizationSetting = typeof organizationSettings.$inferSelect;
+export type UserInvitation = typeof userInvitations.$inferSelect;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type InsertOrganizationUser = z.infer<typeof insertOrganizationUserSchema>;
+export type InsertOrganizationSetting = z.infer<typeof insertOrganizationSettingSchema>;
+export type InsertUserInvitation = z.infer<typeof insertUserInvitationSchema>;
 export type EquipmentCheckout = typeof equipmentCheckouts.$inferSelect;
 export type InsertEquipmentCheckout = z.infer<typeof insertEquipmentCheckoutSchema>;
 

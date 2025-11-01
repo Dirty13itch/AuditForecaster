@@ -99,6 +99,7 @@ const BenchmarkingDeadlineTracker = lazy(() => import("@/pages/compliance/Benchm
 const ComplianceDocumentsLibrary = lazy(() => import("@/pages/compliance/ComplianceDocumentsLibrary"));
 const ComplianceHub = lazy(() => import("@/pages/ComplianceHub"));
 const FieldDay = lazy(() => import("@/pages/FieldDay"));
+const SettingsHub = lazy(() => import("@/pages/SettingsHub"));
 
 const LoadingFallback = () => (
   <div className="flex h-full items-center justify-center">
@@ -320,6 +321,11 @@ function Router() {
       <Route path="/settings" component={() => (
         <RouteErrorBoundary>
           <SettingsPage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/settings-hub" component={() => (
+        <RouteErrorBoundary>
+          <SettingsHub />
         </RouteErrorBoundary>
       )} />
       <Route path="/custom-reports" component={() => (

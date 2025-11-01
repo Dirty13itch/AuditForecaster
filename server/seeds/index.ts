@@ -5,6 +5,7 @@
  */
 
 import { seedReportTemplates, clearSeedTemplates } from './reportTemplates';
+import { seedOrganizations } from './organizations';
 import { serverLogger } from '../logger';
 
 async function main() {
@@ -18,6 +19,11 @@ async function main() {
       serverLogger.info('[Seed] Seed data cleared successfully');
     } else {
       serverLogger.info('[Seed] Seeding database...');
+      
+      // Seed organizations and link users
+      await seedOrganizations();
+      
+      // Seed report templates
       const result = await seedReportTemplates();
       serverLogger.info(`[Seed] Database seeded successfully: ${result.created} templates created`);
     }
