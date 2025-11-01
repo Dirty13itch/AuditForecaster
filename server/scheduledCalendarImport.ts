@@ -64,114 +64,116 @@ export async function startScheduledCalendarImport() {
     serverLogger.info('[ScheduledCalendarImport] Running automated calendar import job');
     
     await backgroundJobTracker.executeJob('calendar_import', async () => {
-      // Find the "Building Knowledge" calendar by name
-      const buildingKnowledgeCalendarId = await googleCalendarService.findCalendarByName(
-        BUILDING_KNOWLEDGE_CALENDAR_NAME
-      );
-      
-      if (!buildingKnowledgeCalendarId) {
-        serverLogger.warn('[ScheduledCalendarImport] "Building Knowledge" calendar not found, skipping import');
-        return;
-      }
-      
-      serverLogger.info(`[ScheduledCalendarImport] Found calendar: ${BUILDING_KNOWLEDGE_CALENDAR_NAME} (${buildingKnowledgeCalendarId})`);
-      
-      // Fetch events from configured lookahead period
-      const startDate = DateTime.now().startOf('day').toJSDate();
-      const endDate = DateTime.now().plus({ days: CALENDAR_IMPORT_LOOKAHEAD_DAYS }).endOf('day').toJSDate();
-      
-      serverLogger.info(`[ScheduledCalendarImport] Fetching events from ${startDate.toISOString()} to ${endDate.toISOString()}`);
-      
-      const events = await googleCalendarService.fetchEventsFromGoogle(
-        [buildingKnowledgeCalendarId],
-        startDate,
-        endDate
-      );
-      
-      if (events.length === 0) {
-        serverLogger.info('[ScheduledCalendarImport] No events found in calendar, skipping import');
-        return;
-      }
-      
-      serverLogger.info(`[ScheduledCalendarImport] Fetched ${events.length} events, starting import process`);
-      
-      // Transform Google Calendar events to our CalendarEvent format
-      const calendarEvents = events.map(event => ({
-        id: event.id || '',
-        summary: event.summary || '',
-        description: event.description || '',
-        location: event.location || '',
-        start: {
-          dateTime: event.start?.dateTime || undefined,
-          date: event.start?.date || undefined,
-        },
-        end: {
-          dateTime: event.end?.dateTime || undefined,
-          date: event.end?.date || undefined,
-        },
-      }));
-      
-      // Process events using import service
-      const result = await processCalendarEvents(
-        storage,
-        calendarEvents,
-        buildingKnowledgeCalendarId,
-        SYSTEM_USER_ID
-      );
-      
-      serverLogger.info('[ScheduledCalendarImport] Import completed successfully', {
-        eventsProcessed: events.length,
-        jobsCreated: result.jobsCreated,
-        eventsQueued: result.eventsQueued,
-        errors: result.errors.length,
-        importLogId: result.importLogId,
-      });
-      
-      // Create audit log for automated import
-      await storage.createAuditLog({
-        userId: SYSTEM_USER_ID,
-        action: 'calendar_import_automated',
-        resourceType: 'calendar',
-        resourceId: buildingKnowledgeCalendarId,
-        metadata: {
+      try {
+        // Find the "Building Knowledge" calendar by name
+        const buildingKnowledgeCalendarId = await googleCalendarService.findCalendarByName(
+          BUILDING_KNOWLEDGE_CALENDAR_NAME
+        );
+        
+        if (!buildingKnowledgeCalendarId) {
+          serverLogger.warn('[ScheduledCalendarImport] "Building Knowledge" calendar not found, skipping import');
+          return;
+        }
+        
+        serverLogger.info(`[ScheduledCalendarImport] Found calendar: ${BUILDING_KNOWLEDGE_CALENDAR_NAME} (${buildingKnowledgeCalendarId})`);
+        
+        // Fetch events from configured lookahead period
+        const startDate = DateTime.now().startOf('day').toJSDate();
+        const endDate = DateTime.now().plus({ days: CALENDAR_IMPORT_LOOKAHEAD_DAYS }).endOf('day').toJSDate();
+        
+        serverLogger.info(`[ScheduledCalendarImport] Fetching events from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+        
+        const events = await googleCalendarService.fetchEventsFromGoogle(
+          [buildingKnowledgeCalendarId],
+          startDate,
+          endDate
+        );
+        
+        if (events.length === 0) {
+          serverLogger.info('[ScheduledCalendarImport] No events found in calendar, skipping import');
+          return;
+        }
+        
+        serverLogger.info(`[ScheduledCalendarImport] Fetched ${events.length} events, starting import process`);
+        
+        // Transform Google Calendar events to our CalendarEvent format
+        const calendarEvents = events.map(event => ({
+          id: event.id || '',
+          summary: event.summary || '',
+          description: event.description || '',
+          location: event.location || '',
+          start: {
+            dateTime: event.start?.dateTime || undefined,
+            date: event.start?.date || undefined,
+          },
+          end: {
+            dateTime: event.end?.dateTime || undefined,
+            date: event.end?.date || undefined,
+          },
+        }));
+        
+        // Process events using import service
+        const result = await processCalendarEvents(
+          storage,
+          calendarEvents,
+          buildingKnowledgeCalendarId,
+          SYSTEM_USER_ID
+        );
+        
+        serverLogger.info('[ScheduledCalendarImport] Import completed successfully', {
           eventsProcessed: events.length,
           jobsCreated: result.jobsCreated,
           eventsQueued: result.eventsQueued,
           errors: result.errors.length,
           importLogId: result.importLogId,
-          source: 'automated_cron_job',
-        },
-      });
-      
-      // Log individual errors if any occurred
-      if (result.errors.length > 0) {
-        serverLogger.warn('[ScheduledCalendarImport] Import completed with errors', {
-          errorCount: result.errors.length,
-          errors: result.errors,
         });
-      }
-      
-    } catch (error) {
-      serverLogger.error('[ScheduledCalendarImport] Automated import failed', { error });
-      
-      // Log the failure for audit purposes
-      try {
+        
+        // Create audit log for automated import
         await storage.createAuditLog({
           userId: SYSTEM_USER_ID,
-          action: 'calendar_import_automated_failed',
+          action: 'calendar_import_automated',
           resourceType: 'calendar',
-          resourceId: 'unknown',
+          resourceId: buildingKnowledgeCalendarId,
           metadata: {
-            error: error instanceof Error ? error.message : 'Unknown error',
+            eventsProcessed: events.length,
+            jobsCreated: result.jobsCreated,
+            eventsQueued: result.eventsQueued,
+            errors: result.errors.length,
+            importLogId: result.importLogId,
             source: 'automated_cron_job',
           },
         });
-      } catch (auditError) {
-        serverLogger.error('[ScheduledCalendarImport] Failed to create audit log for import failure', { auditError });
+        
+        // Log individual errors if any occurred
+        if (result.errors.length > 0) {
+          serverLogger.warn('[ScheduledCalendarImport] Import completed with errors', {
+            errorCount: result.errors.length,
+            errors: result.errors,
+          });
+        }
+        
+      } catch (error) {
+        serverLogger.error('[ScheduledCalendarImport] Automated import failed', { error });
+        
+        // Log the failure for audit purposes
+        try {
+          await storage.createAuditLog({
+            userId: SYSTEM_USER_ID,
+            action: 'calendar_import_automated_failed',
+            resourceType: 'calendar',
+            resourceId: 'unknown',
+            metadata: {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              source: 'automated_cron_job',
+            },
+          });
+        } catch (auditError) {
+          serverLogger.error('[ScheduledCalendarImport] Failed to create audit log for import failure', { auditError });
+        }
+        
+        // Re-throw to let the backgroundJobTracker handle it
+        throw error;
       }
-      
-      // Re-throw to let the backgroundJobTracker handle it
-      throw error;
     });
   });
   
