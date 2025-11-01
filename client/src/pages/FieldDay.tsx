@@ -185,23 +185,37 @@ export default function FieldDay() {
   // Query for inspector's assigned jobs
   const { data: myJobs, isLoading: isLoadingMyJobs } = useQuery<(Job & { builder?: Builder })[]>({
     queryKey: ['/api/jobs', { scheduledDate: today, assignedInspectorId: user?.id }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        scheduledDate: today,
+        assignedInspectorId: user?.id || '',
+      });
+      const response = await fetch(`/api/jobs?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch assigned jobs');
+      return response.json();
+    },
     enabled: !!user?.id,
   });
 
   // Query for all jobs today (admin only)
   const { data: allJobs, isLoading: isLoadingAllJobs } = useQuery<(Job & { builder?: Builder })[]>({
     queryKey: ['/api/jobs', { scheduledDate: today }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        scheduledDate: today,
+      });
+      const response = await fetch(`/api/jobs?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch all jobs');
+      return response.json();
+    },
     enabled: isAdmin,
   });
 
   // Mutation to update job status
   const updateJobMutation = useMutation({
     mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
-      return await apiRequest(`/api/jobs/${jobId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
+      const response = await apiRequest('PATCH', `/api/jobs/${jobId}/status`, { status });
+      return response.json();
     },
     onMutate: async ({ jobId }) => {
       setUpdatingJobId(jobId);

@@ -9,6 +9,7 @@ export const PERMISSIONS: Record<UserRole, string[]> = {
   admin: ['*'], // All permissions
   inspector: [
     'view_jobs',
+    'edit_job',
     'complete_inspections',
     'upload_photos',
     'log_time',
