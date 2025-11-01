@@ -585,7 +585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Domain testing endpoint - authenticated admin only
-  app.post("/api/auth/test-domain", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+  app.post("/api/auth/test-domain", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { domain } = req.body;
       
@@ -8072,7 +8072,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/ventilation-tests/:id/calculate", isAuthenticated, async (req, res) => {
+  app.post("/api/ventilation-tests/:id/calculate", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const test = await storage.getVentilationTest(req.params.id);
       if (!test) {
@@ -9546,7 +9546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/achievements/check", isAuthenticated, async (req, res) => {
+  app.post("/api/achievements/check", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ message: 'User not authenticated' });
@@ -11588,7 +11588,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/qa/performance/export", isAuthenticated, async (req: any, res) => {
+  app.post("/api/qa/performance/export", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { format, period, userId } = req.body;
       const currentUser = req.user.id;
