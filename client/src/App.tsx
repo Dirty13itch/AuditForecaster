@@ -19,6 +19,7 @@ import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { fetchCsrfToken } from "@/lib/csrfToken";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { useGlobalShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import type { ShortcutConfig } from "@/hooks/useKeyboardShortcuts";
@@ -674,6 +675,7 @@ function AppContent() {
             <header className="flex items-center justify-between p-2 border-b">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="flex items-center gap-2">
+                <SyncStatusBadge />
                 <NotificationBell />
                 <OfflineIndicator />
               </div>
