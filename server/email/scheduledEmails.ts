@@ -111,16 +111,16 @@ export function startScheduledEmails() {
         thisWeekJobs.map(job => storage.getForecastsByJob(job.id))
       );
       
-      const allForecasts = forecasts.flat().filter(f => f.actualACH50 !== null);
+      const allForecasts = forecasts.flat().filter(f => f.actualAch50 !== null);
       const passCount = allForecasts.filter(f => {
-        const ach50 = parseFloat(f.actualACH50?.toString() || '0');
+        const ach50 = parseFloat(f.actualAch50?.toString() || '0');
         return ach50 <= 3.0;
       }).length;
       
       const passRate = allForecasts.length > 0 ? (passCount / allForecasts.length) * 100 : 0;
       
       const totalACH50 = allForecasts.reduce((sum, f) => {
-        return sum + parseFloat(f.actualACH50?.toString() || '0');
+        return sum + parseFloat(f.actualAch50?.toString() || '0');
       }, 0);
       const averageACH50 = allForecasts.length > 0 ? totalACH50 / allForecasts.length : 0;
 

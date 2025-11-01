@@ -178,18 +178,18 @@ const createTestJob = (id: string): Job => ({
 
 const createTestForecast = (
   jobId: string,
-  actualTDL: string | null,
-  actualDLO: string | null,
-  actualACH50: string | null
+  actualTdl: string | null,
+  actualDlo: string | null,
+  actualAch50: string | null
 ): Forecast => ({
   id: 'forecast-1',
   jobId,
-  predictedTDL: null,
-  predictedDLO: null,
-  predictedACH50: null,
-  actualTDL,
-  actualDLO,
-  actualACH50,
+  predictedTdl: null,
+  predictedDlo: null,
+  predictedAch50: null,
+  actualTdl,
+  actualDlo,
+  actualAch50,
   confidence: null,
 });
 

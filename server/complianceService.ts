@@ -55,14 +55,14 @@ export async function evaluateJobCompliance(
     let hasActualValues = false;
 
     for (const forecast of forecasts) {
-      if (forecast.actualTDL !== null && forecast.actualTDL !== undefined) {
+      if (forecast.actualTdl !== null && forecast.actualTdl !== undefined) {
         hasActualValues = true;
         const tdlRules = activeRules.filter(
           (rule) => rule.isActive && rule.metricType === "TDL"
         );
 
         for (const rule of tdlRules) {
-          const actualValue = parseFloat(forecast.actualTDL.toString());
+          const actualValue = parseFloat(forecast.actualTdl.toString());
           const thresholdValue = parseFloat(rule.threshold.toString());
 
           if (actualValue > thresholdValue) {
@@ -79,14 +79,14 @@ export async function evaluateJobCompliance(
         }
       }
 
-      if (forecast.actualDLO !== null && forecast.actualDLO !== undefined) {
+      if (forecast.actualDlo !== null && forecast.actualDlo !== undefined) {
         hasActualValues = true;
         const dloRules = activeRules.filter(
           (rule) => rule.isActive && rule.metricType === "DLO"
         );
 
         for (const rule of dloRules) {
-          const actualValue = parseFloat(forecast.actualDLO.toString());
+          const actualValue = parseFloat(forecast.actualDlo.toString());
           const thresholdValue = parseFloat(rule.threshold.toString());
 
           if (actualValue > thresholdValue) {
@@ -103,14 +103,14 @@ export async function evaluateJobCompliance(
         }
       }
 
-      if (forecast.actualACH50 !== null && forecast.actualACH50 !== undefined) {
+      if (forecast.actualAch50 !== null && forecast.actualAch50 !== undefined) {
         hasActualValues = true;
         const ach50Rules = activeRules.filter(
           (rule) => rule.isActive && rule.metricType === "ACH50"
         );
 
         for (const rule of ach50Rules) {
-          const actualValue = parseFloat(forecast.actualACH50.toString());
+          const actualValue = parseFloat(forecast.actualAch50.toString());
           const thresholdValue = parseFloat(rule.threshold.toString());
 
           if (actualValue > thresholdValue) {
@@ -175,14 +175,14 @@ export async function evaluateReportCompliance(
     let hasActualValues = false;
 
     for (const forecast of forecasts) {
-      if (forecast.actualTDL !== null && forecast.actualTDL !== undefined) {
+      if (forecast.actualTdl !== null && forecast.actualTdl !== undefined) {
         hasActualValues = true;
         const tdlRules = activeRules.filter(
           (rule) => rule.isActive && rule.metricType === "TDL"
         );
 
         for (const rule of tdlRules) {
-          const actualValue = parseFloat(forecast.actualTDL.toString());
+          const actualValue = parseFloat(forecast.actualTdl.toString());
           const thresholdValue = parseFloat(rule.threshold.toString());
 
           if (actualValue > thresholdValue) {
@@ -199,14 +199,14 @@ export async function evaluateReportCompliance(
         }
       }
 
-      if (forecast.actualDLO !== null && forecast.actualDLO !== undefined) {
+      if (forecast.actualDlo !== null && forecast.actualDlo !== undefined) {
         hasActualValues = true;
         const dloRules = activeRules.filter(
           (rule) => rule.isActive && rule.metricType === "DLO"
         );
 
         for (const rule of dloRules) {
-          const actualValue = parseFloat(forecast.actualDLO.toString());
+          const actualValue = parseFloat(forecast.actualDlo.toString());
           const thresholdValue = parseFloat(rule.threshold.toString());
 
           if (actualValue > thresholdValue) {
@@ -223,14 +223,14 @@ export async function evaluateReportCompliance(
         }
       }
 
-      if (forecast.actualACH50 !== null && forecast.actualACH50 !== undefined) {
+      if (forecast.actualAch50 !== null && forecast.actualAch50 !== undefined) {
         hasActualValues = true;
         const ach50Rules = activeRules.filter(
           (rule) => rule.isActive && rule.metricType === "ACH50"
         );
 
         for (const rule of ach50Rules) {
-          const actualValue = parseFloat(forecast.actualACH50.toString());
+          const actualValue = parseFloat(forecast.actualAch50.toString());
           const thresholdValue = parseFloat(rule.threshold.toString());
 
           if (actualValue > thresholdValue) {

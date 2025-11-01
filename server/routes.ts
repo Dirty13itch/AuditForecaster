@@ -7427,7 +7427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const forecast = await storage.createForecast(validated);
       
       // Trigger compliance evaluation if actual values are being updated
-      if (validated.actualTDL !== undefined || validated.actualDLO !== undefined || validated.actualACH50 !== undefined) {
+      if (validated.actualTdl !== undefined || validated.actualDlo !== undefined || validated.actualAch50 !== undefined) {
         try {
           await updateJobComplianceStatus(storage, forecast.jobId);
         } catch (error) {
@@ -7455,7 +7455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Trigger compliance evaluation if actual values are being updated
-      if (validated.actualTDL !== undefined || validated.actualDLO !== undefined || validated.actualACH50 !== undefined) {
+      if (validated.actualTdl !== undefined || validated.actualDlo !== undefined || validated.actualAch50 !== undefined) {
         try {
           await updateJobComplianceStatus(storage, forecast.jobId);
         } catch (error) {

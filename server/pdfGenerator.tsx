@@ -483,30 +483,30 @@ function ForecastSection({ forecasts }: { forecasts: Forecast[] }) {
         <View style={styles.forecastCard}>
           <Text style={styles.forecastLabel}>Predicted TDL</Text>
           <Text style={styles.forecastValue}>
-            {forecast.predictedTDL} <Text style={styles.forecastUnit}>CFM25</Text>
+            {forecast.predictedTdl} <Text style={styles.forecastUnit}>CFM25</Text>
           </Text>
         </View>
         <View style={styles.forecastCard}>
           <Text style={styles.forecastLabel}>Predicted DLO</Text>
           <Text style={styles.forecastValue}>
-            {forecast.predictedDLO} <Text style={styles.forecastUnit}>%</Text>
+            {forecast.predictedDlo} <Text style={styles.forecastUnit}>%</Text>
           </Text>
         </View>
       </View>
 
-      {(forecast.actualTDL || forecast.actualDLO) && (
+      {(forecast.actualTdl || forecast.actualDlo) && (
         <>
           <View style={styles.forecastGrid}>
             <View style={styles.forecastCard}>
               <Text style={styles.forecastLabel}>Actual TDL</Text>
               <Text style={styles.forecastValue}>
-                {forecast.actualTDL || 'N/A'} {forecast.actualTDL && <Text style={styles.forecastUnit}>CFM25</Text>}
+                {forecast.actualTdl || 'N/A'} {forecast.actualTdl && <Text style={styles.forecastUnit}>CFM25</Text>}
               </Text>
             </View>
             <View style={styles.forecastCard}>
               <Text style={styles.forecastLabel}>Actual DLO</Text>
               <Text style={styles.forecastValue}>
-                {forecast.actualDLO || 'N/A'} {forecast.actualDLO && <Text style={styles.forecastUnit}>%</Text>}
+                {forecast.actualDlo || 'N/A'} {forecast.actualDlo && <Text style={styles.forecastUnit}>%</Text>}
               </Text>
             </View>
           </View>
@@ -518,23 +518,23 @@ function ForecastSection({ forecasts }: { forecasts: Forecast[] }) {
               <Text style={[styles.tableCell, { fontWeight: 'bold' }]}>Actual</Text>
               <Text style={[styles.tableCell, { fontWeight: 'bold' }]}>Variance</Text>
             </View>
-            {forecast.actualTDL && forecast.predictedTDL && (
+            {forecast.actualTdl && forecast.predictedTdl && (
               <View style={styles.tableRow}>
                 <Text style={styles.tableCell}>TDL</Text>
-                <Text style={styles.tableCell}>{forecast.predictedTDL} CFM25</Text>
-                <Text style={styles.tableCell}>{forecast.actualTDL} CFM25</Text>
+                <Text style={styles.tableCell}>{forecast.predictedTdl} CFM25</Text>
+                <Text style={styles.tableCell}>{forecast.actualTdl} CFM25</Text>
                 <Text style={styles.tableCell}>
-                  {safeToFixed(safeDivide(safeParseFloat(forecast.actualTDL) - safeParseFloat(forecast.predictedTDL), safeParseFloat(forecast.predictedTDL)) * 100, 1)}%
+                  {safeToFixed(safeDivide(safeParseFloat(forecast.actualTdl) - safeParseFloat(forecast.predictedTdl), safeParseFloat(forecast.predictedTdl)) * 100, 1)}%
                 </Text>
               </View>
             )}
-            {forecast.actualDLO && forecast.predictedDLO && (
+            {forecast.actualDlo && forecast.predictedDlo && (
               <View style={styles.tableRow}>
                 <Text style={styles.tableCell}>DLO</Text>
-                <Text style={styles.tableCell}>{forecast.predictedDLO}%</Text>
-                <Text style={styles.tableCell}>{forecast.actualDLO}%</Text>
+                <Text style={styles.tableCell}>{forecast.predictedDlo}%</Text>
+                <Text style={styles.tableCell}>{forecast.actualDlo}%</Text>
                 <Text style={styles.tableCell}>
-                  {safeToFixed(safeDivide(safeParseFloat(forecast.actualDLO) - safeParseFloat(forecast.predictedDLO), safeParseFloat(forecast.predictedDLO)) * 100, 1)}%
+                  {safeToFixed(safeDivide(safeParseFloat(forecast.actualDlo) - safeParseFloat(forecast.predictedDlo), safeParseFloat(forecast.predictedDlo)) * 100, 1)}%
                 </Text>
               </View>
             )}

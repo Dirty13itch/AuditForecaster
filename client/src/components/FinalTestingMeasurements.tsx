@@ -25,9 +25,9 @@ import type { Forecast, Photo } from "@shared/schema";
 const measurementSchema = z.object({
   cfm50: z.coerce.number().min(0, "CFM50 must be positive").optional(),
   houseVolume: z.coerce.number().min(0, "House volume must be positive").optional(),
-  actualACH50: z.coerce.number().min(0, "ACH50 must be positive").optional(),
-  actualTDL: z.coerce.number().min(0, "TDL must be positive").optional(),
-  actualDLO: z.coerce.number().min(0, "DLO must be positive").optional(),
+  actualAch50: z.coerce.number().min(0, "ACH50 must be positive").optional(),
+  actualTdl: z.coerce.number().min(0, "TDL must be positive").optional(),
+  actualDlo: z.coerce.number().min(0, "DLO must be positive").optional(),
   houseSurfaceArea: z.coerce.number().min(0, "Surface area must be positive").optional(),
   totalDuctLeakageCfm25: z.coerce.number().min(0).optional(),
   ductLeakageToOutsideCfm25: z.coerce.number().min(0).optional(),
@@ -116,9 +116,9 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
     defaultValues: {
       cfm50: undefined,
       houseVolume: undefined,
-      actualACH50: undefined,
-      actualTDL: undefined,
-      actualDLO: undefined,
+      actualAch50: undefined,
+      actualTdl: undefined,
+      actualDlo: undefined,
       houseSurfaceArea: undefined,
       totalDuctLeakageCfm25: undefined,
       ductLeakageToOutsideCfm25: undefined,
@@ -144,9 +144,9 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
       form.reset({
         cfm50: existingForecast.cfm50 != null ? parseFloat(existingForecast.cfm50) : undefined,
         houseVolume: existingForecast.houseVolume != null ? parseFloat(existingForecast.houseVolume) : undefined,
-        actualACH50: existingForecast.actualAch50 != null ? parseFloat(existingForecast.actualAch50) : undefined,
-        actualTDL: existingForecast.actualTdl != null ? parseFloat(existingForecast.actualTdl) : undefined,
-        actualDLO: existingForecast.actualDlo != null ? parseFloat(existingForecast.actualDlo) : undefined,
+        actualAch50: existingForecast.actualAch50 != null ? parseFloat(existingForecast.actualAch50) : undefined,
+        actualTdl: existingForecast.actualTdl != null ? parseFloat(existingForecast.actualTdl) : undefined,
+        actualDlo: existingForecast.actualDlo != null ? parseFloat(existingForecast.actualDlo) : undefined,
         houseSurfaceArea: existingForecast.houseSurfaceArea != null ? parseFloat(existingForecast.houseSurfaceArea) : undefined,
         totalDuctLeakageCfm25: existingForecast.totalDuctLeakageCfm25 != null ? parseFloat(existingForecast.totalDuctLeakageCfm25) : undefined,
         ductLeakageToOutsideCfm25: existingForecast.ductLeakageToOutsideCfm25 != null ? parseFloat(existingForecast.ductLeakageToOutsideCfm25) : undefined,
@@ -175,7 +175,7 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
     if (cfm50 && houseVolume && houseVolume > 0) {
       const ach = safeDivide(cfm50 * 60, houseVolume);
       setCalculatedACH50(ach);
-      form.setValue("actualACH50", parseFloat(safeToFixed(ach, 2)));
+      form.setValue("actualAch50", parseFloat(safeToFixed(ach, 2)));
     } else {
       setCalculatedACH50(null);
     }
@@ -311,7 +311,7 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
       form.setValue("cfm50", parsed.cfm50, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
     }
     if (parsed.ach50 !== undefined) {
-      form.setValue("actualACH50", parsed.ach50, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+      form.setValue("actualAch50", parsed.ach50, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
     }
     if (parsed.buildingVolume !== undefined) {
       form.setValue("houseVolume", parsed.buildingVolume, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
@@ -333,14 +333,14 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
     setImportText("");
   };
 
-  const actualACH50 = form.watch("actualACH50");
-  const actualTDL = form.watch("actualTDL");
-  const actualDLO = form.watch("actualDLO");
+  const actualAch50 = form.watch("actualAch50");
+  const actualTdl = form.watch("actualTdl");
+  const actualDlo = form.watch("actualDlo");
 
   // Pass/Fail thresholds
-  const ach50Pass = actualACH50 !== undefined && actualACH50 <= 3.0;
-  const tdlPass = actualTDL !== undefined && actualTDL <= 200;
-  const dloPass = actualDLO !== undefined && actualDLO <= 50;
+  const ach50Pass = actualAch50 !== undefined && actualAch50 <= 3.0;
+  const tdlPass = actualTdl !== undefined && actualTdl <= 200;
+  const dloPass = actualDlo !== undefined && actualDlo <= 50;
 
   return (
     <Card data-testid="card-final-testing-measurements">
@@ -433,7 +433,7 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
 
                 <FormField
                   control={form.control}
-                  name="actualACH50"
+                  name="actualAch50"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center justify-between">
