@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Calendar, MapPin, Building2, CheckCircle2, XCircle, CalendarClock, Loader2 } from "lucide-react";
+import { Calendar, MapPin, Building2, CheckCircle2, XCircle, CalendarClock, Loader2, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => format(new Date(), 'yyyy-MM-dd');
@@ -34,29 +35,43 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 
 interface JobCardProps {
   job: Job & { builder?: Builder };
-  onStatusUpdate: (jobId: string, status: string) => void;
-  isUpdating: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+  onNavigate: () => void;
 }
 
-function FieldDayJobCard({ job, onStatusUpdate, isUpdating }: JobCardProps) {
-  const [, navigate] = useLocation();
-  
+function FieldDayJobCard({ job, isSelected, onSelect, onNavigate }: JobCardProps) {
   const handleCardClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    // Don't navigate if clicking a button
-    if (target.closest('button')) {
-      return;
+    // Check if clicking the selection area (left side of card) vs navigation area (right side)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const cardWidth = rect.width;
+    
+    // Left 80% selects, right 20% navigates to inspection details
+    if (clickX < cardWidth * 0.8) {
+      onSelect();
+    } else {
+      onNavigate();
     }
-    navigate(`/inspection/${job.id}`);
   };
 
   return (
     <Card 
-      className="hover-elevate active-elevate-2 cursor-pointer"
+      className={cn(
+        "hover-elevate active-elevate-2 cursor-pointer relative transition-all",
+        isSelected && "ring-2 ring-primary ring-offset-2"
+      )}
       onClick={handleCardClick}
       data-testid={`card-field-day-job-${job.id}`}
     >
-      <CardHeader className="pb-3">
+      {/* Selection indicator */}
+      {isSelected && (
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+          <Check className="h-5 w-5 text-primary-foreground" />
+        </div>
+      )}
+      
+      <CardHeader className={cn("pb-3", isSelected && "pl-14")}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <CardTitle className="text-xl font-bold truncate" data-testid="text-builder-name">
@@ -78,7 +93,7 @@ function FieldDayJobCard({ job, onStatusUpdate, isUpdating }: JobCardProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className={cn("space-y-4", isSelected && "pl-14")}>
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary" data-testid={`badge-job-type-${job.id}`}>
             {JOB_TYPE_LABELS[job.jobType] || job.jobType}
@@ -95,53 +110,10 @@ function FieldDayJobCard({ job, onStatusUpdate, isUpdating }: JobCardProps) {
             {job.notes}
           </p>
         )}
-
-        {/* Quick action buttons */}
-        <div className="grid grid-cols-3 gap-2 pt-2">
-          <Button
-            size="default"
-            variant="outline"
-            className="bg-success/10 hover:bg-success/20 border-success/30 text-success-foreground min-h-12"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStatusUpdate(job.id, 'done');
-            }}
-            disabled={isUpdating || job.status === 'done'}
-            data-testid={`button-mark-done-${job.id}`}
-          >
-            <CheckCircle2 className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Done</span>
-          </Button>
-
-          <Button
-            size="default"
-            variant="outline"
-            className="bg-destructive/10 hover:bg-destructive/20 border-destructive/30 text-destructive-foreground min-h-12"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStatusUpdate(job.id, 'failed');
-            }}
-            disabled={isUpdating || job.status === 'failed'}
-            data-testid={`button-mark-failed-${job.id}`}
-          >
-            <XCircle className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Failed</span>
-          </Button>
-
-          <Button
-            size="default"
-            variant="outline"
-            className="bg-warning/10 hover:bg-warning/20 border-warning/30 text-warning-foreground min-h-12"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStatusUpdate(job.id, 'reschedule');
-            }}
-            disabled={isUpdating}
-            data-testid={`button-reschedule-${job.id}`}
-          >
-            <CalendarClock className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Reschedule</span>
-          </Button>
+        
+        {/* Tap hint for navigation */}
+        <div className="text-xs text-muted-foreground text-right">
+          Tap right edge for details →
         </div>
       </CardContent>
     </Card>
@@ -177,6 +149,8 @@ function JobListSkeleton({ count = 3 }: { count?: number }) {
 export default function FieldDay() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
   
   const today = getTodayDate();
@@ -242,12 +216,18 @@ export default function FieldDay() {
     },
   });
 
-  const handleStatusUpdate = (jobId: string, status: string) => {
-    updateJobMutation.mutate({ jobId, status });
+  const handleStatusUpdate = (status: string) => {
+    if (!selectedJobId) return;
+    updateJobMutation.mutate({ jobId: selectedJobId, status });
+    setSelectedJobId(null); // Clear selection after update
   };
 
+  // Get selected job data
+  const allJobsList = [...(myJobs || []), ...(isAdmin && allJobs ? allJobs.filter(job => !myJobs?.some(myJob => myJob.id === job.id)) : [])];
+  const selectedJob = allJobsList.find(job => job.id === selectedJobId);
+
   return (
-    <div className="container max-w-7xl mx-auto p-4 space-y-6">
+    <div className="container max-w-7xl mx-auto p-4 space-y-6 pb-32">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -282,8 +262,9 @@ export default function FieldDay() {
               <FieldDayJobCard
                 key={job.id}
                 job={job}
-                onStatusUpdate={handleStatusUpdate}
-                isUpdating={updatingJobId === job.id}
+                isSelected={selectedJobId === job.id}
+                onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
+                onNavigate={() => navigate(`/inspection/${job.id}`)}
               />
             ))}
           </div>
@@ -328,8 +309,9 @@ export default function FieldDay() {
                 <FieldDayJobCard
                   key={job.id}
                   job={job}
-                  onStatusUpdate={handleStatusUpdate}
-                  isUpdating={updatingJobId === job.id}
+                  isSelected={selectedJobId === job.id}
+                  onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
+                  onNavigate={() => navigate(`/inspection/${job.id}`)}
                 />
               ))}
             </div>
@@ -347,6 +329,88 @@ export default function FieldDay() {
             </Card>
           )}
         </section>
+      )}
+
+      {/* Fixed Bottom Action Bar - Thumb Zone Optimized */}
+      {selectedJob && (
+        <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg p-4 z-50">
+          <div className="container max-w-7xl mx-auto">
+            {/* Selected Job Info */}
+            <div className="mb-4">
+              <p className="text-sm font-medium truncate" data-testid="text-selected-job-name">
+                {selectedJob.builder?.name || selectedJob.builderName}
+              </p>
+              <p className="text-xs text-muted-foreground truncate" data-testid="text-selected-job-address">
+                {selectedJob.address}
+              </p>
+            </div>
+
+            {/* Large Touch-Optimized Action Buttons */}
+            <div className="grid grid-cols-3 gap-3">
+              <Button
+                size="lg"
+                className="h-14 bg-green-500 hover:bg-green-600 text-white font-bold"
+                onClick={() => handleStatusUpdate('done')}
+                disabled={updatingJobId === selectedJobId || selectedJob.status === 'done'}
+                data-testid={`button-mark-done-${selectedJobId}`}
+              >
+                {updatingJobId === selectedJobId ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-5 w-5 mr-2" />
+                    Done
+                  </>
+                )}
+              </Button>
+
+              <Button
+                size="lg"
+                className="h-14 bg-red-500 hover:bg-red-600 text-white font-bold"
+                onClick={() => handleStatusUpdate('failed')}
+                disabled={updatingJobId === selectedJobId || selectedJob.status === 'failed'}
+                data-testid={`button-mark-failed-${selectedJobId}`}
+              >
+                {updatingJobId === selectedJobId ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <XCircle className="h-5 w-5 mr-2" />
+                    Failed
+                  </>
+                )}
+              </Button>
+
+              <Button
+                size="lg"
+                className="h-14 bg-orange-500 hover:bg-orange-600 text-white font-bold"
+                onClick={() => handleStatusUpdate('reschedule')}
+                disabled={updatingJobId === selectedJobId}
+                data-testid={`button-reschedule-${selectedJobId}`}
+              >
+                {updatingJobId === selectedJobId ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <CalendarClock className="h-5 w-5 mr-2" />
+                    Reschedule
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Cancel Selection */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full mt-3"
+              onClick={() => setSelectedJobId(null)}
+              data-testid="button-cancel-selection"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
