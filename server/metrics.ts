@@ -126,6 +126,49 @@ export const cacheHits = new promClient.Counter({
   registers: [register]
 });
 
+// ============================================
+// Background Job Metrics (Phase 4)
+// ============================================
+
+export const backgroundJobExecutions = new promClient.Counter({
+  name: 'background_job_executions_total',
+  help: 'Total number of background job executions',
+  labelNames: ['job_name', 'status'],
+  registers: [register]
+});
+
+export const backgroundJobDuration = new promClient.Histogram({
+  name: 'background_job_duration_seconds',
+  help: 'Duration of background job executions in seconds',
+  labelNames: ['job_name'],
+  buckets: [1, 5, 10, 30, 60, 120, 300],
+  registers: [register]
+});
+
+export const backgroundJobErrors = new promClient.Counter({
+  name: 'background_job_errors_total',
+  help: 'Total number of background job errors',
+  labelNames: ['job_name'],
+  registers: [register]
+});
+
+// ============================================
+// WebSocket Metrics (Phase 4)
+// ============================================
+
+export const websocketConnections = new promClient.Gauge({
+  name: 'websocket_connections_active',
+  help: 'Number of active WebSocket connections',
+  registers: [register]
+});
+
+export const websocketMessages = new promClient.Counter({
+  name: 'websocket_messages_total',
+  help: 'Total number of WebSocket messages sent',
+  labelNames: ['type'],
+  registers: [register]
+});
+
 export const cacheMisses = new promClient.Counter({
   name: 'cache_misses_total',
   help: 'Total number of cache misses',

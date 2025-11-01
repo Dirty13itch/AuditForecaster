@@ -1777,6 +1777,50 @@ export const systemConfig = pgTable("system_config", {
   index("idx_system_config_updated_by").on(table.updatedBy),
 ]);
 
+// Background Jobs Tracking for Production Monitoring
+export const backgroundJobs = pgTable("background_jobs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  jobName: varchar("job_name").notNull().unique(),
+  displayName: varchar("display_name").notNull(),
+  description: text("description"),
+  schedule: varchar("schedule"), // Cron expression
+  enabled: boolean("enabled").notNull().default(true),
+  lastRunAt: timestamp("last_run_at"),
+  lastStatus: text("last_status", { enum: ["success", "failed", "running"] }),
+  lastDuration: integer("last_duration_ms"),
+  lastError: text("last_error"),
+  nextRunAt: timestamp("next_run_at"),
+  successCount: integer("success_count").notNull().default(0),
+  failureCount: integer("failure_count").notNull().default(0),
+  averageDuration: integer("average_duration_ms"),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_background_jobs_job_name").on(table.jobName),
+  index("idx_background_jobs_enabled").on(table.enabled),
+  index("idx_background_jobs_last_run_at").on(table.lastRunAt),
+  index("idx_background_jobs_last_status").on(table.lastStatus),
+]);
+
+// Background Job Execution History for Production Monitoring
+export const backgroundJobExecutions = pgTable("background_job_executions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  jobName: varchar("job_name").notNull(),
+  status: text("status", { enum: ["success", "failed", "running"] }).notNull(),
+  startedAt: timestamp("started_at").notNull(),
+  completedAt: timestamp("completed_at"),
+  duration: integer("duration_ms"),
+  error: text("error"),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_background_job_executions_job_name").on(table.jobName),
+  index("idx_background_job_executions_status").on(table.status),
+  index("idx_background_job_executions_started_at").on(table.startedAt),
+  index("idx_background_job_executions_created_at").on(table.createdAt),
+]);
+
 // For Replit Auth upsert operations
 export const upsertUserSchema = createInsertSchema(users).pick({
   id: true,
@@ -2283,6 +2327,21 @@ export const insertSystemConfigSchema = createInsertSchema(systemConfig).omit({
   updatedAt: true 
 });
 
+// Background Jobs insert schemas
+export const insertBackgroundJobSchema = createInsertSchema(backgroundJobs).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  successCount: true,
+  failureCount: true,
+  averageDuration: true,
+});
+
+export const insertBackgroundJobExecutionSchema = createInsertSchema(backgroundJobExecutions).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
 // Calendar import schemas
 export const approveEventSchema = z.object({
   builderId: z.string().min(1, "Builder is required"),
@@ -2477,6 +2536,12 @@ export type FeatureFlag = typeof featureFlags.$inferSelect;
 export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
+
+// Background Jobs Types
+export type BackgroundJob = typeof backgroundJobs.$inferSelect;
+export type InsertBackgroundJob = z.infer<typeof insertBackgroundJobSchema>;
+export type BackgroundJobExecution = typeof backgroundJobExecutions.$inferSelect;
+export type InsertBackgroundJobExecution = z.infer<typeof insertBackgroundJobExecutionSchema>;
 
 export interface CalendarImportLogsResponse {
   logs: CalendarImportLog[];

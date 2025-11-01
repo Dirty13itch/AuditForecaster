@@ -4,13 +4,32 @@ import { emailService } from './emailService';
 import { dailyDigestTemplate, type DailyDigestJob } from './templates/dailyDigest';
 import { weeklyPerformanceSummaryTemplate } from './templates/weeklyPerformanceSummary';
 import { serverLogger } from '../logger';
+import { backgroundJobTracker } from '../backgroundJobTracker';
 
-export function startScheduledEmails() {
+export async function startScheduledEmails() {
+  // Register daily digest job
+  await backgroundJobTracker.registerJob({
+    jobName: 'daily_digest',
+    displayName: 'Daily Digest Email',
+    description: 'Send daily digest emails to users at 7:00 AM',
+    schedule: '0 7 * * *',
+    enabled: true,
+  });
+
+  // Register weekly performance summary job
+  await backgroundJobTracker.registerJob({
+    jobName: 'weekly_performance_summary',
+    displayName: 'Weekly Performance Summary',
+    description: 'Send weekly performance summary emails on Monday at 9:00 AM',
+    schedule: '0 9 * * 1',
+    enabled: true,
+  });
+
   // Daily digest at 7:00 AM every day
   cron.schedule('0 7 * * *', async () => {
     serverLogger.info('[ScheduledEmails] Running daily digest job');
     
-    try {
+    await backgroundJobTracker.executeJob('daily_digest', async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
@@ -78,17 +97,14 @@ export function startScheduledEmails() {
           });
         }
       }
-      
-    } catch (error) {
-      serverLogger.error('[ScheduledEmails] Failed to send daily digest', { error });
-    }
+    });
   });
 
   // Weekly performance summary on Monday at 9:00 AM
   cron.schedule('0 9 * * 1', async () => {
     serverLogger.info('[ScheduledEmails] Running weekly performance summary job');
     
-    try {
+    await backgroundJobTracker.executeJob('weekly_performance_summary', async () => {
       const today = new Date();
       const oneWeekAgo = new Date(today);
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -186,10 +202,7 @@ export function startScheduledEmails() {
           });
         }
       }
-      
-    } catch (error) {
-      serverLogger.error('[ScheduledEmails] Failed to send weekly summary', { error });
-    }
+    });
   });
 
   serverLogger.info('[ScheduledEmails] Cron jobs initialized', {

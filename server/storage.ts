@@ -124,6 +124,10 @@ import {
   type InsertQaChecklistResponse,
   type QaPerformanceMetric,
   type InsertQaPerformanceMetric,
+  type BackgroundJob,
+  type InsertBackgroundJob,
+  type BackgroundJobExecution,
+  type InsertBackgroundJobExecution,
   type ScoreSummary,
   type Notification,
   type InsertNotification,
@@ -161,6 +165,8 @@ import {
   pendingCalendarEvents,
   featureFlags,
   systemConfig,
+  backgroundJobs,
+  backgroundJobExecutions,
   users,
   builders,
   builderContacts,
@@ -9718,6 +9724,150 @@ export class DatabaseStorage implements IStorage {
       return sampleSize;
     } catch (error) {
       serverLogger.error('[Storage/calculateSampleSize] Failed to calculate sample size', { error, unitCount });
+      throw error;
+    }
+  }
+
+  // ===== Background Job Monitoring Methods (Phase 4: Production Readiness) =====
+
+  async upsertBackgroundJob(job: InsertBackgroundJob): Promise<BackgroundJob> {
+    try {
+      const [result] = await db.insert(backgroundJobs)
+        .values(job)
+        .onConflictDoUpdate({
+          target: backgroundJobs.jobName,
+          set: {
+            displayName: job.displayName,
+            description: job.description,
+            schedule: job.schedule,
+            enabled: job.enabled,
+            updatedAt: new Date(),
+          }
+        })
+        .returning();
+      return result;
+    } catch (error) {
+      serverLogger.error('[Storage/upsertBackgroundJob] Failed to upsert background job', { error, job });
+      throw error;
+    }
+  }
+
+  async updateBackgroundJobExecution(
+    jobName: string,
+    status: 'success' | 'failed' | 'running',
+    duration?: number,
+    error?: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
+    try {
+      const now = new Date();
+
+      // Get current job data to calculate averages
+      const currentJob = await db.select()
+        .from(backgroundJobs)
+        .where(eq(backgroundJobs.jobName, jobName))
+        .limit(1)
+        .then(rows => rows[0]);
+
+      const updates: any = {
+        lastRunAt: now,
+        lastStatus: status,
+        lastDuration: duration || null,
+        lastError: error || null,
+        updatedAt: now,
+      };
+
+      if (status === 'success') {
+        updates.successCount = currentJob ? (currentJob.successCount + 1) : 1;
+        
+        // Calculate rolling average duration
+        if (duration && currentJob) {
+          const totalRuns = currentJob.successCount + 1;
+          const currentAvg = currentJob.averageDuration || 0;
+          updates.averageDuration = Math.round(
+            (currentAvg * currentJob.successCount + duration) / totalRuns
+          );
+        } else if (duration) {
+          updates.averageDuration = duration;
+        }
+      } else if (status === 'failed') {
+        updates.failureCount = currentJob ? (currentJob.failureCount + 1) : 1;
+      }
+
+      await db.update(backgroundJobs)
+        .set(updates)
+        .where(eq(backgroundJobs.jobName, jobName));
+
+      serverLogger.info('[Storage/updateBackgroundJobExecution] Background job execution updated', { 
+        jobName, 
+        status, 
+        duration 
+      });
+    } catch (error) {
+      serverLogger.error('[Storage/updateBackgroundJobExecution] Failed to update job execution', { 
+        error, 
+        jobName 
+      });
+      throw error;
+    }
+  }
+
+  async recordBackgroundJobExecution(execution: InsertBackgroundJobExecution): Promise<BackgroundJobExecution> {
+    try {
+      const [result] = await db.insert(backgroundJobExecutions)
+        .values(execution)
+        .returning();
+      
+      serverLogger.info('[Storage/recordBackgroundJobExecution] Job execution recorded', { 
+        jobName: execution.jobName, 
+        status: execution.status 
+      });
+      
+      return result;
+    } catch (error) {
+      serverLogger.error('[Storage/recordBackgroundJobExecution] Failed to record execution', { error, execution });
+      throw error;
+    }
+  }
+
+  async getAllBackgroundJobs(): Promise<BackgroundJob[]> {
+    try {
+      return await db.select()
+        .from(backgroundJobs)
+        .orderBy(backgroundJobs.displayName);
+    } catch (error) {
+      serverLogger.error('[Storage/getAllBackgroundJobs] Failed to get background jobs', { error });
+      throw error;
+    }
+  }
+
+  async getBackgroundJobExecutionHistory(
+    jobName: string,
+    limit: number = 50
+  ): Promise<BackgroundJobExecution[]> {
+    try {
+      return await db.select()
+        .from(backgroundJobExecutions)
+        .where(eq(backgroundJobExecutions.jobName, jobName))
+        .orderBy(desc(backgroundJobExecutions.startedAt))
+        .limit(limit);
+    } catch (error) {
+      serverLogger.error('[Storage/getBackgroundJobExecutionHistory] Failed to get execution history', { 
+        error, 
+        jobName 
+      });
+      throw error;
+    }
+  }
+
+  async getRecentBackgroundJobExecutions(limit: number = 100): Promise<BackgroundJobExecution[]> {
+    try {
+      return await db.select()
+        .from(backgroundJobExecutions)
+        .orderBy(desc(backgroundJobExecutions.startedAt))
+        .limit(limit);
+    } catch (error) {
+      serverLogger.error('[Storage/getRecentBackgroundJobExecutions] Failed to get recent executions', { error });
       throw error;
     }
   }

@@ -47,6 +47,12 @@ Core architectural decisions and features include:
 -   **Construction Manager Report Routing**: Report scheduling system that routes completed inspection reports to builder-specific construction managers (not builders directly). Supports template selection and automated delivery after inspection completion.
 -   **TEC Auto Test Integration**: Import blower door test results from TEC Auto Test application with automatic population of CFM50, ACH50, and building volume data.
 -   **Photo-Based Duct Testing**: Simplified duct leakage testing with manual CFM entry (total duct leakage, leakage to outside) and photo documentation of manometer display readings.
+-   **Production Readiness Infrastructure (Phase 4)**: Comprehensive production monitoring and observability:
+    * **Background Job Monitoring Dashboard**: Admin-only dashboard at `/admin/background-jobs` for monitoring all cron jobs (calendar import, daily digest, weekly summary, scheduled exports). Displays job status, execution history, success/failure rates, last run time, next scheduled run, and error logs. Features real-time updates, health indicators (green/yellow/red), filtering by status, and detailed execution logs. All background jobs automatically tracked in database with timing, status, and error information.
+    * **Enhanced Logging & Metrics**: Comprehensive Prometheus metrics integration tracking HTTP requests (duration, totals, errors), database queries, background job executions (duration, status, errors), WebSocket connections, business metrics, and cache performance. Automatic request/response logging with timing via Express middleware. Structured logging for API requests, background jobs, WebSocket events, and errors.
+    * **Health Check Endpoints**: Production-ready health checks at `/healthz` (liveness), `/readyz` (database readiness), and `/api/status` (detailed system info). Used for deployment health checks, load balancer probes, and monitoring.
+    * **WebSocket Scaling Documentation**: Comprehensive scaling guide in `WEBSOCKET_SCALING.md` covering single-server architecture, sticky session scaling (2-5 servers), Redis pub/sub scaling (5+ servers), Socket.IO migration path, connection limits, performance optimization, monitoring, and troubleshooting.
+    * **Metrics Endpoint**: Prometheus-compatible metrics available at `/metrics` for integration with monitoring tools like Grafana, Datadog, or New Relic.
 
 ## External Dependencies
 

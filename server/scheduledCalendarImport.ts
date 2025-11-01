@@ -4,6 +4,7 @@ import { storage } from './storage';
 import { GoogleCalendarService } from './googleCalendar';
 import { processCalendarEvents } from './calendarImportService';
 import { DateTime } from 'luxon';
+import { backgroundJobTracker } from './backgroundJobTracker';
 
 const googleCalendarService = new GoogleCalendarService();
 
@@ -50,10 +51,19 @@ export async function startScheduledCalendarImport() {
     return;
   }
 
+  // Register the job with background job tracker
+  await backgroundJobTracker.registerJob({
+    jobName: 'calendar_import',
+    displayName: 'Calendar Import',
+    description: 'Automated import from Building Knowledge Google Calendar',
+    schedule: CALENDAR_IMPORT_SCHEDULE,
+    enabled: CALENDAR_IMPORT_ENABLED,
+  });
+
   cron.schedule(CALENDAR_IMPORT_SCHEDULE, async () => {
     serverLogger.info('[ScheduledCalendarImport] Running automated calendar import job');
     
-    try {
+    await backgroundJobTracker.executeJob('calendar_import', async () => {
       // Find the "Building Knowledge" calendar by name
       const buildingKnowledgeCalendarId = await googleCalendarService.findCalendarByName(
         BUILDING_KNOWLEDGE_CALENDAR_NAME
@@ -159,7 +169,10 @@ export async function startScheduledCalendarImport() {
       } catch (auditError) {
         serverLogger.error('[ScheduledCalendarImport] Failed to create audit log for import failure', { auditError });
       }
-    }
+      
+      // Re-throw to let the backgroundJobTracker handle it
+      throw error;
+    });
   });
   
   serverLogger.info('[ScheduledCalendarImport] Automated calendar import cron job initialized', {

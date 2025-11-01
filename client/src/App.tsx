@@ -66,6 +66,7 @@ const Analytics = lazy(() => import("@/pages/Analytics"));
 const AuditLogs = lazy(() => import("@/pages/AuditLogs"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const AdminDiagnostics = lazy(() => import("@/pages/AdminDiagnostics"));
+const BackgroundJobs = lazy(() => import("@/pages/BackgroundJobs"));
 const CalendarPOC = lazy(() => import("@/pages/CalendarPOC"));
 const CalendarReview = lazy(() => import("@/pages/CalendarReview"));
 const CalendarImportHistory = lazy(() => import("@/pages/CalendarImportHistory"));
@@ -333,6 +334,11 @@ function Router() {
       <Route path="/admin/diagnostics" component={() => (
         <RouteErrorBoundary>
           <AdminDiagnostics />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/admin/background-jobs" component={() => (
+        <RouteErrorBoundary>
+          <BackgroundJobs />
         </RouteErrorBoundary>
       )} />
       <Route path="/admin/calendar-import" component={() => (
