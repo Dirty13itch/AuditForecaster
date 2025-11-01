@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
@@ -39,6 +39,9 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
@@ -86,6 +89,7 @@ import {
   MoreVertical,
   Code,
   Package,
+  RefreshCw,
 } from "lucide-react";
 import type { ReportTemplate } from "@shared/schema";
 
@@ -256,7 +260,7 @@ const templateFormSchema = z.object({
 
 type TemplateFormValues = z.infer<typeof templateFormSchema>;
 
-export default function ReportTemplateDesigner() {
+function ReportTemplateDesignerContent() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const { id: templateId } = useParams();
@@ -318,8 +322,13 @@ export default function ReportTemplateDesigner() {
     },
   });
 
-  // Queries and mutations
-  const { data: existingTemplate, isLoading } = useQuery<ReportTemplate>({
+  // Queries and mutations with retry: 2
+  const { 
+    data: existingTemplate, 
+    isLoading: isLoadingTemplate,
+    error: templateError,
+    refetch: refetchTemplate
+  } = useQuery<ReportTemplate>({
     queryKey: ["/api/report-templates", templateId],
     queryFn: async () => {
       const response = await fetch(`/api/report-templates/${templateId}`);
@@ -327,9 +336,15 @@ export default function ReportTemplateDesigner() {
       return response.json();
     },
     enabled: isEditMode,
+    retry: 2,
   });
 
-  const { data: versionHistory } = useQuery<ReportTemplate[]>({
+  const { 
+    data: versionHistory,
+    isLoading: isLoadingVersions,
+    error: versionsError,
+    refetch: refetchVersions 
+  } = useQuery<ReportTemplate[]>({
     queryKey: ["/api/report-templates", templateId, "versions"],
     queryFn: async () => {
       const response = await fetch(`/api/report-templates/${templateId}/versions`);
@@ -337,6 +352,7 @@ export default function ReportTemplateDesigner() {
       return response.json();
     },
     enabled: isEditMode && versionHistoryOpen,
+    retry: 2,
   });
 
   const saveTemplateMutation = useMutation({
@@ -408,7 +424,7 @@ export default function ReportTemplateDesigner() {
     }
   }, [existingTemplate]);
 
-  // Undo/Redo functionality
+  // Memoized callbacks for undo/redo
   const pushToUndoStack = useCallback(() => {
     setUndoStack((prev) => [...prev, { ...templateData }]);
     setRedoStack([]);
@@ -430,18 +446,18 @@ export default function ReportTemplateDesigner() {
     setRedoStack((prev) => prev.slice(1));
   }, [redoStack, templateData]);
 
-  // Drag and drop handlers
-  const handleDragStart = (event: DragStartEvent) => {
+  // Memoized drag and drop handlers
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
     setActiveId(active.id);
-  };
+  }, []);
 
-  const handleDragOver = (event: DragOverEvent) => {
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const { over } = event;
     setOverId(over?.id || null);
-  };
+  }, []);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     
     if (!over) {
@@ -452,10 +468,8 @@ export default function ReportTemplateDesigner() {
 
     pushToUndoStack();
 
-    // Check if dragging from palette
     const paletteComponent = componentPalette.find((c) => c.id === active.id);
     if (paletteComponent) {
-      // Add new component to canvas
       const newComponent: TemplateComponent = {
         id: `${paletteComponent.type}_${Date.now()}`,
         type: paletteComponent.type,
@@ -471,7 +485,6 @@ export default function ReportTemplateDesigner() {
       }));
       setSelectedComponentId(newComponent.id);
     } else {
-      // Reorder existing components
       const oldIndex = templateData.components.findIndex((c) => c.id === active.id);
       const newIndex = templateData.components.findIndex((c) => c.id === over.id);
 
@@ -485,10 +498,10 @@ export default function ReportTemplateDesigner() {
 
     setActiveId(null);
     setOverId(null);
-  };
+  }, [templateData.components, pushToUndoStack]);
 
-  // Component property update
-  const updateComponentProperty = (componentId: string, property: string, value: any) => {
+  // Memoized component property update
+  const updateComponentProperty = useCallback((componentId: string, property: string, value: any) => {
     pushToUndoStack();
     setTemplateData((prev) => ({
       ...prev,
@@ -498,20 +511,20 @@ export default function ReportTemplateDesigner() {
           : c
       ),
     }));
-  };
+  }, [pushToUndoStack]);
 
-  // Delete component
-  const deleteComponent = (componentId: string) => {
+  // Memoized delete component
+  const deleteComponent = useCallback((componentId: string) => {
     pushToUndoStack();
     setTemplateData((prev) => ({
       ...prev,
       components: prev.components.filter((c) => c.id !== componentId),
     }));
     setSelectedComponentId(null);
-  };
+  }, [pushToUndoStack]);
 
-  // Duplicate component
-  const duplicateComponent = (componentId: string) => {
+  // Memoized duplicate component
+  const duplicateComponent = useCallback((componentId: string) => {
     const component = templateData.components.find((c) => c.id === componentId);
     if (!component) return;
 
@@ -527,10 +540,10 @@ export default function ReportTemplateDesigner() {
       components: [...prev.components, newComponent],
     }));
     setSelectedComponentId(newComponent.id);
-  };
+  }, [templateData.components, pushToUndoStack]);
 
-  // Save template
-  const handleSaveTemplate = (values: TemplateFormValues) => {
+  // Memoized save template
+  const handleSaveTemplate = useCallback((values: TemplateFormValues) => {
     const dataToSave: TemplateData = {
       ...templateData,
       name: values.name,
@@ -538,10 +551,10 @@ export default function ReportTemplateDesigner() {
       category: values.category,
     };
     saveTemplateMutation.mutate(dataToSave);
-  };
+  }, [templateData, saveTemplateMutation]);
 
-  // Export template
-  const handleExportTemplate = () => {
+  // Memoized export template
+  const handleExportTemplate = useCallback(() => {
     const dataStr = JSON.stringify(templateData, null, 2);
     const dataBlob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(dataBlob);
@@ -551,10 +564,10 @@ export default function ReportTemplateDesigner() {
     link.click();
     URL.revokeObjectURL(url);
     toast({ title: "Template exported successfully" });
-  };
+  }, [templateData, toast]);
 
-  // Import template
-  const handleImportTemplate = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Memoized import template
+  const handleImportTemplate = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -570,11 +583,22 @@ export default function ReportTemplateDesigner() {
       }
     };
     reader.readAsText(file);
-  };
+  }, [pushToUndoStack, toast]);
 
-  const selectedComponent = templateData.components.find((c) => c.id === selectedComponentId);
+  // Memoized selected component
+  const selectedComponent = useMemo(() => 
+    templateData.components.find((c) => c.id === selectedComponentId),
+    [templateData.components, selectedComponentId]
+  );
 
-  const renderComponentPreview = (component: TemplateComponent) => {
+  // Memoized component categories
+  const componentCategories = useMemo(() => {
+    const categories = new Set(componentPalette.map((c) => c.category));
+    return Array.from(categories);
+  }, []);
+
+  // Memoized render component preview
+  const renderComponentPreview = useCallback((component: TemplateComponent) => {
     const paletteItem = componentPalette.find((p) => p.type === component.type);
     const Icon = paletteItem?.icon || FileText;
 
@@ -589,11 +613,12 @@ export default function ReportTemplateDesigner() {
           e.stopPropagation();
           setSelectedComponentId(component.id);
         }}
+        data-testid={`component-${component.id}`}
       >
         <div className="flex items-start gap-2">
           <Icon className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">
+            <p className="text-sm font-medium truncate" data-testid={`text-component-label-${component.id}`}>
               {component.properties.label || paletteItem?.label}
             </p>
             {component.properties.description && (
@@ -609,12 +634,12 @@ export default function ReportTemplateDesigner() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="h-7 w-7">
+              <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-component-menu-${component.id}`}>
                 <MoreVertical className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => duplicateComponent(component.id)}>
+              <DropdownMenuItem onClick={() => duplicateComponent(component.id)} data-testid={`menu-duplicate-${component.id}`}>
                 <Copy className="h-3.5 w-3.5 mr-2" />
                 Duplicate
               </DropdownMenuItem>
@@ -622,6 +647,7 @@ export default function ReportTemplateDesigner() {
               <DropdownMenuItem 
                 onClick={() => deleteComponent(component.id)}
                 className="text-destructive"
+                data-testid={`menu-delete-${component.id}`}
               >
                 <Trash2 className="h-3.5 w-3.5 mr-2" />
                 Delete
@@ -631,7 +657,55 @@ export default function ReportTemplateDesigner() {
         </div>
       </div>
     );
-  };
+  }, [selectedComponentId, duplicateComponent, deleteComponent]);
+
+  // Loading state with skeleton loaders
+  if (isLoadingTemplate && isEditMode) {
+    return (
+      <div className="h-screen flex flex-col" data-testid="skeleton-designer">
+        <div className="border-b px-4 py-2 bg-background">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-6 w-48" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 p-4 space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <Skeleton className="h-64" />
+            <Skeleton className="h-64" />
+            <Skeleton className="h-64" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state with retry button
+  if (templateError && isEditMode) {
+    return (
+      <div className="h-screen flex items-center justify-center p-4" data-testid="error-template">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Failed to load template</AlertTitle>
+          <AlertDescription className="space-y-4">
+            <p>{templateError instanceof Error ? templateError.message : 'Unknown error occurred'}</p>
+            <Button 
+              variant="outline" 
+              onClick={() => refetchTemplate()}
+              className="w-full"
+              data-testid="button-retry-template"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <DndContext
@@ -641,12 +715,12 @@ export default function ReportTemplateDesigner() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="h-screen flex flex-col">
+      <div className="h-screen flex flex-col" data-testid="page-designer">
         {/* Header Toolbar */}
         <div className="border-b px-4 py-2 bg-background">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <h1 className="text-lg font-semibold">Report Template Designer</h1>
+              <h1 className="text-lg font-semibold" data-testid="text-designer-title">Report Template Designer</h1>
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-2">
                 <Button
@@ -668,76 +742,45 @@ export default function ReportTemplateDesigner() {
                   <Redo className="h-4 w-4" />
                 </Button>
               </div>
-              <Separator orientation="vertical" className="h-6" />
-              <div className="flex items-center gap-1 bg-muted rounded-md p-1">
-                <Button
-                  variant={previewMode === "desktop" ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setPreviewMode("desktop")}
-                  data-testid="button-preview-desktop"
-                >
-                  <Monitor className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={previewMode === "tablet" ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setPreviewMode("tablet")}
-                  data-testid="button-preview-tablet"
-                >
-                  <Tablet className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={previewMode === "mobile" ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setPreviewMode("mobile")}
-                  data-testid="button-preview-mobile"
-                >
-                  <Smartphone className="h-4 w-4" />
-                </Button>
-              </div>
+            </div>
+            <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => setShowGrid(!showGrid)}
                 data-testid="button-toggle-grid"
               >
-                <Grid3X3 className={`h-4 w-4 ${showGrid ? "text-primary" : ""}`} />
+                <Grid3X3 className="h-4 w-4 mr-2" />
+                {showGrid ? "Hide Grid" : "Show Grid"}
               </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              {isEditMode && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setVersionHistoryOpen(true)}
-                    data-testid="button-version-history"
-                  >
-                    <GitBranch className="h-4 w-4 mr-2" />
-                    Version History
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" data-testid="button-preview-mode">
+                    {previewMode === "desktop" ? <Monitor className="h-4 w-4 mr-2" /> : 
+                     previewMode === "tablet" ? <Tablet className="h-4 w-4 mr-2" /> : 
+                     <Smartphone className="h-4 w-4 mr-2" />}
+                    Preview
+                    <ChevronDown className="h-4 w-4 ml-2" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => cloneTemplateMutation.mutate(`${templateData.name} (Copy)`)}
-                    data-testid="button-clone"
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Clone
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => archiveTemplateMutation.mutate()}
-                    data-testid="button-archive"
-                  >
-                    <Archive className="h-4 w-4 mr-2" />
-                    Archive
-                  </Button>
-                </>
-              )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => setPreviewMode("desktop")} data-testid="menu-preview-desktop">
+                    <Monitor className="h-4 w-4 mr-2" />
+                    Desktop
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setPreviewMode("tablet")} data-testid="menu-preview-tablet">
+                    <Tablet className="h-4 w-4 mr-2" />
+                    Tablet
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setPreviewMode("mobile")} data-testid="menu-preview-mobile">
+                    <Smartphone className="h-4 w-4 mr-2" />
+                    Mobile
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Separator orientation="vertical" className="h-6" />
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={handleExportTemplate}
                 data-testid="button-export"
@@ -745,110 +788,111 @@ export default function ReportTemplateDesigner() {
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportTemplate}
-                className="hidden"
-                id="import-template"
-              />
-              <label htmlFor="import-template">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  asChild
-                  data-testid="button-import"
-                >
-                  <span>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Import
-                  </span>
-                </Button>
-              </label>
               <Button
-                variant="default"
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById("import-file")?.click()}
+                data-testid="button-import"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+                <input
+                  id="import-file"
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={handleImportTemplate}
+                  data-testid="input-import-file"
+                />
+              </Button>
+              <Button
                 size="sm"
                 onClick={() => setSaveDialogOpen(true)}
+                disabled={saveTemplateMutation.isPending}
                 data-testid="button-save"
               >
                 <Save className="h-4 w-4 mr-2" />
-                Save
+                {saveTemplateMutation.isPending ? "Saving..." : "Save"}
               </Button>
+              {isEditMode && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" data-testid="button-more-options">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setVersionHistoryOpen(true)} data-testid="menu-version-history">
+                      <Clock className="h-3.5 w-3.5 mr-2" />
+                      Version History
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => {
+                        const name = prompt("Enter clone name:");
+                        if (name) cloneTemplateMutation.mutate(name);
+                      }}
+                      data-testid="menu-clone"
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-2" />
+                      Clone Template
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => {
+                        if (confirm("Archive this template?")) {
+                          archiveTemplateMutation.mutate();
+                        }
+                      }}
+                      className="text-destructive"
+                      data-testid="menu-archive"
+                    >
+                      <Archive className="h-3.5 w-3.5 mr-2" />
+                      Archive
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Main Designer Area */}
+        {/* Main Content */}
         <ResizablePanelGroup direction="horizontal" className="flex-1">
-          {/* Component Palette */}
-          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+          {/* Left Panel - Component Palette */}
+          <ResizablePanel defaultSize={20} minSize={15} data-testid="panel-palette">
             <div className="h-full flex flex-col border-r">
               <div className="p-4 border-b">
-                <h2 className="font-semibold">Components</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Drag components to the canvas
-                </p>
+                <h2 className="text-sm font-semibold" data-testid="text-palette-title">Component Palette</h2>
               </div>
               <ScrollArea className="flex-1">
-                <div className="p-4 space-y-4">
-                  {["Text", "Number", "DateTime", "Selection", "Media", "Structure", "Calculations", "Specialized"].map(
-                    (category) => (
-                      <div key={category}>
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-2">
-                          {category}
-                        </h3>
-                        <div className="space-y-2">
-                          {componentPalette
-                            .filter((c) => c.category === category)
-                            .map((component) => (
+                <div className="p-4 space-y-6">
+                  {componentCategories.map((category) => (
+                    <div key={category}>
+                      <h3 className="text-xs font-medium text-muted-foreground mb-2" data-testid={`text-category-${category.toLowerCase()}`}>
+                        {category}
+                      </h3>
+                      <div className="grid gap-2">
+                        {componentPalette
+                          .filter((c) => c.category === category)
+                          .map((component) => {
+                            const Icon = component.icon;
+                            return (
                               <div
                                 key={component.id}
+                                className="p-2 border rounded cursor-move hover:border-primary transition-colors"
                                 draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.effectAllowed = "copy";
-                                  handleDragStart({
-                                    active: { id: component.id, data: { current: component } },
-                                  } as DragStartEvent);
-                                }}
-                                onClick={() => {
-                                  // Click to add component to canvas
-                                  pushToUndoStack();
-                                  const newComponent: TemplateComponent = {
-                                    id: `${component.type}_${Date.now()}`,
-                                    type: component.type,
-                                    properties: {
-                                      label: component.label,
-                                      ...component.defaultProperties,
-                                    },
-                                  };
-                                  setTemplateData((prev) => ({
-                                    ...prev,
-                                    components: [...prev.components, newComponent],
-                                  }));
-                                  setSelectedComponentId(newComponent.id);
-                                }}
-                                className="p-2 border rounded-md cursor-pointer hover:bg-accent hover:border-primary/50 transition-colors"
-                                data-testid={`palette-${component.type}`}
+                                data-testid={`palette-${component.id}`}
                               >
                                 <div className="flex items-center gap-2">
-                                  <component.icon className="h-4 w-4 text-muted-foreground" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">
-                                      {component.label}
-                                    </p>
-                                    {component.description && (
-                                      <p className="text-xs text-muted-foreground truncate">
-                                        {component.description}
-                                      </p>
-                                    )}
-                                  </div>
+                                  <Icon className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">{component.label}</span>
                                 </div>
                               </div>
-                            ))}
-                        </div>
+                            );
+                          })}
                       </div>
-                    )
-                  )}
+                    </div>
+                  ))}
                 </div>
               </ScrollArea>
             </div>
@@ -856,65 +900,44 @@ export default function ReportTemplateDesigner() {
 
           <ResizableHandle />
 
-          {/* Design Canvas */}
-          <ResizablePanel defaultSize={50}>
+          {/* Middle Panel - Canvas */}
+          <ResizablePanel defaultSize={50} minSize={30} data-testid="panel-canvas">
             <div className="h-full flex flex-col">
-              <div className="p-4 border-b bg-muted/50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="font-semibold">{templateData.name}</h2>
-                    {templateData.description && (
-                      <p className="text-sm text-muted-foreground">
-                        {templateData.description}
-                      </p>
-                    )}
-                  </div>
-                  <Badge variant="outline">{templateData.category}</Badge>
-                </div>
+              <div className="p-4 border-b">
+                <h2 className="text-sm font-semibold" data-testid="text-canvas-title">{templateData.name}</h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {templateData.components.length} component{templateData.components.length !== 1 ? "s" : ""}
+                </p>
               </div>
               <ScrollArea className="flex-1">
                 <div
                   ref={setCanvasRef}
-                  className={`min-h-full p-6 ${
+                  className={`p-6 min-h-full ${
                     showGrid ? "bg-grid-pattern" : ""
-                  } ${
-                    previewMode === "mobile"
-                      ? "max-w-sm mx-auto"
-                      : previewMode === "tablet"
-                      ? "max-w-2xl mx-auto"
-                      : ""
                   }`}
                   onClick={() => setSelectedComponentId(null)}
-                  style={{
-                    backgroundImage: showGrid
-                      ? `linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)`
-                      : undefined,
-                    backgroundSize: showGrid ? "24px 24px" : undefined,
-                  }}
-                  data-testid="canvas-droppable"
+                  data-testid="canvas-drop-area"
                 >
                   {templateData.components.length === 0 ? (
-                    <div className="h-96 flex items-center justify-center">
-                      <div className="text-center">
-                        <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-muted-foreground">
-                          Drag components here to start building your template
-                        </p>
+                    <div className="flex items-center justify-center h-64 border-2 border-dashed rounded-lg" data-testid="empty-canvas">
+                      <div className="text-center text-muted-foreground">
+                        <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>Drag components here to build your template</p>
                       </div>
                     </div>
                   ) : (
-                    <SortableContext
-                      items={templateData.components.map((c) => c.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div className="space-y-3">
+                    <div className="space-y-3">
+                      <SortableContext
+                        items={templateData.components.map((c) => c.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
                         {templateData.components.map((component) => (
-                          <div key={component.id} data-testid={`canvas-component-${component.id}`}>
+                          <div key={component.id}>
                             {renderComponentPreview(component)}
                           </div>
                         ))}
-                      </div>
-                    </SortableContext>
+                      </SortableContext>
+                    </div>
                   )}
                 </div>
               </ScrollArea>
@@ -923,20 +946,17 @@ export default function ReportTemplateDesigner() {
 
           <ResizableHandle />
 
-          {/* Properties Panel */}
-          <ResizablePanel defaultSize={30} minSize={20} maxSize={40}>
+          {/* Right Panel - Properties */}
+          <ResizablePanel defaultSize={30} minSize={20} data-testid="panel-properties">
             <div className="h-full flex flex-col border-l">
               <div className="p-4 border-b">
-                <h2 className="font-semibold">Properties</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {selectedComponent ? "Configure selected component" : "Select a component to edit"}
-                </p>
+                <h2 className="text-sm font-semibold" data-testid="text-properties-title">Properties</h2>
               </div>
               {selectedComponent ? (
-                <ScrollArea className="flex-1">
-                  <div className="p-4 space-y-4">
+                <ScrollArea className="flex-1 p-4">
+                  <div className="space-y-4">
                     <div>
-                      <Label htmlFor="component-label">Label</Label>
+                      <Label htmlFor="component-label" data-testid="label-component-label">Label</Label>
                       <Input
                         id="component-label"
                         value={selectedComponent.properties.label || ""}
@@ -949,7 +969,7 @@ export default function ReportTemplateDesigner() {
                     </div>
 
                     <div>
-                      <Label htmlFor="component-description">Description</Label>
+                      <Label htmlFor="component-description" data-testid="label-component-description">Description</Label>
                       <Textarea
                         id="component-description"
                         value={selectedComponent.properties.description || ""}
@@ -957,15 +977,18 @@ export default function ReportTemplateDesigner() {
                           updateComponentProperty(selectedComponent.id, "description", e.target.value)
                         }
                         className="mt-1"
-                        rows={2}
+                        rows={3}
                         data-testid="textarea-component-description"
                       />
                     </div>
 
-                    {selectedComponent.type !== "section" && selectedComponent.type !== "divider" && (
+                    {(selectedComponent.type === "text" || 
+                      selectedComponent.type === "textarea" || 
+                      selectedComponent.type === "number" || 
+                      selectedComponent.type === "decimal") && (
                       <>
                         <div>
-                          <Label htmlFor="component-placeholder">Placeholder</Label>
+                          <Label htmlFor="component-placeholder" data-testid="label-component-placeholder">Placeholder</Label>
                           <Input
                             id="component-placeholder"
                             value={selectedComponent.properties.placeholder || ""}
@@ -978,7 +1001,7 @@ export default function ReportTemplateDesigner() {
                         </div>
 
                         <div className="flex items-center justify-between">
-                          <Label htmlFor="component-required">Required Field</Label>
+                          <Label htmlFor="component-required" data-testid="label-component-required">Required Field</Label>
                           <Switch
                             id="component-required"
                             checked={selectedComponent.properties.required || false}
@@ -993,7 +1016,7 @@ export default function ReportTemplateDesigner() {
 
                     {(selectedComponent.type === "select" || selectedComponent.type === "multiselect" || selectedComponent.type === "radio") && (
                       <div>
-                        <Label>Options</Label>
+                        <Label data-testid="label-component-options">Options</Label>
                         <div className="mt-2 space-y-2">
                           {(selectedComponent.properties.options || []).map((option, index) => (
                             <div key={index} className="flex gap-2">
@@ -1006,6 +1029,7 @@ export default function ReportTemplateDesigner() {
                                 }}
                                 placeholder="Value"
                                 className="flex-1"
+                                data-testid={`input-option-value-${index}`}
                               />
                               <Input
                                 value={option.label}
@@ -1016,6 +1040,7 @@ export default function ReportTemplateDesigner() {
                                 }}
                                 placeholder="Label"
                                 className="flex-1"
+                                data-testid={`input-option-label-${index}`}
                               />
                               <Button
                                 variant="ghost"
@@ -1056,7 +1081,7 @@ export default function ReportTemplateDesigner() {
                       <>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <Label htmlFor="component-min">Min Value</Label>
+                            <Label htmlFor="component-min" data-testid="label-component-min">Min Value</Label>
                             <Input
                               id="component-min"
                               type="number"
@@ -1068,10 +1093,11 @@ export default function ReportTemplateDesigner() {
                                 })
                               }
                               className="mt-1"
+                              data-testid="input-component-min"
                             />
                           </div>
                           <div>
-                            <Label htmlFor="component-max">Max Value</Label>
+                            <Label htmlFor="component-max" data-testid="label-component-max">Max Value</Label>
                             <Input
                               id="component-max"
                               type="number"
@@ -1083,6 +1109,7 @@ export default function ReportTemplateDesigner() {
                                 })
                               }
                               className="mt-1"
+                              data-testid="input-component-max"
                             />
                           </div>
                         </div>
@@ -1091,7 +1118,7 @@ export default function ReportTemplateDesigner() {
 
                     {selectedComponent.type === "calculated" || selectedComponent.type === "formula" && (
                       <div>
-                        <Label htmlFor="component-formula">Formula</Label>
+                        <Label htmlFor="component-formula" data-testid="label-component-formula">Formula</Label>
                         <Textarea
                           id="component-formula"
                           value={selectedComponent.properties.formula || ""}
@@ -1101,6 +1128,7 @@ export default function ReportTemplateDesigner() {
                           className="mt-1 font-mono text-sm"
                           rows={3}
                           placeholder="e.g., field1 + field2 * 0.1"
+                          data-testid="textarea-component-formula"
                         />
                       </div>
                     )}
@@ -1108,10 +1136,10 @@ export default function ReportTemplateDesigner() {
                     <Separator />
 
                     <div>
-                      <h3 className="text-sm font-semibold mb-2">Conditional Logic</h3>
+                      <h3 className="text-sm font-semibold mb-2" data-testid="text-conditional-logic">Conditional Logic</h3>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <Label htmlFor="component-conditional-show">Show/Hide</Label>
+                          <Label htmlFor="component-conditional-show" data-testid="label-conditional-show">Show/Hide</Label>
                           <Switch
                             id="component-conditional-show"
                             checked={selectedComponent.properties.conditional?.show || false}
@@ -1121,11 +1149,12 @@ export default function ReportTemplateDesigner() {
                                 show: checked,
                               })
                             }
+                            data-testid="switch-conditional-show"
                           />
                         </div>
                         {selectedComponent.properties.conditional?.show && (
                           <div>
-                            <Label>When field</Label>
+                            <Label data-testid="label-conditional-when">When field</Label>
                             <Select
                               value={selectedComponent.properties.conditional?.when || ""}
                               onValueChange={(value) =>
@@ -1135,14 +1164,14 @@ export default function ReportTemplateDesigner() {
                                 })
                               }
                             >
-                              <SelectTrigger className="mt-1">
+                              <SelectTrigger className="mt-1" data-testid="select-conditional-when">
                                 <SelectValue placeholder="Select field" />
                               </SelectTrigger>
                               <SelectContent>
                                 {templateData.components
                                   .filter((c) => c.id !== selectedComponent.id)
                                   .map((c) => (
-                                    <SelectItem key={c.id} value={c.id}>
+                                    <SelectItem key={c.id} value={c.id} data-testid={`option-field-${c.id}`}>
                                       {c.properties.label || c.id}
                                     </SelectItem>
                                   ))}
@@ -1156,7 +1185,7 @@ export default function ReportTemplateDesigner() {
                 </ScrollArea>
               ) : (
                 <div className="flex-1 flex items-center justify-center p-4">
-                  <div className="text-center text-muted-foreground">
+                  <div className="text-center text-muted-foreground" data-testid="empty-properties">
                     <Settings className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p>Select a component to view and edit its properties</p>
                   </div>
@@ -1169,9 +1198,9 @@ export default function ReportTemplateDesigner() {
 
       {/* Save Dialog */}
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-        <DialogContent>
+        <DialogContent data-testid="dialog-save-template">
           <DialogHeader>
-            <DialogTitle>{isEditMode ? "Update Template" : "Save Template"}</DialogTitle>
+            <DialogTitle data-testid="text-save-dialog-title">{isEditMode ? "Update Template" : "Save Template"}</DialogTitle>
             <DialogDescription>
               Provide details for your report template
             </DialogDescription>
@@ -1220,15 +1249,15 @@ export default function ReportTemplateDesigner() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="pre_drywall">Pre-Drywall</SelectItem>
-                        <SelectItem value="final">Final</SelectItem>
-                        <SelectItem value="duct_testing">Duct Testing</SelectItem>
-                        <SelectItem value="blower_door">Blower Door</SelectItem>
-                        <SelectItem value="pre_insulation">Pre-Insulation</SelectItem>
-                        <SelectItem value="post_insulation">Post-Insulation</SelectItem>
-                        <SelectItem value="rough_in">Rough-in</SelectItem>
-                        <SelectItem value="energy_audit">Energy Audit</SelectItem>
-                        <SelectItem value="custom">Custom</SelectItem>
+                        <SelectItem value="pre_drywall" data-testid="option-pre-drywall">Pre-Drywall</SelectItem>
+                        <SelectItem value="final" data-testid="option-final">Final</SelectItem>
+                        <SelectItem value="duct_testing" data-testid="option-duct-testing">Duct Testing</SelectItem>
+                        <SelectItem value="blower_door" data-testid="option-blower-door">Blower Door</SelectItem>
+                        <SelectItem value="pre_insulation" data-testid="option-pre-insulation">Pre-Insulation</SelectItem>
+                        <SelectItem value="post_insulation" data-testid="option-post-insulation">Post-Insulation</SelectItem>
+                        <SelectItem value="rough_in" data-testid="option-rough-in">Rough-in</SelectItem>
+                        <SelectItem value="energy_audit" data-testid="option-energy-audit">Energy Audit</SelectItem>
+                        <SelectItem value="custom" data-testid="option-custom">Custom</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -1236,7 +1265,7 @@ export default function ReportTemplateDesigner() {
                 )}
               />
               <DialogFooter>
-                <Button type="submit" disabled={saveTemplateMutation.isPending}>
+                <Button type="submit" disabled={saveTemplateMutation.isPending} data-testid="button-submit-save">
                   {saveTemplateMutation.isPending ? "Saving..." : "Save Template"}
                 </Button>
               </DialogFooter>
@@ -1248,56 +1277,81 @@ export default function ReportTemplateDesigner() {
       {/* Version History Dialog */}
       {isEditMode && (
         <Dialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl" data-testid="dialog-version-history">
             <DialogHeader>
-              <DialogTitle>Version History</DialogTitle>
+              <DialogTitle data-testid="text-version-history-title">Version History</DialogTitle>
               <DialogDescription>
                 View and restore previous versions of this template
               </DialogDescription>
             </DialogHeader>
-            <ScrollArea className="max-h-96">
-              <div className="space-y-2">
-                {versionHistory?.map((version) => (
-                  <Card key={version.id}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-base">
-                            Version {version.version}
-                            {version.id === templateId && (
-                              <Badge variant="secondary" className="ml-2">
-                                Current
-                              </Badge>
-                            )}
-                          </CardTitle>
-                          <CardDescription className="text-xs">
-                            {version.versionNotes || "No notes"}
-                          </CardDescription>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {version.updatedAt && new Date(version.updatedAt).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    {version.id !== templateId && (
-                      <CardContent className="pt-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            navigate(`/report-template-designer/${version.id}`);
-                            setVersionHistoryOpen(false);
-                          }}
-                        >
-                          <Eye className="h-3.5 w-3.5 mr-2" />
-                          View Version
-                        </Button>
-                      </CardContent>
-                    )}
-                  </Card>
+            {isLoadingVersions ? (
+              <div className="space-y-3" data-testid="skeleton-versions">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
                 ))}
               </div>
-            </ScrollArea>
+            ) : versionsError ? (
+              <Alert variant="destructive" data-testid="alert-error-versions">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="flex items-center justify-between gap-4">
+                  <span>Failed to load versions: {versionsError instanceof Error ? versionsError.message : 'Unknown error'}</span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => refetchVersions()}
+                    data-testid="button-retry-versions"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <ScrollArea className="max-h-96">
+                <div className="space-y-2" data-testid="list-versions">
+                  {versionHistory?.map((version, idx) => (
+                    <Card key={version.id} data-testid={`card-version-${idx}`}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="text-base" data-testid={`text-version-${idx}`}>
+                              Version {version.version}
+                              {version.id === templateId && (
+                                <Badge variant="secondary" className="ml-2">
+                                  Current
+                                </Badge>
+                              )}
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                              {version.versionNotes || "No notes"}
+                            </CardDescription>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {version.updatedAt && new Date(version.updatedAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      {version.id !== templateId && (
+                        <CardContent className="pt-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              navigate(`/report-template-designer/${version.id}`);
+                              setVersionHistoryOpen(false);
+                            }}
+                            data-testid={`button-view-version-${idx}`}
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-2" />
+                            View Version
+                          </Button>
+                        </CardContent>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </DialogContent>
         </Dialog>
       )}
@@ -1305,7 +1359,7 @@ export default function ReportTemplateDesigner() {
       {/* Drag Overlay */}
       <DragOverlay>
         {activeId && (
-          <div className="p-3 bg-background border-2 border-primary rounded-md shadow-lg opacity-80">
+          <div className="p-3 bg-background border-2 border-primary rounded-md shadow-lg opacity-80" data-testid="drag-overlay">
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4" />
               <span className="text-sm font-medium">Moving component</span>
@@ -1314,5 +1368,13 @@ export default function ReportTemplateDesigner() {
         )}
       </DragOverlay>
     </DndContext>
+  );
+}
+
+export default function ReportTemplateDesigner() {
+  return (
+    <ErrorBoundary>
+      <ReportTemplateDesignerContent />
+    </ErrorBoundary>
   );
 }

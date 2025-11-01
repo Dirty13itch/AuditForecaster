@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Download, Mail, Eye } from "lucide-react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Plus, FileText, Download, Mail, Eye, AlertCircle, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { InvoiceWizard } from "@/components/financial/invoice-wizard";
 
@@ -25,18 +28,27 @@ type Invoice = {
   createdAt: Date;
 };
 
-export default function InvoicesPage() {
+function InvoicesPageContent() {
   const { toast } = useToast();
   const [showWizard, setShowWizard] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
-  const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
+  const { 
+    data: invoices = [], 
+    isLoading,
+    error,
+    refetch
+  } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices"],
+    retry: 2,
   });
 
-  const filteredInvoices = selectedStatus === "all" 
-    ? invoices 
-    : invoices.filter(inv => inv.status === selectedStatus);
+  const filteredInvoices = useMemo(() => 
+    selectedStatus === "all" 
+      ? invoices 
+      : invoices.filter(inv => inv.status === selectedStatus),
+    [invoices, selectedStatus]
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -48,16 +60,16 @@ export default function InvoicesPage() {
     }
   };
 
-  const handleInvoiceCreated = () => {
+  const handleInvoiceCreated = useCallback(() => {
     setShowWizard(false);
     queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
     toast({
       title: "Invoice Created",
       description: "Invoice has been created successfully.",
     });
-  };
+  }, [toast]);
 
-  const handleDownloadPDF = async (invoiceId: string, invoiceNumber: string) => {
+  const handleDownloadPDF = useCallback(async (invoiceId: string, invoiceNumber: string) => {
     try {
       const response = await fetch(`/api/invoices/${invoiceId}/pdf`, {
         credentials: 'include',
@@ -86,7 +98,7 @@ export default function InvoicesPage() {
         variant: "destructive",
       });
     }
-  };
+  }, [toast]);
 
   const sendInvoiceMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
@@ -111,13 +123,13 @@ export default function InvoicesPage() {
     },
   });
 
-  const handleSendInvoice = (invoiceId: string) => {
+  const handleSendInvoice = useCallback((invoiceId: string) => {
     sendInvoiceMutation.mutate(invoiceId);
-  };
+  }, [sendInvoiceMutation]);
 
   if (showWizard) {
     return (
-      <div className="h-full overflow-auto">
+      <div className="h-full overflow-auto" data-testid="page-invoice-wizard">
         <div className="max-w-4xl mx-auto p-6">
           <InvoiceWizard 
             onClose={() => setShowWizard(false)}
@@ -129,12 +141,12 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="h-full overflow-auto">
+    <div className="h-full overflow-auto" data-testid="page-invoices">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Invoices</h1>
-            <p className="text-muted-foreground">Manage monthly invoices to Building Knowledge</p>
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">Invoices</h1>
+            <p className="text-muted-foreground" data-testid="text-page-subtitle">Manage monthly invoices to Building Knowledge</p>
           </div>
           <Button onClick={() => setShowWizard(true)} data-testid="button-create-invoice">
             <Plus className="h-4 w-4 mr-2" />
@@ -142,8 +154,27 @@ export default function InvoicesPage() {
           </Button>
         </div>
 
-        <Tabs value={selectedStatus} onValueChange={setSelectedStatus}>
-          <TabsList>
+        {error && (
+          <Alert variant="destructive" data-testid="alert-invoices-error">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Failed to Load Invoices</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+              <span>Unable to fetch invoices. Please try again.</span>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => refetch()}
+                data-testid="button-retry-invoices"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Tabs value={selectedStatus} onValueChange={setSelectedStatus} data-testid="tabs-invoice-status">
+          <TabsList data-testid="tabs-list-invoice-status">
             <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
             <TabsTrigger value="draft" data-testid="tab-draft">Draft</TabsTrigger>
             <TabsTrigger value="reviewed" data-testid="tab-reviewed">Reviewed</TabsTrigger>
@@ -151,13 +182,15 @@ export default function InvoicesPage() {
             <TabsTrigger value="paid" data-testid="tab-paid">Paid</TabsTrigger>
           </TabsList>
 
-          <TabsContent value={selectedStatus} className="space-y-4">
+          <TabsContent value={selectedStatus} className="space-y-4" data-testid="tab-content-invoices">
             {isLoading ? (
-              <div className="text-center py-12 text-muted-foreground" data-testid="text-loading">
-                Loading invoices...
+              <div className="space-y-3" data-testid="skeleton-invoices-list">
+                <Skeleton className="h-[200px] w-full" />
+                <Skeleton className="h-[200px] w-full" />
+                <Skeleton className="h-[200px] w-full" />
               </div>
             ) : filteredInvoices.length === 0 ? (
-              <Card>
+              <Card data-testid="card-empty-state">
                 <CardContent className="py-12">
                   <div className="text-center text-muted-foreground">
                     <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -177,7 +210,7 @@ export default function InvoicesPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3" data-testid="list-invoices">
                 {filteredInvoices.map((invoice) => (
                   <Card key={invoice.id} data-testid={`card-invoice-${invoice.id}`}>
                     <CardHeader>
@@ -198,12 +231,18 @@ export default function InvoicesPage() {
                     <CardContent>
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">Total Amount</div>
+                          <div className="text-sm text-muted-foreground" data-testid={`label-total-amount-${invoice.id}`}>Total Amount</div>
                           <div className="text-2xl font-bold" data-testid={`text-invoice-total-${invoice.id}`}>
                             ${parseFloat(invoice.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </div>
+                          <div className="text-xs text-muted-foreground" data-testid={`text-subtotal-${invoice.id}`}>
+                            Subtotal: ${parseFloat(invoice.subtotal).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-xs text-muted-foreground" data-testid={`text-tax-${invoice.id}`}>
+                            Tax: ${parseFloat(invoice.tax).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2" data-testid={`actions-${invoice.id}`}>
                           <Button variant="outline" size="sm" data-testid={`button-view-invoice-${invoice.id}`}>
                             <Eye className="h-4 w-4 mr-1" />
                             View
@@ -213,10 +252,11 @@ export default function InvoicesPage() {
                               variant="outline" 
                               size="sm" 
                               onClick={() => handleSendInvoice(invoice.id)}
+                              disabled={sendInvoiceMutation.isPending}
                               data-testid={`button-send-invoice-${invoice.id}`}
                             >
                               <Mail className="h-4 w-4 mr-1" />
-                              Send
+                              {sendInvoiceMutation.isPending ? "Sending..." : "Send"}
                             </Button>
                           )}
                           <Button 
@@ -239,5 +279,13 @@ export default function InvoicesPage() {
         </Tabs>
       </div>
     </div>
+  );
+}
+
+export default function InvoicesPage() {
+  return (
+    <ErrorBoundary>
+      <InvoicesPageContent />
+    </ErrorBoundary>
   );
 }

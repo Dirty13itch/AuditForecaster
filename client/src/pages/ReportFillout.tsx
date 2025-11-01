@@ -13,10 +13,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Camera, Save, Send, ChevronDown, ChevronRight, Signature, FileText, CheckCircle, Clock, AlertCircle, Calculator, Eye, EyeOff, WifiOff, Cloud, CloudOff } from "lucide-react";
+import { CalendarIcon, Camera, Save, Send, ChevronDown, ChevronRight, Signature, FileText, CheckCircle, Clock, AlertCircle, Calculator, Eye, EyeOff, WifiOff, Cloud, CloudOff, RefreshCw } from "lucide-react";
 import { indexedDB } from "@/utils/indexedDB";
 import { syncQueue } from "@/utils/syncQueue";
 import { format } from "date-fns";
@@ -577,31 +580,32 @@ function SectionInstance({
   });
 
   return (
-    <Card className="mb-4">
+    <Card className="mb-4" data-testid={`card-section-${section.id}-${instanceData.instanceIndex}`}>
       <CardHeader
         className="cursor-pointer"
         onClick={onToggleExpanded}
+        data-testid={`header-section-${section.id}`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button size="icon" variant="ghost">
+            <Button size="icon" variant="ghost" data-testid={`button-toggle-section-${section.id}`}>
               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </Button>
             <div>
-              <CardTitle className="text-lg">{section.title}</CardTitle>
+              <CardTitle className="text-lg" data-testid={`title-section-${section.id}`}>{section.title}</CardTitle>
               {section.description && (
-                <CardDescription className="text-sm mt-1">{section.description}</CardDescription>
+                <CardDescription className="text-sm mt-1" data-testid={`description-section-${section.id}`}>{section.description}</CardDescription>
               )}
             </div>
           </div>
           {section.isRepeatable && (
-            <Badge variant="outline">Instance {instanceData.instanceIndex + 1}</Badge>
+            <Badge variant="outline" data-testid={`badge-instance-${section.id}-${instanceData.instanceIndex}`}>Instance {instanceData.instanceIndex + 1}</Badge>
           )}
         </div>
       </CardHeader>
       
       {isExpanded && (
-        <CardContent>
+        <CardContent data-testid={`content-section-${section.id}`}>
           <div className="space-y-4">
             {visibleFields.map(field => {
               const state = fieldStates[field.id] || { visible: true, required: field.isRequired, enabled: true, value: null };
@@ -611,15 +615,16 @@ function SectionInstance({
                 <div 
                   key={field.id} 
                   className={`transition-all duration-200 ${state.visible ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}
+                  data-testid={`field-container-${field.id}`}
                 >
-                  <Label htmlFor={`field-${field.id}`} className="flex items-center gap-2">
+                  <Label htmlFor={`field-${field.id}`} className="flex items-center gap-2" data-testid={`label-field-${field.id}`}>
                     {field.label}
-                    {state.required && <span className="text-destructive">*</span>}
-                    {isCalculated && <Calculator className="h-3 w-3 text-muted-foreground" />}
-                    {!state.enabled && <EyeOff className="h-3 w-3 text-muted-foreground" />}
+                    {state.required && <span className="text-destructive" data-testid={`required-${field.id}`}>*</span>}
+                    {isCalculated && <Calculator className="h-3 w-3 text-muted-foreground" data-testid={`calc-icon-${field.id}`} />}
+                    {!state.enabled && <EyeOff className="h-3 w-3 text-muted-foreground" data-testid={`disabled-icon-${field.id}`} />}
                   </Label>
                   {field.description && (
-                    <p className="text-sm text-muted-foreground mb-2">{field.description}</p>
+                    <p className="text-sm text-muted-foreground mb-2" data-testid={`description-field-${field.id}`}>{field.description}</p>
                   )}
                   <FieldInput
                     field={field}
@@ -628,7 +633,7 @@ function SectionInstance({
                     disabled={!state.enabled || isCalculated}
                   />
                   {field.conditions && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1" data-testid={`conditional-hint-${field.id}`}>
                       <Eye className="inline h-3 w-3 mr-1" />
                       This field has conditional visibility
                     </p>
@@ -643,7 +648,7 @@ function SectionInstance({
   );
 }
 
-export default function ReportFilloutPage() {
+function ReportFilloutContent() {
   const { toast } = useToast();
   const { id } = useParams<{ id: string }>();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
@@ -656,44 +661,81 @@ export default function ReportFilloutPage() {
   const [unsavedChanges, setUnsavedChanges] = useState(false);
 
   // Fetch report instance
-  const { data: reportInstance, isLoading: isLoadingInstance } = useQuery<ReportInstance>({
+  const { 
+    data: reportInstance, 
+    isLoading: isLoadingInstance,
+    error: instanceError,
+    refetch: refetchInstance
+  } = useQuery<ReportInstance>({
     queryKey: ["/api/report-instances", id],
     enabled: !!id,
+    retry: 2,
   });
 
   // Fetch full template (for component-based templates)
-  const { data: template, isLoading: isLoadingTemplate } = useQuery<ReportTemplate>({
+  const { 
+    data: template, 
+    isLoading: isLoadingTemplate,
+    error: templateError,
+    refetch: refetchTemplate
+  } = useQuery<ReportTemplate>({
     queryKey: ["/api/report-templates", reportInstance?.templateId],
     enabled: !!reportInstance?.templateId,
+    retry: 2,
   });
 
   // Check if this is a component-based template
-  const isComponentBasedTemplate = template?.components && 
+  const isComponentBasedTemplate = useMemo(() => 
+    template?.components && 
     Array.isArray(template.components) && 
-    (template.components as any[]).length > 0;
+    (template.components as any[]).length > 0,
+    [template]
+  );
 
   // Fetch template sections (legacy templates only)
-  const { data: sections = [], isLoading: isLoadingSections } = useQuery<TemplateSection[]>({
+  const { 
+    data: sections = [], 
+    isLoading: isLoadingSections,
+    error: sectionsError,
+    refetch: refetchSections
+  } = useQuery<TemplateSection[]>({
     queryKey: ["/api/report-templates", reportInstance?.templateId, "sections"],
     enabled: !!reportInstance?.templateId && !isComponentBasedTemplate,
+    retry: 2,
   });
 
   // Fetch template fields (legacy templates only)
-  const { data: fields = [], isLoading: isLoadingFields } = useQuery<TemplateField[]>({
+  const { 
+    data: fields = [], 
+    isLoading: isLoadingFields,
+    error: fieldsError,
+    refetch: refetchFields
+  } = useQuery<TemplateField[]>({
     queryKey: ["/api/report-templates", reportInstance?.templateId, "fields"],
     enabled: !!reportInstance?.templateId && !isComponentBasedTemplate,
+    retry: 2,
   });
 
   // Fetch field dependencies
-  const { data: dependencies = [] } = useQuery<FieldDependency[]>({
+  const { 
+    data: dependencies = [],
+    error: dependenciesError,
+    refetch: refetchDependencies
+  } = useQuery<FieldDependency[]>({
     queryKey: ["/api/templates", reportInstance?.templateId, "dependencies"],
     enabled: !!reportInstance?.templateId,
+    retry: 2,
   });
 
   // Fetch existing field values
-  const { data: existingValues = [] } = useQuery<ReportFieldValue[]>({
+  const { 
+    data: existingValues = [],
+    error: valuesError,
+    refetch: refetchValues
+  } = useQuery<ReportFieldValue[]>({
     queryKey: ["/api/report-instances", id, "field-values"],
     enabled: !!id,
+    retry: 2,
   });
 
   // Initialize section instances and field values
@@ -966,12 +1008,95 @@ export default function ReportFilloutPage() {
     updateStatus.mutate("completed");
   };
 
+  // Handle errors for all queries
+  const hasErrors = instanceError || templateError || sectionsError || fieldsError || dependenciesError || valuesError;
+  
+  if (hasErrors) {
+    const errorMessages = [
+      instanceError && "Failed to load report instance",
+      templateError && "Failed to load template",
+      sectionsError && "Failed to load sections",
+      fieldsError && "Failed to load fields",
+      dependenciesError && "Failed to load dependencies",
+      valuesError && "Failed to load field values"
+    ].filter(Boolean);
+
+    return (
+      <div className="container mx-auto p-6" data-testid="error-state">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error Loading Report</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <div>
+              {errorMessages.map((msg, idx) => (
+                <div key={idx}>• {msg}</div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (instanceError) refetchInstance();
+                  if (templateError) refetchTemplate();
+                  if (sectionsError) refetchSections();
+                  if (fieldsError) refetchFields();
+                  if (dependenciesError) refetchDependencies();
+                  if (valuesError) refetchValues();
+                }}
+                data-testid="button-retry-all"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry All
+              </Button>
+              <Link href="/reports">
+                <Button size="sm" variant="secondary" data-testid="button-back-to-reports">
+                  Back to Reports
+                </Button>
+              </Link>
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Loading state with skeletons
   if (isLoadingInstance || isLoadingTemplate || (isLoadingSections && !isComponentBasedTemplate) || (isLoadingFields && !isComponentBasedTemplate)) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
-          <p className="text-muted-foreground">Loading report...</p>
+      <div className="container mx-auto p-6" data-testid="loading-state">
+        <div className="mb-6 space-y-4">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" data-testid="skeleton-title" />
+              <Skeleton className="h-4 w-64" data-testid="skeleton-subtitle" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-10 w-24" data-testid="skeleton-button" />
+              <Skeleton className="h-10 w-24" data-testid="skeleton-button" />
+            </div>
+          </div>
+        </div>
+
+        {/* Sections skeleton */}
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} data-testid={`skeleton-section-${i}`}>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-48 mt-2" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="space-y-2" data-testid={`skeleton-field-${i}-${j}`}>
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );
@@ -979,7 +1104,7 @@ export default function ReportFilloutPage() {
 
   if (!reportInstance) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-6" data-testid="not-found-state">
         <Card>
           <CardContent className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -989,7 +1114,7 @@ export default function ReportFilloutPage() {
                 The report instance you're looking for doesn't exist.
               </p>
               <Link href="/reports">
-                <Button>Back to Reports</Button>
+                <Button data-testid="button-back-not-found">Back to Reports</Button>
               </Link>
             </div>
           </CardContent>
@@ -1027,37 +1152,42 @@ export default function ReportFilloutPage() {
     }
   };
 
-  // Group fields by section (for legacy templates)
-  const fieldsBySection: Record<string, TemplateField[]> = {};
-  fields.forEach((field) => {
-    if (!fieldsBySection[field.sectionId]) {
-      fieldsBySection[field.sectionId] = [];
-    }
-    fieldsBySection[field.sectionId].push(field);
-  });
+  // Group fields by section (for legacy templates) - Memoized to prevent recalculation
+  const fieldsBySection = useMemo(() => {
+    const grouped: Record<string, TemplateField[]> = {};
+    fields.forEach((field) => {
+      if (!grouped[field.sectionId]) {
+        grouped[field.sectionId] = [];
+      }
+      grouped[field.sectionId].push(field);
+    });
+    return grouped;
+  }, [fields]);
 
-  // Get components for component-based templates
-  const components = (template?.components as any[]) || [];
+  // Get components for component-based templates - Memoized to prevent recalculation
+  const components = useMemo(() => (template?.components as any[]) || [], [template]);
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6" data-testid="report-fillout-container">
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Report #{reportInstance.id.slice(0, 8)}</h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className="text-3xl font-bold" data-testid="text-report-id">
+              Report #{reportInstance.id.slice(0, 8)}
+            </h1>
+            <p className="text-muted-foreground mt-1" data-testid="text-report-meta">
               Job: {reportInstance.jobId} | Template: v{reportInstance.templateVersion}
-              {isComponentBasedTemplate && <Badge variant="outline" className="ml-2">New Designer</Badge>}
+              {isComponentBasedTemplate && <Badge variant="outline" className="ml-2" data-testid="badge-new-designer">New Designer</Badge>}
             </p>
           </div>
           <div className="flex items-center gap-2">
             {!isOnline && (
-              <Badge variant="outline" className="bg-orange-100 dark:bg-orange-900">
+              <Badge variant="outline" className="bg-orange-100 dark:bg-orange-900" data-testid="badge-offline">
                 <WifiOff className="h-3 w-3 mr-1" />
                 Offline
               </Badge>
             )}
-            <Badge variant={getStatusVariant(reportInstance.status)}>
+            <Badge variant={getStatusVariant(reportInstance.status)} data-testid="badge-status">
               <span className="mr-1">{getStatusIcon(reportInstance.status)}</span>
               {reportInstance.status}
             </Badge>
@@ -1082,12 +1212,12 @@ export default function ReportFilloutPage() {
         </div>
       </div>
 
-      <ScrollArea className="h-[calc(100vh-180px)]">
+      <ScrollArea className="h-[calc(100vh-180px)]" data-testid="scroll-area-content">
         {isComponentBasedTemplate ? (
           // Render component-based template
-          <div className="space-y-6">
+          <div className="space-y-6" data-testid="component-based-template">
             {components.length === 0 ? (
-              <Card>
+              <Card data-testid="no-components-card">
                 <CardContent className="flex items-center justify-center h-64">
                   <div className="text-center">
                     <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -1104,16 +1234,16 @@ export default function ReportFilloutPage() {
                 const isRequired = props.required || false;
                 
                 return (
-                  <Card key={component.id} className="mb-4">
+                  <Card key={component.id} className="mb-4" data-testid={`card-component-${component.id}`}>
                     <CardContent className="pt-6">
                       <div className="space-y-4">
                         <div>
-                          <Label htmlFor={`component-${component.id}`} className="flex items-center gap-2">
+                          <Label htmlFor={`component-${component.id}`} className="flex items-center gap-2" data-testid={`label-component-${component.id}`}>
                             {props.label || component.type}
-                            {isRequired && <span className="text-destructive">*</span>}
+                            {isRequired && <span className="text-destructive" data-testid="text-required">*</span>}
                           </Label>
                           {props.description && (
-                            <p className="text-sm text-muted-foreground mt-1">{props.description}</p>
+                            <p className="text-sm text-muted-foreground mt-1" data-testid={`text-description-${component.id}`}>{props.description}</p>
                           )}
                         </div>
                         <ComponentInput
@@ -1131,25 +1261,36 @@ export default function ReportFilloutPage() {
           </div>
         ) : (
           // Render legacy section-based template
-          sections.map((section) => {
-            const sectionFields = fieldsBySection[section.id] || [];
-            const instances = sectionInstances.filter(inst => inst.sectionId === section.id);
-            
-            return instances.map((instance, idx) => (
-              <SectionInstance
-                key={`${section.id}-${idx}`}
-                section={section}
-                fields={sectionFields}
-                instanceData={instance}
-                fieldStates={fieldStates}
-                onFieldChange={handleFieldChange}
-                isExpanded={expandedSections.has(section.id)}
-                onToggleExpanded={() => toggleSection(section.id)}
-              />
-            ));
-          })
+          <div data-testid="legacy-section-template">
+            {sections.map((section) => {
+              const sectionFields = fieldsBySection[section.id] || [];
+              const instances = sectionInstances.filter(inst => inst.sectionId === section.id);
+              
+              return instances.map((instance, idx) => (
+                <SectionInstance
+                  key={`${section.id}-${idx}`}
+                  section={section}
+                  fields={sectionFields}
+                  instanceData={instance}
+                  fieldStates={fieldStates}
+                  onFieldChange={handleFieldChange}
+                  isExpanded={expandedSections.has(section.id)}
+                  onToggleExpanded={() => toggleSection(section.id)}
+                />
+              ));
+            })}
+          </div>
         )}
       </ScrollArea>
     </div>
+  );
+}
+
+// Export component wrapped in ErrorBoundary for production resilience
+export default function ReportFillout() {
+  return (
+    <ErrorBoundary>
+      <ReportFilloutContent />
+    </ErrorBoundary>
   );
 }

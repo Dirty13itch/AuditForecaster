@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -7,13 +7,13 @@ import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -30,6 +30,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
@@ -41,21 +42,17 @@ import {
   Package,
   Home,
   AlertCircle,
-  Calendar,
-  MapPin,
-  Hash,
   ChevronLeft,
   Save,
   Plus,
   Trash2,
   Download,
-  Clock,
   Wind,
   Droplets,
   ThermometerSun,
   Zap,
-  ClipboardCheck,
-  FileCheck
+  FileCheck,
+  RefreshCw
 } from "lucide-react";
 import { format } from "date-fns";
 import type { 
@@ -63,8 +60,7 @@ import type {
   TaxCreditRequirement,
   TaxCreditDocument,
   UnitCertification,
-  Builder,
-  Job
+  Builder
 } from "@shared/schema";
 import { insertTaxCreditProjectSchema } from "@shared/schema";
 
@@ -91,7 +87,7 @@ const projectFormSchema = insertTaxCreditProjectSchema.extend({
 
 type ProjectFormValues = z.infer<typeof projectFormSchema>;
 
-export default function TaxCreditProject() {
+function TaxCreditProjectContent() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -99,32 +95,61 @@ export default function TaxCreditProject() {
   const [activeTab, setActiveTab] = useState("details");
 
   // Fetch project data if editing
-  const { data: project, isLoading: projectLoading } = useQuery<TaxCreditProject>({
+  const { 
+    data: project, 
+    isLoading: projectLoading, 
+    error: projectError,
+    refetch: refetchProject
+  } = useQuery<TaxCreditProject>({
     queryKey: [`/api/tax-credit-projects/${id}`],
     enabled: !isNew && !!id,
+    retry: 2,
   });
 
   // Fetch requirements for this project
-  const { data: requirements = [], isLoading: requirementsLoading } = useQuery<TaxCreditRequirement[]>({
+  const { 
+    data: requirements = [], 
+    isLoading: requirementsLoading,
+    error: requirementsError,
+    refetch: refetchRequirements
+  } = useQuery<TaxCreditRequirement[]>({
     queryKey: [`/api/tax-credit-requirements/project/${id}`],
     enabled: !isNew && !!id,
+    retry: 2,
   });
 
   // Fetch documents for this project
-  const { data: documents = [], isLoading: documentsLoading } = useQuery<TaxCreditDocument[]>({
+  const { 
+    data: documents = [], 
+    isLoading: documentsLoading,
+    error: documentsError,
+    refetch: refetchDocuments
+  } = useQuery<TaxCreditDocument[]>({
     queryKey: [`/api/tax-credit-documents/project/${id}`],
     enabled: !isNew && !!id,
+    retry: 2,
   });
 
   // Fetch unit certifications for this project
-  const { data: certifications = [], isLoading: certificationsLoading } = useQuery<UnitCertification[]>({
+  const { 
+    data: certifications = [], 
+    isLoading: certificationsLoading,
+    error: certificationsError,
+    refetch: refetchCertifications
+  } = useQuery<UnitCertification[]>({
     queryKey: [`/api/unit-certifications/project/${id}`],
     enabled: !isNew && !!id,
+    retry: 2,
   });
 
   // Fetch builders for dropdown
-  const { data: buildersData } = useQuery<{ data: Builder[] }>({
+  const { 
+    data: buildersData,
+    error: buildersError,
+    refetch: refetchBuilders
+  } = useQuery<{ data: Builder[] }>({
     queryKey: ["/api/builders"],
+    retry: 2,
   });
 
   const builders = buildersData?.data || [];
@@ -222,57 +247,183 @@ export default function TaxCreditProject() {
     },
   });
 
-  // Calculate progress
-  const completedRequirements = requirements.filter(r => r.status === "completed").length;
-  const totalRequirements = requirementTypes.length;
-  const progressPercentage = totalRequirements > 0 ? (completedRequirements / totalRequirements) * 100 : 0;
+  // Phase 3 - OPTIMIZE: Memoized status color function
+  const getStatusColor = useMemo(() => {
+    return (status: string) => {
+      switch (status) {
+        case "completed":
+          return "text-green-600";
+        case "failed":
+          return "text-red-600";
+        case "pending":
+          return "text-yellow-600";
+        default:
+          return "text-gray-600";
+      }
+    };
+  }, []);
 
-  const qualifiedUnits = certifications.filter(c => c.qualified).length;
-  const unitsProgress = project?.totalUnits ? (qualifiedUnits / project.totalUnits) * 100 : 0;
+  // Phase 3 - OPTIMIZE: Memoized requirement status lookup
+  const getRequirementStatus = useCallback((type: string) => {
+    const requirement = requirements.find(r => r.requirementType === type);
+    return requirement?.status || "pending";
+  }, [requirements]);
+
+  // Phase 3 - OPTIMIZE: Memoized requirement toggle handler
+  const handleRequirementToggle = useCallback((type: string, checked: boolean) => {
+    requirementMutation.mutate({
+      requirementType: type,
+      status: checked ? "completed" : "pending",
+    });
+  }, [requirementMutation]);
+
+  // Phase 3 - OPTIMIZE: Memoized progress calculations
+  const completedRequirements = useMemo(() => 
+    requirements.filter(r => r.status === "completed").length,
+    [requirements]
+  );
+
+  const totalRequirements = useMemo(() => requirementTypes.length, []);
+
+  const progressPercentage = useMemo(() => 
+    totalRequirements > 0 ? (completedRequirements / totalRequirements) * 100 : 0,
+    [completedRequirements, totalRequirements]
+  );
+
+  const qualifiedUnits = useMemo(() => 
+    certifications.filter(c => c.qualified).length,
+    [certifications]
+  );
+
+  const unitsProgress = useMemo(() => 
+    project?.totalUnits ? (qualifiedUnits / project.totalUnits) * 100 : 0,
+    [project?.totalUnits, qualifiedUnits]
+  );
+
+  const avgHersIndex = useMemo(() => {
+    if (certifications.length === 0) return null;
+    return Math.round(certifications.reduce((sum, c) => sum + (c.hersIndex || 0), 0) / certifications.length);
+  }, [certifications]);
+
+  const avgSavings = useMemo(() => {
+    if (certifications.length === 0) return null;
+    return Math.round(certifications.reduce((sum, c) => sum + (c.percentSavings || 0), 0) / certifications.length);
+  }, [certifications]);
+
+  const potentialCredit = useMemo(() => 
+    qualifiedUnits * 2500,
+    [qualifiedUnits]
+  );
 
   const onSubmit = (data: ProjectFormValues) => {
     projectMutation.mutate(data);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "text-green-600";
-      case "failed":
-        return "text-red-600";
-      case "pending":
-        return "text-yellow-600";
-      default:
-        return "text-gray-600";
-    }
-  };
-
-  const getRequirementStatus = (type: string) => {
-    const requirement = requirements.find(r => r.requirementType === type);
-    return requirement?.status || "pending";
-  };
-
-  const handleRequirementToggle = (type: string, checked: boolean) => {
-    requirementMutation.mutate({
-      requirementType: type,
-      status: checked ? "completed" : "pending",
-    });
-  };
-
   const isLoading = projectLoading || requirementsLoading || documentsLoading || certificationsLoading;
 
+  // Phase 5 - HARDEN: Error states for all queries
+  const hasError = projectError || requirementsError || documentsError || certificationsError || buildersError;
+
+  if (!isNew && hasError) {
+    return (
+      <div className="container mx-auto p-6 space-y-6" data-testid="container-error">
+        <Alert variant="destructive" data-testid="alert-error">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error Loading Project</AlertTitle>
+          <AlertDescription>
+            {(projectError as Error)?.message || 
+             (requirementsError as Error)?.message || 
+             (documentsError as Error)?.message || 
+             (certificationsError as Error)?.message ||
+             (buildersError as Error)?.message ||
+             "Failed to load project data. Please try again."}
+          </AlertDescription>
+        </Alert>
+        <div className="flex gap-4">
+          <Button 
+            onClick={() => {
+              refetchProject();
+              refetchRequirements();
+              refetchDocuments();
+              refetchCertifications();
+              refetchBuilders();
+            }}
+            data-testid="button-retry-all"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Retry
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => setLocation("/tax-credits")}
+            data-testid="button-back-from-error"
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back to Tax Credits
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Phase 2 - BUILD: Skeleton loading states
   if (!isNew && isLoading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-8">Loading project details...</div>
+      <div className="container mx-auto p-6 space-y-6" data-testid="container-loading">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between" data-testid="skeleton-header">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-6 w-24" />
+        </div>
+
+        {/* Progress Cards Skeleton */}
+        <div className="grid gap-4 md:grid-cols-2" data-testid="skeleton-progress-cards">
+          {[1, 2].map((i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-40" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-2 flex-1" />
+                  <Skeleton className="h-4 w-12" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Form Skeleton */}
+        <Card data-testid="skeleton-form">
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-96" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6" data-testid="container-tax-credit-project">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" data-testid="header-project">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -287,14 +438,17 @@ export default function TaxCreditProject() {
               {isNew ? "New 45L Project" : project?.projectName || "45L Project"}
             </h1>
             {!isNew && (
-              <p className="text-muted-foreground mt-1">
+              <p className="text-muted-foreground mt-1" data-testid="text-project-meta">
                 Tax Year {project?.taxYear} • {project?.totalUnits} Total Units
               </p>
             )}
           </div>
         </div>
         {!isNew && (
-          <Badge className={project?.status === "certified" ? "bg-green-500" : "bg-yellow-500"}>
+          <Badge 
+            className={project?.status === "certified" ? "bg-green-500" : "bg-yellow-500"}
+            data-testid="badge-project-status"
+          >
             {project?.status || "pending"}
           </Badge>
         )}
@@ -302,14 +456,14 @@ export default function TaxCreditProject() {
 
       {/* Progress Overview (only show when editing) */}
       {!isNew && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
+        <div className="grid gap-4 md:grid-cols-2" data-testid="section-progress">
+          <Card data-testid="card-requirements-progress">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Requirements Progress</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
-                <Progress value={progressPercentage} className="flex-1" />
+                <Progress value={progressPercentage} className="flex-1" data-testid="progress-requirements" />
                 <span className="text-sm font-medium" data-testid="text-requirements-progress">
                   {completedRequirements}/{totalRequirements}
                 </span>
@@ -317,13 +471,13 @@ export default function TaxCreditProject() {
             </CardContent>
           </Card>
           
-          <Card>
+          <Card data-testid="card-units-progress">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Qualified Units</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
-                <Progress value={unitsProgress} className="flex-1" />
+                <Progress value={unitsProgress} className="flex-1" data-testid="progress-units" />
                 <span className="text-sm font-medium" data-testid="text-units-progress">
                   {qualifiedUnits}/{project?.totalUnits || 0}
                 </span>
@@ -334,8 +488,8 @@ export default function TaxCreditProject() {
       )}
 
       {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} data-testid="tabs-project">
+        <TabsList data-testid="tabs-list">
           <TabsTrigger value="details" data-testid="tab-details">Project Details</TabsTrigger>
           {!isNew && (
             <>
@@ -346,24 +500,24 @@ export default function TaxCreditProject() {
           )}
         </TabsList>
 
-        <TabsContent value="details" className="space-y-4">
-          <Card>
+        <TabsContent value="details" className="space-y-4" data-testid="tab-content-details">
+          <Card data-testid="card-project-form">
             <CardHeader>
-              <CardTitle>Project Information</CardTitle>
-              <CardDescription>
+              <CardTitle data-testid="text-form-title">Project Information</CardTitle>
+              <CardDescription data-testid="text-form-description">
                 Enter the basic information for this 45L tax credit project
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" data-testid="form-project">
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="builderId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Builder</FormLabel>
+                          <FormLabel data-testid="label-builder">Builder</FormLabel>
                           <Select
                             disabled={!isNew}
                             onValueChange={field.onChange}
@@ -374,15 +528,15 @@ export default function TaxCreditProject() {
                                 <SelectValue placeholder="Select a builder" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent data-testid="select-content-builder">
                               {builders.map((builder) => (
-                                <SelectItem key={builder.id} value={builder.id}>
+                                <SelectItem key={builder.id} value={builder.id} data-testid={`select-item-builder-${builder.id}`}>
                                   {builder.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <FormMessage />
+                          <FormMessage data-testid="error-builder" />
                         </FormItem>
                       )}
                     />
@@ -392,11 +546,11 @@ export default function TaxCreditProject() {
                       name="projectName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Project Name</FormLabel>
+                          <FormLabel data-testid="label-project-name">Project Name</FormLabel>
                           <FormControl>
                             <Input {...field} placeholder="e.g., Sunrise Development Phase 2" data-testid="input-project-name" />
                           </FormControl>
-                          <FormMessage />
+                          <FormMessage data-testid="error-project-name" />
                         </FormItem>
                       )}
                     />
@@ -406,20 +560,20 @@ export default function TaxCreditProject() {
                       name="projectType"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Project Type</FormLabel>
+                          <FormLabel data-testid="label-project-type">Project Type</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-project-type">
                                 <SelectValue />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="single-family">Single Family</SelectItem>
-                              <SelectItem value="multifamily">Multifamily</SelectItem>
-                              <SelectItem value="manufactured">Manufactured Home</SelectItem>
+                            <SelectContent data-testid="select-content-project-type">
+                              <SelectItem value="single-family" data-testid="select-item-single-family">Single Family</SelectItem>
+                              <SelectItem value="multifamily" data-testid="select-item-multifamily">Multifamily</SelectItem>
+                              <SelectItem value="manufactured" data-testid="select-item-manufactured">Manufactured Home</SelectItem>
                             </SelectContent>
                           </Select>
-                          <FormMessage />
+                          <FormMessage data-testid="error-project-type" />
                         </FormItem>
                       )}
                     />
@@ -429,7 +583,7 @@ export default function TaxCreditProject() {
                       name="totalUnits"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Total Units</FormLabel>
+                          <FormLabel data-testid="label-total-units">Total Units</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
@@ -439,10 +593,10 @@ export default function TaxCreditProject() {
                               data-testid="input-total-units"
                             />
                           </FormControl>
-                          <FormDescription>
+                          <FormDescription data-testid="description-total-units">
                             Number of dwelling units in this project
                           </FormDescription>
-                          <FormMessage />
+                          <FormMessage data-testid="error-total-units" />
                         </FormItem>
                       )}
                     />
@@ -452,7 +606,7 @@ export default function TaxCreditProject() {
                       name="taxYear"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tax Year</FormLabel>
+                          <FormLabel data-testid="label-tax-year">Tax Year</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
@@ -463,7 +617,7 @@ export default function TaxCreditProject() {
                               data-testid="input-tax-year"
                             />
                           </FormControl>
-                          <FormMessage />
+                          <FormMessage data-testid="error-tax-year" />
                         </FormItem>
                       )}
                     />
@@ -473,24 +627,24 @@ export default function TaxCreditProject() {
                       name="softwareTool"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Software Tool</FormLabel>
+                          <FormLabel data-testid="label-software">Software Tool</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-software">
                                 <SelectValue placeholder="Select software" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="REM/Rate">REM/Rate</SelectItem>
-                              <SelectItem value="EnergyGauge">EnergyGauge</SelectItem>
-                              <SelectItem value="HERS">HERS</SelectItem>
-                              <SelectItem value="Other">Other</SelectItem>
+                            <SelectContent data-testid="select-content-software">
+                              <SelectItem value="REM/Rate" data-testid="select-item-remrate">REM/Rate</SelectItem>
+                              <SelectItem value="EnergyGauge" data-testid="select-item-energygauge">EnergyGauge</SelectItem>
+                              <SelectItem value="HERS" data-testid="select-item-hers">HERS</SelectItem>
+                              <SelectItem value="Other" data-testid="select-item-other">Other</SelectItem>
                             </SelectContent>
                           </Select>
-                          <FormDescription>
+                          <FormDescription data-testid="description-software">
                             Energy modeling software used
                           </FormDescription>
-                          <FormMessage />
+                          <FormMessage data-testid="error-software" />
                         </FormItem>
                       )}
                     />
@@ -500,11 +654,11 @@ export default function TaxCreditProject() {
                       name="softwareVersion"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Software Version</FormLabel>
+                          <FormLabel data-testid="label-software-version">Software Version</FormLabel>
                           <FormControl>
                             <Input {...field} placeholder="e.g., v2.9.7" data-testid="input-software-version" />
                           </FormControl>
-                          <FormMessage />
+                          <FormMessage data-testid="error-software-version" />
                         </FormItem>
                       )}
                     />
@@ -515,28 +669,28 @@ export default function TaxCreditProject() {
                         name="status"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Status</FormLabel>
+                            <FormLabel data-testid="label-status">Status</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger data-testid="select-status">
                                   <SelectValue />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent>
-                                <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="certified">Certified</SelectItem>
-                                <SelectItem value="claimed">Claimed</SelectItem>
-                                <SelectItem value="denied">Denied</SelectItem>
+                              <SelectContent data-testid="select-content-status">
+                                <SelectItem value="pending" data-testid="select-item-pending">Pending</SelectItem>
+                                <SelectItem value="certified" data-testid="select-item-certified">Certified</SelectItem>
+                                <SelectItem value="claimed" data-testid="select-item-claimed">Claimed</SelectItem>
+                                <SelectItem value="denied" data-testid="select-item-denied">Denied</SelectItem>
                               </SelectContent>
                             </Select>
-                            <FormMessage />
+                            <FormMessage data-testid="error-status" />
                           </FormItem>
                         )}
                       />
                     )}
                   </div>
 
-                  <div className="flex justify-end gap-4">
+                  <div className="flex justify-end gap-4" data-testid="section-form-actions">
                     <Button
                       type="button"
                       variant="outline"
@@ -558,11 +712,11 @@ export default function TaxCreditProject() {
 
         {!isNew && (
           <>
-            <TabsContent value="requirements" className="space-y-4">
-              <Card>
+            <TabsContent value="requirements" className="space-y-4" data-testid="tab-content-requirements">
+              <Card data-testid="card-requirements">
                 <CardHeader>
-                  <CardTitle>Requirements Checklist</CardTitle>
-                  <CardDescription>
+                  <CardTitle data-testid="text-requirements-title">Requirements Checklist</CardTitle>
+                  <CardDescription data-testid="text-requirements-description">
                     Track all IRS 45L requirements for this project
                   </CardDescription>
                 </CardHeader>
@@ -581,16 +735,23 @@ export default function TaxCreditProject() {
                           checked={status === "completed"}
                           onCheckedChange={(checked) => handleRequirementToggle(type.id, !!checked)}
                           disabled={requirementMutation.isPending}
+                          data-testid={`checkbox-requirement-${type.id}`}
                         />
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <Icon className="h-4 w-4 text-muted-foreground" />
-                            <Label className="text-base font-medium">{type.label}</Label>
-                            <Badge variant="outline" className={getStatusColor(status)}>
+                            <Label className="text-base font-medium" data-testid={`label-requirement-${type.id}`}>
+                              {type.label}
+                            </Label>
+                            <Badge 
+                              variant="outline" 
+                              className={getStatusColor(status)}
+                              data-testid={`badge-requirement-status-${type.id}`}
+                            >
                               {status}
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="text-sm text-muted-foreground mt-1" data-testid={`text-requirement-description-${type.id}`}>
                             {type.description}
                           </p>
                         </div>
@@ -600,28 +761,28 @@ export default function TaxCreditProject() {
                 </CardContent>
               </Card>
 
-              <Alert>
+              <Alert data-testid="alert-requirements-info">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
+                <AlertDescription data-testid="text-requirements-info">
                   All requirements must be completed and documented before the project can be certified for the 45L tax credit.
                 </AlertDescription>
               </Alert>
             </TabsContent>
 
-            <TabsContent value="units" className="space-y-4">
-              <Card>
+            <TabsContent value="units" className="space-y-4" data-testid="tab-content-units">
+              <Card data-testid="card-units">
                 <CardHeader>
-                  <CardTitle>Unit Certifications</CardTitle>
-                  <CardDescription>
+                  <CardTitle data-testid="text-units-title">Unit Certifications</CardTitle>
+                  <CardDescription data-testid="text-units-description">
                     Track individual unit test results and qualification status
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {certifications.length === 0 ? (
-                    <div className="text-center py-8">
+                    <div className="text-center py-8" data-testid="empty-units">
                       <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground mb-4">No units certified yet</p>
-                      <Button>
+                      <p className="text-muted-foreground mb-4" data-testid="text-empty-units">No units certified yet</p>
+                      <Button data-testid="button-add-unit">
                         <Plus className="mr-2 h-4 w-4" />
                         Add Unit Certification
                       </Button>
@@ -639,20 +800,28 @@ export default function TaxCreditProject() {
                               <Home className="h-4 w-4" />
                             </div>
                             <div>
-                              <div className="font-medium">{cert.unitAddress}</div>
-                              <div className="text-sm text-muted-foreground">
+                              <div className="font-medium" data-testid={`text-unit-address-${cert.id}`}>
+                                {cert.unitAddress}
+                              </div>
+                              <div className="text-sm text-muted-foreground" data-testid={`text-unit-meta-${cert.id}`}>
                                 Unit {cert.unitNumber} • HERS {cert.hersIndex || "N/A"}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {cert.qualified ? (
-                              <Badge className="bg-green-500 text-white">
+                              <Badge 
+                                className="bg-green-500 text-white"
+                                data-testid={`badge-unit-qualified-${cert.id}`}
+                              >
                                 <CheckCircle className="mr-1 h-3 w-3" />
                                 Qualified
                               </Badge>
                             ) : (
-                              <Badge className="bg-red-500 text-white">
+                              <Badge 
+                                className="bg-red-500 text-white"
+                                data-testid={`badge-unit-not-qualified-${cert.id}`}
+                              >
                                 <XCircle className="mr-1 h-3 w-3" />
                                 Not Qualified
                               </Badge>
@@ -665,32 +834,28 @@ export default function TaxCreditProject() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card data-testid="card-units-summary">
                 <CardHeader>
-                  <CardTitle>Summary Statistics</CardTitle>
+                  <CardTitle data-testid="text-summary-title">Summary Statistics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4 md:grid-cols-3">
-                    <div>
+                    <div data-testid="stat-avg-hers">
                       <Label className="text-sm text-muted-foreground">Average HERS Index</Label>
-                      <p className="text-2xl font-bold">
-                        {certifications.length > 0 
-                          ? Math.round(certifications.reduce((sum, c) => sum + (c.hersIndex || 0), 0) / certifications.length)
-                          : "N/A"}
+                      <p className="text-2xl font-bold" data-testid="text-avg-hers">
+                        {avgHersIndex ?? "N/A"}
                       </p>
                     </div>
-                    <div>
+                    <div data-testid="stat-avg-savings">
                       <Label className="text-sm text-muted-foreground">Average Savings</Label>
-                      <p className="text-2xl font-bold">
-                        {certifications.length > 0
-                          ? `${Math.round(certifications.reduce((sum, c) => sum + (c.percentSavings || 0), 0) / certifications.length)}%`
-                          : "N/A"}
+                      <p className="text-2xl font-bold" data-testid="text-avg-savings">
+                        {avgSavings !== null ? `${avgSavings}%` : "N/A"}
                       </p>
                     </div>
-                    <div>
+                    <div data-testid="stat-potential-credit">
                       <Label className="text-sm text-muted-foreground">Potential Credit</Label>
-                      <p className="text-2xl font-bold text-green-600">
-                        ${(qualifiedUnits * 2500).toLocaleString()}
+                      <p className="text-2xl font-bold text-green-600" data-testid="text-potential-credit">
+                        ${potentialCredit.toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -698,20 +863,20 @@ export default function TaxCreditProject() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="documents" className="space-y-4">
-              <Card>
+            <TabsContent value="documents" className="space-y-4" data-testid="tab-content-documents">
+              <Card data-testid="card-documents">
                 <CardHeader>
-                  <CardTitle>Project Documents</CardTitle>
-                  <CardDescription>
+                  <CardTitle data-testid="text-documents-title">Project Documents</CardTitle>
+                  <CardDescription data-testid="text-documents-description">
                     Upload and manage all required documentation for 45L certification
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {documents.length === 0 ? (
-                    <div className="text-center py-8">
+                    <div className="text-center py-8" data-testid="empty-documents">
                       <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground mb-4">No documents uploaded yet</p>
-                      <Button>
+                      <p className="text-muted-foreground mb-4" data-testid="text-empty-documents">No documents uploaded yet</p>
+                      <Button data-testid="button-upload-document">
                         <Upload className="mr-2 h-4 w-4" />
                         Upload Document
                       </Button>
@@ -729,17 +894,19 @@ export default function TaxCreditProject() {
                               <FileText className="h-4 w-4" />
                             </div>
                             <div>
-                              <div className="font-medium">{doc.fileName}</div>
-                              <div className="text-sm text-muted-foreground">
+                              <div className="font-medium" data-testid={`text-document-name-${doc.id}`}>
+                                {doc.fileName}
+                              </div>
+                              <div className="text-sm text-muted-foreground" data-testid={`text-document-meta-${doc.id}`}>
                                 {doc.documentType} • Uploaded {format(new Date(doc.uploadDate), "MMM d, yyyy")}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" data-testid={`button-download-document-${doc.id}`}>
                               <Download className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" data-testid={`button-delete-document-${doc.id}`}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
@@ -750,9 +917,9 @@ export default function TaxCreditProject() {
                 </CardContent>
               </Card>
 
-              <Alert>
+              <Alert data-testid="alert-documents-info">
                 <FileCheck className="h-4 w-4" />
-                <AlertDescription>
+                <AlertDescription data-testid="text-documents-info">
                   Required documents: Energy modeling reports, test results, equipment specifications, and AHRI certificates.
                 </AlertDescription>
               </Alert>
@@ -761,5 +928,13 @@ export default function TaxCreditProject() {
         )}
       </Tabs>
     </div>
+  );
+}
+
+export default function TaxCreditProject() {
+  return (
+    <ErrorBoundary>
+      <TaxCreditProjectContent />
+    </ErrorBoundary>
   );
 }

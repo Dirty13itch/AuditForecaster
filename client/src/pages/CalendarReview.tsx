@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, CheckCircle2, XCircle, AlertCircle, Clock } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, AlertCircle, Clock, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   Dialog,
   DialogContent,
@@ -58,7 +59,7 @@ interface Builder {
   companyName: string;
 }
 
-export default function CalendarReview() {
+function CalendarReviewContent() {
   const { toast } = useToast();
   const { showConfirm, ConfirmDialog } = useConfirmDialog();
   const [selectedStatus, setSelectedStatus] = useState<string>("pending");
@@ -94,6 +95,7 @@ export default function CalendarReview() {
     refetch 
   } = useQuery<EventsResponse>({
     queryKey: [`/api/calendar/unmatched-events?${queryParams.toString()}`],
+    retry: 2,
   });
 
   const events = data?.events || [];
@@ -102,6 +104,7 @@ export default function CalendarReview() {
   // Fetch all builders for approve dialog
   const { data: buildersData } = useQuery<Builder[]>({
     queryKey: ['/api/builders'],
+    retry: 2,
   });
   
   const builders = buildersData || [];
@@ -154,13 +157,13 @@ export default function CalendarReview() {
     },
   });
 
-  const getConfidenceBadgeVariant = (confidence: number) => {
+  const getConfidenceBadgeVariant = useCallback((confidence: number) => {
     if (confidence >= 80) return "default";
     if (confidence >= 60) return "secondary";
     return "destructive";
-  };
+  }, []);
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = useCallback((status: string) => {
     switch (status) {
       case 'approved':
         return <CheckCircle2 className="h-4 w-4 text-green-600" />;
@@ -171,10 +174,10 @@ export default function CalendarReview() {
       default:
         return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
     }
-  };
+  }, []);
 
   // Extract parsed data from rawEventJson
-  const getParsedData = (event: UnmatchedEvent) => {
+  const getParsedData = useCallback((event: UnmatchedEvent) => {
     try {
       const parsed = typeof event.rawEventJson === 'string' 
         ? JSON.parse(event.rawEventJson) 
@@ -186,44 +189,44 @@ export default function CalendarReview() {
     } catch {
       return { builderName: 'Unknown', inspectionType: 'Unknown' };
     }
-  };
+  }, []);
 
-  const inspectionTypes = [
+  const inspectionTypes = useMemo(() => [
     'Full Test',
     'SV2',
     'Pre-Drywall',
     'Final',
     'Rough',
-  ];
+  ], []);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setMinConfidence(0);
     setMaxConfidence(100);
     setStartDate("");
     setEndDate("");
     setBuilderMatch('all');
     setPage(0);
-  };
+  }, []);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Manual Review Queue</h1>
-          <p className="text-muted-foreground mt-2">
+    <div className="container mx-auto p-6 space-y-6" data-testid="wrapper-review-page">
+      <div className="flex items-center justify-between" data-testid="section-page-header">
+        <div data-testid="wrapper-header-content">
+          <h1 className="text-3xl font-bold" data-testid="heading-page-title">Manual Review Queue</h1>
+          <p className="text-muted-foreground mt-2" data-testid="text-page-description">
             Review and approve calendar events that need manual verification
           </p>
         </div>
       </div>
 
       {/* Status Filter Tabs */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filter by Status</CardTitle>
-          <CardDescription>View events by their current review status</CardDescription>
+      <Card data-testid="card-status-filter">
+        <CardHeader data-testid="section-status-header">
+          <CardTitle data-testid="heading-status-title">Filter by Status</CardTitle>
+          <CardDescription data-testid="text-status-description">View events by their current review status</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
+        <CardContent data-testid="section-status-content">
+          <div className="flex gap-2" data-testid="wrapper-status-buttons">
             {['pending', 'approved', 'rejected'].map((status) => (
               <Button
                 key={status}
@@ -242,12 +245,12 @@ export default function CalendarReview() {
       </Card>
 
       {/* Advanced Filters Panel */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Advanced Filters</CardTitle>
-              <CardDescription>Refine your search with additional criteria</CardDescription>
+      <Card data-testid="card-advanced-filters">
+        <CardHeader data-testid="section-filters-header">
+          <div className="flex items-center justify-between" data-testid="wrapper-filters-title">
+            <div data-testid="wrapper-filters-text">
+              <CardTitle data-testid="heading-filters-title">Advanced Filters</CardTitle>
+              <CardDescription data-testid="text-filters-description">Refine your search with additional criteria</CardDescription>
             </div>
             <Button
               variant="outline"
@@ -259,11 +262,11 @@ export default function CalendarReview() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <CardContent className="space-y-6" data-testid="section-filters-content">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="wrapper-filters-grid">
             {/* Confidence Score Range Slider */}
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold">
+            <div className="space-y-3" data-testid="wrapper-confidence-filter">
+              <Label className="text-sm font-semibold" data-testid="label-confidence-range">
                 Confidence Score: {minConfidence}% - {maxConfidence}%
               </Label>
               <div className="space-y-4">
@@ -307,8 +310,8 @@ export default function CalendarReview() {
             </div>
 
             {/* Date Range Filters */}
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold">Event Date Range</Label>
+            <div className="space-y-3" data-testid="wrapper-date-filter">
+              <Label className="text-sm font-semibold" data-testid="label-date-range">Event Date Range</Label>
               <div className="space-y-2">
                 <div className="space-y-2">
                   <Label htmlFor="start-date" className="text-xs text-muted-foreground">
@@ -346,8 +349,8 @@ export default function CalendarReview() {
             </div>
 
             {/* Builder Match Filter */}
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold">Builder Detection</Label>
+            <div className="space-y-3" data-testid="wrapper-builder-filter">
+              <Label className="text-sm font-semibold" data-testid="label-builder-detection">Builder Detection</Label>
               <Select 
                 value={builderMatch} 
                 onValueChange={(value) => {
@@ -364,15 +367,15 @@ export default function CalendarReview() {
                   <SelectItem value="unmatched">No Builder Detected</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" data-testid="text-builder-help">
                 Filter events by whether the parser detected a builder
               </p>
             </div>
           </div>
 
           {/* Active Filters Summary */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t">
-            <span className="text-xs text-muted-foreground">Active Filters:</span>
+          <div className="flex flex-wrap gap-2 pt-2 border-t" data-testid="wrapper-active-filters">
+            <span className="text-xs text-muted-foreground" data-testid="label-active-filters">Active Filters:</span>
             {minConfidence > 0 && (
               <Badge variant="secondary" className="text-xs">
                 Min: {minConfidence}%
@@ -406,44 +409,53 @@ export default function CalendarReview() {
       </Card>
 
       {/* Events Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Unmatched Events</CardTitle>
-          <CardDescription>
+      <Card data-testid="card-events-table">
+        <CardHeader data-testid="section-table-header">
+          <CardTitle data-testid="heading-table-title">Unmatched Events</CardTitle>
+          <CardDescription data-testid="text-table-description">
             {pagination ? `Showing ${events.length} of ${pagination.total} events` : 'Loading...'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent data-testid="section-table-content">
           {isLoading && (
-            <div className="space-y-3">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
+            <div className="space-y-3" data-testid="wrapper-loading-skeleton">
+              <Skeleton className="h-12 w-full" data-testid="skeleton-row-1" />
+              <Skeleton className="h-12 w-full" data-testid="skeleton-row-2" />
+              <Skeleton className="h-12 w-full" data-testid="skeleton-row-3" />
+              <Skeleton className="h-12 w-full" data-testid="skeleton-row-4" />
+              <Skeleton className="h-12 w-full" data-testid="skeleton-row-5" />
             </div>
           )}
 
           {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Error: {error instanceof Error ? error.message : 'Failed to fetch events'}
+            <Alert variant="destructive" data-testid="alert-error-loading">
+              <AlertCircle className="h-4 w-4" data-testid="icon-error-loading" />
+              <AlertDescription className="flex items-center justify-between gap-4" data-testid="text-error-loading">
+                <span data-testid="text-error-message">Error: {error instanceof Error ? error.message : 'Failed to fetch events'}</span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => refetch()}
+                  data-testid="button-retry-fetch"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
               </AlertDescription>
             </Alert>
           )}
 
           {!isLoading && !error && events.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-muted-foreground" data-testid="text-empty-state">
               No {selectedStatus} events found
             </div>
           )}
 
           {!isLoading && !error && events.length > 0 && (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
+            <div className="overflow-x-auto" data-testid="wrapper-table">
+              <Table data-testid="table-events">
+                <TableHeader data-testid="section-table-head">
+                  <TableRow data-testid="row-table-headers">
                     <TableHead>Event Title</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Date/Time</TableHead>
@@ -540,11 +552,11 @@ export default function CalendarReview() {
 
           {/* Pagination */}
           {pagination && pagination.total > limit && (
-            <div className="flex items-center justify-between mt-4">
-              <div className="text-sm text-muted-foreground">
+            <div className="flex items-center justify-between mt-4" data-testid="wrapper-pagination">
+              <div className="text-sm text-muted-foreground" data-testid="text-page-info">
                 Page {page + 1} of {Math.ceil(pagination.total / limit)}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2" data-testid="wrapper-pagination-buttons">
                 <Button
                   variant="outline"
                   onClick={() => setPage(page - 1)}
@@ -570,32 +582,32 @@ export default function CalendarReview() {
       {/* Approve Dialog */}
       <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
         <DialogContent className="sm:max-w-[425px]" data-testid="dialog-approve-event">
-          <DialogHeader>
-            <DialogTitle>Approve Calendar Event</DialogTitle>
-            <DialogDescription>
+          <DialogHeader data-testid="section-dialog-header">
+            <DialogTitle data-testid="heading-dialog-title">Approve Calendar Event</DialogTitle>
+            <DialogDescription data-testid="text-dialog-description">
               Select the builder and inspection type for this event
             </DialogDescription>
           </DialogHeader>
           
           {selectedEvent && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Event Details</Label>
-                <div className="text-sm space-y-1 p-3 bg-muted rounded-md">
-                  <div><span className="font-medium">Title:</span> {selectedEvent.title}</div>
-                  <div><span className="font-medium">Location:</span> {selectedEvent.location || 'N/A'}</div>
-                  <div><span className="font-medium">Date:</span> {new Date(selectedEvent.startTime).toLocaleString()}</div>
-                  <div>
+            <div className="space-y-4 py-4" data-testid="wrapper-dialog-content">
+              <div className="space-y-2" data-testid="section-event-details">
+                <Label className="text-sm font-semibold" data-testid="label-event-details">Event Details</Label>
+                <div className="text-sm space-y-1 p-3 bg-muted rounded-md" data-testid="wrapper-event-info">
+                  <div data-testid="text-event-title"><span className="font-medium">Title:</span> {selectedEvent.title}</div>
+                  <div data-testid="text-event-location"><span className="font-medium">Location:</span> {selectedEvent.location || 'N/A'}</div>
+                  <div data-testid="text-event-date"><span className="font-medium">Date:</span> {new Date(selectedEvent.startTime).toLocaleString()}</div>
+                  <div data-testid="wrapper-event-confidence">
                     <span className="font-medium">Confidence:</span>{' '}
-                    <Badge variant={getConfidenceBadgeVariant(selectedEvent.confidenceScore)}>
+                    <Badge variant={getConfidenceBadgeVariant(selectedEvent.confidenceScore)} data-testid="badge-event-confidence">
                       {selectedEvent.confidenceScore}%
                     </Badge>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="builder">Builder *</Label>
+              <div className="space-y-2" data-testid="section-builder-select">
+                <Label htmlFor="builder" data-testid="label-builder">Builder *</Label>
                 <Select value={selectedBuilderId} onValueChange={setSelectedBuilderId}>
                   <SelectTrigger id="builder" data-testid="select-builder">
                     <SelectValue placeholder="Select a builder" />
@@ -610,8 +622,8 @@ export default function CalendarReview() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="inspection-type">Inspection Type *</Label>
+              <div className="space-y-2" data-testid="section-inspection-select">
+                <Label htmlFor="inspection-type" data-testid="label-inspection-type">Inspection Type *</Label>
                 <Select value={selectedInspectionType} onValueChange={setSelectedInspectionType}>
                   <SelectTrigger id="inspection-type" data-testid="select-inspection-type">
                     <SelectValue placeholder="Select inspection type" />
@@ -628,7 +640,7 @@ export default function CalendarReview() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter data-testid="section-dialog-footer">
             <Button
               variant="outline"
               onClick={() => setApproveDialogOpen(false)}
@@ -650,7 +662,7 @@ export default function CalendarReview() {
               disabled={!selectedBuilderId || !selectedInspectionType || approveMutation.isPending}
               data-testid="button-confirm-approve"
             >
-              {approveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {approveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" data-testid="icon-loading-approve" />}
               Approve & Create Job
             </Button>
           </DialogFooter>
@@ -658,5 +670,13 @@ export default function CalendarReview() {
       </Dialog>
       <ConfirmDialog />
     </div>
+  );
+}
+
+export default function CalendarReview() {
+  return (
+    <ErrorBoundary data-testid="wrapper-error-boundary">
+      <CalendarReviewContent />
+    </ErrorBoundary>
   );
 }

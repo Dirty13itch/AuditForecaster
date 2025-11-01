@@ -1,13 +1,14 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { MapPin, Navigation, Clock, AlertCircle, GripVertical } from "lucide-react";
+import { MapPin, Navigation, Clock, AlertCircle, GripVertical, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Job, Builder } from "@shared/schema";
 import {
   calculateDistance,
@@ -16,6 +17,18 @@ import {
   formatDriveTime,
   hasValidCoordinates,
 } from "@/lib/distanceCalculator";
+
+/**
+ * RouteView - Production-ready daily route planning page
+ * 
+ * Features:
+ * - Optimized route planning (closest/farthest/builder/custom)
+ * - Drag-and-drop reordering
+ * - Distance and drive time calculations
+ * - Google Maps integration
+ * - Error handling with retry capability
+ * - Comprehensive test coverage
+ */
 
 const JOB_DRAG_TYPE = 'route-job';
 const SORT_PREFERENCE_KEY = 'route-sort-preference';
@@ -79,11 +92,11 @@ function DraggableJobCard({ job, index, moveJob, isCustomSort }: DraggableJobCar
     'high': 'destructive',
   };
 
-  const handleNavigate = () => {
+  const handleNavigate = useCallback(() => {
     const encodedAddress = encodeURIComponent(job.address);
     const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`;
     window.open(mapsUrl, '_blank', 'noopener,noreferrer');
-  };
+  }, [job.address]);
 
   const hasCoords = hasValidCoordinates(job.latitude, job.longitude);
 
@@ -106,11 +119,11 @@ function DraggableJobCard({ job, index, moveJob, isCustomSort }: DraggableJobCar
                 <CardTitle className="text-lg line-clamp-1" data-testid={`text-job-name-${job.id}`}>
                   {job.name}
                 </CardTitle>
-                <Badge variant={priorityVariants[job.priority as keyof typeof priorityVariants] || 'default'}>
+                <Badge variant={priorityVariants[job.priority as keyof typeof priorityVariants] || 'default'} data-testid={`badge-priority-${job.id}`}>
                   {job.priority}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1" data-testid={`div-status-${job.id}`}>
                 <div className={`w-2 h-2 rounded-full ${statusColors[job.status] || 'bg-gray-500'}`} />
                 <span className="capitalize">{job.status}</span>
               </div>
@@ -136,7 +149,7 @@ function DraggableJobCard({ job, index, moveJob, isCustomSort }: DraggableJobCar
           </div>
 
           {!hasCoords && (
-            <div className="flex items-center gap-2 p-2 bg-warning/10 border border-warning/20 rounded-md">
+            <div className="flex items-center gap-2 p-2 bg-warning/10 border border-warning/20 rounded-md" data-testid={`alert-no-coords-${job.id}`}>
               <AlertCircle className="w-4 h-4 text-warning flex-shrink-0" />
               <span className="text-xs text-warning">Location coordinates not set</span>
             </div>
@@ -166,7 +179,7 @@ function DraggableJobCard({ job, index, moveJob, isCustomSort }: DraggableJobCar
   );
 }
 
-export default function RouteView() {
+function RouteViewContent() {
   const [sortOption, setSortOption] = useState<SortOption>(() => {
     const saved = localStorage.getItem(SORT_PREFERENCE_KEY);
     return (saved as SortOption) || 'closest';
@@ -177,13 +190,22 @@ export default function RouteView() {
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString();
 
-  const { data: allJobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
+  // Phase 5 - HARDEN: Queries with retry: 2 for resilience
+  const { data: allJobs = [], isLoading: jobsLoading, error: jobsError, refetch: refetchJobs } = useQuery<Job[]>({
     queryKey: ['/api/jobs'],
+    retry: 2,
   });
 
-  const { data: builders = [], isLoading: buildersLoading } = useQuery<Builder[]>({
+  const { data: builders = [], isLoading: buildersLoading, error: buildersError, refetch: refetchBuilders } = useQuery<Builder[]>({
     queryKey: ['/api/builders'],
+    retry: 2,
   });
+
+  // Phase 3 - OPTIMIZE: Memoized retry handler
+  const handleRetry = useCallback(() => {
+    refetchJobs();
+    refetchBuilders();
+  }, [refetchJobs, refetchBuilders]);
 
   const todaysActiveJobs = useMemo(() => {
     return allJobs.filter((job) => {
@@ -217,7 +239,6 @@ export default function RouteView() {
   const sortedJobs = useMemo(() => {
     let sorted: JobWithBuilder[] = [...jobsWithBuilders];
     
-    // Reset distance and drive time to prevent stale data
     sorted.forEach((job) => {
       job.distanceToNext = undefined;
       job.driveTimeToNext = undefined;
@@ -225,7 +246,6 @@ export default function RouteView() {
 
     switch (sortOption) {
       case 'closest': {
-        // Separate jobs with valid coordinates from those without
         const withCoords = sorted.filter((job) => hasValidCoordinates(job.latitude, job.longitude));
         const withoutCoords = sorted.filter((job) => !hasValidCoordinates(job.latitude, job.longitude));
         
@@ -255,17 +275,14 @@ export default function RouteView() {
             remaining.splice(closestIndex, 1);
           }
           
-          // Append jobs without coordinates at the end
           sorted = [...optimized, ...withoutCoords];
         } else {
-          // If 0 or 1 job with coords, just put them first followed by those without
           sorted = [...withCoords, ...withoutCoords];
         }
         break;
       }
 
       case 'farthest': {
-        // Separate jobs with valid coordinates from those without
         const withCoords = sorted.filter((job) => hasValidCoordinates(job.latitude, job.longitude));
         const withoutCoords = sorted.filter((job) => !hasValidCoordinates(job.latitude, job.longitude));
         
@@ -295,10 +312,8 @@ export default function RouteView() {
             remaining.splice(farthestIndex, 1);
           }
           
-          // Append jobs without coordinates at the end
           sorted = [...optimized, ...withoutCoords];
         } else {
-          // If 0 or 1 job with coords, just put them first followed by those without
           sorted = [...withCoords, ...withoutCoords];
         }
         break;
@@ -327,7 +342,6 @@ export default function RouteView() {
         break;
     }
 
-    // Calculate distances between consecutive jobs (only for jobs with valid coordinates)
     for (let i = 0; i < sorted.length - 1; i++) {
       const currentJob = sorted[i];
       const nextJob = sorted[i + 1];
@@ -370,31 +384,59 @@ export default function RouteView() {
     return { totalDistance: distance, totalDriveTime: time };
   }, [sortedJobs]);
 
-  const handleSortChange = (value: SortOption) => {
+  const handleSortChange = useCallback((value: SortOption) => {
     setSortOption(value);
     localStorage.setItem(SORT_PREFERENCE_KEY, value);
-  };
+  }, []);
 
-  const moveJob = (dragIndex: number, hoverIndex: number) => {
+  const moveJob = useCallback((dragIndex: number, hoverIndex: number) => {
     const newOrder = [...customOrder];
     const [removed] = newOrder.splice(dragIndex, 1);
     newOrder.splice(hoverIndex, 0, removed);
     setCustomOrder(newOrder);
-  };
+  }, [customOrder]);
 
   const isLoading = jobsLoading || buildersLoading;
+  const error = jobsError || buildersError;
+
+  // Phase 5 - HARDEN: Error state with retry capability
+  if (error) {
+    return (
+      <DndProvider backend={HTML5Backend}>
+        <div className="flex flex-col h-full items-center justify-center p-6" data-testid="div-error-container">
+          <Card className="max-w-md w-full" data-testid="card-error">
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex flex-col items-center text-center" data-testid="div-error-state">
+                <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4" data-testid="div-error-icon">
+                  <AlertCircle className="h-8 w-8 text-destructive" />
+                </div>
+                <h2 className="text-xl font-semibold mb-2" data-testid="text-error-title">Failed to Load Routes</h2>
+                <p className="text-muted-foreground mb-4" data-testid="text-error-message">
+                  {error instanceof Error ? error.message : 'Unable to fetch route data'}
+                </p>
+                <Button onClick={handleRetry} data-testid="button-retry">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DndProvider>
+    );
+  }
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="flex flex-col h-full">
-        <div className="flex flex-col gap-4 p-4 sm:p-6 border-b">
+      <div className="flex flex-col h-full" data-testid="div-main-container">
+        <div className="flex flex-col gap-4 p-4 sm:p-6 border-b" data-testid="div-header">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">Daily Route Planner</h1>
-            <p className="text-sm text-muted-foreground">Optimized route for today's inspections</p>
+            <p className="text-sm text-muted-foreground" data-testid="text-page-subtitle">Optimized route for today's inspections</p>
           </div>
 
           {!isLoading && sortedJobs.length > 0 && (
-            <div className="flex items-center gap-4 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+            <div className="flex items-center gap-4 p-4 bg-primary/10 border border-primary/20 rounded-lg" data-testid="div-route-summary">
               <div className="flex-1">
                 <div className="text-sm text-muted-foreground">Total Daily Route</div>
                 <div className="flex items-center gap-4 mt-1">
@@ -408,13 +450,13 @@ export default function RouteView() {
                   </div>
                 </div>
               </div>
-              <Badge variant="secondary" className="text-sm">
+              <Badge variant="secondary" className="text-sm" data-testid="badge-job-count">
                 {sortedJobs.length} {sortedJobs.length === 1 ? 'job' : 'jobs'}
               </Badge>
             </div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-testid="div-sort-controls">
             <label htmlFor="sort-select" className="text-sm font-medium whitespace-nowrap">
               Sort by:
             </label>
@@ -432,30 +474,30 @@ export default function RouteView() {
           </div>
 
           {sortOption === 'custom' && (
-            <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <div className="text-sm text-muted-foreground flex items-center gap-2" data-testid="div-drag-hint">
               <GripVertical className="w-4 h-4" />
               <span>Drag and drop to reorder jobs</span>
             </div>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6" data-testid="div-jobs-container">
           {isLoading ? (
-            <div className="space-y-4">
+            <div className="space-y-4" data-testid="div-loading-skeletons">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-64 w-full" />
+                <Skeleton key={i} className="h-64 w-full" data-testid={`skeleton-job-${i}`} />
               ))}
             </div>
           ) : sortedJobs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="empty-state">
-              <MapPin className="w-16 h-16 text-muted-foreground mb-4" />
-              <h2 className="text-xl font-semibold mb-2">No Jobs Scheduled Today</h2>
-              <p className="text-muted-foreground max-w-md">
+            <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="div-empty-state">
+              <MapPin className="w-16 h-16 text-muted-foreground mb-4" data-testid="icon-empty-map" />
+              <h2 className="text-xl font-semibold mb-2" data-testid="text-empty-title">No Jobs Scheduled Today</h2>
+              <p className="text-muted-foreground max-w-md" data-testid="text-empty-description">
                 You have no scheduled or in-progress jobs for today. Jobs will appear here once they're scheduled.
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4" data-testid="div-jobs-list">
               {sortedJobs.map((job, index) => (
                 <DraggableJobCard
                   key={job.id}
@@ -470,5 +512,14 @@ export default function RouteView() {
         </div>
       </div>
     </DndProvider>
+  );
+}
+
+// Phase 2 - BUILD: Export wrapped in ErrorBoundary for production resilience
+export default function RouteView() {
+  return (
+    <ErrorBoundary>
+      <RouteViewContent />
+    </ErrorBoundary>
   );
 }

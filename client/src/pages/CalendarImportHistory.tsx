@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertCircle as AlertCircleIcon, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { 
   Calendar, 
   CheckCircle, 
@@ -20,12 +21,13 @@ import {
   Filter,
   X,
   ExternalLink,
-  Clock
+  Clock,
+  RefreshCw
 } from "lucide-react";
 import { DateTime } from "luxon";
 import type { CalendarImportLog, CalendarImportLogsResponse } from "@shared/schema";
 
-export default function CalendarImportHistory() {
+function CalendarImportHistoryContent() {
   const [, setLocation] = useLocation();
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCalendar, setSelectedCalendar] = useState<string | undefined>();
@@ -45,13 +47,14 @@ export default function CalendarImportHistory() {
     queryParams.append('hasErrors', 'true');
   }
 
-  const { data, isLoading, error } = useQuery<CalendarImportLogsResponse>({
+  const { data, isLoading, error, refetch } = useQuery<CalendarImportLogsResponse>({
     queryKey: ['/api/calendar/import-logs', currentPage, selectedCalendar, showErrorsOnly],
     queryFn: async () => {
       const response = await fetch(`/api/calendar/import-logs?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch logs');
       return response.json();
-    }
+    },
+    retry: 2,
   });
 
   const logs = data?.logs || [];
@@ -69,25 +72,27 @@ export default function CalendarImportHistory() {
     return Array.from(calendars.entries()).map(([id, name]) => ({ id, name }));
   }, [logs]);
 
-  const toggleRow = (id: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedRows(newExpanded);
-  };
+  const toggleRow = useCallback((id: string) => {
+    setExpandedRows(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(id)) {
+        newExpanded.delete(id);
+      } else {
+        newExpanded.add(id);
+      }
+      return newExpanded;
+    });
+  }, []);
 
-  const formatDate = (date: Date | string | null) => {
+  const formatDate = useCallback((date: Date | string | null) => {
     if (!date) return "N/A";
     const dt = DateTime.fromJSDate(new Date(date));
     const formatted = dt.toFormat("MMM dd, yyyy h:mm a");
     const timezone = dt.toFormat("ZZZZ");
     return `${formatted} ${timezone}`;
-  };
+  }, []);
 
-  const formatError = (error: string | null) => {
+  const formatError = useCallback((error: string | null) => {
     if (!error) return null;
     
     // Try to parse as JSON and format
@@ -114,13 +119,13 @@ export default function CalendarImportHistory() {
         </p>
       );
     }
-  };
+  }, []);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSelectedCalendar(undefined);
     setShowErrorsOnly(false);
     setCurrentPage(1);
-  };
+  }, []);
 
   const hasActiveFilters = selectedCalendar || showErrorsOnly;
 
@@ -135,10 +140,19 @@ export default function CalendarImportHistory() {
             View automated calendar import runs and their results
           </p>
         </div>
-        <Alert variant="destructive">
+        <Alert variant="destructive" data-testid="alert-error-loading">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Error loading import logs: {error instanceof Error ? error.message : 'Unknown error'}
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>Error loading import logs: {error instanceof Error ? error.message : 'Unknown error'}</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refetch()}
+              data-testid="button-retry-fetch"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
           </AlertDescription>
         </Alert>
       </div>
@@ -482,5 +496,13 @@ export default function CalendarImportHistory() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function CalendarImportHistory() {
+  return (
+    <ErrorBoundary>
+      <CalendarImportHistoryContent />
+    </ErrorBoundary>
   );
 }
