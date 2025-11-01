@@ -10,7 +10,7 @@ import { serverLogger } from "./logger";
 import { getWorkflowTemplate, type JobType } from '@shared/workflowTemplates';
 
 // Job status type from schema
-export type JobStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'review';
+export type JobStatus = 'scheduled' | 'done' | 'failed' | 'reschedule' | 'cancelled';
 
 // Validation result type
 export interface ValidationResult {
@@ -33,19 +33,20 @@ export interface ComplianceTests {
  * Status Transition Validation
  * 
  * Valid transitions:
- * - pending → scheduled
- * - scheduled → in_progress  
- * - in_progress → completed
- * - any status → cancelled
- * - completed → review (if compliance fails)
- * - in_progress → review (if issues found during inspection)
+ * - scheduled → done (job completed successfully)
+ * - scheduled → failed (job failed or needs rework)
+ * - scheduled → reschedule (job needs to be rescheduled)
+ * - scheduled → cancelled (job cancelled)
+ * - done → reschedule (completed job needs to be redone)
+ * - failed → reschedule (failed job gets rescheduled)
+ * - reschedule → scheduled (rescheduled job becomes scheduled again)
+ * - cancelled is terminal (cannot transition from cancelled)
  */
 const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
-  pending: ['scheduled', 'cancelled'],
-  scheduled: ['in_progress', 'cancelled'],
-  in_progress: ['completed', 'review', 'cancelled'],
-  completed: ['review', 'cancelled'], // Can go to review if compliance issues found later
-  review: ['in_progress', 'completed', 'cancelled'], // Can go back to in_progress after fixes or complete if approved
+  scheduled: ['done', 'failed', 'reschedule', 'cancelled'],
+  done: ['reschedule'], // Can reschedule completed jobs
+  failed: ['reschedule'], // Can reschedule failed jobs
+  reschedule: ['scheduled'], // Rescheduled becomes scheduled again
   cancelled: [], // Terminal state - cannot transition from cancelled
 };
 
@@ -109,11 +110,11 @@ export function validateJobDates(dates: JobDates): ValidationResult {
 
   // Completed date validation
   if (completedDate) {
-    // Completed date can only be set when status is completed or review
-    if (status && status !== 'completed' && status !== 'review') {
+    // Completed date can only be set when status is done or failed
+    if (status && status !== 'done' && status !== 'failed') {
       return {
         valid: false,
-        error: `Completed date can only be set when status is 'completed' or 'review', not '${status}'`,
+        error: `Completed date can only be set when status is 'done' or 'failed', not '${status}'`,
       };
     }
 
@@ -327,7 +328,7 @@ export function validateJobCreation(job: Partial<InsertJob>): ValidationResult {
   const dateValidation = validateJobDates({
     scheduledDate: job.scheduledDate,
     completedDate: job.completedDate,
-    status: (job.status as JobStatus) || 'pending',
+    status: (job.status as JobStatus) || 'scheduled',
     isNewJob: true,
   });
 
@@ -337,7 +338,7 @@ export function validateJobCreation(job: Partial<InsertJob>): ValidationResult {
 
   // Validate status if provided
   if (job.status) {
-    const validStatuses: JobStatus[] = ['pending', 'scheduled', 'in_progress', 'completed', 'cancelled', 'review'];
+    const validStatuses: JobStatus[] = ['scheduled', 'done', 'failed', 'reschedule', 'cancelled'];
     if (!validStatuses.includes(job.status as JobStatus)) {
       return {
         valid: false,
@@ -512,15 +513,15 @@ export function validateJobUpdate(
 
   // Validate status transition if status is being updated
   if (updates.status && updates.status !== currentJob.status) {
-    // CRITICAL: Prevent reverting completed jobs back to in-progress
-    // Completed jobs should only be able to transition to 'review' or 'cancelled'
-    if (currentJob.status === 'completed' && 
-        updates.status !== 'completed' && 
-        updates.status !== 'review' && 
+    // CRITICAL: Prevent reverting done jobs back to in-progress
+    // Done jobs should only be able to transition to 'failed' or 'cancelled'
+    if (currentJob.status === 'done' && 
+        updates.status !== 'done' && 
+        updates.status !== 'failed' && 
         updates.status !== 'cancelled') {
       return {
         valid: false,
-        error: 'Cannot revert a completed job to in-progress status. If changes are needed, please contact an administrator or transition to review status.',
+        error: 'Cannot revert a completed job to in-progress status. If changes are needed, please contact an administrator or transition to failed status.',
       };
     }
     
@@ -532,8 +533,8 @@ export function validateJobUpdate(
       return transitionValidation;
     }
 
-    // Validate workflow completion requirements when transitioning to 'completed'
-    if (updates.status === 'completed' && completionData) {
+    // Validate workflow completion requirements when transitioning to 'done'
+    if (updates.status === 'done' && completionData) {
       const mergedJob = { ...currentJob, ...updates };
       const completionValidation = validateJobCompletion(
         mergedJob,

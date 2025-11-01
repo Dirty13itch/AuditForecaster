@@ -2334,8 +2334,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validated.builderId = undefined;
       }
 
-      // Check if status is changing to "completed"
-      const isCompletingNow = validated.status === 'completed' && existingJob.status !== 'completed';
+      // Check if status is changing to "done"
+      const isCompletingNow = validated.status === 'done' && existingJob.status !== 'done';
 
       // Fetch completion data if completing the job
       let completionData = undefined;
@@ -2427,7 +2427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const statusSchema = z.object({
-        status: z.enum(['pending', 'scheduled', 'in-progress', 'completed', 'review']),
+        status: z.enum(['scheduled', 'done', 'failed', 'reschedule']),
       });
 
       const { status: newStatus } = statusSchema.parse(req.body);
@@ -2436,7 +2436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(existingJob);
       }
 
-      const isCompletingNow = newStatus === 'completed' && existingJob.status !== 'completed';
+      const isCompletingNow = newStatus === 'done' && existingJob.status !== 'done';
 
       const updateData: any = { status: newStatus };
       if (isCompletingNow && !existingJob.completedDate) {
@@ -3837,9 +3837,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Update scheduledDate to match Google Calendar
               updates.scheduledDate = googleEventStartTime;
               
-              // If job is already completed, log warning
-              if (job.status === 'completed') {
-                serverLogger.warn(`[CalendarSync] Job ${job.id} is completed but event was rescheduled from ${jobScheduledDate.toISOString()} to ${googleEventStartTime.toISOString()}`);
+              // If job is already done, log warning
+              if (job.status === 'done') {
+                serverLogger.warn(`[CalendarSync] Job ${job.id} is done but event was rescheduled from ${jobScheduledDate.toISOString()} to ${googleEventStartTime.toISOString()}`);
                 syncIntelligence.completedButRescheduled++;
               } else {
                 syncIntelligence.rescheduled++;

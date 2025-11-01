@@ -262,7 +262,7 @@ function QualityAssuranceContent() {
       inspectorName: "John Doe",
       score: 95,
       timestamp: new Date(),
-      status: "completed"
+      status: "done"
     },
     {
       id: "2",
@@ -271,7 +271,7 @@ function QualityAssuranceContent() {
       jobId: "job-2",
       inspectorName: "Jane Smith",
       timestamp: subDays(new Date(), 1),
-      status: "pending"
+      status: "scheduled"
     },
     {
       id: "3",

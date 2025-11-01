@@ -1556,20 +1556,17 @@ export default function Schedule() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pending" data-testid="option-status-pending">
-                      Pending
-                    </SelectItem>
                     <SelectItem value="scheduled" data-testid="option-status-scheduled">
                       Scheduled
                     </SelectItem>
-                    <SelectItem value="in-progress" data-testid="option-status-in-progress">
-                      In Progress
+                    <SelectItem value="done" data-testid="option-status-done">
+                      Done
                     </SelectItem>
-                    <SelectItem value="completed" data-testid="option-status-completed">
-                      Completed
+                    <SelectItem value="failed" data-testid="option-status-failed">
+                      Failed
                     </SelectItem>
-                    <SelectItem value="review" data-testid="option-status-review">
-                      Review
+                    <SelectItem value="reschedule" data-testid="option-status-reschedule">
+                      Reschedule
                     </SelectItem>
                   </SelectContent>
                 </Select>

@@ -125,10 +125,10 @@ export const SV2_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 110, // ~2 hours
   requiredPhotos: ["Air Sealing", "Insulation", "Ductwork", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
-    allRequiredTestsCompleted: false, // No tests required
-    builderSignatureRequired: true,
-    photoUploadRequired: true,
+    allChecklistItemsCompleted: false,
+    allRequiredTestsCompleted: false,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
   guidanceNotes: "Focus on air sealing and insulation - these can't be verified after drywall! Take comprehensive photos.",
 };
@@ -235,10 +235,10 @@ export const FULL_TEST_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 190, // ~3 hours
   requiredPhotos: ["Equipment", "Test Setup", "Data Plate", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
-    allRequiredTestsCompleted: true,
-    builderSignatureRequired: true,
-    photoUploadRequired: true,
+    allChecklistItemsCompleted: false,
+    allRequiredTestsCompleted: false,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
   guidanceNotes: "Complete all three tests. If blower door or duct leakage fails, schedule retest.",
 };
@@ -291,10 +291,10 @@ export const CODE_BDOOR_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 90, // ~1.5 hours
   requiredPhotos: ["Test Setup", "Equipment", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
-    allRequiredTestsCompleted: true,
-    builderSignatureRequired: true,
-    photoUploadRequired: true,
+    allChecklistItemsCompleted: false,
+    allRequiredTestsCompleted: false,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
 };
 
@@ -361,10 +361,10 @@ export const ROUGH_DUCT_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 80, // ~1.5 hours
   requiredPhotos: ["Ductwork", "Sealing", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
+    allChecklistItemsCompleted: false,
     allRequiredTestsCompleted: false,
-    builderSignatureRequired: true,
-    photoUploadRequired: true,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
   guidanceNotes: "Duct sealing is critical - can't be verified after insulation burial. Document thoroughly.",
 };
@@ -424,10 +424,10 @@ export const BDOOR_RETEST_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 70, // ~1 hour
   requiredPhotos: ["Test Setup", "Repairs", "Equipment"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
-    allRequiredTestsCompleted: true,
-    builderSignatureRequired: true,
-    photoUploadRequired: false, // Not critical for retest
+    allChecklistItemsCompleted: false,
+    allRequiredTestsCompleted: false,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
   guidanceNotes: "Document what repairs were made between original test and retest. Show previous results for comparison.",
 };
@@ -489,10 +489,10 @@ export const MULTIFAMILY_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 90,
   requiredPhotos: ["Party Wall", "Equipment", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
-    allRequiredTestsCompleted: true,
-    builderSignatureRequired: true,
-    photoUploadRequired: true,
+    allChecklistItemsCompleted: false,
+    allRequiredTestsCompleted: false,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
 };
 
@@ -564,10 +564,10 @@ export const ENERGY_STAR_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 200, // ~3.5 hours
   requiredPhotos: ["Equipment", "Test Setup", "Data Plate", "Energy Star Label", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
-    allRequiredTestsCompleted: true,
-    builderSignatureRequired: true,
-    photoUploadRequired: true,
+    allChecklistItemsCompleted: false,
+    allRequiredTestsCompleted: false,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
   guidanceNotes: "Energy Star requires all three tests and comprehensive documentation.",
 };
@@ -621,10 +621,10 @@ export const REHAB_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 170,
   requiredPhotos: ["Before", "After", "Equipment", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: true,
-    allRequiredTestsCompleted: true,
-    builderSignatureRequired: true,
-    photoUploadRequired: true,
+    allChecklistItemsCompleted: false,
+    allRequiredTestsCompleted: false,
+    builderSignatureRequired: false,
+    photoUploadRequired: false,
   },
 };
 

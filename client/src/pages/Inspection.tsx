@@ -8,8 +8,6 @@ import ChecklistItem from "@/components/ChecklistItem";
 import BottomNav from "@/components/BottomNav";
 import { FinalTestingMeasurements } from "@/components/FinalTestingMeasurements";
 import { EnhancedPhotoGallery } from "@/components/photos/EnhancedPhotoGallery";
-import { WorkflowProgress } from "@/components/WorkflowProgress";
-import { CompletionGate } from "@/components/CompletionGate";
 import { JobCompletionCelebration } from "@/components/JobCompletionCelebration";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -225,13 +223,13 @@ function InspectionContent() {
    * 
    * Workflow Completion Logic:
    * - Only allowed if all completion requirements met (see canCompleteJob)
-   * - Updates job status to 'completed'
+   * - Updates job status to 'done'
    * - Triggers celebration UI for inspector satisfaction
    * - Invalidates all job caches to reflect completion across app
    */
   const completeJobMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("PUT", `/api/jobs/${jobId}`, { status: 'completed' });
+      return apiRequest("PUT", `/api/jobs/${jobId}`, { status: 'done' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
@@ -271,7 +269,7 @@ function InspectionContent() {
         builderId: job.builderId,
         inspectionType: 'Blower Door',
         jobType: 'bdoor_retest',
-        status: 'pending',
+        status: 'scheduled',
         notes: `Retest following failed blower door test ${testId}. Previous ACH50 exceeded ${COMPLIANCE_THRESHOLDS.MAX_ACH50}.`,
         previousTestId: testId,
       });
@@ -304,58 +302,50 @@ function InspectionContent() {
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   /**
-   * Phase 3 - OPTIMIZE: Memoize workflow completion requirements check
-   * Phase 6 - DOCUMENT: Workflow Completion Requirements Logic
-   * 
-   * Completion Requirements Validation:
-   * 1. Checklist: All items completed (if required by workflow template)
-   * 2. Photos: Photo upload marked complete (if required)
-   * 3. Signature: Builder signature captured (if required)
-   * 4. Tests: All required tests completed and data exists
-   * 
-   * Example: Blower Door workflow requires:
-   * - Checklist completion
-   * - At least one blower door test with results
-   * - Photos of setup and results
-   * - Builder signature on report
+   * Check for incomplete items to show warnings (but don't block completion)
    */
-  const canCompleteJob = useMemo(() => {
-    if (!job) return false;
-
-    const workflow = getWorkflowTemplate(job.inspectionType as JobType);
+  const incompleteItems = useMemo(() => {
+    if (!job) return [];
     
-    // Check completion requirements
-    const requirementsMet = 
-      (!workflow.completionRequirements.allChecklistItemsCompleted || 
-        (completedCount === totalCount && totalCount > 0)) &&
-      (!workflow.completionRequirements.photoUploadRequired || 
-        job.photoUploadComplete === true) &&
-      (!workflow.completionRequirements.builderSignatureRequired || 
-        !!job.builderSignatureUrl);
+    const workflow = getWorkflowTemplate(job.inspectionType as JobType);
+    const warnings = [];
+    
+    // Check checklist completion
+    if (completedCount < totalCount && totalCount > 0) {
+      warnings.push(`${totalCount - completedCount} checklist items not completed`);
+    }
+    
+    // Check photo upload
+    if (!job.photoUploadComplete) {
+      warnings.push("Photos not uploaded");
+    }
+    
+    // Check builder signature
+    if (!job.builderSignatureUrl) {
+      warnings.push("Builder signature not captured");
+    }
     
     // Check required tests
-    const testsMet = workflow.requiredTests.every(test => {
-      if (test.testType === 'blower_door') return blowerDoorTests.length > 0;
-      if (test.testType === 'duct_leakage') return ductLeakageTests.length > 0;
-      if (test.testType === 'ventilation') return ventilationTests.length > 0;
-      return true;
+    workflow.requiredTests.forEach(test => {
+      if (test.testType === 'blower_door' && blowerDoorTests.length === 0) {
+        warnings.push("Blower door test not performed");
+      }
+      if (test.testType === 'duct_leakage' && ductLeakageTests.length === 0) {
+        warnings.push("Duct leakage test not performed");
+      }
+      if (test.testType === 'ventilation' && ventilationTests.length === 0) {
+        warnings.push("Ventilation test not performed");
+      }
     });
     
-    return requirementsMet && testsMet;
+    return warnings;
   }, [job, completedCount, totalCount, blowerDoorTests.length, ductLeakageTests.length, ventilationTests.length]);
 
   // Phase 3 - OPTIMIZE: useCallback for ALL event handlers to prevent recreation
   const handleCompleteJob = useCallback(() => {
-    if (canCompleteJob) {
-      setShowCompleteDialog(true);
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Cannot Complete Job",
-        description: "Please complete all requirements before submitting.",
-      });
-    }
-  }, [canCompleteJob, toast]);
+    // Always allow completion - just show dialog (with warnings if any)
+    setShowCompleteDialog(true);
+  }, []);
 
   const handleConfirmComplete = useCallback(() => {
     completeJobMutation.mutate();
@@ -737,25 +727,6 @@ function InspectionContent() {
           {/* Tab Content Switching */}
           {activeTab === TAB_OPTIONS.WORKFLOW && job && (
             <>
-              <WorkflowProgress
-                job={job}
-                checklistProgress={{
-                  completed: completedCount,
-                  total: totalCount,
-                }}
-                hasBlowerDoorTest={Array.isArray(blowerDoorTests) && blowerDoorTests.length > 0}
-                hasDuctLeakageTest={Array.isArray(ductLeakageTests) && ductLeakageTests.length > 0}
-                hasVentilationTest={Array.isArray(ventilationTests) && ventilationTests.length > 0}
-              />
-              
-              {/* Completion Requirements */}
-              <CompletionGate
-                job={job}
-                checklistProgress={{ completed: completedCount, total: totalCount }}
-                hasBlowerDoorTest={blowerDoorTests.length > 0}
-                hasDuctLeakageTest={ductLeakageTests.length > 0}
-                hasVentilationTest={ventilationTests.length > 0}
-              />
 
               {/* Blower Door Test Error State */}
               {blowerDoorError && (
@@ -961,7 +932,7 @@ function InspectionContent() {
             </Button>
             <Button
               onClick={handleCompleteJob}
-              disabled={!canCompleteJob || completeJobMutation.isPending}
+              disabled={completeJobMutation.isPending}
               className="flex-1"
               data-testid="button-complete"
             >
@@ -989,7 +960,23 @@ function InspectionContent() {
           <AlertDialogHeader>
             <AlertDialogTitle data-testid="text-dialog-title">Complete Inspection?</AlertDialogTitle>
             <AlertDialogDescription data-testid="text-dialog-description">
-              This will mark the inspection as complete. Make sure all requirements are met before proceeding.
+              {incompleteItems.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-amber-600 dark:text-amber-400">
+                    Warning: The following items are incomplete:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    {incompleteItems.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3">
+                    Are you sure you want to mark this inspection as complete?
+                  </p>
+                </div>
+              ) : (
+                <p>This will mark the inspection as complete. All items have been completed.</p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -998,7 +985,7 @@ function InspectionContent() {
               onClick={handleConfirmComplete}
               data-testid="button-confirm-complete"
             >
-              Complete
+              {incompleteItems.length > 0 ? "Complete Anyway" : "Complete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

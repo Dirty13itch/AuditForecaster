@@ -1892,9 +1892,9 @@ export class DatabaseStorage implements IStorage {
 
     // Calculate job statistics
     const totalJobs = lotJobs.length;
-    const completedJobs = lotJobs.filter(job => job.status === 'completed').length;
+    const completedJobs = lotJobs.filter(job => job.status === 'done').length;
     const pendingJobs = lotJobs.filter(job => 
-      job.status === 'scheduled' || job.status === 'in_progress'
+      job.status === 'scheduled'
     ).length;
 
     return {
@@ -6949,7 +6949,7 @@ export class DatabaseStorage implements IStorage {
     const achievements = await this.getUserAchievements(userId);
     
     const stats: Record<string, number> = {
-      inspections_completed: jobs.filter(j => j.status === 'completed').length,
+      inspections_completed: jobs.filter(j => j.status === 'done').length,
       photos_taken: photos.length,
       achievements_unlocked: achievements.length,
       total_xp: await this.getUserXP(userId),
@@ -7580,7 +7580,7 @@ export class DatabaseStorage implements IStorage {
       );
       
       const totalJobs = builderJobs.length;
-      const completedJobs = builderJobs.filter(job => job.status === 'completed').length;
+      const completedJobs = builderJobs.filter(job => job.status === 'done').length;
       
       // Calculate average ACH50
       const avgACH50 = builderTests.length > 0
@@ -7660,7 +7660,7 @@ export class DatabaseStorage implements IStorage {
     
     // Calculate metrics
     const totalJobs = jobsInRange.length;
-    const completedJobs = jobsInRange.filter(j => j.status === 'completed').length;
+    const completedJobs = jobsInRange.filter(j => j.status === 'done').length;
     const completionRate = totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0;
     
     const totalRevenue = invoicesInRange.reduce((sum, inv) => 
@@ -7692,8 +7692,8 @@ export class DatabaseStorage implements IStorage {
       profit: parseFloat(profit.toFixed(2)),
       profitMargin: parseFloat(profitMargin.toFixed(1)),
       photosUploaded: photosInRange[0]?.count || 0,
-      activeJobs: jobsInRange.filter(j => j.status === 'scheduled' || j.status === 'in-progress').length,
-      pendingJobs: jobsInRange.filter(j => j.status === 'pending').length
+      activeJobs: jobsInRange.filter(j => j.status === 'scheduled').length,
+      pendingJobs: jobsInRange.filter(j => j.status === 'scheduled').length
     };
   }
 
@@ -7740,10 +7740,8 @@ export class DatabaseStorage implements IStorage {
       const trend = trends.get(key);
       trend.total++;
       
-      if (job.status === 'completed') trend.completed++;
+      if (job.status === 'done') trend.completed++;
       else if (job.status === 'scheduled') trend.scheduled++;
-      else if (job.status === 'in-progress') trend.inProgress++;
-      else if (job.status === 'pending') trend.pending++;
     });
     
     return Array.from(trends.values()).sort((a, b) => a.date.localeCompare(b.date));
@@ -7756,7 +7754,7 @@ export class DatabaseStorage implements IStorage {
     
     const performance = await Promise.all(buildersData.map(async (builder) => {
       const builderJobs = jobsData.filter(j => j.builderId === builder.id);
-      const completedJobs = builderJobs.filter(j => j.status === 'completed');
+      const completedJobs = builderJobs.filter(j => j.status === 'done');
       
       // Calculate average completion time
       const completionTimes = completedJobs
@@ -7968,7 +7966,7 @@ export class DatabaseStorage implements IStorage {
           lte(jobs.scheduledDate, end)
         ));
       
-      const completedJobs = inspectorJobs.filter(j => j.status === 'completed');
+      const completedJobs = inspectorJobs.filter(j => j.status === 'done');
       
       // Calculate metrics
       const completionRate = inspectorJobs.length > 0
@@ -8347,7 +8345,7 @@ export class DatabaseStorage implements IStorage {
         lte(jobs.scheduledDate, endDate)
       ));
     
-    const completedJobs = monthlyJobs.filter(j => j.status === 'completed');
+    const completedJobs = monthlyJobs.filter(j => j.status === 'done');
     
     highlights.push({
       label: 'Jobs Completed',
@@ -8388,7 +8386,7 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Get pending jobs
-    const pendingJobs = monthlyJobs.filter(j => j.status === 'pending' || j.status === 'scheduled');
+    const pendingJobs = monthlyJobs.filter(j => j.status === 'scheduled');
     
     if (pendingJobs.length > 5) {
       highlights.push({
@@ -8478,7 +8476,7 @@ export class DatabaseStorage implements IStorage {
         lte(jobs.scheduledDate, endDate)
       ));
     
-    const completedJobs = userJobs.filter(j => j.status === 'completed');
+    const completedJobs = userJobs.filter(j => j.status === 'done');
     const jobsCompleted = completedJobs.length;
     const jobsReviewed = userJobs.filter(j => j.reviewStatus === 'reviewed').length;
     

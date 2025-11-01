@@ -509,13 +509,10 @@ export default function JobDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="scheduled">Scheduled</SelectItem>
-                        <SelectItem value="pre-inspection">Pre-Inspection</SelectItem>
-                        <SelectItem value="in-progress">In Progress</SelectItem>
-                        <SelectItem value="testing">Testing</SelectItem>
-                        <SelectItem value="review">Review</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="done">Done</SelectItem>
+                        <SelectItem value="failed">Failed</SelectItem>
+                        <SelectItem value="reschedule">Reschedule</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
