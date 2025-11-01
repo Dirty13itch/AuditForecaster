@@ -61,18 +61,13 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { Builder, BuilderAgreement, InsertBuilderAgreement } from "@shared/schema";
+import { INSPECTION_TYPE_OPTIONS, getInspectionTypeLabel, normalizeInspectionType } from "@shared/inspectionTypes";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active", variant: "default" as const },
   { value: "expired", label: "Expired", variant: "secondary" as const },
   { value: "terminated", label: "Terminated", variant: "destructive" as const },
   { value: "pending", label: "Pending", variant: "outline" as const },
-];
-
-const INSPECTION_TYPES = [
-  { id: "final", label: "Final Testing" },
-  { id: "rough", label: "Pre-Drywall Inspection" },
-  { id: "duct_test", label: "Duct Testing" },
 ];
 
 const agreementFormSchema = z.object({
@@ -231,6 +226,12 @@ export function BuilderAgreementsDialog({
 
   const handleEditClick = (agreement: BuilderAgreement) => {
     setAgreementToEdit(agreement);
+    
+    // Normalize legacy inspection type values for backward compatibility
+    const normalizedInspectionTypes = (agreement.inspectionTypesIncluded || []).map(type => 
+      normalizeInspectionType(type)
+    );
+    
     form.reset({
       agreementName: agreement.agreementName,
       startDate: new Date(agreement.startDate),
@@ -238,7 +239,7 @@ export function BuilderAgreementsDialog({
       status: agreement.status as "active" | "expired" | "terminated" | "pending",
       defaultInspectionPrice: agreement.defaultInspectionPrice || "",
       paymentTerms: agreement.paymentTerms || "",
-      inspectionTypesIncluded: agreement.inspectionTypesIncluded || [],
+      inspectionTypesIncluded: normalizedInspectionTypes,
       notes: agreement.notes || "",
     });
     setIsAddDialogOpen(true);
@@ -386,7 +387,7 @@ export function BuilderAgreementsDialog({
                         <div className="flex flex-wrap gap-2 mt-2">
                           {agreement.inspectionTypesIncluded.map((type) => (
                             <Badge key={type} variant="outline">
-                              {INSPECTION_TYPES.find(t => t.id === type)?.label || type}
+                              {getInspectionTypeLabel(type)}
                             </Badge>
                           ))}
                         </div>
@@ -589,34 +590,34 @@ export function BuilderAgreementsDialog({
                       </FormDescription>
                     </div>
                     <div className="space-y-2">
-                      {INSPECTION_TYPES.map((type) => (
+                      {INSPECTION_TYPE_OPTIONS.map((option) => (
                         <FormField
-                          key={type.id}
+                          key={option.value}
                           control={form.control}
                           name="inspectionTypesIncluded"
                           render={({ field }) => {
                             return (
                               <FormItem
-                                key={type.id}
+                                key={option.value}
                                 className="flex flex-row items-start space-x-3 space-y-0"
                               >
                                 <FormControl>
                                   <Checkbox
-                                    checked={field.value?.includes(type.id)}
+                                    checked={field.value?.includes(option.value)}
                                     onCheckedChange={(checked) => {
                                       return checked
-                                        ? field.onChange([...field.value, type.id])
+                                        ? field.onChange([...field.value, option.value])
                                         : field.onChange(
                                             field.value?.filter(
-                                              (value) => value !== type.id
+                                              (value) => value !== option.value
                                             )
                                           )
                                     }}
-                                    data-testid={`checkbox-${type.id}`}
+                                    data-testid={`checkbox-${option.value}`}
                                   />
                                 </FormControl>
                                 <FormLabel className="font-normal">
-                                  {type.label}
+                                  {option.label}
                                 </FormLabel>
                               </FormItem>
                             )

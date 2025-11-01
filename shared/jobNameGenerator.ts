@@ -53,7 +53,7 @@ const JOB_TYPE_ABBREVIATIONS: Record<string, string> = {
 
 /**
  * Extract job type abbreviation from inspection type using fuzzy matching
- * @param inspectionType - The inspection type string
+ * @param inspectionType - The inspection type enum value (e.g., "full_test") or label
  * @returns Abbreviated job type (e.g., "Final", "PreDry", "Bdoor")
  */
 export function getJobTypeAbbreviation(inspectionType: string): string {
@@ -61,7 +61,29 @@ export function getJobTypeAbbreviation(inspectionType: string): string {
     return "Job";
   }
 
-  const normalized = inspectionType.toLowerCase().trim();
+  // Import getInspectionTypeLabel to convert enum values to labels
+  // If it's an enum value, convert to label first for abbreviation lookup
+  let labelToUse = inspectionType;
+  
+  // Check if this looks like an enum value (contains underscore, all lowercase)
+  if (inspectionType.includes('_') || /^[a-z0-9_]+$/.test(inspectionType)) {
+    // Try to import and use getInspectionTypeLabel
+    // For now, map common enum values to labels
+    const enumToLabel: Record<string, string> = {
+      'rough_duct': 'Pre-Drywall Inspection',
+      'full_test': 'Final Testing',
+      'code_bdoor': 'Blower Door Only',
+      'sv2': 'Duct Blaster Only',
+      'bdoor_retest': 'Blower Door Retest',
+      'rehab': 'Infrared Imaging',
+      'multifamily': 'Multifamily Project',
+      'energy_star': 'Energy Star',
+      'other': 'Other',
+    };
+    labelToUse = enumToLabel[inspectionType] || inspectionType;
+  }
+
+  const normalized = labelToUse.toLowerCase().trim();
 
   // Direct match
   if (JOB_TYPE_ABBREVIATIONS[normalized]) {
@@ -76,9 +98,9 @@ export function getJobTypeAbbreviation(inspectionType: string): string {
   }
 
   // Fallback to original inspection type (truncated if too long)
-  return inspectionType.length > 12
-    ? inspectionType.substring(0, 12)
-    : inspectionType;
+  return labelToUse.length > 12
+    ? labelToUse.substring(0, 12)
+    : labelToUse;
 }
 
 /**
@@ -113,7 +135,7 @@ export function generateJobName(
 /**
  * Detect inspection type from calendar event title using smart patterns
  * @param title - Calendar event title
- * @returns Detected inspection type or empty string
+ * @returns Detected inspection type enum value (e.g., "full_test") or empty string
  */
 export function detectInspectionTypeFromTitle(title: string): string {
   if (!title) {
@@ -123,32 +145,33 @@ export function detectInspectionTypeFromTitle(title: string): string {
   const normalized = title.toLowerCase().trim();
 
   // Pattern matching for M/I Homes calendar events
+  // Returns enum values to match database schema
   if (normalized.includes("sv2")) {
-    return "Pre-Drywall Inspection";
+    return "rough_duct"; // Pre-Drywall Inspection
   }
 
   if (normalized.includes("test") && !normalized.includes("retest")) {
-    return "Final Testing";
+    return "full_test"; // Final Testing
   }
 
   if (normalized.includes("retest") || normalized.includes("re-test")) {
-    return "Blower Door Retest";
+    return "bdoor_retest"; // Blower Door Retest
   }
 
   if (normalized.includes("blower door") || normalized.includes("bdoor") || normalized.includes("bd")) {
-    return "Blower Door Only";
+    return "code_bdoor"; // Blower Door Only
   }
 
   if (normalized.includes("duct blaster") || normalized.includes("duct") || normalized.includes("db")) {
-    return "Duct Blaster Only";
+    return "sv2"; // Duct Blaster Only
   }
 
   if (normalized.includes("infrared") || normalized.includes("thermal") || normalized.includes("ir")) {
-    return "Infrared Imaging";
+    return "rehab"; // Infrared Imaging
   }
 
   if (normalized.includes("multifamily") || normalized.includes("multi-family") || normalized.includes("multi family")) {
-    return "Multifamily Project";
+    return "multifamily"; // Multifamily Project
   }
 
   return "";

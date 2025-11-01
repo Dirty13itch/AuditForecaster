@@ -2696,8 +2696,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Import utilities from shared/jobNameGenerator.ts
       const { detectInspectionTypeFromTitle, generateJobName } = await import("@shared/jobNameGenerator");
 
-      // Detect inspection type from event title
-      const inspectionType = detectInspectionTypeFromTitle(googleEvent.title) || "Other";
+      // Detect inspection type from event title (returns enum value)
+      const inspectionType = detectInspectionTypeFromTitle(googleEvent.title) || "other";
 
       // Validate and handle dates properly
       let scheduledDate: Date;

@@ -20,28 +20,7 @@ import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import { generateJobName } from "@shared/jobNameGenerator";
 import { insertJobSchema, type Job, type Builder, type Plan, type Development, type Lot } from "@shared/schema";
-
-const JOB_TYPES = [
-  'Pre-Drywall Inspection',
-  'Final Testing',
-  'Blower Door Only',
-  'Duct Blaster Only',
-  'Blower Door Retest',
-  'Infrared Imaging',
-  'Multifamily Project',
-  'Other'
-] as const;
-
-function getDefaultPricing(inspectionType: string): number | undefined {
-  const pricingMap: Record<string, number> = {
-    'Pre-Drywall Inspection': 100,
-    'Final Testing': 350,
-    'Blower Door Only': 200,
-    'Duct Blaster Only': 200,
-    'Blower Door Retest': 200,
-  };
-  return pricingMap[inspectionType];
-}
+import { INSPECTION_TYPE_OPTIONS, getDefaultPricing, getInspectionTypeLabel } from "@shared/inspectionTypes";
 
 const jobFormSchema = insertJobSchema.pick({
   name: true,
@@ -461,8 +440,8 @@ export default function JobDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {JOB_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        {INSPECTION_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

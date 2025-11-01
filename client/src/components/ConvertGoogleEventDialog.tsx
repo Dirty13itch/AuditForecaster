@@ -16,6 +16,7 @@ import { Calendar, MapPin, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { generateJobName, detectInspectionTypeFromTitle } from '@shared/jobNameGenerator';
 import type { GoogleEvent, Builder } from '@shared/schema';
+import { INSPECTION_TYPE_OPTIONS, getDefaultPricing, getInspectionTypeLabel } from '@shared/inspectionTypes';
 
 const convertEventSchema = z.object({
   name: z.string().min(1, 'Job name is required'),
@@ -39,35 +40,12 @@ interface ConvertGoogleEventDialogProps {
   onSuccess?: () => void;
 }
 
-const JOB_TYPES = [
-  'Pre-Drywall Inspection',
-  'Final Testing',
-  'Blower Door Only',
-  'Duct Blaster Only',
-  'Blower Door Retest',
-  'Infrared Imaging',
-  'Multifamily Project',
-  'Other'
-];
-
-
 function extractBuilder(title: string, builders: Builder[]): string {
   // Always default to M/I Homes builder if it exists
   const miBuilder = builders.find(b => 
     b.name.includes('M/I') || b.companyName.includes('M/I')
   );
   return miBuilder?.id || '';
-}
-
-function getDefaultPricing(inspectionType: string): number | undefined {
-  const pricingMap: Record<string, number> = {
-    'Pre-Drywall Inspection': 100,
-    'Final Testing': 350,
-    'Blower Door Only': 200,
-    'Duct Blaster Only': 200,
-    'Blower Door Retest': 200,
-  };
-  return pricingMap[inspectionType];
 }
 
 export function ConvertGoogleEventDialog({ 
@@ -285,8 +263,8 @@ export function ConvertGoogleEventDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {JOB_TYPES.map(type => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        {INSPECTION_TYPE_OPTIONS.map(option => (
+                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
