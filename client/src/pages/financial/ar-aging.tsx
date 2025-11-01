@@ -15,6 +15,8 @@ import { format, differenceInDays } from "date-fns";
 import { useLocation } from "wouter";
 import { AlertCircle, RefreshCw, Download, FileText, DollarSign } from "lucide-react";
 import { safeParseFloat } from "@shared/numberUtils";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 // Phase 3 - OPTIMIZE: Module-level constants for aging bucket thresholds
 // Phase 6 - DOCUMENT: AR Aging bucket definitions (industry standard)
@@ -35,6 +37,8 @@ type BucketType = "current" | "30days" | "60days" | "90plus";
 function ARAgingContent() {
   const [, setLocation] = useLocation();
   const [selectedBuilder, setSelectedBuilder] = useState<string>("all");
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
 
   // Phase 5 - HARDEN: Added retry: 2 for resilience against network issues
   const { 
@@ -201,9 +205,45 @@ function ARAgingContent() {
     refetchBuilders();
   }, [refetchBuilders]);
 
-  const handleExport = useCallback(() => {
-    // TODO: Implement export functionality
-  }, []);
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const response = await apiRequest('POST', '/api/export/ar-aging', {
+        format: 'xlsx',
+        filters: selectedBuilder !== 'all' ? { builderId: selectedBuilder } : undefined,
+        fileName: `ar-aging-${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      });
+
+      // Create a blob from the response
+      const blob = await response.blob();
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ar-aging-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Export successful",
+        description: "AR Aging report has been downloaded.",
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: "Export failed",
+        description: error instanceof Error ? error.message : "Failed to export AR aging report. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [selectedBuilder, toast]);
 
   return (
     <div className="h-full overflow-auto" data-testid="page-ar-aging">
@@ -244,10 +284,11 @@ function ARAgingContent() {
             <Button 
               variant="outline" 
               onClick={handleExport}
+              disabled={isExporting || arLoading}
               data-testid="button-export"
             >
               <Download className="h-4 w-4 mr-2" />
-              Export
+              {isExporting ? 'Exporting...' : 'Export'}
             </Button>
           </div>
         </div>

@@ -8681,6 +8681,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/compliance/mn-housing-egcc/:jobId/pdf - Generate MN Housing EGCC worksheet PDF
+  // FIXED: Changed from GET to POST to handle Unicode characters properly
+  // Accepts worksheet data as JSON in request body instead of base64 query param
+  app.post("/api/compliance/mn-housing-egcc/:jobId/pdf", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const { jobId } = idParamSchema.parse(req.params);
+      
+      serverLogger.info('[API/Compliance/MNHousingEGCC] PDF generation requested', { jobId });
+
+      // Fetch job data
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        serverLogger.warn('[API/Compliance/MNHousingEGCC] Job not found', { jobId });
+        return res.status(404).json({ message: 'Job not found' });
+      }
+
+      // Fetch builder data if available
+      let builder;
+      if (job.builderId) {
+        try {
+          builder = await storage.getBuilder(job.builderId);
+        } catch (error) {
+          serverLogger.warn('[API/Compliance/MNHousingEGCC] Builder not found', { 
+            jobId, 
+            builderId: job.builderId 
+          });
+        }
+      }
+
+      // Parse worksheet data from request body (now accepts raw JSON with Unicode support)
+      const { worksheet } = req.body;
+      
+      if (!worksheet) {
+        return res.status(400).json({ 
+          message: 'Missing worksheet data. Please save the worksheet before generating PDF.' 
+        });
+      }
+
+      // Import PDF generator function
+      const { generateMNHousingEGCCReport } = await import('./pdfGenerator.tsx');
+
+      // Generate PDF
+      const pdfBuffer = await generateMNHousingEGCCReport({
+        job,
+        builder,
+        worksheet,
+        createdAt: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+      });
+
+      // Generate filename with job address and date
+      const addressPart = job.address
+        .replace(/[^a-zA-Z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .substring(0, 30);
+      const datePart = new Date().toISOString().split('T')[0];
+      const filename = `MN-Housing-EGCC-${addressPart}-${datePart}.pdf`;
+
+      serverLogger.info('[API/Compliance/MNHousingEGCC] PDF generated successfully', { 
+        jobId,
+        filename,
+        sizeKB: (pdfBuffer.length / 1024).toFixed(2)
+      });
+
+      // Set response headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      // Send PDF buffer
+      res.send(pdfBuffer);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/Compliance/MNHousingEGCC] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Compliance/MNHousingEGCC', error, { jobId: req.params.jobId });
+      res.status(500).json({ 
+        message: 'Failed to generate PDF. Please try again or contact support.' 
+      });
+    }
+  });
+
   // Google Calendar preferences
   app.get('/api/calendar-preferences', isAuthenticated, async (req, res) => {
     try {
@@ -10607,6 +10691,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logError('Export/Photos', error);
       res.status(500).json({ message: "Failed to export photo metadata" });
+    }
+  });
+
+  // Export AR Aging report
+  app.post("/api/export/ar-aging", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const options: ExportOptions = {
+        format: req.body.format || 'xlsx',
+        columns: req.body.columns,
+        filters: req.body.filters,
+        dateRange: req.body.dateRange ? {
+          startDate: new Date(req.body.dateRange.startDate),
+          endDate: new Date(req.body.dateRange.endDate),
+        } : undefined,
+        customFileName: req.body.fileName,
+      };
+
+      const result = await exportService.exportARAging(options);
+      
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.size.toString());
+      
+      const stream = createReadStream(result.filePath);
+      stream.pipe(res);
+      
+      stream.on('end', () => {
+        unlink(result.filePath).catch(err => {
+          serverLogger.error('Failed to delete export file', { error: err, file: result.filePath });
+        });
+      });
+    } catch (error) {
+      logError('Export/ARAging', error);
+      res.status(500).json({ message: "Failed to export AR aging report" });
     }
   });
 

@@ -1156,3 +1156,640 @@ export async function generateDashboardPDF(data: DashboardPDFData): Promise<Buff
     throw new Error(`Dashboard PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+interface MNHousingEGCCData {
+  job: Job;
+  builder?: Builder;
+  worksheet: {
+    complianceStatus: string;
+    prescriptivePath: boolean;
+    performancePath: boolean;
+    combinationApproach: boolean;
+    buildingType: string;
+    climateZone: string;
+    squareFootage: string;
+    lockInDate: string;
+    deviations: Array<{
+      id: string;
+      item: string;
+      originalMethod: string;
+      revisedMethod: string;
+      reason: string;
+      date: string;
+    }>;
+    utilityProvider: string;
+    energyStarBonus: string;
+    insulationRebates: string;
+    hvacRebates: string;
+    lightingRebates: string;
+    rebateStatus: string;
+    applicationDate: string;
+    approvalDate: string;
+    awardAmount: string;
+    documents: Array<{ id: string; name: string; type: string; url: string }>;
+    submissionDate: string;
+    submittedTo: string;
+    reviewStatus: string;
+    certificationDate: string;
+    notes: string;
+  };
+  createdAt?: string;
+  lastModified?: string;
+}
+
+const egccStyles = StyleSheet.create({
+  page: {
+    padding: 40,
+    fontSize: 11,
+    fontFamily: 'Helvetica',
+  },
+  header: {
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottom: '2 solid #2E5BBA',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2E5BBA',
+    marginBottom: 5,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6C757D',
+  },
+  section: {
+    marginTop: 15,
+    marginBottom: 15,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#212529',
+    marginBottom: 10,
+    paddingBottom: 5,
+    borderBottom: '1 solid #DEE2E6',
+  },
+  row: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  label: {
+    width: '40%',
+    fontWeight: 'bold',
+    color: '#495057',
+  },
+  value: {
+    width: '60%',
+    color: '#212529',
+  },
+  card: {
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 4,
+    border: '1 solid #DEE2E6',
+  },
+  checkBox: {
+    width: 12,
+    height: 12,
+    border: '2 solid #2E5BBA',
+    borderRadius: 2,
+    marginRight: 8,
+    backgroundColor: '#2E5BBA',
+  },
+  checkBoxEmpty: {
+    width: 12,
+    height: 12,
+    border: '2 solid #DEE2E6',
+    borderRadius: 2,
+    marginRight: 8,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  deviationCard: {
+    backgroundColor: '#FFF3CD',
+    padding: 10,
+    marginBottom: 10,
+    borderRadius: 4,
+    border: '1 solid #FFC107',
+  },
+  deviationTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#212529',
+    marginBottom: 6,
+  },
+  deviationRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  deviationLabel: {
+    width: '35%',
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#495057',
+  },
+  deviationValue: {
+    width: '65%',
+    fontSize: 10,
+    color: '#212529',
+  },
+  rebateCard: {
+    backgroundColor: '#D4EDDA',
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 4,
+    border: '1 solid #28A745',
+  },
+  rebateTotal: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#28A745',
+    marginTop: 8,
+  },
+  documentItem: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    padding: 6,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 4,
+    border: '1 solid #DEE2E6',
+  },
+  badge: {
+    padding: '2 6',
+    backgroundColor: '#28A745',
+    color: '#FFFFFF',
+    borderRadius: 3,
+    fontSize: 8,
+    fontWeight: 'bold',
+    alignSelf: 'flex-start',
+  },
+  badgeDraft: {
+    backgroundColor: '#6C757D',
+  },
+  badgeInProgress: {
+    backgroundColor: '#FFC107',
+  },
+  badgeSubmitted: {
+    backgroundColor: '#17A2B8',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 40,
+    right: 40,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTop: '1 solid #DEE2E6',
+    fontSize: 9,
+    color: '#6C757D',
+  },
+});
+
+function EGCCHeader({ job }: { job: Job }) {
+  return (
+    <View style={egccStyles.header}>
+      <Text style={egccStyles.headerTitle}>MN Housing EGCC 2020 Worksheet</Text>
+      <Text style={egccStyles.headerSubtitle}>
+        Energy Guide Compliance Certification
+      </Text>
+      <Text style={egccStyles.headerSubtitle}>
+        Generated on {new Date().toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}
+      </Text>
+    </View>
+  );
+}
+
+function JobMetadata({ job, builder }: { job: Job; builder?: Builder }) {
+  return (
+    <View style={egccStyles.section}>
+      <Text style={egccStyles.sectionTitle}>Project Information</Text>
+      <View style={egccStyles.card}>
+        <View style={egccStyles.row}>
+          <Text style={egccStyles.label}>Project Name:</Text>
+          <Text style={egccStyles.value}>{job.name}</Text>
+        </View>
+        <View style={egccStyles.row}>
+          <Text style={egccStyles.label}>Address:</Text>
+          <Text style={egccStyles.value}>{job.address}</Text>
+        </View>
+        {builder && (
+          <>
+            <View style={egccStyles.row}>
+              <Text style={egccStyles.label}>Builder:</Text>
+              <Text style={egccStyles.value}>{builder.name} ({builder.companyName})</Text>
+            </View>
+            {builder.phone && (
+              <View style={egccStyles.row}>
+                <Text style={egccStyles.label}>Builder Contact:</Text>
+                <Text style={egccStyles.value}>{builder.phone}</Text>
+              </View>
+            )}
+          </>
+        )}
+        <View style={egccStyles.row}>
+          <Text style={egccStyles.label}>Contractor:</Text>
+          <Text style={egccStyles.value}>{job.contractor}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ComplianceApproach({ worksheet }: { worksheet: MNHousingEGCCData['worksheet'] }) {
+  const buildingTypeLabels: Record<string, string> = {
+    low_rise: 'Low-Rise (1-3 stories)',
+    mid_rise: 'Mid-Rise (4-6 stories)',
+    high_rise: 'High-Rise (7+ stories)',
+  };
+
+  const climateZoneLabels: Record<string, string> = {
+    zone_6: 'Climate Zone 6',
+    zone_7: 'Climate Zone 7',
+  };
+
+  return (
+    <View style={egccStyles.section}>
+      <Text style={egccStyles.sectionTitle}>Intended Compliance Methods</Text>
+      <View style={egccStyles.card}>
+        <View style={egccStyles.checkboxRow}>
+          <View style={worksheet.prescriptivePath ? egccStyles.checkBox : egccStyles.checkBoxEmpty} />
+          <Text>Prescriptive Path</Text>
+        </View>
+        <View style={egccStyles.checkboxRow}>
+          <View style={worksheet.performancePath ? egccStyles.checkBox : egccStyles.checkBoxEmpty} />
+          <Text>Performance Path</Text>
+        </View>
+        <View style={egccStyles.checkboxRow}>
+          <View style={worksheet.combinationApproach ? egccStyles.checkBox : egccStyles.checkBoxEmpty} />
+          <Text>Combination Approach</Text>
+        </View>
+      </View>
+
+      <View style={egccStyles.card}>
+        <View style={egccStyles.row}>
+          <Text style={egccStyles.label}>Building Type:</Text>
+          <Text style={egccStyles.value}>
+            {worksheet.buildingType ? buildingTypeLabels[worksheet.buildingType] || worksheet.buildingType : 'Not specified'}
+          </Text>
+        </View>
+        <View style={egccStyles.row}>
+          <Text style={egccStyles.label}>Climate Zone:</Text>
+          <Text style={egccStyles.value}>
+            {worksheet.climateZone ? climateZoneLabels[worksheet.climateZone] || worksheet.climateZone : 'Not specified'}
+          </Text>
+        </View>
+        {worksheet.squareFootage && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Square Footage:</Text>
+            <Text style={egccStyles.value}>{worksheet.squareFootage} sq ft</Text>
+          </View>
+        )}
+        {worksheet.lockInDate && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Lock-In Date:</Text>
+            <Text style={egccStyles.value}>
+              {new Date(worksheet.lockInDate).toLocaleDateString('en-US')}
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function DeviationsSection({ deviations }: { deviations: MNHousingEGCCData['worksheet']['deviations'] }) {
+  if (deviations.length === 0) {
+    return (
+      <View style={egccStyles.section}>
+        <Text style={egccStyles.sectionTitle}>Method Deviations</Text>
+        <Text style={{ fontSize: 10, color: '#6C757D', fontStyle: 'italic' }}>
+          No deviations from intended compliance methods.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={egccStyles.section}>
+      <Text style={egccStyles.sectionTitle}>Method Deviations</Text>
+      {deviations.map((deviation, index) => (
+        <View key={deviation.id} style={egccStyles.deviationCard}>
+          <Text style={egccStyles.deviationTitle}>Deviation #{index + 1}</Text>
+          <View style={egccStyles.deviationRow}>
+            <Text style={egccStyles.deviationLabel}>Item:</Text>
+            <Text style={egccStyles.deviationValue}>{deviation.item || 'Not specified'}</Text>
+          </View>
+          <View style={egccStyles.deviationRow}>
+            <Text style={egccStyles.deviationLabel}>Original Method:</Text>
+            <Text style={egccStyles.deviationValue}>{deviation.originalMethod || 'Not specified'}</Text>
+          </View>
+          <View style={egccStyles.deviationRow}>
+            <Text style={egccStyles.deviationLabel}>Revised Method:</Text>
+            <Text style={egccStyles.deviationValue}>{deviation.revisedMethod || 'Not specified'}</Text>
+          </View>
+          <View style={egccStyles.deviationRow}>
+            <Text style={egccStyles.deviationLabel}>Reason:</Text>
+            <Text style={egccStyles.deviationValue}>{deviation.reason || 'Not specified'}</Text>
+          </View>
+          <View style={egccStyles.deviationRow}>
+            <Text style={egccStyles.deviationLabel}>Date:</Text>
+            <Text style={egccStyles.deviationValue}>
+              {deviation.date ? new Date(deviation.date).toLocaleDateString('en-US') : 'Not specified'}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function RebateAnalysis({ worksheet }: { worksheet: MNHousingEGCCData['worksheet'] }) {
+  const energyStarBonus = parseFloat(worksheet.energyStarBonus) || 0;
+  const insulationRebates = parseFloat(worksheet.insulationRebates) || 0;
+  const hvacRebates = parseFloat(worksheet.hvacRebates) || 0;
+  const lightingRebates = parseFloat(worksheet.lightingRebates) || 0;
+  const total = energyStarBonus + insulationRebates + hvacRebates + lightingRebates;
+
+  const providerLabels: Record<string, string> = {
+    xcel: 'Xcel Energy',
+    centerpoint: 'CenterPoint Energy',
+    other: 'Other Provider',
+  };
+
+  const statusLabels: Record<string, string> = {
+    not_started: 'Not Started',
+    submitted: 'Submitted',
+    approved: 'Approved',
+    denied: 'Denied',
+  };
+
+  return (
+    <View style={egccStyles.section}>
+      <Text style={egccStyles.sectionTitle}>Energy Rebate Analysis</Text>
+      
+      {worksheet.utilityProvider && (
+        <View style={egccStyles.row}>
+          <Text style={egccStyles.label}>Utility Provider:</Text>
+          <Text style={egccStyles.value}>
+            {providerLabels[worksheet.utilityProvider] || worksheet.utilityProvider}
+          </Text>
+        </View>
+      )}
+
+      <View style={egccStyles.rebateCard}>
+        <Text style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8 }}>
+          Estimated Rebates
+        </Text>
+        {energyStarBonus > 0 && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>ENERGY STAR Bonus:</Text>
+            <Text style={egccStyles.value}>${energyStarBonus.toLocaleString()}</Text>
+          </View>
+        )}
+        {insulationRebates > 0 && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Insulation Rebates:</Text>
+            <Text style={egccStyles.value}>${insulationRebates.toLocaleString()}</Text>
+          </View>
+        )}
+        {hvacRebates > 0 && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>HVAC Rebates:</Text>
+            <Text style={egccStyles.value}>${hvacRebates.toLocaleString()}</Text>
+          </View>
+        )}
+        {lightingRebates > 0 && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Lighting Rebates:</Text>
+            <Text style={egccStyles.value}>${lightingRebates.toLocaleString()}</Text>
+          </View>
+        )}
+        {total > 0 && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Total Estimated:</Text>
+            <Text style={egccStyles.rebateTotal}>${total.toLocaleString()}</Text>
+          </View>
+        )}
+      </View>
+
+      {worksheet.rebateStatus && (
+        <View style={egccStyles.card}>
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Rebate Status:</Text>
+            <Text style={egccStyles.value}>
+              {statusLabels[worksheet.rebateStatus] || worksheet.rebateStatus}
+            </Text>
+          </View>
+          {worksheet.applicationDate && (
+            <View style={egccStyles.row}>
+              <Text style={egccStyles.label}>Application Date:</Text>
+              <Text style={egccStyles.value}>
+                {new Date(worksheet.applicationDate).toLocaleDateString('en-US')}
+              </Text>
+            </View>
+          )}
+          {worksheet.approvalDate && (
+            <View style={egccStyles.row}>
+              <Text style={egccStyles.label}>Approval Date:</Text>
+              <Text style={egccStyles.value}>
+                {new Date(worksheet.approvalDate).toLocaleDateString('en-US')}
+              </Text>
+            </View>
+          )}
+          {worksheet.awardAmount && (
+            <View style={egccStyles.row}>
+              <Text style={egccStyles.label}>Award Amount:</Text>
+              <Text style={egccStyles.value}>${parseFloat(worksheet.awardAmount).toLocaleString()}</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function DocumentsList({ documents }: { documents: MNHousingEGCCData['worksheet']['documents'] }) {
+  return (
+    <View style={egccStyles.section}>
+      <Text style={egccStyles.sectionTitle}>Required Documentation</Text>
+      {documents.length === 0 ? (
+        <Text style={{ fontSize: 10, color: '#6C757D', fontStyle: 'italic' }}>
+          No documents attached yet.
+        </Text>
+      ) : (
+        documents.map((doc, index) => (
+          <View key={doc.id} style={egccStyles.documentItem}>
+            <Text style={{ fontSize: 10, width: '5%' }}>{index + 1}.</Text>
+            <Text style={{ fontSize: 10, width: '50%', fontWeight: 'bold' }}>{doc.name}</Text>
+            <Text style={{ fontSize: 9, width: '45%', color: '#6C757D' }}>{doc.type}</Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+function SubmissionTracking({ worksheet, createdAt, lastModified }: { 
+  worksheet: MNHousingEGCCData['worksheet'];
+  createdAt?: string;
+  lastModified?: string;
+}) {
+  const statusBadgeStyle = () => {
+    switch (worksheet.complianceStatus) {
+      case 'approved':
+        return egccStyles.badge;
+      case 'submitted':
+        return [egccStyles.badge, egccStyles.badgeSubmitted];
+      case 'in_progress':
+        return [egccStyles.badge, egccStyles.badgeInProgress];
+      default:
+        return [egccStyles.badge, egccStyles.badgeDraft];
+    }
+  };
+
+  return (
+    <View style={egccStyles.section}>
+      <Text style={egccStyles.sectionTitle}>Submission Tracking</Text>
+      <View style={egccStyles.card}>
+        <View style={egccStyles.row}>
+          <Text style={egccStyles.label}>Status:</Text>
+          <View style={statusBadgeStyle()}>
+            <Text style={{ color: '#FFFFFF', textTransform: 'uppercase' }}>
+              {worksheet.complianceStatus.replace('_', ' ')}
+            </Text>
+          </View>
+        </View>
+        {worksheet.submissionDate && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Submission Date:</Text>
+            <Text style={egccStyles.value}>
+              {new Date(worksheet.submissionDate).toLocaleDateString('en-US')}
+            </Text>
+          </View>
+        )}
+        {worksheet.submittedTo && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Submitted To:</Text>
+            <Text style={egccStyles.value}>{worksheet.submittedTo}</Text>
+          </View>
+        )}
+        {worksheet.reviewStatus && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Review Status:</Text>
+            <Text style={egccStyles.value}>{worksheet.reviewStatus}</Text>
+          </View>
+        )}
+        {worksheet.certificationDate && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Certification Date:</Text>
+            <Text style={egccStyles.value}>
+              {new Date(worksheet.certificationDate).toLocaleDateString('en-US')}
+            </Text>
+          </View>
+        )}
+        {createdAt && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Created:</Text>
+            <Text style={egccStyles.value}>
+              {new Date(createdAt).toLocaleDateString('en-US')}
+            </Text>
+          </View>
+        )}
+        {lastModified && (
+          <View style={egccStyles.row}>
+            <Text style={egccStyles.label}>Last Modified:</Text>
+            <Text style={egccStyles.value}>
+              {new Date(lastModified).toLocaleDateString('en-US')}
+            </Text>
+          </View>
+        )}
+      </View>
+      {worksheet.notes && (
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>Notes:</Text>
+          <Text style={{ fontSize: 10, color: '#495057', lineHeight: 1.5 }}>
+            {worksheet.notes}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function EGCCFooter() {
+  return (
+    <View style={egccStyles.footer} fixed>
+      <Text>MN Housing EGCC 2020 Worksheet</Text>
+      <Text>Minnesota Housing Finance Agency</Text>
+    </View>
+  );
+}
+
+function MNHousingEGCCDocument({ data }: { data: MNHousingEGCCData }) {
+  return (
+    <Document>
+      <Page size="LETTER" style={egccStyles.page}>
+        <EGCCHeader job={data.job} />
+        <JobMetadata job={data.job} builder={data.builder} />
+        <ComplianceApproach worksheet={data.worksheet} />
+        <EGCCFooter />
+      </Page>
+
+      <Page size="LETTER" style={egccStyles.page}>
+        <DeviationsSection deviations={data.worksheet.deviations} />
+        <RebateAnalysis worksheet={data.worksheet} />
+        <EGCCFooter />
+      </Page>
+
+      <Page size="LETTER" style={egccStyles.page}>
+        <DocumentsList documents={data.worksheet.documents} />
+        <SubmissionTracking 
+          worksheet={data.worksheet}
+          createdAt={data.createdAt}
+          lastModified={data.lastModified}
+        />
+        <EGCCFooter />
+      </Page>
+    </Document>
+  );
+}
+
+export async function generateMNHousingEGCCReport(data: MNHousingEGCCData): Promise<Buffer> {
+  const { addBreadcrumb } = await import('./sentry');
+  addBreadcrumb('pdf', 'Starting MN Housing EGCC PDF generation', {
+    jobId: data.job.id,
+    jobName: data.job.name,
+  });
+  
+  try {
+    const pdfDocument = <MNHousingEGCCDocument data={data} />;
+    const buffer = await renderToBuffer(pdfDocument);
+    
+    addBreadcrumb('pdf', 'MN Housing EGCC PDF generated successfully', {
+      jobId: data.job.id,
+      sizeKB: (buffer.length / 1024).toFixed(2)
+    });
+    
+    return buffer;
+  } catch (error) {
+    addBreadcrumb('pdf', 'MN Housing EGCC PDF generation failed', {
+      jobId: data.job.id,
+      error: error instanceof Error ? error.message : String(error)
+    }, 'error');
+    
+    serverLogger.error('Error generating MN Housing EGCC PDF:', error);
+    throw new Error(`MN Housing EGCC PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}

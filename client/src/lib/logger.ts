@@ -63,14 +63,8 @@ class Logger {
       console.error(...this.formatMessage('error', message, ...args));
     }
     
-    // In production, this could send to a logging service
-    // Example: this.sendToLoggingService(message, args);
-  }
-
-  // Placeholder for future logging service integration
-  private sendToLoggingService(message: string, args: any[]): void {
-    // TODO: Implement logging service integration (e.g., Sentry, LogRocket, etc.)
-    // This could be configured to send errors to a remote service in production
+    // Note: Sentry integration is already configured in client/src/lib/sentry.ts
+    // and server/sentry.ts for production error tracking
   }
 }
 

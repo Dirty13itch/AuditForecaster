@@ -20,12 +20,14 @@ import {
   forecasts,
   reportInstances,
   taxCreditProjects,
+  arSnapshots,
   type Job,
   type Invoice,
   type Expense,
   type MileageLog,
   type Equipment,
   type QaInspectionScore,
+  type ArSnapshot,
 } from '@shared/schema';
 import { serverLogger } from './logger';
 import { Readable } from 'stream';
@@ -237,6 +239,58 @@ export class ExportService {
       });
     } catch (error) {
       serverLogger.error('Failed to export equipment', { error });
+      throw error;
+    }
+  }
+
+  // AR Aging Export
+  async exportARAging(options: ExportOptions): Promise<ExportResult> {
+    try {
+      let query = db.select({
+        snapshot: arSnapshots,
+        builder: builders,
+      })
+      .from(arSnapshots)
+      .leftJoin(builders, eq(arSnapshots.builderId, builders.id))
+      .orderBy(desc(arSnapshots.snapshotDate));
+
+      // Apply filters
+      if (options.filters?.builderId) {
+        query = query.where(eq(arSnapshots.builderId, options.filters.builderId));
+      }
+
+      if (options.dateRange) {
+        query = query.where(
+          and(
+            gte(arSnapshots.snapshotDate, options.dateRange.startDate),
+            lte(arSnapshots.snapshotDate, options.dateRange.endDate)
+          )
+        );
+      }
+
+      const rawData = await query;
+
+      // Flatten the data for export
+      const data = rawData.map(row => ({
+        snapshotDate: row.snapshot.snapshotDate,
+        builderId: row.snapshot.builderId,
+        builderName: row.builder?.companyName || 'Unknown',
+        current: row.snapshot.current,
+        days30: row.snapshot.days30,
+        days60: row.snapshot.days60,
+        days90Plus: row.snapshot.days90Plus,
+        totalAR: row.snapshot.totalAR,
+      }));
+
+      return this.formatData({
+        data,
+        type: 'ar-aging',
+        format: options.format,
+        columns: options.columns || ['snapshotDate', 'builderName', 'current', 'days30', 'days60', 'days90Plus', 'totalAR'],
+        customFileName: options.customFileName,
+      });
+    } catch (error) {
+      serverLogger.error('Failed to export AR aging', { error });
       throw error;
     }
   }

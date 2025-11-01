@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Save, Send, Upload, Download, Plus, Trash2, Calendar, AlertCircle } from "lucide-react";
 import { useUploadComplianceArtifact } from "@/lib/compliance";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -162,6 +163,7 @@ function MNHousingEGCCWorksheetContent() {
   const { jobId } = useParams<{ jobId: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [worksheet, setWorksheet] = useState<WorksheetData>(DEFAULT_WORKSHEET);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
@@ -360,7 +362,7 @@ function MNHousingEGCCWorksheetContent() {
         programType: "mn_housing_egcc",
         artifactType: docType,
         documentPath: docUrl,
-        uploadedBy: "current-user-id", // TODO: Replace with actual user ID from auth context
+        uploadedBy: user?.id || "unknown",
       });
 
       // Update local worksheet state
@@ -461,18 +463,82 @@ function MNHousingEGCCWorksheetContent() {
 
   /**
    * Phase 3 - OPTIMIZE: Memoized PDF download handler
-   * Phase 6 - DOCUMENT: PDF generation placeholder
+   * Phase 6 - DOCUMENT: PDF generation implementation
    * 
-   * TODO: Implement PDF generation with worksheet data
-   * Should include all sections: intended methods, deviations,
+   * Generates a professional PDF of the MN Housing EGCC worksheet
+   * including all sections: intended methods, deviations,
    * rebate analysis, and compliance documentation.
+   * 
+   * FIXED: Changed from GET with base64 query param to POST with JSON body
+   * This properly handles Unicode characters (José, Café, naïve, etc.)
+   * and supports larger payloads without URL length limits.
    */
-  const handleDownloadPDF = useCallback(() => {
-    toast({
-      title: "PDF generation",
-      description: "PDF download feature coming soon.",
-    });
-  }, [toast]);
+  const handleDownloadPDF = useCallback(async () => {
+    if (!jobId || !job) {
+      toast({
+        title: "Error",
+        description: "Job information not available.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Save current worksheet state before generating PDF
+      saveDraft();
+
+      toast({
+        title: "Generating PDF",
+        description: "Please wait while we prepare your document...",
+      });
+
+      // Import apiRequest from queryClient
+      const { apiRequest } = await import("@/lib/queryClient");
+
+      // Call POST API endpoint with worksheet as JSON body (supports Unicode!)
+      const response = await apiRequest(
+        "POST",
+        `/api/compliance/mn-housing-egcc/${jobId}/pdf`,
+        { worksheet }
+      );
+
+      // Get the blob from response
+      const blob = await response.blob();
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Generate filename with job address and date
+      const addressPart = job.address
+        .replace(/[^a-zA-Z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .substring(0, 30);
+      const datePart = new Date().toISOString().split('T')[0];
+      link.download = `MN-Housing-EGCC-${addressPart}-${datePart}.pdf`;
+
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "PDF downloaded successfully.",
+      });
+    } catch (error) {
+      console.error('PDF download error:', error);
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Failed to download PDF. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [jobId, job, worksheet, toast, saveDraft]);
 
   /**
    * Phase 2 - BUILD: Enhanced loading state with multiple skeletons
