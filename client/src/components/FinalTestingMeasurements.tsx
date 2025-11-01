@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Save, Loader2, Calculator, ThermometerSun, Wind, Ruler, Lightbulb, Network } from "lucide-react";
+import { Save, Loader2, Calculator, ThermometerSun, Wind, Ruler, Lightbulb, Network, Upload } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { safeToFixed, safeDivide } from "@shared/numberUtils";
@@ -50,6 +51,8 @@ interface FinalTestingMeasurementsProps {
 export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProps) {
   const { toast } = useToast();
   const [calculatedACH50, setCalculatedACH50] = useState<number | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importText, setImportText] = useState("");
 
   const { data: existingForecast } = useQuery<Forecast | null>({
     queryKey: ["/api/forecasts", jobId],
@@ -168,6 +171,73 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
     saveMeasurementsMutation.mutate(data);
   };
 
+  const parseTECAutoTestOutput = (text: string): { cfm50?: number; ach50?: number; buildingVolume?: number } => {
+    // More flexible patterns that allow optional text in parentheses and various delimiters
+    // Match: "CFM50: 1250" OR "CFM 50: 1250" OR "CFM50 (Corrected): 1250" etc.
+    const cfm50Match = text.match(/CFM\s*50\s*(?:\([^)]*\))?\s*[:=]\s*([\d,]+(?:\.\d+)?)/i);
+    
+    // Match: "ACH50: 2.5" OR "ACH 50: 2.5" OR "ACH50 (Natural): 2.5" etc.
+    const ach50Match = text.match(/ACH\s*50\s*(?:\([^)]*\))?\s*[:=]\s*([\d,]+(?:\.\d+)?)/i);
+    
+    // Match: "Building Volume: 15000" OR "House Volume: 15000" OR "Volume (ft³): 15000" etc.
+    const volumeMatch = text.match(/(?:Building|House)?\s*Volume\s*(?:\([^)]*\))?\s*[:=]\s*([\d,]+(?:\.\d+)?)/i);
+
+    // Remove commas from numbers for parsing
+    const cfm50 = cfm50Match ? parseFloat(cfm50Match[1].replace(/,/g, '')) : undefined;
+    const ach50 = ach50Match ? parseFloat(ach50Match[1].replace(/,/g, '')) : undefined;
+    const buildingVolume = volumeMatch ? parseFloat(volumeMatch[1].replace(/,/g, '')) : undefined;
+
+    return { cfm50, ach50, buildingVolume };
+  };
+
+  const handleImportTECAutoTest = () => {
+    if (!importText.trim()) {
+      toast({
+        title: "No data to import",
+        description: "Please paste TEC Auto Test results before importing.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsed = parseTECAutoTestOutput(importText);
+    
+    if (!parsed.cfm50 && !parsed.ach50 && !parsed.buildingVolume) {
+      toast({
+        title: "Could not parse TEC Auto Test results",
+        description: "Please check format and try again. Expected format includes CFM50, ACH50, and Building Volume values.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Populate form fields with parsed values
+    if (parsed.cfm50 !== undefined) {
+      form.setValue("cfm50", parsed.cfm50, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+    }
+    if (parsed.ach50 !== undefined) {
+      form.setValue("actualACH50", parsed.ach50, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+    }
+    if (parsed.buildingVolume !== undefined) {
+      form.setValue("houseVolume", parsed.buildingVolume, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+    }
+
+    // Show success toast with imported values
+    const importedFields = [];
+    if (parsed.cfm50 !== undefined) importedFields.push(`CFM50: ${parsed.cfm50}`);
+    if (parsed.ach50 !== undefined) importedFields.push(`ACH50: ${parsed.ach50}`);
+    if (parsed.buildingVolume !== undefined) importedFields.push(`Volume: ${parsed.buildingVolume} cu ft`);
+
+    toast({
+      title: "TEC Auto Test results imported successfully",
+      description: importedFields.join(", "),
+    });
+
+    // Close dialog and clear import text
+    setShowImportDialog(false);
+    setImportText("");
+  };
+
   const actualACH50 = form.watch("actualACH50");
   const actualTDL = form.watch("actualTDL");
   const actualDLO = form.watch("actualDLO");
@@ -202,10 +272,23 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Blower Door Test Section */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Wind className="h-4 w-4" />
-                Blower Door Test
-              </h3>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Wind className="h-4 w-4" />
+                  Blower Door Test
+                </h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowImportDialog(true)}
+                  data-testid="button-import-tec-auto-test"
+                  className="flex items-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Import from TEC Auto Test
+                </Button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -771,6 +854,62 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
           </form>
         </Form>
       </CardContent>
+
+      {/* TEC Auto Test Import Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="sm:max-w-[600px]" data-testid="dialog-import-tec-auto-test">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Import from TEC Auto Test
+            </DialogTitle>
+            <DialogDescription>
+              Paste the TEC Auto Test output below. The system will automatically extract CFM50, ACH50, and Building Volume values.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="tec-import-text" className="text-sm font-medium">
+                TEC Auto Test Output
+              </label>
+              <Textarea
+                id="tec-import-text"
+                placeholder={`Paste TEC Auto Test results here. Example format:\n\nCFM50: 1250\nACH50: 2.5\nBuilding Volume: 15000 cubic feet`}
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                className="min-h-[200px] font-mono text-sm"
+                data-testid="textarea-tec-import"
+              />
+              <p className="text-xs text-muted-foreground">
+                Expected format includes lines with CFM50, ACH50, and Building Volume (or House Volume) values.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowImportDialog(false);
+                setImportText("");
+              }}
+              data-testid="button-cancel-import"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleImportTECAutoTest}
+              data-testid="button-confirm-import"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
