@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle2, Loader2, Calendar, AlertCircle, Plus, RefreshCw, Menu, TestTube2, Camera, FileText, Wind, Gauge } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import TopBar from "@/components/TopBar";
 import ChecklistItem from "@/components/ChecklistItem";
@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -73,6 +74,7 @@ function InspectionContent() {
   const [voiceNoteLoadingId, setVoiceNoteLoadingId] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [isJumpMenuOpen, setIsJumpMenuOpen] = useState(false);
 
   // Phase 5 - HARDEN: Fetch job details with retry: 2 for network resilience
   const { 
@@ -504,6 +506,48 @@ function InspectionContent() {
     refetchVentilation();
   }, [refetchVentilation]);
 
+  // Jump To navigation handlers with scrolling
+  const jumpToBlowerDoor = useCallback(() => {
+    setActiveTab(TAB_OPTIONS.WORKFLOW);
+    setIsJumpMenuOpen(false);
+    setTimeout(() => {
+      document.getElementById("blower-door-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  }, []);
+
+  const jumpToDuctLeakage = useCallback(() => {
+    setActiveTab(TAB_OPTIONS.WORKFLOW);
+    setIsJumpMenuOpen(false);
+    setTimeout(() => {
+      document.getElementById("duct-leakage-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  }, []);
+
+  const jumpToVentilation = useCallback(() => {
+    setActiveTab(TAB_OPTIONS.WORKFLOW);
+    setIsJumpMenuOpen(false);
+    setTimeout(() => {
+      document.getElementById("ventilation-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  }, []);
+
+  const jumpToPhotos = useCallback(() => {
+    setActiveTab(TAB_OPTIONS.PHOTOS);
+    setIsJumpMenuOpen(false);
+  }, []);
+
+  const jumpToNotes = useCallback(() => {
+    setActiveTab(TAB_OPTIONS.INSPECTION);
+    setIsJumpMenuOpen(false);
+  }, []);
+
+  const jumpToComplete = useCallback(() => {
+    setIsJumpMenuOpen(false);
+    setTimeout(() => {
+      setShowCompleteDialog(true);
+    }, 100);
+  }, []);
+
   // Phase 2 - BUILD: Guard clause for missing job ID
   if (!jobId) {
     return (
@@ -752,7 +796,7 @@ function InspectionContent() {
 
               {/* Blower Door Test Results Display */}
               {blowerDoorTests.length > 0 && (
-                <div className="space-y-4" data-testid="section-blower-door-tests">
+                <div id="blower-door-section" className="space-y-4 scroll-mt-24" data-testid="section-blower-door-tests">
                   <h3 className="text-lg font-semibold" data-testid="text-blower-door-title">Blower Door Tests</h3>
                   {blowerDoorTests.map((test: any) => (
                     <div key={test.id}>
@@ -850,6 +894,47 @@ function InspectionContent() {
                 </Alert>
               )}
 
+              {/* Duct Leakage Test Results Display */}
+              {ductLeakageTests.length > 0 && (
+                <div id="duct-leakage-section" className="space-y-4 scroll-mt-24" data-testid="section-duct-leakage-tests">
+                  <h3 className="text-lg font-semibold" data-testid="text-duct-leakage-title">Duct Leakage Tests</h3>
+                  {ductLeakageTests.map((test: any) => (
+                    <Card key={test.id} data-testid={`card-duct-leakage-test-${test.id}`}>
+                      <CardHeader>
+                        <CardTitle className="text-base" data-testid={`text-duct-test-date-${test.id}`}>
+                          Duct Leakage Test - {format(parseISO(test.testDate), "MMM d, yyyy")}
+                        </CardTitle>
+                        <CardDescription data-testid={`text-duct-test-description-${test.id}`}>
+                          Test results for duct system air tightness
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-total-leakage-label-${test.id}`}>Total Leakage</p>
+                            <p className="text-lg font-semibold" data-testid={`text-total-leakage-value-${test.id}`}>
+                              {test.totalLeakage ? Number(test.totalLeakage).toFixed(0) : 'N/A'} CFM
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-leakage-to-outside-label-${test.id}`}>Leakage to Outside</p>
+                            <p className="text-lg font-semibold" data-testid={`text-leakage-to-outside-value-${test.id}`}>
+                              {test.leakageToOutside ? Number(test.leakageToOutside).toFixed(0) : 'N/A'} CFM
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-duct-status-label-${test.id}`}>Status</p>
+                            <Badge variant="secondary" data-testid={`badge-duct-status-${test.id}`}>
+                              Recorded
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
               {/* Ventilation Test Error State */}
               {ventilationError && (
                 <Alert variant="destructive" data-testid="error-ventilation-query">
@@ -870,6 +955,47 @@ function InspectionContent() {
                     </Button>
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {/* Ventilation Test Results Display */}
+              {ventilationTests.length > 0 && (
+                <div id="ventilation-section" className="space-y-4 scroll-mt-24" data-testid="section-ventilation-tests">
+                  <h3 className="text-lg font-semibold" data-testid="text-ventilation-title">Ventilation Tests</h3>
+                  {ventilationTests.map((test: any) => (
+                    <Card key={test.id} data-testid={`card-ventilation-test-${test.id}`}>
+                      <CardHeader>
+                        <CardTitle className="text-base" data-testid={`text-vent-test-date-${test.id}`}>
+                          Ventilation Test - {format(parseISO(test.testDate), "MMM d, yyyy")}
+                        </CardTitle>
+                        <CardDescription data-testid={`text-vent-test-description-${test.id}`}>
+                          Test results for ventilation system performance
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-airflow-label-${test.id}`}>Airflow</p>
+                            <p className="text-lg font-semibold" data-testid={`text-airflow-value-${test.id}`}>
+                              {test.totalAirflow ? Number(test.totalAirflow).toFixed(0) : 'N/A'} CFM
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-vent-type-label-${test.id}`}>Type</p>
+                            <p className="text-lg font-semibold" data-testid={`text-vent-type-value-${test.id}`}>
+                              {test.ventilationType || 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-vent-status-label-${test.id}`}>Status</p>
+                            <Badge variant="secondary" data-testid={`badge-vent-status-${test.id}`}>
+                              Recorded
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
             </>
           )}
@@ -951,6 +1077,110 @@ function InspectionContent() {
           </div>
         </div>
       </main>
+
+      {/* Floating Action Button - Jump To Menu */}
+      <DropdownMenu open={isJumpMenuOpen} onOpenChange={setIsJumpMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon"
+            className="fixed bottom-24 right-6 md:bottom-8 md:right-8 h-14 w-14 shadow-lg hover:shadow-xl transition-shadow z-40"
+            data-testid="button-jump-to-fab"
+          >
+            <Menu className="h-6 w-6" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent 
+          align="end" 
+          className="w-56"
+          data-testid="menu-jump-to"
+        >
+          <DropdownMenuLabel data-testid="label-jump-to">Jump To</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          
+          <DropdownMenuItem 
+            onClick={() => handleTabChange(TAB_OPTIONS.WORKFLOW)}
+            className="min-h-12 cursor-pointer"
+            data-testid="menu-item-workflow"
+          >
+            <FileText className="mr-2 h-5 w-5" />
+            <span className="flex-1">Workflow Steps</span>
+            {activeTab === TAB_OPTIONS.WORKFLOW && (
+              <Badge variant="outline" className="ml-2">Active</Badge>
+            )}
+          </DropdownMenuItem>
+
+          <DropdownMenuItem 
+            onClick={jumpToBlowerDoor}
+            className="min-h-12 cursor-pointer"
+            data-testid="menu-item-blower-door"
+          >
+            <Gauge className="mr-2 h-5 w-5" />
+            <span className="flex-1">Blower Door Test</span>
+            {blowerDoorTests.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{blowerDoorTests.length}</Badge>
+            )}
+          </DropdownMenuItem>
+
+          <DropdownMenuItem 
+            onClick={jumpToDuctLeakage}
+            className="min-h-12 cursor-pointer"
+            data-testid="menu-item-duct-leakage"
+          >
+            <TestTube2 className="mr-2 h-5 w-5" />
+            <span className="flex-1">Duct Leakage Test</span>
+            {ductLeakageTests.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{ductLeakageTests.length}</Badge>
+            )}
+          </DropdownMenuItem>
+
+          <DropdownMenuItem 
+            onClick={jumpToVentilation}
+            className="min-h-12 cursor-pointer"
+            data-testid="menu-item-ventilation"
+          >
+            <Wind className="mr-2 h-5 w-5" />
+            <span className="flex-1">Ventilation Test</span>
+            {ventilationTests.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{ventilationTests.length}</Badge>
+            )}
+          </DropdownMenuItem>
+
+          <DropdownMenuItem 
+            onClick={jumpToPhotos}
+            className="min-h-12 cursor-pointer"
+            data-testid="menu-item-photos"
+          >
+            <Camera className="mr-2 h-5 w-5" />
+            <span className="flex-1">Photos</span>
+            {activeTab === TAB_OPTIONS.PHOTOS && (
+              <Badge variant="outline" className="ml-2">Active</Badge>
+            )}
+          </DropdownMenuItem>
+
+          <DropdownMenuItem 
+            onClick={jumpToNotes}
+            className="min-h-12 cursor-pointer"
+            data-testid="menu-item-notes"
+          >
+            <FileText className="mr-2 h-5 w-5" />
+            <span className="flex-1">Notes</span>
+            <Badge variant="secondary" className="ml-2">
+              {completedCount}/{totalCount}
+            </Badge>
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem 
+            onClick={jumpToComplete}
+            className="min-h-12 cursor-pointer text-primary font-medium"
+            data-testid="menu-item-complete"
+          >
+            <CheckCircle2 className="mr-2 h-5 w-5" />
+            <span>Complete Job</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
 
