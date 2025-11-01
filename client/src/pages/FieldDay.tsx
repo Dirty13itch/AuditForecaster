@@ -12,9 +12,12 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { SwipeableFieldDayCard } from "@/components/SwipeableFieldDayCard";
+import { JobCompletionCelebration } from "@/components/JobCompletionCelebration";
 import { JOB_TYPE_DISPLAY_NAMES } from "@shared/hersInspectionTypes";
 import { VirtualList } from "@/components/ui/virtual-grid";
 import { JobListLoadingFallback } from "@/components/LoadingStates";
+import { PageTransition } from "@/components/ui/page-transition";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => format(new Date(), 'yyyy-MM-dd');
@@ -44,6 +47,7 @@ export default function FieldDay() {
   const [, navigate] = useLocation();
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
+  const [completedJob, setCompletedJob] = useState<Job | null>(null);
   
   const today = getTodayDate();
   const isAdmin = user?.role === 'admin';
@@ -86,15 +90,23 @@ export default function FieldDay() {
     onMutate: async ({ jobId }) => {
       setUpdatingJobId(jobId);
     },
-    onSuccess: (_, { status }) => {
+    onSuccess: (updatedJob, { status }) => {
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
       
-      const statusLabel = STATUS_CONFIG[status]?.label || status;
-      toast({
-        title: "Status updated",
-        description: `Job marked as ${statusLabel.toLowerCase()}`,
-      });
+      // Show celebration for completed jobs
+      if (status === 'done') {
+        const jobData = allJobsList.find(job => job.id === updatedJob.id);
+        if (jobData) {
+          setCompletedJob({...jobData, status: 'done'});
+        }
+      } else {
+        const statusLabel = STATUS_CONFIG[status]?.label || status;
+        toast({
+          title: "Status updated",
+          description: `Job marked as ${statusLabel.toLowerCase()}`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -119,13 +131,28 @@ export default function FieldDay() {
   const selectedJob = allJobsList.find(job => job.id === selectedJobId);
 
   return (
-    <div className="container max-w-7xl mx-auto p-4 space-y-6 pb-32">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">
-            Field Day
-          </h1>
+    <PageTransition mode="fade" duration={0.3}>
+      <div className="container max-w-7xl mx-auto p-4 space-y-6 pb-32">
+        {/* Job Completion Celebration */}
+        {completedJob && (
+          <JobCompletionCelebration
+            job={completedJob}
+            onClose={() => setCompletedJob(null)}
+            autoCloseMs={5000}
+          />
+        )}
+
+        {/* Header */}
+        <motion.div 
+          className="flex items-center justify-between"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">
+              Field Day
+            </h1>
           <p className="text-muted-foreground mt-1" data-testid="text-today-date">
             {format(new Date(), 'EEEE, MMMM d, yyyy')}
           </p>
@@ -322,6 +349,7 @@ export default function FieldDay() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </PageTransition>
   );
 }

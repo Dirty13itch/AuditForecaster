@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Check, CheckCircle2, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
+import { MapPin, Check, CheckCircle2, CalendarClock, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { cardAppear, popIn } from "@/lib/animations";
 import type { Job, Builder } from "@shared/schema";
 
 // Job type display names
@@ -42,17 +45,29 @@ export function SwipeableFieldDayCard({
   onNavigate, 
   onStatusUpdate 
 }: SwipeableFieldDayCardProps) {
+  const shouldReduceMotion = useReducedMotion();
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [justCompleted, setJustCompleted] = useState(false);
   
   // Setup swipe gestures
   const swipeGesture = useSwipeGesture({
     onSwipeLeft: () => {
       if (onStatusUpdate && job.status !== 'done') {
+        setIsUpdating(true);
+        setJustCompleted(true);
         onStatusUpdate('done');
+        // Reset states after animation
+        setTimeout(() => {
+          setIsUpdating(false);
+          setJustCompleted(false);
+        }, 1500);
       }
     },
     onSwipeRight: () => {
       if (onStatusUpdate && job.status !== 'reschedule') {
+        setIsUpdating(true);
         onStatusUpdate('reschedule');
+        setTimeout(() => setIsUpdating(false), 500);
       }
     },
     threshold: 25 // 25% of screen width threshold
@@ -90,49 +105,121 @@ export function SwipeableFieldDayCard({
   const showRescheduleIndicator = swipeGesture.isDragging && swipeGesture.swipeDirection === 'right' && Math.abs(swipeGesture.dragOffset) > 30;
 
   return (
-    <div className="relative">
+    <motion.div 
+      className="relative"
+      variants={cardAppear}
+      initial="hidden"
+      animate="visible"
+      layout
+    >
+      {/* Completion celebration particles */}
+      <AnimatePresence>
+        {justCompleted && !shouldReduceMotion && (
+          <div className="absolute inset-0 pointer-events-none z-10">
+            {Array.from({ length: 8 }, (_, i) => (
+              <motion.div
+                key={i}
+                className="absolute top-1/2 left-1/2"
+                initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
+                animate={{
+                  x: (Math.random() - 0.5) * 200,
+                  y: (Math.random() - 0.5) * 200,
+                  scale: [0, 1, 0],
+                  opacity: [1, 1, 0]
+                }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.8, delay: i * 0.05 }}
+              >
+                <Sparkles className="h-6 w-6 text-yellow-500" />
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Background indicators during swipe */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Done indicator (swipe left) */}
-        {showDoneIndicator && (
-          <div className="absolute inset-y-0 right-0 w-full flex items-center justify-end pr-6 bg-gradient-to-l from-green-500/30 to-transparent rounded-lg">
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
-              <CheckCircle2 className="h-6 w-6 text-green-600" />
-              <span className="text-lg font-semibold text-green-600">Done</span>
-            </div>
-          </div>
-        )}
+        <AnimatePresence>
+          {showDoneIndicator && (
+            <motion.div 
+              className="absolute inset-y-0 right-0 w-full flex items-center justify-end pr-6 bg-gradient-to-l from-green-500/30 to-transparent rounded-lg"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <motion.div 
+                className="flex items-center gap-2"
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+                <span className="text-lg font-semibold text-green-600">Done</span>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         {/* Reschedule indicator (swipe right) */}
-        {showRescheduleIndicator && (
-          <div className="absolute inset-y-0 left-0 w-full flex items-center justify-start pl-6 bg-gradient-to-r from-orange-500/30 to-transparent rounded-lg">
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
-              <CalendarClock className="h-6 w-6 text-orange-600" />
-              <span className="text-lg font-semibold text-orange-600">Reschedule</span>
-            </div>
-          </div>
-        )}
+        <AnimatePresence>
+          {showRescheduleIndicator && (
+            <motion.div 
+              className="absolute inset-y-0 left-0 w-full flex items-center justify-start pl-6 bg-gradient-to-r from-orange-500/30 to-transparent rounded-lg"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <motion.div 
+                className="flex items-center gap-2"
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                <CalendarClock className="h-6 w-6 text-orange-600" />
+                <span className="text-lg font-semibold text-orange-600">Reschedule</span>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Main card */}
-      <Card 
-        className={cn(
-          "relative cursor-pointer transition-all bg-background",
-          "hover-elevate active-elevate-2",
-          isSelected && "ring-2 ring-primary ring-offset-2",
-          swipeGesture.isDragging && "select-none"
-        )}
-        style={cardStyle}
-        onClick={handleCardClick}
-        {...swipeGesture.handlers}
-        data-testid={`card-swipeable-job-${job.id}`}
+      <motion.div
+        animate={isUpdating && !shouldReduceMotion ? {
+          scale: [1, 1.02, 1],
+          transition: { duration: 0.3 }
+        } : {}}
       >
-        {/* Selection checkmark */}
-        {isSelected && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-            <Check className="h-5 w-5 text-primary-foreground" />
-          </div>
-        )}
+        <Card 
+          className={cn(
+            "relative cursor-pointer transition-all bg-background",
+            "hover-elevate active-elevate-2",
+            isSelected && "ring-2 ring-primary ring-offset-2",
+            swipeGesture.isDragging && "select-none",
+            justCompleted && "border-success shadow-lg shadow-success/20"
+          )}
+          style={cardStyle}
+          onClick={handleCardClick}
+          {...swipeGesture.handlers}
+          data-testid={`card-swipeable-job-${job.id}`}
+        >
+          {/* Selection checkmark with animation */}
+          <AnimatePresence>
+            {isSelected && (
+              <motion.div 
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-primary flex items-center justify-center"
+                variants={popIn}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+              >
+                <Check className="h-5 w-5 text-primary-foreground" />
+              </motion.div>
+            )}
+          </AnimatePresence>
         
         <CardHeader className={cn("pb-3", isSelected && "pl-14")}>
           <div className="flex items-start justify-between gap-2">
@@ -146,12 +233,19 @@ export function SwipeableFieldDayCard({
               </CardDescription>
             </div>
             {STATUS_CONFIG[job.status] && (
-              <Badge 
-                variant={STATUS_CONFIG[job.status].variant}
-                data-testid={`badge-status-${job.id}`}
+              <motion.div
+                animate={isUpdating ? {
+                  scale: [1, 1.1, 1],
+                  transition: { duration: 0.3 }
+                } : {}}
               >
-                {STATUS_CONFIG[job.status].label}
-              </Badge>
+                <Badge 
+                  variant={STATUS_CONFIG[job.status].variant}
+                  data-testid={`badge-status-${job.id}`}
+                >
+                  {STATUS_CONFIG[job.status].label}
+                </Badge>
+              </motion.div>
             )}
           </div>
         </CardHeader>
@@ -188,6 +282,7 @@ export function SwipeableFieldDayCard({
           </div>
         </CardContent>
       </Card>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
