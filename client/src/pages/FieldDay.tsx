@@ -13,12 +13,15 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { SwipeableFieldDayCard } from "@/components/SwipeableFieldDayCard";
+import { JOB_TYPE_DISPLAY_NAMES } from "@shared/hersInspectionTypes";
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => format(new Date(), 'yyyy-MM-dd');
 
-// Job type display names
+// Job type display names - Use HERS display names with fallbacks for unmapped types
 const JOB_TYPE_LABELS: Record<string, string> = {
+  ...JOB_TYPE_DISPLAY_NAMES,
+  // Additional fallback mappings for any legacy or unmapped types
   rough: "Rough Inspection",
   final: "Final Inspection",
   blower_door: "Blower Door Test",

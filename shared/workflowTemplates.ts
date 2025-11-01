@@ -12,16 +12,41 @@ import {
   MULTIFAMILY_PROJECT_TEMPLATE,
 } from './checklistTemplates';
 
+// Import HERS workflow templates
+import {
+  type HERSWorkflowTemplate,
+  QA_ROUGH_WORKFLOW,
+  QA_FINAL_WORKFLOW,
+  HERS_BLOWER_DOOR_WORKFLOW,
+  HERS_DUCT_LEAKAGE_WORKFLOW,
+  HERS_VENTILATION_WORKFLOW,
+  MF_ROUGH_WORKFLOW,
+  MF_FINAL_WORKFLOW,
+  COMPLIANCE_REVIEW_WORKFLOW,
+  HERS_WORKFLOW_TEMPLATES,
+} from './hersWorkflowTemplates';
+
 export type JobType = 
-  | "sv2"           // Pre-Drywall (Site Visit 2)
-  | "full_test"     // Final Testing with all tests
-  | "code_bdoor"    // Code inspection + blower door
-  | "rough_duct"    // Rough duct inspection
-  | "rehab"         // Rehabilitation inspection
-  | "bdoor_retest"  // Blower door retest only
-  | "multifamily"   // Multifamily units
-  | "energy_star"   // Energy Star certification
-  | "other";        // Other/custom
+  // HERS Job Types (9 primary types)
+  | "qa_rough"           // HERS/QA Rough Inspection
+  | "qa_final"           // HERS/QA Final Inspection  
+  | "hers_blower_door"   // HERS Blower Door Test Only
+  | "hers_duct_leakage"  // HERS Duct Leakage Test Only
+  | "hers_ventilation"   // HERS Ventilation Test Only
+  | "mf_rough"           // Multifamily Rough
+  | "mf_final"           // Multifamily Final
+  | "compliance_review"  // Compliance Review
+  | "other"              // Other/Custom
+  
+  // Legacy Job Types (kept for backward compatibility)
+  | "sv2"                // Pre-Drywall (Site Visit 2)
+  | "full_test"          // Final Testing with all tests
+  | "code_bdoor"         // Code inspection + blower door
+  | "rough_duct"         // Rough duct inspection
+  | "rehab"              // Rehabilitation inspection
+  | "bdoor_retest"       // Blower door retest only
+  | "multifamily"        // Multifamily (Legacy)
+  | "energy_star";       // Energy Star certification
 
 export interface WorkflowStep {
   stepNumber: number;
@@ -678,9 +703,52 @@ export const OTHER_WORKFLOW: WorkflowTemplate = {
 };
 
 // ============================================================================
+// HERS Workflow Adapter - Convert HERS workflows to standard WorkflowTemplate
+// ============================================================================
+function adaptHERSWorkflow(hersWorkflow: HERSWorkflowTemplate): WorkflowTemplate {
+  return {
+    jobType: hersWorkflow.jobType as JobType,
+    displayName: hersWorkflow.displayName,
+    description: hersWorkflow.description,
+    checklistTemplate: hersWorkflow.checklistTemplate,
+    steps: hersWorkflow.steps.map(step => ({
+      stepNumber: step.stepNumber,
+      name: step.name,
+      description: step.description,
+      required: step.required,
+      navigationTarget: step.navigationTarget,
+      estimatedMinutes: step.estimatedMinutes,
+    })),
+    requiredTests: hersWorkflow.requiredTests.map(test => ({
+      testType: test.testType,
+      name: test.name,
+      description: test.description,
+      navigationTarget: test.navigationTarget,
+      complianceThreshold: test.complianceThreshold,
+    })),
+    estimatedDuration: hersWorkflow.estimatedDuration,
+    requiredPhotos: hersWorkflow.requiredPhotos,
+    completionRequirements: hersWorkflow.completionRequirements,
+    guidanceNotes: hersWorkflow.guidanceNotes,
+  };
+}
+
+// ============================================================================
 // Workflow Registry - Maps job types to templates
 // ============================================================================
 export const WORKFLOW_TEMPLATES: Record<JobType, WorkflowTemplate> = {
+  // HERS Job Types (primary)
+  qa_rough: adaptHERSWorkflow(QA_ROUGH_WORKFLOW),
+  qa_final: adaptHERSWorkflow(QA_FINAL_WORKFLOW),
+  hers_blower_door: adaptHERSWorkflow(HERS_BLOWER_DOOR_WORKFLOW),
+  hers_duct_leakage: adaptHERSWorkflow(HERS_DUCT_LEAKAGE_WORKFLOW),
+  hers_ventilation: adaptHERSWorkflow(HERS_VENTILATION_WORKFLOW),
+  mf_rough: adaptHERSWorkflow(MF_ROUGH_WORKFLOW),
+  mf_final: adaptHERSWorkflow(MF_FINAL_WORKFLOW),
+  compliance_review: adaptHERSWorkflow(COMPLIANCE_REVIEW_WORKFLOW),
+  other: adaptHERSWorkflow(HERS_WORKFLOW_TEMPLATES.other),
+  
+  // Legacy Job Types (backward compatibility)
   sv2: SV2_WORKFLOW,
   full_test: FULL_TEST_WORKFLOW,
   code_bdoor: CODE_BDOOR_WORKFLOW,
@@ -689,7 +757,6 @@ export const WORKFLOW_TEMPLATES: Record<JobType, WorkflowTemplate> = {
   bdoor_retest: BDOOR_RETEST_WORKFLOW,
   multifamily: MULTIFAMILY_WORKFLOW,
   energy_star: ENERGY_STAR_WORKFLOW,
-  other: OTHER_WORKFLOW,
 };
 
 /**

@@ -375,7 +375,28 @@ export const jobs = pgTable("jobs", {
   contractor: text("contractor").notNull(),
   status: text("status").notNull(),
   inspectionType: text("inspection_type", {
-    enum: ["sv2", "full_test", "code_bdoor", "rough_duct", "rehab", "bdoor_retest", "multifamily", "energy_star", "other"]
+    enum: [
+      // HERS Job Types (9 primary types)
+      "qa_rough",           // HERS/QA Rough Inspection
+      "qa_final",           // HERS/QA Final Inspection  
+      "hers_blower_door",   // HERS Blower Door Test Only
+      "hers_duct_leakage",  // HERS Duct Leakage Test Only
+      "hers_ventilation",   // HERS Ventilation Test Only
+      "mf_rough",           // Multifamily Rough
+      "mf_final",           // Multifamily Final
+      "compliance_review",  // Compliance Review
+      "other",              // Other/Custom
+      
+      // Legacy Job Types (kept for backward compatibility)
+      "sv2",                // Pre-Drywall (SV2)
+      "full_test",          // Final Testing (Complete)
+      "code_bdoor",         // Code + Blower Door
+      "rough_duct",         // Rough Duct Inspection
+      "rehab",              // Rehabilitation
+      "bdoor_retest",       // Blower Door Retest
+      "multifamily",        // Multifamily (Legacy)
+      "energy_star"         // Energy Star
+    ]
   }).notNull(),
   pricing: decimal("pricing", { precision: 10, scale: 2 }),
   scheduledDate: timestamp("scheduled_date"),
@@ -447,6 +468,37 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_photo_upload_complete").on(table.photoUploadComplete),
   // Invoice billing index
   index("idx_jobs_billed_in_invoice_id").on(table.billedInInvoiceId),
+]);
+
+// Job Type Configuration table for storing job type metadata
+export const jobTypeConfig = pgTable("job_type_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobType: text("job_type").notNull().unique(), // Maps to inspectionType enum values
+  displayName: text("display_name").notNull(),
+  shortName: text("short_name").notNull(),
+  category: text("category", {
+    enum: ["quality_assurance", "performance_testing", "multifamily", "compliance", "other", "legacy"]
+  }).notNull(),
+  requiredTests: text("required_tests").array().default(sql`ARRAY[]::text[]`), // ['blower_door', 'duct_leakage', 'ventilation']
+  defaultDuration: integer("default_duration").default(120), // Minutes
+  basePricing: decimal("base_pricing", { precision: 10, scale: 2 }), // Default pricing
+  workflowTemplate: text("workflow_template"), // Reference to workflow template type
+  requiredPhotos: text("required_photos").array().default(sql`ARRAY[]::text[]`), // Required photo types
+  completionRequirements: jsonb("completion_requirements").default({
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: true,
+    builderSignatureRequired: false,
+    photoUploadRequired: true
+  }),
+  guidanceNotes: text("guidance_notes"),
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_job_type_config_job_type").on(table.jobType),
+  index("idx_job_type_config_category").on(table.category),
+  index("idx_job_type_config_is_active").on(table.isActive),
 ]);
 
 export const scheduleEvents = pgTable("schedule_events", {
@@ -2607,6 +2659,20 @@ export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type InsertOrganizationUser = z.infer<typeof insertOrganizationUserSchema>;
 export type InsertOrganizationSetting = z.infer<typeof insertOrganizationSettingSchema>;
 export type InsertUserInvitation = z.infer<typeof insertUserInvitationSchema>;
+
+// Job Type Config Schemas
+export const insertJobTypeConfigSchema = createInsertSchema(jobTypeConfig).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateJobTypeConfigSchema = insertJobTypeConfigSchema.partial();
+
+export type JobTypeConfig = typeof jobTypeConfig.$inferSelect;
+export type InsertJobTypeConfig = z.infer<typeof insertJobTypeConfigSchema>;
+export type UpdateJobTypeConfig = z.infer<typeof updateJobTypeConfigSchema>;
+
 export type EquipmentCheckout = typeof equipmentCheckouts.$inferSelect;
 export type InsertEquipmentCheckout = z.infer<typeof insertEquipmentCheckoutSchema>;
 
