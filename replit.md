@@ -40,6 +40,13 @@ Core architectural decisions and features include:
 -   **Mobile-Optimized Workflow UI**: Touch-friendly design, responsive typography, and layouts optimized for field use on mobile devices.
 -   **Financial Management System**: Comprehensive standalone financial module with partner contractor access control, monthly invoicing, payment tracking with AR aging, expense management (MileIQ-style, OCR), job cost ledger, and profitability analytics.
 -   **Minnesota Multifamily Compliance Suite**: Complete compliance tracking system for ENERGY STAR MFNC, MN Housing EGCC, ZERH, and Building Energy Benchmarking, with a comprehensive compliance documents library.
+-   **Field Day Experience**: Mobile-first daily workload view showing inspector's assigned jobs with role-based access (admin sees all jobs + their assignments, inspectors see only their assigned jobs). Simple one-tap status toggles for efficient field updates.
+-   **Real-Time Sync Infrastructure**: Google Calendar-style live updates using WebSockets. Any changes to jobs, schedules, or assignments are instantly visible across all connected sessions without manual refresh.
+-   **Flexible Inspection Workflows**: Non-linear workflow system allowing inspectors to jump directly to any step, test, or photo capture without forced sequence. Supports out-of-order completion with partial saves and clear required vs optional distinctions.
+-   **Simplified Job Status Workflow**: Streamlined status management using only: scheduled, done, failed, and reschedule. Removed "in-progress" state to match field inspector reality where jobs are either scheduled or completed with outcome.
+-   **Construction Manager Report Routing**: Report scheduling system that routes completed inspection reports to builder-specific construction managers (not builders directly). Supports template selection and automated delivery after inspection completion.
+-   **TEC Auto Test Integration**: Import blower door test results from TEC Auto Test application with automatic population of CFM50, ACH50, and building volume data.
+-   **Photo-Based Duct Testing**: Simplified duct leakage testing with manual CFM entry (total duct leakage, leakage to outside) and photo documentation of manometer display readings.
 
 ## External Dependencies
 
