@@ -1,7 +1,7 @@
 # Energy Auditing Field Application
 
 ## Overview
-This full-stack energy auditing field application optimizes energy auditing workflows for field inspectors. It enables management of inspections, job tracking, event scheduling, and report generation. Key capabilities include outdoor readability, offline-first operation, rapid data entry, enhanced data accuracy via photo documentation and OCR, and robust analytics. The project aims to provide a comprehensive, user-friendly, and powerful mobile solution for field operations, offering significant market potential by streamlining energy audit processes and improving data reliability for field inspectors. The application has achieved a 40/40 production standard, signifying AAA-level quality and readiness for deployment.
+This full-stack energy auditing field application optimizes energy auditing workflows for field inspectors. It enables management of inspections, job tracking, event scheduling, and report generation. Key capabilities include outdoor readability, offline-first operation, rapid data entry, enhanced data accuracy via photo documentation and OCR, and robust analytics. The project aims to provide a comprehensive, user-friendly, and powerful mobile solution for field operations, offering significant market potential by streamlining energy audit processes and improving data reliability. The application has achieved a 40/40 production standard, signifying AAA-level quality and readiness for deployment.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
