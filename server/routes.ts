@@ -11654,7 +11654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Background Job Monitoring Endpoints (Phase 4: Production Readiness) =====
   
   // Get all background jobs with status
-  app.get("/api/admin/background-jobs", isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.get("/api/admin/background-jobs", isAuthenticated, requireRole('admin'), async (req, res) => {
     try {
       serverLogger.info('[Route/GET /api/admin/background-jobs] Fetching background jobs');
       
@@ -11673,7 +11673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get execution history for a specific job
-  app.get("/api/admin/background-jobs/:jobName/executions", isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.get("/api/admin/background-jobs/:jobName/executions", isAuthenticated, requireRole('admin'), async (req, res) => {
     try {
       const { jobName } = req.params;
       const { limit } = req.query;
@@ -11705,7 +11705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get recent executions across all jobs
-  app.get("/api/admin/background-jobs/executions/recent", isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.get("/api/admin/background-jobs/executions/recent", isAuthenticated, requireRole('admin'), async (req, res) => {
     try {
       const { limit } = req.query;
       
@@ -11730,7 +11730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update job configuration (enable/disable)
-  app.patch("/api/admin/background-jobs/:jobName", isAuthenticated, requireRole(['admin']), async (req: any, res) => {
+  app.patch("/api/admin/background-jobs/:jobName", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       const { jobName } = req.params;
       const { enabled } = req.body;
