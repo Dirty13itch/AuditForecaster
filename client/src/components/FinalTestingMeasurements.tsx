@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Save, Loader2, Calculator, ThermometerSun, Wind, Ruler, Lightbulb, Network, Upload } from "lucide-react";
+import { Save, Loader2, Calculator, ThermometerSun, Wind, Ruler, Lightbulb, Network, Upload, Camera, X, Eye } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { safeToFixed, safeDivide } from "@shared/numberUtils";
-import type { Forecast } from "@shared/schema";
+import { clientLogger } from "@/lib/logger";
+import { PhotoCapture } from "@/components/PhotoCapture";
+import { PhotoViewerDialog } from "@/components/photos/PhotoViewerDialog";
+import type { Forecast, Photo } from "@shared/schema";
 
 const measurementSchema = z.object({
   cfm50: z.coerce.number().min(0, "CFM50 must be positive").optional(),
@@ -53,6 +57,8 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
   const [calculatedACH50, setCalculatedACH50] = useState<number | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importText, setImportText] = useState("");
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
 
   const { data: existingForecast } = useQuery<Forecast | null>({
     queryKey: ["/api/forecasts", jobId],
@@ -65,6 +71,44 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
       return data.length > 0 ? data[0] : null;
     },
     enabled: !!jobId,
+  });
+
+  // Query for manometer photos
+  const { data: manometerPhotos = [], refetch: refetchPhotos } = useQuery<Photo[]>({
+    queryKey: ["/api/photos", jobId, "duct-test-manometer"],
+    queryFn: async () => {
+      const response = await fetch(`/api/photos?jobId=${jobId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) return [];
+      const allPhotos = await response.json();
+      // Filter for duct-test-manometer tagged photos
+      return allPhotos.filter((photo: Photo) => 
+        photo.tags?.includes("duct-test-manometer")
+      );
+    },
+    enabled: !!jobId,
+  });
+
+  // Delete photo mutation
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (photoId: string) => {
+      return apiRequest("DELETE", `/api/photos/${photoId}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/photos", jobId, "duct-test-manometer"] });
+      toast({
+        title: "Photo deleted",
+        description: "Manometer photo has been removed successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete failed",
+        description: error.message || "Failed to delete photo. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const form = useForm<MeasurementFormValues>({
@@ -169,6 +213,57 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
 
   const onSubmit = (data: MeasurementFormValues) => {
     saveMeasurementsMutation.mutate(data);
+  };
+
+  const handlePhotoUploadComplete = async () => {
+    try {
+      // Fetch all photos for this job to find the most recently uploaded one
+      const response = await fetch(`/api/photos?jobId=${jobId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch photos");
+      
+      const allPhotos: Photo[] = await response.json();
+      
+      // Find photos that were just uploaded (within last 10 seconds) and don't have the tag yet
+      const tenSecondsAgo = new Date(Date.now() - 10000);
+      const recentPhotos = allPhotos.filter(photo => {
+        const uploadedAt = new Date(photo.uploadedAt);
+        const hasTag = photo.tags?.includes("duct-test-manometer");
+        return uploadedAt > tenSecondsAgo && !hasTag;
+      });
+
+      // Tag each recent photo
+      for (const photo of recentPhotos) {
+        const existingTags = photo.tags || [];
+        await apiRequest("PATCH", `/api/photos/${photo.id}`, {
+          tags: [...existingTags, "duct-test-manometer"],
+        });
+      }
+
+      // Refetch to show the newly tagged photos
+      await refetchPhotos();
+      setShowPhotoUpload(false);
+      
+      toast({
+        title: "Photo uploaded",
+        description: `${recentPhotos.length} manometer photo(s) added successfully.`,
+      });
+    } catch (error) {
+      clientLogger.error("[FinalTestingMeasurements] Failed to tag uploaded photos:", error);
+      // Still refetch and close dialog even if tagging failed
+      await refetchPhotos();
+      setShowPhotoUpload(false);
+      toast({
+        title: "Photo uploaded",
+        description: "Photo uploaded but may need manual tagging.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeletePhoto = (photoId: string) => {
+    deletePhotoMutation.mutate(photoId);
   };
 
   const parseTECAutoTestOutput = (text: string): { cfm50?: number; ach50?: number; buildingVolume?: number } => {
@@ -396,102 +491,44 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
 
             <Separator />
 
-            {/* Duct Blaster Test Section */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Ruler className="h-4 w-4" />
-                Duct Blaster Test
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="actualTDL"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center justify-between">
-                        <span>Total Duct Leakage (TDL)</span>
-                        {actualTDL !== undefined && (
-                          <Badge variant={tdlPass ? "default" : "destructive"} className="text-xs">
-                            {tdlPass ? "Pass" : "Fail"} (≤200 CFM25)
-                          </Badge>
-                        )}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          placeholder="0.0"
-                          {...field}
-                          value={field.value ?? ""}
-                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          data-testid="input-tdl"
-                        />
-                      </FormControl>
-                      <FormDescription>CFM25 - Total system leakage</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="actualDLO"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center justify-between">
-                        <span>Duct Leakage to Outside (DLO)</span>
-                        {actualDLO !== undefined && (
-                          <Badge variant={dloPass ? "default" : "destructive"} className="text-xs">
-                            {dloPass ? "Pass" : "Fail"} (≤50 CFM25)
-                          </Badge>
-                        )}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          placeholder="0.0"
-                          {...field}
-                          value={field.value ?? ""}
-                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          data-testid="input-dlo"
-                        />
-                      </FormControl>
-                      <FormDescription>CFM25 - Leakage to unconditioned space</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            {/* Simplified Duct Leakage Test Section with Photo Documentation */}
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2 mb-2">
+                  <Ruler className="h-5 w-5" />
+                  Duct Leakage Test
+                </h3>
+                <Alert>
+                  <Camera className="h-4 w-4" />
+                  <AlertDescription>
+                    Enter CFM values from manometer and upload photos of display
+                  </AlertDescription>
+                </Alert>
               </div>
-            </div>
 
-            <Separator />
-
-            {/* Detailed Duct Leakage Measurements */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Ruler className="h-4 w-4" />
-                Detailed Duct Leakage (CFM25)
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* CFM Value Inputs - Prominent and Touch-Friendly */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
                   name="totalDuctLeakageCfm25"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Total Duct Leakage CFM25</FormLabel>
+                      <FormLabel className="text-base font-semibold">Total Duct Leakage (CFM)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           step="0.1"
-                          placeholder="0.0"
+                          placeholder="Enter CFM value"
                           {...field}
                           value={field.value ?? ""}
                           onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          data-testid="input-total-duct-leakage"
+                          data-testid="input-total-duct-leakage-cfm"
+                          className="text-lg font-medium"
                         />
                       </FormControl>
-                      <FormDescription>All leaks in duct system at 25 Pa</FormDescription>
+                      <FormDescription className="text-sm">
+                        Total system leakage at 25 Pascals
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -502,48 +539,124 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
                   name="ductLeakageToOutsideCfm25"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Duct Leakage to Outside CFM25</FormLabel>
+                      <FormLabel className="text-base font-semibold">Leakage to Outside (CFM)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           step="0.1"
-                          placeholder="0.0"
+                          placeholder="Enter CFM value"
                           {...field}
                           value={field.value ?? ""}
                           onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          data-testid="input-duct-leakage-outside"
+                          data-testid="input-duct-leakage-outside-cfm"
+                          className="text-lg font-medium"
                         />
                       </FormControl>
-                      <FormDescription>Leaks to unconditioned space at 25 Pa</FormDescription>
+                      <FormDescription className="text-sm">
+                        Leakage to unconditioned space at 25 Pascals
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
-                <FormField
-                  control={form.control}
-                  name="aerosealed"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          data-testid="checkbox-aerosealed"
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>
-                          Aerosealed Duct System
-                        </FormLabel>
-                        <FormDescription>
-                          Check if ducts have been professionally sealed with Aeroseal
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
-                />
               </div>
+
+              {/* Manometer Photos Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <h4 className="text-base font-semibold">Manometer Photos</h4>
+                  <Button
+                    type="button"
+                    onClick={() => setShowPhotoUpload(true)}
+                    data-testid="button-add-manometer-photo"
+                    className="flex items-center gap-2"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Add Manometer Photo
+                  </Button>
+                </div>
+
+                {/* Photo Grid Display */}
+                {manometerPhotos.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {manometerPhotos.map((photo) => (
+                      <Card
+                        key={photo.id}
+                        className="relative overflow-hidden group"
+                        data-testid={`card-manometer-photo-${photo.id}`}
+                      >
+                        <div className="aspect-square relative">
+                          <img
+                            src={photo.thumbnailPath || photo.fullUrl || photo.filePath}
+                            alt={photo.caption || "Manometer reading"}
+                            className="w-full h-full object-cover"
+                          />
+                          
+                          {/* Action Buttons Overlay */}
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              onClick={() => setSelectedPhoto(photo)}
+                              data-testid={`button-view-photo-${photo.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="destructive"
+                              onClick={() => handleDeletePhoto(photo.id)}
+                              disabled={deletePhotoMutation.isPending}
+                              data-testid={`button-delete-photo-${photo.id}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        {/* Photo Caption/Date */}
+                        {photo.caption && (
+                          <div className="p-2 text-xs text-muted-foreground truncate">
+                            {photo.caption}
+                          </div>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                    <Camera className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      No manometer photos yet. Add photos of your readings.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Optional: Aerosealed Checkbox */}
+              <FormField
+                control={form.control}
+                name="aerosealed"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="checkbox-aerosealed"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>
+                        Aerosealed Duct System
+                      </FormLabel>
+                      <FormDescription>
+                        Check if ducts have been professionally sealed with Aeroseal
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
             </div>
 
             <Separator />
@@ -910,6 +1023,66 @@ export function FinalTestingMeasurements({ jobId }: FinalTestingMeasurementsProp
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Photo Upload Dialog */}
+      <Dialog open={showPhotoUpload} onOpenChange={setShowPhotoUpload}>
+        <DialogContent className="sm:max-w-[600px]" data-testid="dialog-manometer-photo-upload">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              Add Manometer Photo
+            </DialogTitle>
+            <DialogDescription>
+              Take or upload photos of the manometer display showing duct leakage readings.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <PhotoCapture
+              jobId={jobId}
+              bucketPath="photos/duct-test-manometer"
+              onUploadComplete={handlePhotoUploadComplete}
+              showGalleryByDefault={true}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowPhotoUpload(false)}
+              data-testid="button-close-photo-upload"
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Photo Viewer Dialog */}
+      {selectedPhoto && (
+        <PhotoViewerDialog
+          photo={selectedPhoto}
+          photos={manometerPhotos}
+          onClose={() => setSelectedPhoto(null)}
+          onDelete={(photoId) => {
+            handleDeletePhoto(photoId);
+            setSelectedPhoto(null);
+          }}
+          onNext={() => {
+            const currentIndex = manometerPhotos.findIndex(p => p.id === selectedPhoto.id);
+            if (currentIndex < manometerPhotos.length - 1) {
+              setSelectedPhoto(manometerPhotos[currentIndex + 1]);
+            }
+          }}
+          onPrevious={() => {
+            const currentIndex = manometerPhotos.findIndex(p => p.id === selectedPhoto.id);
+            if (currentIndex > 0) {
+              setSelectedPhoto(manometerPhotos[currentIndex - 1]);
+            }
+          }}
+        />
+      )}
     </Card>
   );
 }
