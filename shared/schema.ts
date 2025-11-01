@@ -102,6 +102,9 @@ export const builders = pgTable("builders", {
   autoCreatedFromEvent: boolean("auto_created_from_event").default(false),
   needsReview: boolean("needs_review").default(false),
   confidence: integer("confidence"), // 0-100 score from parser
+  constructionManagerName: text("construction_manager_name"),
+  constructionManagerEmail: text("construction_manager_email"),
+  constructionManagerPhone: text("construction_manager_phone"),
   createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [

@@ -54,7 +54,7 @@ function UnbilledWorkTrackerContent() {
   // Filter for completed unbilled jobs
   const unbilledJobs = useMemo(() => {
     return allJobs.filter(job => {
-      const isCompleted = job.status === "completed" || job.fieldWorkComplete;
+      const isCompleted = job.status === "done" || job.fieldWorkComplete;
       const isUnbilled = !job.billedInInvoiceId;
       const hasBuilder = selectedBuilder === "all" || job.builderId === selectedBuilder;
       return isCompleted && isUnbilled && hasBuilder;

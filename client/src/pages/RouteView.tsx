@@ -83,7 +83,9 @@ function DraggableJobCard({ job, index, moveJob, isCustomSort }: DraggableJobCar
 
   const statusColors: Record<string, string> = {
     'scheduled': 'bg-blue-500',
-    'in-progress': 'bg-blue-600',
+    'reschedule': 'bg-yellow-500',
+    'done': 'bg-green-600',
+    'failed': 'bg-red-600',
   };
 
   const priorityVariants: Record<string, 'default' | 'secondary' | 'destructive'> = {
@@ -215,7 +217,7 @@ function RouteViewContent() {
       jobDate.setHours(0, 0, 0, 0);
       
       const isToday = jobDate.getTime() === today.getTime();
-      const isActive = job.status === 'scheduled' || job.status === 'in-progress';
+      const isActive = job.status === 'scheduled' || job.status === 'reschedule';
       
       return isToday && isActive;
     });
@@ -493,7 +495,7 @@ function RouteViewContent() {
               <MapPin className="w-16 h-16 text-muted-foreground mb-4" data-testid="icon-empty-map" />
               <h2 className="text-xl font-semibold mb-2" data-testid="text-empty-title">No Jobs Scheduled Today</h2>
               <p className="text-muted-foreground max-w-md" data-testid="text-empty-description">
-                You have no scheduled or in-progress jobs for today. Jobs will appear here once they're scheduled.
+                You have no scheduled or pending jobs for today. Jobs will appear here once they're scheduled.
               </p>
             </div>
           ) : (

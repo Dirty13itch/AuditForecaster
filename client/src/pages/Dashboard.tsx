@@ -80,10 +80,10 @@ const THRESHOLDS = {
 
 // Phase 6 - DOCUMENT: Status colors for job states (consistent with design system)
 const STATUS_COLORS = {
-  completed: "hsl(var(--success))",
-  "in-progress": "hsl(var(--primary))",
-  review: "hsl(var(--warning))",
-  pending: "hsl(var(--secondary))",
+  done: "hsl(var(--success))",
+  scheduled: "hsl(var(--secondary))",
+  failed: "hsl(var(--warning))",
+  reschedule: "hsl(var(--primary))",
 } as const;
 
 // Phase 6 - DOCUMENT: Generate sparkline trend data for metric cards
@@ -355,10 +355,10 @@ function DashboardContent() {
       return jobDate >= lastMonthStart && jobDate <= lastMonthEnd;
     });
 
-    const completedJobs = jobs.filter(j => j.status === "completed");
+    const completedJobs = jobs.filter(j => j.status === "done");
 
-    const jobsCompleted = thisMonthJobs.filter(j => j.status === "completed").length;
-    const jobsCompletedLastMonth = lastMonthJobs.filter(j => j.status === "completed").length;
+    const jobsCompleted = thisMonthJobs.filter(j => j.status === "done").length;
+    const jobsCompletedLastMonth = lastMonthJobs.filter(j => j.status === "done").length;
     
     // Phase 6 - DOCUMENT: Trend calculation - percentage change from previous period
     // Phase 5 - HARDEN: safeDivide prevents NaN when last month had zero jobs
@@ -471,8 +471,8 @@ function DashboardContent() {
       const builderJobs = jobs.filter(j => j.builderId === builder.id);
       return {
         name: builder.name,
-        completed: builderJobs.filter(j => j.status === "completed").length,
-        pending: builderJobs.filter(j => j.status === "pending").length,
+        completed: builderJobs.filter(j => j.status === "done").length,
+        pending: builderJobs.filter(j => j.status === "scheduled").length,
         compliance: 0,
         completionRate: 0,
         avgCompletionTime: 0,
@@ -481,10 +481,10 @@ function DashboardContent() {
   }, [builderPerformance, builders, jobs]);
 
   const jobStatusData = useMemo(() => [
-    { name: "Completed", value: jobs.filter(j => j.status === "completed").length, color: STATUS_COLORS.completed },
-    { name: "In Progress", value: jobs.filter(j => j.status === "in-progress").length, color: STATUS_COLORS["in-progress"] },
-    { name: "Review", value: jobs.filter(j => j.status === "review").length, color: STATUS_COLORS.review },
-    { name: "Pending", value: jobs.filter(j => j.status === "pending").length, color: STATUS_COLORS.pending },
+    { name: "Done", value: jobs.filter(j => j.status === "done").length, color: STATUS_COLORS.done },
+    { name: "Scheduled", value: jobs.filter(j => j.status === "scheduled").length, color: STATUS_COLORS.scheduled },
+    { name: "Failed", value: jobs.filter(j => j.status === "failed").length, color: STATUS_COLORS.failed },
+    { name: "Reschedule", value: jobs.filter(j => j.status === "reschedule").length, color: STATUS_COLORS.reschedule },
   ], [jobs]);
 
   const revenueExpenseData = useMemo(() => {

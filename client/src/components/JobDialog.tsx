@@ -102,7 +102,7 @@ export default function JobDialog({
       pricing: job?.pricing ? parseFloat(job.pricing as any) : undefined,
       scheduledDate: job?.scheduledDate ? new Date(job.scheduledDate) : undefined,
       priority: (job?.priority as "low" | "medium" | "high") || "medium",
-      status: job?.status || "pending",
+      status: job?.status || "scheduled",
       latitude: job?.latitude || undefined,
       longitude: job?.longitude || undefined,
       floorArea: job?.floorArea ? parseFloat(job.floorArea as any) : undefined,

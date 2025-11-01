@@ -118,11 +118,10 @@ function DraggableJobCard({ job }: DraggableJobCardProps) {
   }), [job]);
 
   const statusColors = {
-    'pending': 'bg-yellow-500',
-    'scheduled': 'bg-blue-500',
-    'in-progress': 'bg-blue-600',
-    'completed': 'bg-green-500',
-    'review': 'bg-orange-500',
+    'scheduled': 'bg-yellow-500',
+    'done': 'bg-green-500',
+    'failed': 'bg-orange-500',
+    'reschedule': 'bg-blue-500',
   };
 
   const priorityLabels = {

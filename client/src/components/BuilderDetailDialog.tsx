@@ -95,11 +95,11 @@ export function BuilderDetailDialog({
   };
 
   const activeJobs = jobs.filter(
-    (job) => job.builderId === builder.id && job.status !== "completed"
+    (job) => job.builderId === builder.id && job.status !== "done"
   );
 
   const completedJobs = jobs.filter(
-    (job) => job.builderId === builder.id && job.status === "completed"
+    (job) => job.builderId === builder.id && job.status === "done"
   );
 
   return (
@@ -228,7 +228,7 @@ export function BuilderDetailDialog({
                           </p>
                         </div>
                         <Badge
-                          variant={job.status === "in-progress" ? "default" : "secondary"}
+                          variant={job.status === "scheduled" || job.status === "reschedule" ? "default" : "secondary"}
                           data-testid={`badge-job-status-${job.id}`}
                         >
                           {job.status}

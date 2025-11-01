@@ -52,10 +52,10 @@ import ExportDialog from "@/components/ExportDialog";
 
 // Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
 const STATUS_COLORS = {
-  pending: "#FFC107",
-  "in-progress": "#2E5BBA",
-  review: "#FD7E14",
-  completed: "#28A745",
+  scheduled: "#FFC107",
+  done: "#28A745",
+  failed: "#FD7E14",
+  reschedule: "#2E5BBA",
 } as const;
 
 const ISSUE_COLORS = [
@@ -194,7 +194,7 @@ function AnalyticsContent() {
   
   // Phase 3 - OPTIMIZE: Memoized completed jobs calculation
   const completedJobs = useMemo(() => {
-    return jobsInRange.filter(j => j.status === "completed" && j.completedDate && j.scheduledDate);
+    return jobsInRange.filter(j => j.status === "done" && j.completedDate && j.scheduledDate);
   }, [jobsInRange]);
   
   // Phase 6 - DOCUMENT: Average inspection time calculation
@@ -215,7 +215,7 @@ function AnalyticsContent() {
   // Phase 5 - HARDEN: Prevents division by zero
   const completionRate = useMemo(() => {
     if (totalInspections === 0) return 0;
-    return (jobsInRange.filter(j => j.status === "completed").length / totalInspections) * 100;
+    return (jobsInRange.filter(j => j.status === "done").length / totalInspections) * 100;
   }, [jobsInRange, totalInspections]);
 
   // Phase 6 - DOCUMENT: Average items per inspection metric
@@ -266,7 +266,7 @@ function AnalyticsContent() {
   // Phase 6 - DOCUMENT: Common issues calculation
   // Identifies most frequently failed checklist items from completed jobs
   const commonIssues = useMemo(() => {
-    const completedJobIds = jobsInRange.filter(j => j.status === 'completed').map(j => j.id);
+    const completedJobIds = jobsInRange.filter(j => j.status === 'done').map(j => j.id);
     const failedItems = checklistItems.filter(item => 
       !item.completed && completedJobIds.includes(item.jobId)
     );
@@ -283,7 +283,7 @@ function AnalyticsContent() {
       return acc;
     }, {} as Record<string, { count: number; photoRequired: boolean }>);
 
-    const completedInspections = jobsInRange.filter(j => j.status === 'completed').length;
+    const completedInspections = jobsInRange.filter(j => j.status === 'done').length;
     
     return Object.entries(issueFrequency)
       .map(([name, data]) => ({
@@ -391,10 +391,10 @@ function AnalyticsContent() {
 
       return {
         month,
-        Pending: jobsInMonth.filter(j => j.status === 'pending').length,
-        'In Progress': jobsInMonth.filter(j => j.status === 'in-progress').length,
-        Review: jobsInMonth.filter(j => j.status === 'review').length,
-        Completed: jobsInMonth.filter(j => j.status === 'completed').length,
+        Scheduled: jobsInMonth.filter(j => j.status === 'scheduled').length,
+        Done: jobsInMonth.filter(j => j.status === 'done').length,
+        Failed: jobsInMonth.filter(j => j.status === 'failed').length,
+        Reschedule: jobsInMonth.filter(j => j.status === 'reschedule').length,
       };
     });
   }, [monthsInRange, jobs, isInDateRange]);
@@ -458,7 +458,7 @@ function AnalyticsContent() {
   const builderStats = useMemo(() => {
     return builders.map(builder => {
       const builderJobs = jobsInRange.filter(j => j.builderId === builder.id);
-      const completedBuilderJobs = builderJobs.filter(j => j.status === 'completed');
+      const completedBuilderJobs = builderJobs.filter(j => j.status === 'done');
       
       // Phase 5 - HARDEN: Safe division prevents NaN values
       const completionRate = builderJobs.length > 0
@@ -1259,7 +1259,7 @@ function AnalyticsContent() {
             <CardContent>
               {isLoading ? (
                 <Skeleton className="h-[300px] w-full" data-testid="skeleton-status-breakdown" />
-              ) : statusBreakdownData.some(d => d.Pending + d['In Progress'] + d.Review + d.Completed > 0) ? (
+              ) : statusBreakdownData.some(d => d.Scheduled + d.Done + d.Failed + d.Reschedule > 0) ? (
                 <ResponsiveContainer width="100%" height={300} data-testid="chart-status-breakdown">
                   <AreaChart data={statusBreakdownData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -1269,31 +1269,31 @@ function AnalyticsContent() {
                     <Legend />
                     <Area
                       type="monotone"
-                      dataKey="Pending"
+                      dataKey="Scheduled"
                       stackId="1"
-                      stroke={STATUS_COLORS.pending}
-                      fill={STATUS_COLORS.pending}
+                      stroke={STATUS_COLORS.scheduled}
+                      fill={STATUS_COLORS.scheduled}
                     />
                     <Area
                       type="monotone"
-                      dataKey="In Progress"
+                      dataKey="Done"
                       stackId="1"
-                      stroke={STATUS_COLORS["in-progress"]}
-                      fill={STATUS_COLORS["in-progress"]}
+                      stroke={STATUS_COLORS.done}
+                      fill={STATUS_COLORS.done}
                     />
                     <Area
                       type="monotone"
-                      dataKey="Review"
+                      dataKey="Failed"
                       stackId="1"
-                      stroke={STATUS_COLORS.review}
-                      fill={STATUS_COLORS.review}
+                      stroke={STATUS_COLORS.failed}
+                      fill={STATUS_COLORS.failed}
                     />
                     <Area
                       type="monotone"
-                      dataKey="Completed"
+                      dataKey="Reschedule"
                       stackId="1"
-                      stroke={STATUS_COLORS.completed}
-                      fill={STATUS_COLORS.completed}
+                      stroke={STATUS_COLORS.reschedule}
+                      fill={STATUS_COLORS.reschedule}
                     />
                   </AreaChart>
                 </ResponsiveContainer>

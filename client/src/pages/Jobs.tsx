@@ -41,10 +41,10 @@ import {
 // Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
 // Status colors for job states
 const STATUS_COLORS = {
-  pending: "warning",
-  "in-progress": "info",
-  completed: "success",
-  review: "secondary",
+  scheduled: "warning",
+  done: "success",
+  failed: "secondary",
+  reschedule: "info",
 } as const;
 
 // Default pagination sizes
