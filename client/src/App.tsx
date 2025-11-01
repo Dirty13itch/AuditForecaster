@@ -100,6 +100,7 @@ const ComplianceDocumentsLibrary = lazy(() => import("@/pages/compliance/Complia
 const ComplianceHub = lazy(() => import("@/pages/ComplianceHub"));
 const FieldDay = lazy(() => import("@/pages/FieldDay"));
 const SettingsHub = lazy(() => import("@/pages/SettingsHub"));
+const OfflineTest = lazy(() => import("@/pages/offline-test"));
 
 const LoadingFallback = () => (
   <div className="flex h-full items-center justify-center">
@@ -321,6 +322,11 @@ function Router() {
       <Route path="/settings" component={() => (
         <RouteErrorBoundary>
           <SettingsPage />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/offline-test" component={() => (
+        <RouteErrorBoundary>
+          <OfflineTest />
         </RouteErrorBoundary>
       )} />
       <Route path="/settings-hub" component={() => (
