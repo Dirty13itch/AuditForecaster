@@ -508,9 +508,58 @@ async function upsertUserAndStoreInSession(claims: any): Promise<SessionUser> {
     userData.role = "admin";
     serverLogger.info(`[Auth] ENFORCING ADMIN ROLE for critical user ${email} (ID: ${id})`);
   } else if (!existingUser) {
-    // For new users (not critical admin), set default role
-    userData.role = "inspector"; // Default role for new users
-    serverLogger.info(`[Auth] Setting default role for new user ${email}: inspector`);
+    // For new users (not critical admin), determine role assignment
+    const claimedRole = claims["roles"]?.[0] || claims["role"];
+    const validNonPrivilegedRoles = ["inspector", "viewer"];
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const allowTestingAdmin = isDevelopment && !process.env.DISABLE_OIDC_ADMIN_CLAIMS;
+    
+    // SECURITY: Multi-layered role assignment with explicit rejection of unknown roles
+    if (claimedRole === "admin" && allowTestingAdmin) {
+      // TESTING ONLY: Allow admin role from OIDC in development (can be disabled via env var)
+      userData.role = "admin";
+      serverLogger.warn(`[Auth/Security] DEVELOPMENT/TESTING: Admin role from OIDC claims for ${email}`, {
+        context: 'OIDCRoleAssignment',
+        claimedRole,
+        email,
+        userId: id,
+        environment: process.env.NODE_ENV,
+        sessionId: claims.jti || claims.sid || 'unknown',
+        requestId: (claims as any).requestId || 'unknown',
+      });
+    } else if (claimedRole && validNonPrivilegedRoles.includes(claimedRole)) {
+      // Accept valid non-privileged roles from OIDC claims
+      userData.role = claimedRole;
+      serverLogger.info(`[Auth] Role from OIDC claims: ${claimedRole}`, {
+        context: 'OIDCRoleAssignment',
+        claimedRole,
+        email,
+        userId: id,
+        sessionId: claims.jti || claims.sid || 'unknown',
+        requestId: (claims as any).requestId || 'unknown',
+      });
+    } else if (claimedRole && !validNonPrivilegedRoles.includes(claimedRole)) {
+      // SECURITY: Explicitly reject unknown roles - assign minimal "viewer" role
+      userData.role = "viewer";
+      serverLogger.warn(`[Auth/Security] REJECTED unknown OIDC role claim "${claimedRole}" for ${email}, assigned minimal "viewer" role`, {
+        context: 'RejectedOIDCRole',
+        claimedRole,
+        email,
+        userId: id,
+        sessionId: claims.jti || claims.sid || 'unknown',
+        requestId: (claims as any).requestId || 'unknown',
+      });
+    } else {
+      // No role claim provided - use default
+      userData.role = "inspector";
+      serverLogger.info(`[Auth] No role claim, using default: inspector`, {
+        context: 'DefaultRoleAssignment',
+        email,
+        userId: id,
+        sessionId: claims.jti || claims.sid || 'unknown',
+        requestId: (claims as any).requestId || 'unknown',
+      });
+    }
   }
   // If user exists and is not critical admin, preserve their existing role by not including it
   
