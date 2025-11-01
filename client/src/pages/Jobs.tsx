@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ListItemSkeleton, DashboardCardSkeleton } from "@/components/ui/skeleton-variants";
+import { JobListLoadingFallback, CalendarEventsLoadingFallback } from "@/components/LoadingStates";
 import { 
   FadeIn, 
   FadeInUp, 
@@ -654,11 +654,7 @@ function JobsContent() {
             </AccordionTrigger>
             <AccordionContent className="px-6 pb-6 pt-2">
               {isLoadingPlanned ? (
-                <div className="space-y-3" data-testid="skeleton-planned-events">
-                  {Array.from({ length: SKELETON_COUNTS.plannedEvents }).map((_, i) => (
-                    <ListItemSkeleton key={i} />
-                  ))}
-                </div>
+                <CalendarEventsLoadingFallback count={SKELETON_COUNTS.plannedEvents} />
               ) : plannedEventsError ? (
                 <Alert variant="destructive" data-testid="alert-error-planned-events">
                   <AlertCircle className="h-4 w-4" />
@@ -764,11 +760,7 @@ function JobsContent() {
           </AccordionTrigger>
           <AccordionContent className="px-6 pb-6 pt-2">
             {isLoadingTodays ? (
-              <div className="space-y-3" data-testid="skeleton-todays-jobs">
-                {Array.from({ length: SKELETON_COUNTS.todaysJobs }).map((_, i) => (
-                  <DashboardCardSkeleton key={i} />
-                ))}
-              </div>
+              <JobListLoadingFallback count={SKELETON_COUNTS.todaysJobs} />
             ) : todaysJobsError ? (
               <Alert variant="destructive" data-testid="alert-error-todays-jobs">
                 <AlertCircle className="h-4 w-4" />
@@ -846,11 +838,7 @@ function JobsContent() {
           </AccordionTrigger>
           <AccordionContent className="px-6 pb-6 pt-2">
             {isLoadingCompleted ? (
-              <div className="space-y-3" data-testid="skeleton-completed-today">
-                {Array.from({ length: SKELETON_COUNTS.completedToday }).map((_, i) => (
-                  <DashboardCardSkeleton key={i} />
-                ))}
-              </div>
+              <JobListLoadingFallback count={SKELETON_COUNTS.completedToday} />
             ) : completedTodayError ? (
               <Alert variant="destructive" data-testid="alert-error-completed-today">
                 <AlertCircle className="h-4 w-4" />
@@ -928,11 +916,7 @@ function JobsContent() {
           </AccordionTrigger>
           <AccordionContent className="px-6 pb-6 pt-2">
             {isLoadingAll ? (
-              <div className="space-y-3" data-testid="skeleton-all-jobs">
-                {Array.from({ length: SKELETON_COUNTS.allJobs }).map((_, i) => (
-                  <DashboardCardSkeleton key={i} />
-                ))}
-              </div>
+              <JobListLoadingFallback count={SKELETON_COUNTS.allJobs} />
             ) : allJobsError ? (
               <Alert variant="destructive" data-testid="alert-error-all-jobs">
                 <AlertCircle className="h-4 w-4" />

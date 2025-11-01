@@ -6,7 +6,6 @@ import { Calendar, MapPin, Building2, CheckCircle2, XCircle, CalendarClock, Load
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -15,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { SwipeableFieldDayCard } from "@/components/SwipeableFieldDayCard";
 import { JOB_TYPE_DISPLAY_NAMES } from "@shared/hersInspectionTypes";
 import { VirtualList } from "@/components/ui/virtual-grid";
+import { JobListLoadingFallback } from "@/components/LoadingStates";
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => format(new Date(), 'yyyy-MM-dd');
@@ -37,32 +37,6 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   failed: { label: "Failed", variant: "destructive", color: "bg-red-500" },
   reschedule: { label: "Reschedule", variant: "outline", color: "bg-orange-500" }
 };
-
-function JobListSkeleton({ count = 3 }: { count?: number }) {
-  return (
-    <div className="space-y-4">
-      {Array.from({ length: count }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader className="pb-3">
-            <Skeleton className="h-6 w-3/4" />
-            <Skeleton className="h-4 w-full mt-2" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Skeleton className="h-6 w-24" />
-              <Skeleton className="h-6 w-20" />
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
 
 export default function FieldDay() {
   const { user } = useAuth();
@@ -173,7 +147,7 @@ export default function FieldDay() {
         </div>
 
         {isLoadingMyJobs ? (
-          <JobListSkeleton />
+          <JobListLoadingFallback count={3} />
         ) : myJobs && myJobs.length > 0 ? (
           <VirtualList
             items={myJobs}
@@ -229,7 +203,7 @@ export default function FieldDay() {
           </p>
 
           {isLoadingAllJobs ? (
-            <JobListSkeleton count={5} />
+            <JobListLoadingFallback count={5} />
           ) : allJobs && allJobs.length > 0 ? (
             <VirtualList
               items={allJobs}

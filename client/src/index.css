@@ -102,6 +102,10 @@
   --shadow-2xl: 0px 2px 0px 0px hsl(210 10% 15% / 0.00);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+  
+  /* Skeleton loading colors */
+  --skeleton-base: 210 8% 91%;
+  --skeleton-shimmer: 210 8% 96%;
 
   /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
 
@@ -137,6 +141,10 @@
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
+  
+  /* Skeleton loading colors for dark mode */
+  --skeleton-base: 210 10% 20%;
+  --skeleton-shimmer: 210 10% 25%;
 
   --opaque-button-border-intensity: 9;  /* In terms of percentages */
 
@@ -482,5 +490,15 @@
 
   .rbc-addons-dnd .rbc-event.rbc-addons-dnd-dragging {
     opacity: 0.5;
+  }
+}
+
+/* Shimmer animation for skeleton screens */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
   }
 }

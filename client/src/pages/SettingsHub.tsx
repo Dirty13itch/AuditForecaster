@@ -16,8 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SettingsLoadingFallback } from "@/components/LoadingStates";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
@@ -503,11 +503,7 @@ export default function SettingsHub() {
             </CardHeader>
             <CardContent>
               {orgLoading ? (
-                <div className="space-y-4">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
+                <SettingsLoadingFallback />
               ) : (
                 <Form {...organizationForm}>
                   <form onSubmit={organizationForm.handleSubmit((data) => updateOrganizationMutation.mutate(data))} className="space-y-6">
@@ -760,11 +756,7 @@ export default function SettingsHub() {
             </CardHeader>
             <CardContent>
               {usersLoading ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
+                <SettingsLoadingFallback />
               ) : (
                 <Table>
                   <TableHeader>

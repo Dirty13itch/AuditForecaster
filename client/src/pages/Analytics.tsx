@@ -26,8 +26,9 @@ import { format, subMonths, differenceInMinutes, startOfMonth, isThisMonth, subD
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ChartLoadingFallback, DashboardLoadingFallback } from "@/components/LoadingStates";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 // Use lazy-loaded chart components to reduce initial bundle size
 import {
@@ -1183,7 +1184,7 @@ function AnalyticsContent() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <Skeleton className="h-[300px] w-full" data-testid="skeleton-inspection-volume" />
+                  <ChartLoadingFallback />
                 ) : monthlyInspectionData.some(d => d.inspections > 0) ? (
                   <ResponsiveContainer width="100%" height={300} data-testid="chart-inspection-volume">
                     <LineChart data={monthlyInspectionData}>
@@ -1221,7 +1222,7 @@ function AnalyticsContent() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <Skeleton className="h-[300px] w-full" data-testid="skeleton-photo-tags" />
+                  <ChartLoadingFallback />
                 ) : photoTagData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300} data-testid="chart-photo-tags">
                     <BarChart data={photoTagData}>
@@ -1259,7 +1260,7 @@ function AnalyticsContent() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-[300px] w-full" data-testid="skeleton-status-breakdown" />
+                <ChartLoadingFallback />
               ) : statusBreakdownData.some(d => d.Scheduled + d.Done + d.Failed + d.Reschedule > 0) ? (
                 <ResponsiveContainer width="100%" height={300} data-testid="chart-status-breakdown">
                   <AreaChart data={statusBreakdownData}>
@@ -1318,7 +1319,7 @@ function AnalyticsContent() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-[300px] w-full" data-testid="skeleton-common-issues" />
+                <ChartLoadingFallback />
               ) : commonIssues.length > 0 ? (
                 <Table data-testid="table-common-issues">
                   <TableHeader>
@@ -1377,7 +1378,7 @@ function AnalyticsContent() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-[300px] w-full" data-testid="skeleton-issues-trend" />
+                <ChartLoadingFallback />
               ) : topIssues.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300} data-testid="chart-issues-trend">
                   <LineChart data={issuesTrendData}>
@@ -1420,7 +1421,7 @@ function AnalyticsContent() {
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
-                    <Skeleton className="h-[300px] w-full" data-testid="skeleton-compliance-trends" />
+                    <ChartLoadingFallback />
                   ) : monthlyComplianceData.some(d => d.totalEvaluated > 0) ? (
                     <ResponsiveContainer width="100%" height={300} data-testid="chart-compliance-trends">
                       <LineChart data={monthlyComplianceData}>
@@ -1462,7 +1463,7 @@ function AnalyticsContent() {
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
-                    <Skeleton className="h-[300px] w-full" data-testid="skeleton-top-violations" />
+                    <ChartLoadingFallback />
                   ) : topViolationsData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={300} data-testid="chart-top-violations">
                       <BarChart data={topViolationsData}>

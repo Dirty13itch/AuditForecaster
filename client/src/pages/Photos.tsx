@@ -11,8 +11,8 @@ import BottomNav from "@/components/BottomNav";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PhotoCleanupBanner } from "@/components/PhotoCleanupBanner";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PhotoGridLoadingFallback } from "@/components/LoadingStates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -844,11 +844,7 @@ function PhotosContent() {
 
           {/* Phase 2 - BUILD: Comprehensive skeleton loaders for initial load */}
           {isLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="skeleton-photo-grid">
-              {[...Array(SKELETON_COUNTS.initialGrid)].map((_, i) => (
-                <Skeleton key={i} className="aspect-square" data-testid={`skeleton-photo-${i}`} />
-              ))}
-            </div>
+            <PhotoGridLoadingFallback count={SKELETON_COUNTS.initialGrid} />
           ) : photos.length === 0 ? (
             // Phase 2 - BUILD: Empty state with helpful messaging
             <Card data-testid="empty-photos">
@@ -911,10 +907,8 @@ function PhotosContent() {
 
               {/* Phase 2 - BUILD: Skeleton loaders for loading next page */}
               {isFetchingNextPage && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-4" data-testid="skeleton-load-more">
-                  {[...Array(SKELETON_COUNTS.loadMoreGrid)].map((_, i) => (
-                    <Skeleton key={i} className="aspect-square" data-testid={`skeleton-more-${i}`} />
-                  ))}
+                <div className="pt-4">
+                  <PhotoGridLoadingFallback count={SKELETON_COUNTS.loadMoreGrid} />
                 </div>
               )}
             </>
