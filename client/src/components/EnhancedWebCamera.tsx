@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Camera, X, RotateCw, Zap, ZapOff, Loader2, AlertTriangle } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
-import { addToSyncQueue } from "@/lib/syncQueue";
+import { addToSyncQueue } from "@/utils/syncQueue";
 import { clientLogger } from "@/lib/logger";
 import { generateHash } from "@/lib/utils";
 import type { Photo } from "@shared/schema";

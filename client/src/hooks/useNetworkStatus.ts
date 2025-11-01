@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getSyncQueueCount, processSyncQueue } from '@/lib/syncQueue';
+import { getSyncQueueCount, processSyncQueue } from '@/utils/syncQueue';
 import { clientLogger } from '@/lib/logger';
 
 export interface NetworkStatus {

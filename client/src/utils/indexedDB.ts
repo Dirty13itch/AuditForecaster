@@ -413,7 +413,7 @@ class IndexedDBManager {
   }
 
   // Sync queue operations
-  async addToSyncQueue(item: Omit<SyncQueueItem, 'id'>): Promise<void> {
+  async addToSyncQueue(item: Omit<SyncQueueItem, 'id'>): Promise<string> {
     const db = await this.getDB();
     
     const queueItem: SyncQueueItem = {
@@ -422,6 +422,7 @@ class IndexedDBManager {
     };
     
     await db.put('syncQueue', queueItem);
+    return queueItem.id;
   }
 
   async getSyncQueue(priority?: SyncPriority): Promise<SyncQueueItem[]> {

@@ -7,7 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { X, Check, ImageIcon, Loader2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
-import { addToSyncQueue } from "@/lib/syncQueue";
+import { addToSyncQueue } from "@/utils/syncQueue";
 import { clientLogger } from "@/lib/logger";
 import { generateHash } from "@/lib/utils";
 import { SmartTagSelector } from "./SmartTagSelector";
