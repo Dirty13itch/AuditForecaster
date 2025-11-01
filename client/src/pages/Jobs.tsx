@@ -446,9 +446,14 @@ function JobsContent() {
    */
   const assignJobMutation = useMutation({
     mutationFn: async ({ jobId, inspectorId }: { jobId: string; inspectorId: string }) => {
-      return apiRequest("POST", `/api/jobs/${jobId}/assign`, { inspectorId });
+      // BUGFIX: Use PUT endpoint which now handles inspectorId → assignedTo mapping
+      console.log('[Jobs] Assigning inspector:', { jobId, inspectorId });
+      const result = await apiRequest("PUT", `/api/jobs/${jobId}`, { inspectorId });
+      console.log('[Jobs] Assignment API response:', result);
+      return result;
     },
     onSuccess: async (data) => {
+      console.log('[Jobs] Assignment mutation success:', data);
       // Invalidate all job-related queries with improved predicate
       await Promise.all([
         queryClient.invalidateQueries({ 
@@ -472,6 +477,7 @@ function JobsContent() {
       });
     },
     onError: (error: Error) => {
+      console.error('[Jobs] Assignment mutation error:', error);
       toast({
         title: "Assignment Failed",
         description: error.message || "Failed to assign job",

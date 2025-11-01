@@ -2360,6 +2360,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: 'Forbidden: You can only edit your own jobs' });
       }
 
+      // BUGFIX: Map inspectorId to assignedTo for API compatibility
+      if (req.body.inspectorId !== undefined) {
+        req.body.assignedTo = req.body.inspectorId;
+        req.body.assignedAt = new Date(); // Track when inspector was assigned
+        req.body.assignedBy = req.user.id; // Track who assigned the inspector
+        delete req.body.inspectorId;
+      }
+
       const validated = insertJobSchema.partial().parse(req.body);
       // Sanitize builderId - convert empty string to undefined (which becomes null in DB)
       if (validated.builderId === '') {
