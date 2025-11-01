@@ -32,6 +32,11 @@ const menuItems = [
     icon: ClipboardList,
   },
   {
+    title: "Field Day",
+    url: "/field-day",
+    icon: Calendar,
+  },
+  {
     title: "Photos",
     url: "/photos",
     icon: Camera,

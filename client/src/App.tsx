@@ -96,6 +96,7 @@ const ZERHComplianceTracker = lazy(() => import("@/pages/compliance/ZERHComplian
 const BenchmarkingDeadlineTracker = lazy(() => import("@/pages/compliance/BenchmarkingDeadlineTracker"));
 const ComplianceDocumentsLibrary = lazy(() => import("@/pages/compliance/ComplianceDocumentsLibrary"));
 const ComplianceHub = lazy(() => import("@/pages/ComplianceHub"));
+const FieldDay = lazy(() => import("@/pages/FieldDay"));
 
 const LoadingFallback = () => (
   <div className="flex h-full items-center justify-center">
@@ -129,6 +130,11 @@ function Router() {
         }
         return null;
       }} />
+      <Route path="/field-day" component={() => (
+        <RouteErrorBoundary>
+          <FieldDay />
+        </RouteErrorBoundary>
+      )} />
       <Route path="/schedule" component={() => (
         <RouteErrorBoundary>
           <Schedule />
