@@ -122,23 +122,16 @@ export default function ExportDialog({
         ? '/api/export/qa-scores'
         : `/api/export/${dataType}`;
       
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          format: options.format,
-          dataType: dataType === 'financial' ? currentFilters?.dataType || 'invoices' : undefined,
-          columns: options.columns,
-          filters: useCurrentFilters ? currentFilters : options.filters,
-          dateRange: options.dateRange ? {
-            startDate: options.dateRange.startDate.toISOString(),
-            endDate: options.dateRange.endDate.toISOString(),
-          } : undefined,
-          fileName: options.fileName,
-        }),
+      const response = await apiRequest('POST', endpoint, {
+        format: options.format,
+        dataType: dataType === 'financial' ? currentFilters?.dataType || 'invoices' : undefined,
+        columns: options.columns,
+        filters: useCurrentFilters ? currentFilters : options.filters,
+        dateRange: options.dateRange ? {
+          startDate: options.dateRange.startDate.toISOString(),
+          endDate: options.dateRange.endDate.toISOString(),
+        } : undefined,
+        fileName: options.fileName,
       });
       
       if (!response.ok) {

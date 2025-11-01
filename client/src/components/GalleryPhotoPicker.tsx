@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { addToSyncQueue } from "@/utils/syncQueue";
 import { clientLogger } from "@/lib/logger";
 import { generateHash } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
 import { SmartTagSelector } from "./SmartTagSelector";
 import type { PhotoTag } from "@shared/photoTags";
 import type { Photo } from "@shared/schema";
@@ -299,12 +300,7 @@ export function GalleryPhotoPicker({
         };
 
         try {
-          const photoResponse = await fetch("/api/photos", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(photoData),
-            credentials: "include",
-          });
+          const photoResponse = await apiRequest("POST", "/api/photos", photoData);
 
           if (!photoResponse.ok) {
             throw new Error(`Failed to save photo metadata: ${file.name}`);
@@ -355,12 +351,7 @@ export function GalleryPhotoPicker({
         };
 
         try {
-          const sessionResponse = await fetch("/api/upload-sessions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(sessionData),
-            credentials: "include",
-          });
+          const sessionResponse = await apiRequest("POST", "/api/upload-sessions", sessionData);
 
           if (!sessionResponse.ok) {
             throw new Error("Failed to create upload session");

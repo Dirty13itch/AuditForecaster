@@ -6,6 +6,7 @@ import AwsS3 from "@uppy/aws-s3";
 import Webcam from "@uppy/webcam";
 import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 
 /**
  * Compress an image file using canvas API
@@ -179,12 +180,7 @@ export function ObjectUploader({
     if (!bucketPath) {
       throw new Error("Either onGetUploadParameters or bucketPath must be provided");
     }
-    const response = await fetch("/api/uploads/presigned-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: bucketPath }),
-      credentials: "include",
-    });
+    const response = await apiRequest("POST", "/api/uploads/presigned-url", { path: bucketPath });
     if (!response.ok) throw new Error("Failed to get upload URL");
     return response.json();
   });

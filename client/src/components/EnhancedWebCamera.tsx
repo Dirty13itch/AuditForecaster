@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { addToSyncQueue } from "@/utils/syncQueue";
 import { clientLogger } from "@/lib/logger";
 import { generateHash } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
 import type { Photo } from "@shared/schema";
 
 /**
@@ -336,12 +337,7 @@ export function EnhancedWebCamera({
       let photoQueued = false;
 
       try {
-        const photoResponse = await fetch("/api/photos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(photoData),
-          credentials: "include",
-        });
+        const photoResponse = await apiRequest("POST", "/api/photos", photoData);
 
         if (!photoResponse.ok) {
           throw new Error("Failed to save photo metadata");

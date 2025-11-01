@@ -239,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // TEMPORARY: Manual admin role override (development only)
   // This endpoint allows manually setting a user's role to admin by email
-  app.post("/api/dev/set-admin-role", async (req: any, res) => {
+  app.post("/api/dev/set-admin-role", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     // Only allow in development mode
     if (!isDevelopment()) {
       return res.status(404).json({ message: "Not found" });
@@ -9568,7 +9568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/achievements/seed", isAuthenticated, requireRole('admin'), async (req, res) => {
+  app.post("/api/achievements/seed", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req, res) => {
     try {
       const { ACHIEVEMENT_DEFINITIONS } = await import("@shared/achievementDefinitions");
       
@@ -11730,7 +11730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update job configuration (enable/disable)
-  app.patch("/api/admin/background-jobs/:jobName", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+  app.patch("/api/admin/background-jobs/:jobName", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { jobName } = req.params;
       const { enabled } = req.body;
