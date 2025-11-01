@@ -5,10 +5,11 @@ import {
   WifiOff, 
   Wifi, 
   CloudUpload, 
-  CloudCheck, 
+  Cloud, 
   Loader2, 
   RefreshCw,
-  AlertCircle 
+  AlertCircle,
+  CheckCircle2 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -66,7 +67,7 @@ export function SyncStatusBadge() {
 
   // Determine badge variant and content
   let variant: "default" | "secondary" | "destructive" | "outline" = "default";
-  let icon = <CloudCheck className="h-3.5 w-3.5" />;
+  let icon = <CheckCircle2 className="h-3.5 w-3.5" />;
   let label = "All synced";
   let showClickable = false;
   let pulseAnimation = false;

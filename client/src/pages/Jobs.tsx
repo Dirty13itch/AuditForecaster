@@ -19,6 +19,7 @@ import {
 import { useDebounce } from "@/hooks/useAnimation";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
+import { VirtualList } from "@/components/ui/virtual-grid";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder, GoogleEvent } from "@shared/schema";
@@ -792,9 +793,12 @@ function JobsContent() {
               </div>
             ) : (
               <>
-                <StaggerContainer className="space-y-3">
-                  {todaysJobs.map((job) => (
-                    <StaggerItem key={job.id}>
+                <VirtualList
+                  items={todaysJobs}
+                  height="500px"
+                  estimateSize={120}
+                  renderItem={(job) => (
+                    <div className="mb-3">
                       <JobCard
                         {...job}
                         builders={builders}
@@ -804,9 +808,12 @@ function JobsContent() {
                         onClick={() => navigate(`/inspection/${job.id}`)}
                         onGenerateReport={() => setSelectedJobForReport(job)}
                       />
-                    </StaggerItem>
-                  ))}
-                </StaggerContainer>
+                    </div>
+                  )}
+                  getItemKey={(job) => job.id}
+                  className="mb-4"
+                  overscan={3}
+                />
                 {todaysPaginationInfo && todaysPaginationInfo.total > todaysPagination.pageSize && (
                   <PaginationControls
                     page={todaysPagination.page}
@@ -868,20 +875,27 @@ function JobsContent() {
               </div>
             ) : (
               <>
-                <div className="space-y-3">
-                  {completedToday.map((job) => (
-                    <JobCard
-                      key={job.id}
-                      {...job}
-                      builders={builders}
-                      inspectors={inspectors}
-                      inspectorWorkload={inspectorWorkload}
-                      onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
-                      onClick={() => navigate(`/inspection/${job.id}`)}
-                      onGenerateReport={() => setSelectedJobForReport(job)}
-                    />
-                  ))}
-                </div>
+                <VirtualList
+                  items={completedToday}
+                  height="500px"
+                  estimateSize={120}
+                  renderItem={(job) => (
+                    <div className="mb-3">
+                      <JobCard
+                        {...job}
+                        builders={builders}
+                        inspectors={inspectors}
+                        inspectorWorkload={inspectorWorkload}
+                        onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
+                        onClick={() => navigate(`/inspection/${job.id}`)}
+                        onGenerateReport={() => setSelectedJobForReport(job)}
+                      />
+                    </div>
+                  )}
+                  getItemKey={(job) => job.id}
+                  className="mb-4"
+                  overscan={3}
+                />
                 {completedPaginationInfo && completedPaginationInfo.total > completedPagination.pageSize && (
                   <PaginationControls
                     page={completedPagination.page}
@@ -947,20 +961,27 @@ function JobsContent() {
               </div>
             ) : (
               <>
-                <div className="space-y-3">
-                  {allJobs.map((job) => (
-                    <JobCard
-                      key={job.id}
-                      {...job}
-                      builders={builders}
-                      inspectors={inspectors}
-                      inspectorWorkload={inspectorWorkload}
-                      onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
-                      onClick={() => navigate(`/inspection/${job.id}`)}
-                      onGenerateReport={() => setSelectedJobForReport(job)}
-                    />
-                  ))}
-                </div>
+                <VirtualList
+                  items={allJobs}
+                  height="600px"
+                  estimateSize={120}
+                  renderItem={(job) => (
+                    <div className="mb-3">
+                      <JobCard
+                        {...job}
+                        builders={builders}
+                        inspectors={inspectors}
+                        inspectorWorkload={inspectorWorkload}
+                        onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
+                        onClick={() => navigate(`/inspection/${job.id}`)}
+                        onGenerateReport={() => setSelectedJobForReport(job)}
+                      />
+                    </div>
+                  )}
+                  getItemKey={(job) => job.id}
+                  className="mb-4"
+                  overscan={3}
+                />
                 {allJobsPaginationInfo && allJobsPaginationInfo.total > allJobsPagination.pageSize && (
                   <PaginationControls
                     page={allJobsPagination.page}

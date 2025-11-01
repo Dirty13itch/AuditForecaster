@@ -26,6 +26,7 @@ import { PhotoComparisonTool } from "@/components/photos/PhotoComparisonTool";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { indexedDB } from "@/utils/indexedDB";
 import { syncQueue } from "@/utils/syncQueue";
+import { VirtualGrid } from "@/components/ui/virtual-grid";
 import {
   Select,
   SelectContent,

@@ -14,6 +14,7 @@ import type { Job, Builder } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { SwipeableFieldDayCard } from "@/components/SwipeableFieldDayCard";
 import { JOB_TYPE_DISPLAY_NAMES } from "@shared/hersInspectionTypes";
+import { VirtualList } from "@/components/ui/virtual-grid";
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => format(new Date(), 'yyyy-MM-dd');
@@ -174,20 +175,26 @@ export default function FieldDay() {
         {isLoadingMyJobs ? (
           <JobListSkeleton />
         ) : myJobs && myJobs.length > 0 ? (
-          <div className="space-y-4">
-            {myJobs.map((job) => (
-              <SwipeableFieldDayCard
-                key={job.id}
-                job={job}
-                isSelected={selectedJobId === job.id}
-                onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
-                onNavigate={() => navigate(`/inspection/${job.id}`)}
-                onStatusUpdate={(status) => {
-                  updateJobMutation.mutate({ jobId: job.id, status });
-                }}
-              />
-            ))}
-          </div>
+          <VirtualList
+            items={myJobs}
+            height="400px"
+            estimateSize={140}
+            renderItem={(job) => (
+              <div className="mb-4">
+                <SwipeableFieldDayCard
+                  job={job}
+                  isSelected={selectedJobId === job.id}
+                  onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
+                  onNavigate={() => navigate(`/inspection/${job.id}`)}
+                  onStatusUpdate={(status) => {
+                    updateJobMutation.mutate({ jobId: job.id, status });
+                  }}
+                />
+              </div>
+            )}
+            getItemKey={(job) => job.id}
+            overscan={3}
+          />
         ) : (
           <Card data-testid="card-no-jobs-assigned">
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -224,20 +231,26 @@ export default function FieldDay() {
           {isLoadingAllJobs ? (
             <JobListSkeleton count={5} />
           ) : allJobs && allJobs.length > 0 ? (
-            <div className="space-y-4">
-              {allJobs.map((job) => (
-                <SwipeableFieldDayCard
-                  key={job.id}
-                  job={job}
-                  isSelected={selectedJobId === job.id}
-                  onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
-                  onNavigate={() => navigate(`/inspection/${job.id}`)}
-                  onStatusUpdate={(status) => {
-                    updateJobMutation.mutate({ jobId: job.id, status });
-                  }}
-                />
-              ))}
-            </div>
+            <VirtualList
+              items={allJobs}
+              height="500px"
+              estimateSize={140}
+              renderItem={(job) => (
+                <div className="mb-4">
+                  <SwipeableFieldDayCard
+                    job={job}
+                    isSelected={selectedJobId === job.id}
+                    onSelect={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
+                    onNavigate={() => navigate(`/inspection/${job.id}`)}
+                    onStatusUpdate={(status) => {
+                      updateJobMutation.mutate({ jobId: job.id, status });
+                    }}
+                  />
+                </div>
+              )}
+              getItemKey={(job) => job.id}
+              overscan={3}
+            />
           ) : (
             <Card data-testid="card-no-jobs-today">
               <CardContent className="flex flex-col items-center justify-center py-12">
