@@ -77,6 +77,16 @@ const SKELETON_COUNTS = {
   reportCards: 4,
 } as const;
 
+// Phase 5 - HARDEN: Safe JSON parsing with fallback to prevent crashes on undefined/null
+function safeJSONParse<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 interface ReportSection {
   id: string;
   title: string;
@@ -221,16 +231,12 @@ function ReportsContent() {
   // Phase 6 - DOCUMENT: Helper to detect if template uses conditional logic
   // Conditional templates have FormSection[] structure with fields array
   const isConditionalTemplate = useCallback((template: ReportTemplate): boolean => {
-    try {
-      const sections = JSON.parse(template.sections);
-      if (Array.isArray(sections) && sections.length > 0) {
-        const firstSection = sections[0];
-        return firstSection.fields !== undefined && Array.isArray(firstSection.fields);
-      }
-      return false;
-    } catch {
-      return false;
+    const sections = safeJSONParse<any[]>(template.sections, []);
+    if (Array.isArray(sections) && sections.length > 0) {
+      const firstSection = sections[0];
+      return firstSection.fields !== undefined && Array.isArray(firstSection.fields);
     }
+    return false;
   }, []);
 
   // Phase 6 - DOCUMENT: Report status determination logic
@@ -494,7 +500,7 @@ function ReportsContent() {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="grid-templates">
               {filteredTemplates.map((template) => {
-                const sections = JSON.parse(template.sections) as ReportSection[];
+                const sections = safeJSONParse<ReportSection[]>(template.sections, []);
                 const isConditional = isConditionalTemplate(template);
                 return (
                   <Card key={template.id} className="hover-elevate" data-testid={`card-template-${template.id}`}>
@@ -817,7 +823,7 @@ function ReportsContent() {
             </DialogHeader>
             <ScrollArea className="max-h-[70vh] pr-4">
               <DynamicForm
-                sections={JSON.parse(selectedTemplate.sections) as FormSection[]}
+                sections={safeJSONParse<FormSection[]>(selectedTemplate.sections, [])}
                 initialData={conditionalFormData}
                 onChange={(data) => {
                   setConditionalFormData(data);
@@ -876,7 +882,7 @@ function TemplateBuilderDialog({
       name: editingTemplate?.name || "",
       description: editingTemplate?.description || "",
       isDefault: editingTemplate?.isDefault || false,
-      sections: editingTemplate ? JSON.parse(editingTemplate.sections) : [],
+      sections: editingTemplate ? safeJSONParse<any[]>(editingTemplate.sections, []) : [],
     },
   });
 
@@ -1034,7 +1040,7 @@ function TemplatePreviewDialog({
   onOpenChange: (open: boolean) => void;
   template: ReportTemplate;
 }) {
-  const sections = JSON.parse(template.sections) as ReportSection[];
+  const sections = safeJSONParse<ReportSection[]>(template.sections, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1313,7 +1319,7 @@ function ReportViewerDialog({
   onEmail: () => void;
 }) {
   const { toast } = useToast();
-  const data = JSON.parse(report.data);
+  const data = safeJSONParse<any>(report.data, {});
 
   // Phase 6 - DOCUMENT: PDF generation workflow
   // Calls backend API to generate PDF from report data using @react-pdf/renderer
