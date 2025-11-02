@@ -125,6 +125,7 @@ import rateLimit from "express-rate-limit";
 import { registerSettingsRoutes } from "./routes/settings";
 import { sanitizeText, validateFileUpload } from './validation';
 import { withCache, buildersCache, inspectorsCache, statsCache, invalidateCachePattern } from './cache';
+import { monitorQuery, getSlowQueryStats, clearSlowQueryStats } from './query-monitor';
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
@@ -936,7 +937,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const builders = await withCache(
           buildersCache,
           `builders:user:${userId}`,
-          () => storage.getBuildersByUser(userId),
+          () => monitorQuery(
+            'builders-by-user',
+            () => storage.getBuildersByUser(userId),
+            { userId }
+          ),
           600 // 10 minutes
         );
         return res.json(builders);
@@ -946,13 +951,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.query.limit !== undefined || req.query.offset !== undefined) {
         // Don't cache paginated requests - they change too frequently
         const params = paginationParamsSchema.parse(req.query);
-        const result = await storage.getBuildersPaginated(params);
+        const result = await monitorQuery(
+          'builders-paginated',
+          () => storage.getBuildersPaginated(params),
+          { limit: params.limit, offset: params.offset }
+        );
         return res.json(result);
       }
       const builders = await withCache(
         buildersCache,
         'builders:all',
-        () => storage.getAllBuilders(),
+        () => monitorQuery(
+          'builders-all',
+          () => storage.getAllBuilders()
+        ),
         600 // 10 minutes
       );
       res.json(builders);
@@ -3123,7 +3135,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (userRole === 'inspector') {
         if (req.query.cursor !== undefined || req.query.sortBy !== undefined || req.query.sortOrder !== undefined) {
           const params = cursorPaginationParamsSchema.parse(req.query);
-          const result = await storage.getJobsCursorPaginatedByUser(userId, params);
+          const result = await monitorQuery(
+            'jobs-cursor-paginated-by-user',
+            () => storage.getJobsCursorPaginatedByUser(userId, params),
+            { userId, cursor: params.cursor, sortBy: params.sortBy }
+          );
           // Fix: Use result.data instead of result.items, and add null check
           const count = result.data?.length ?? 0;
           serverLogger.info('[Jobs] Returning cursor-paginated jobs for inspector', { count });
@@ -3133,7 +3149,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           return res.json(result);
         }
-        const jobs = await storage.getJobsByUser(userId) ?? [];
+        const jobs = await monitorQuery(
+          'jobs-by-user',
+          () => storage.getJobsByUser(userId),
+          { userId }
+        ) ?? [];
         serverLogger.info('[Jobs] Returning jobs for inspector', { count: jobs.length });
         return res.json(jobs);
       }
@@ -3141,7 +3161,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Admins, managers, and viewers see all jobs
       if (req.query.cursor !== undefined || req.query.sortBy !== undefined || req.query.sortOrder !== undefined) {
         const params = cursorPaginationParamsSchema.parse(req.query);
-        const result = await storage.getJobsCursorPaginated(params);
+        const result = await monitorQuery(
+          'jobs-cursor-paginated',
+          () => storage.getJobsCursorPaginated(params),
+          { cursor: params.cursor, sortBy: params.sortBy }
+        );
         // Fix: Use result.data instead of result.items, and add null check
         const count = result.data?.length ?? 0;
         serverLogger.info('[Jobs] Returning cursor-paginated jobs for admin/manager/viewer', { count });
@@ -3153,7 +3177,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (req.query.limit !== undefined || req.query.offset !== undefined) {
         const params = paginationParamsSchema.parse(req.query);
-        const result = await storage.getJobsPaginated(params);
+        const result = await monitorQuery(
+          'jobs-paginated',
+          () => storage.getJobsPaginated(params),
+          { limit: params.limit, offset: params.offset }
+        );
         // Fix: Use result.data instead of result.items, and add null check
         const count = result.data?.length ?? 0;
         serverLogger.info('[Jobs] Returning paginated jobs for admin/manager/viewer', { count });
@@ -3163,7 +3191,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.json(result);
       }
-      const jobs = await storage.getAllJobs() ?? [];
+      const jobs = await monitorQuery(
+        'jobs-all',
+        () => storage.getAllJobs()
+      ) ?? [];
       serverLogger.info('[Jobs] Returning all jobs for admin/manager/viewer', { count: jobs.length });
       res.json(jobs);
     } catch (error) {
@@ -4011,8 +4042,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       serverLogger.info(`[AdminDashboard] Fetching summary for ${startDate.toISOString()} to ${endDate.toISOString()}`);
       
-      // Fetch all inspectors
-      const inspectors = await storage.getUsersByRole('inspector');
+      const response = await monitorQuery(
+        'admin-summary',
+        async () => {
+          // Fetch all inspectors
+          const inspectors = await storage.getUsersByRole('inspector');
       
       // Fetch all jobs in date range
       const allJobsResult = await db
@@ -4202,37 +4236,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Limit alerts to 5
       const limitedAlerts = alerts.slice(0, 5);
       
-      const response = {
-        kpis: {
-          utilization: {
-            rate: Math.round(utilizationRate * 100) / 100,
-            totalHours,
-            billableHours: Math.round(billableHours * 100) / 100,
-          },
-          firstPassRate: {
-            rate: Math.round(firstPassRate * 100) / 100,
-            passed: passedJobs.length,
-            failed: failedJobs.length,
-          },
-          revenueVsTarget: {
-            actual: Math.round(actualRevenue * 100) / 100,
-            target: targetRevenue,
-            percentOfTarget: Math.round(percentOfTarget * 100) / 100,
-          },
+          return {
+            kpis: {
+              utilization: {
+                rate: Math.round(utilizationRate * 100) / 100,
+                totalHours,
+                billableHours: Math.round(billableHours * 100) / 100,
+              },
+              firstPassRate: {
+                rate: Math.round(firstPassRate * 100) / 100,
+                passed: passedJobs.length,
+                failed: failedJobs.length,
+              },
+              revenueVsTarget: {
+                actual: Math.round(actualRevenue * 100) / 100,
+                target: targetRevenue,
+                percentOfTarget: Math.round(percentOfTarget * 100) / 100,
+              },
+            },
+            workload: {
+              byInspector: workloadByInspector,
+              byDay: workloadByDay,
+            },
+            pendingActions: {
+              unassignedJobs,
+              overdueReports,
+              failedTests,
+            },
+            alerts: limitedAlerts,
+          };
         },
-        workload: {
-          byInspector: workloadByInspector,
-          byDay: workloadByDay,
-        },
-        pendingActions: {
-          unassignedJobs,
-          overdueReports,
-          failedTests,
-        },
-        alerts: limitedAlerts,
-      };
+        { startDate: startDate.toISOString(), endDate: endDate.toISOString() }
+      );
       
-      serverLogger.info(`[AdminDashboard] Returning summary with ${allJobsResult.length} jobs, ${alerts.length} alerts`);
+      serverLogger.info(`[AdminDashboard] Returning summary with ${response.pendingActions.unassignedJobs.length + response.pendingActions.overdueReports.length + response.pendingActions.failedTests.length} pending actions, ${response.alerts.length} alerts`);
       res.json(response);
     } catch (error) {
       logError('AdminDashboard', error);
@@ -8496,7 +8533,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (useCursorPagination) {
         // New cursor-based pagination
         const params = photoCursorPaginationParamsSchema.parse({ cursor, limit, sortOrder });
-        const result = await storage.getPhotosCursorPaginated(filters, params);
+        const result = await monitorQuery(
+          'photos-cursor-paginated',
+          () => storage.getPhotosCursorPaginated(filters, params),
+          { cursor: params.cursor, hasFilters: !!(filters.jobId || filters.checklistItemId || filters.tags) }
+        );
         return res.json(result);
       }
 
@@ -8508,9 +8549,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         let result;
         if (hasFilters) {
-          result = await storage.getPhotosFilteredPaginated(filters, params);
+          result = await monitorQuery(
+            'photos-filtered-paginated',
+            () => storage.getPhotosFilteredPaginated(filters, params),
+            { hasFilters: true, limit: params.limit, offset: params.offset }
+          );
         } else {
-          result = await storage.getPhotosPaginated(params);
+          result = await monitorQuery(
+            'photos-paginated',
+            () => storage.getPhotosPaginated(params),
+            { limit: params.limit, offset: params.offset }
+          );
         }
         
         return res.json(result);
@@ -8518,11 +8567,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let photos;
       if (checklistItemId && typeof checklistItemId === "string") {
-        photos = await storage.getPhotosByChecklistItem(checklistItemId);
+        photos = await monitorQuery(
+          'photos-by-checklist-item',
+          () => storage.getPhotosByChecklistItem(checklistItemId),
+          { checklistItemId }
+        );
       } else if (jobId && typeof jobId === "string") {
-        photos = await storage.getPhotosByJob(jobId);
+        photos = await monitorQuery(
+          'photos-by-job',
+          () => storage.getPhotosByJob(jobId),
+          { jobId }
+        );
       } else {
-        photos = await storage.getAllPhotos();
+        photos = await monitorQuery(
+          'photos-all',
+          () => storage.getAllPhotos()
+        );
       }
 
       res.json(photos);
@@ -10150,64 +10210,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const summary = await withCache(
         statsCache,
         cacheKey,
-        async () => {
-          // Parse date param or use today
-          const queryDate = date ? new Date(date) : new Date();
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
+        () => monitorQuery(
+          'inspector-summary',
+          async () => {
+            // Parse date param or use today
+            const queryDate = date ? new Date(date) : new Date();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Smart week range logic
+        const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+        const currentHour = new Date().getHours();
+        
+        let weekStart: Date;
+        let weekEnd: Date;
+        let includesNextMonday = false;
+        
+        // If (Monday, Tuesday, or Wednesday before 12pm)
+        if ((currentDay === 1 || currentDay === 2 || (currentDay === 3 && currentHour < 12))) {
+          // start = Monday of current week
+          const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1;
+          weekStart = new Date(today);
+          weekStart.setDate(today.getDate() - daysFromMonday);
           
-          // Smart week range logic
-      const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-      const currentHour = new Date().getHours();
-      
-      let weekStart: Date;
-      let weekEnd: Date;
-      let includesNextMonday = false;
-      
-      // If (Monday, Tuesday, or Wednesday before 12pm)
-      if ((currentDay === 1 || currentDay === 2 || (currentDay === 3 && currentHour < 12))) {
-        // start = Monday of current week
-        const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1;
-        weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - daysFromMonday);
-        
-        // end = Sunday of current week
-        weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        
-        includesNextMonday = false;
-      } else {
-        // If (Wednesday after 12pm, Thursday, Friday, Saturday, or Sunday)
-        // start = today
-        weekStart = new Date(today);
-        
-        // end = Sunday of current week (or next Monday if today is Sunday)
-        if (currentDay === 0) {
-          // Today is Sunday, so end = next Monday
-          weekEnd = new Date(today);
-          weekEnd.setDate(today.getDate() + 1);
-          includesNextMonday = true;
-        } else {
           // end = Sunday of current week
-          const daysUntilSunday = 7 - currentDay;
-          weekEnd = new Date(today);
-          weekEnd.setDate(today.getDate() + daysUntilSunday);
-          includesNextMonday = true;
+          weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6);
+          
+          includesNextMonday = false;
+        } else {
+          // If (Wednesday after 12pm, Thursday, Friday, Saturday, or Sunday)
+          // start = today
+          weekStart = new Date(today);
+          
+          // end = Sunday of current week (or next Monday if today is Sunday)
+          if (currentDay === 0) {
+            // Today is Sunday, so end = next Monday
+            weekEnd = new Date(today);
+            weekEnd.setDate(today.getDate() + 1);
+            includesNextMonday = true;
+          } else {
+            // end = Sunday of current week
+            const daysUntilSunday = 7 - currentDay;
+            weekEnd = new Date(today);
+            weekEnd.setDate(today.getDate() + daysUntilSunday);
+            includesNextMonday = true;
+          }
         }
-      }
-      
-      // Set end of day for weekEnd
-      weekEnd.setHours(23, 59, 59, 999);
-      
-      // Query today's jobs
-      const todayStart = new Date(queryDate);
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date(queryDate);
-      todayEnd.setHours(23, 59, 59, 999);
-      
-      const allJobs = await db.query.jobs.findMany({
-        where: eq(jobs.assignedTo, targetInspectorId),
-      });
+        
+        // Set end of day for weekEnd
+        weekEnd.setHours(23, 59, 59, 999);
+        
+        // Query today's jobs
+        const todayStart = new Date(queryDate);
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(queryDate);
+        todayEnd.setHours(23, 59, 59, 999);
+        
+        const allJobs = await db.query.jobs.findMany({
+          where: eq(jobs.assignedTo, targetInspectorId),
+        });
       
       // Filter today's jobs
       const todayJobs = allJobs.filter(job => {
@@ -10295,7 +10357,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             offlineQueueCount,
             unsyncedPhotoCount,
           };
-        },
+          },
+          { userId: targetInspectorId, date: dateStr }
+        ),
         180 // 3 minutes TTL
       );
       
@@ -13926,6 +13990,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const { status, message } = handleDatabaseError(error, 'update job configuration');
       res.status(status).json({ message });
+    }
+  });
+
+  // ===== Slow Query Monitoring Endpoints (Performance Optimization) =====
+  
+  // Admin endpoint to view slow query statistics
+  app.get("/api/admin/slow-queries", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const stats = getSlowQueryStats();
+      res.json(stats);
+    } catch (error) {
+      logError('Admin/SlowQueries', error);
+      res.status(500).json({ message: "Failed to fetch slow query statistics" });
+    }
+  });
+
+  // Admin endpoint to clear slow query statistics
+  app.delete("/api/admin/slow-queries", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      clearSlowQueryStats();
+      res.json({ message: "Slow query statistics cleared" });
+    } catch (error) {
+      logError('Admin/ClearSlowQueries', error);
+      res.status(500).json({ message: "Failed to clear slow query statistics" });
     }
   });
 
