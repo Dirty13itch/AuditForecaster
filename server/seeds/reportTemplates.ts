@@ -5,6 +5,7 @@
 
 import { storage } from '../storage';
 import { serverLogger } from '../logger';
+import { db } from '../db';
 
 /**
  * Sample Pre-Drywall Inspection Template
@@ -418,6 +419,16 @@ export async function seedReportTemplates() {
   try {
     serverLogger.info('[Seed] Starting report template seed...');
     
+    // Get admin user for created_by field
+    const adminUser = await db.query.users.findFirst({
+      where: (users, { eq }) => eq(users.id, "test-admin")
+    });
+    
+    if (!adminUser) {
+      serverLogger.warn('[Seed] No admin user found, skipping report template seeding');
+      return { success: true, created: 0 };
+    }
+    
     // Check if templates already exist
     const existingTemplates = await storage.getAllReportTemplates();
     const existingNames = existingTemplates.map(t => t.name);
@@ -428,7 +439,7 @@ export async function seedReportTemplates() {
     if (!existingNames.includes(preDrywallTemplate.name)) {
       await storage.createReportTemplate({
         ...preDrywallTemplate,
-        createdBy: null // System-created template
+        createdBy: adminUser.id
       });
       createdCount++;
       serverLogger.info('[Seed] Created Pre-Drywall Inspection template');
@@ -440,7 +451,7 @@ export async function seedReportTemplates() {
     if (!existingNames.includes(finalInspectionTemplate.name)) {
       await storage.createReportTemplate({
         ...finalInspectionTemplate,
-        createdBy: null // System-created template
+        createdBy: adminUser.id
       });
       createdCount++;
       serverLogger.info('[Seed] Created Final Inspection template');

@@ -17,13 +17,9 @@ import {
   builders, 
   plans, 
   jobs, 
-  jobWorkflow,
-  jobPhotos,
-  qaItems,
-  credits45L
+  taxCreditProjects
 } from "@shared/schema";
 import { serverLogger } from "../logger";
-import { nanoid } from "nanoid";
 
 interface Community {
   name: string;
@@ -90,13 +86,15 @@ export async function seedMIHomesTC() {
     
     const [miHomes] = await db.insert(builders).values({
       name: "M/I Homes",
-      abbreviation: "MI",
-      contactName: "Twin Cities Division",
-      contactEmail: "tcbuilds@mihomes.com",
-      contactPhone: "(952) 555-0150",
+      companyName: "M/I Homes Twin Cities",
+      email: "tcbuilds@mihomes.com",
+      phone: "(952) 555-0150",
       address: "5000 Baker Road, Minnetonka, MN 55345",
-      certifications: ["ENERGY STAR Partner", "Minnesota Housing EGCC"],
-      active: true
+      abbreviations: ["MI", "MIH", "M/I"],
+      volumeTier: "premium",
+      status: "active",
+      constructionManagerName: "John Smith",
+      constructionManagerEmail: "jsmith@mihomes.com"
     }).returning().onConflictDoNothing();
 
     if (!miHomes) {
@@ -106,7 +104,7 @@ export async function seedMIHomesTC() {
     }
 
     const builder = miHomes || await db.query.builders.findFirst({
-      where: (builders, { eq }) => eq(builders.abbreviation, "MI")
+      where: (builders, { eq }) => eq(builders.name, "M/I Homes")
     });
 
     if (!builder) {
@@ -147,17 +145,13 @@ export async function seedMIHomesTC() {
     for (const plan of planData) {
       const [created] = await db.insert(plans).values({
         builderId: builder.id,
-        name: plan.name,
-        planType: plan.type as any,
-        squareFootage: plan.sqft,
-        bedrooms: plan.beds,
-        bathrooms: plan.baths,
-        description: `${plan.name} - ${plan.community} (${plan.sqft} sq ft, ${plan.beds} bed / ${plan.baths} bath)`,
-        active: true
+        planName: plan.name,
+        floorArea: plan.sqft,
+        notes: `${plan.type} - ${plan.community} (${plan.beds} bed / ${plan.baths} bath)`
       }).returning().onConflictDoNothing();
       
       if (created) {
-        createdPlans.push({ ...created, community: plan.community });
+        createdPlans.push({ ...created, community: plan.community, planType: plan.type });
         serverLogger.info(`[Seed:MIHomesTC] Created plan: ${plan.name} (${plan.community})`);
       }
     }
@@ -180,7 +174,6 @@ export async function seedMIHomesTC() {
       { status: "reschedule", weight: 0.1 }
     ];
 
-    const createdJobs: any[] = [];
     let jobCount = 0;
     
     // Get test users for assignment
@@ -195,6 +188,10 @@ export async function seedMIHomesTC() {
       where: (users, { eq }) => eq(users.id, "test-admin")
     });
 
+    // Job types and statuses
+    const inspectionTypes = ["qa_rough", "qa_final", "hers_blower_door", "hers_duct_leakage"];
+    const statuses = ["scheduled", "done", "failed", "reschedule"];
+
     // Generate jobs for each community
     for (const community of COMMUNITIES) {
       const communityPlans = createdPlans.filter(p => p.community.includes(community.name));
@@ -206,8 +203,8 @@ export async function seedMIHomesTC() {
         jobCount++;
         const lot = 100 + jobCount;
         const plan = communityPlans[Math.floor(Math.random() * communityPlans.length)];
-        const jobType = Math.random() < 0.5 ? jobTypes[0] : jobTypes[1];
-        const status = jobStatuses[Math.floor(Math.random() * jobStatuses.length)].status;
+        const inspectionType = inspectionTypes[Math.floor(Math.random() * inspectionTypes.length)];
+        const status = statuses[Math.floor(Math.random() * statuses.length)];
         
         // Generate realistic address
         const streetNumber = 5000 + jobCount;
@@ -228,200 +225,69 @@ export async function seedMIHomesTC() {
         // Assign inspector (round-robin)
         const inspector = inspectors[jobCount % inspectors.length];
         
-        const [job] = await db.insert(jobs).values({
-          jobNumber: `MIH-${community.city.substring(0, 3).toUpperCase()}-${lot}`,
+        await db.insert(jobs).values({
+          name: `MIH-${community.city.substring(0, 3).toUpperCase()}-${lot}`,
+          address: fullAddress,
           builderId: builder.id,
           planId: plan.id,
-          address: fullAddress,
-          city: community.city,
-          state: community.state,
-          zip: community.zipCodes[0],
-          lotNumber: lot.toString(),
-          development: community.name,
-          stage: jobType.stage as any,
-          status: status as any,
-          scheduledAt: scheduledDate,
+          contractor: "M/I Homes",
+          status: status,
+          inspectionType: inspectionType as any,
+          scheduledDate: scheduledDate,
           assignedTo: inspector?.id,
           createdBy: adminUser?.id || null,
-          gpsLatitude: community.gps.lat.toString(),
-          gpsLongitude: community.gps.lng.toString(),
+          latitude: community.gps.lat,
+          longitude: community.gps.lng,
           notes: `${community.name} - Lot ${lot} - ${plan.name} plan (${plan.planType})`
-        }).returning();
-
-        createdJobs.push(job);
+        });
       }
     }
 
-    serverLogger.info(`[Seed:MIHomesTC] Created ${createdJobs.length} jobs across ${COMMUNITIES.length} communities`);
+    serverLogger.info(`[Seed:MIHomesTC] Created ${jobCount} jobs across ${COMMUNITIES.length} communities`);
 
     // ============================================================================
-    // 4. VISITS & WORKFLOW DATA (15 visits with realistic data)
-    // ============================================================================
-    
-    const completedJobs = createdJobs.filter(j => j.status === "done").slice(0, 15);
-    
-    for (let i = 0; i < completedJobs.length; i++) {
-      const job = completedJobs[i];
-      const isFinal = job.stage === "final";
-      
-      // Create workflow entry with realistic test data
-      const workflowData: any = {
-        jobId: job.id,
-        jobType: isFinal ? "final" : "pre_drywall",
-        currentStep: 10, // Completed
-        completedSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        stepData: {
-          // Checklist items
-          checklist: isFinal ? {
-            insulationCoverage: { checked: true, notes: "R-49 attic, R-21 walls verified" },
-            airSealingComplete: { checked: true, notes: "All penetrations sealed" },
-            ductSealed: { checked: true, notes: "All joints and boots sealed with mastic" },
-            equipmentInstalled: { checked: true, notes: "2-ton AC, 80k BTU furnace" },
-            ventilationOperable: { checked: true, notes: "ERV operating correctly" }
-          } : {
-            framingComplete: { checked: true },
-            insulationReady: { checked: true },
-            hvacRoughIn: { checked: true }
-          }
-        },
-        completedAt: new Date()
-      };
-
-      // Add test data for Final inspections
-      if (isFinal) {
-        // Blower door test
-        const ach50 = 2.1 + (Math.random() * 1.2); // 2.1 to 3.3 ACH50
-        const buildingVolume = job.planId ? 22000 + (Math.random() * 8000) : 25000;
-        const cfm50 = (ach50 * buildingVolume) / 60;
-        
-        workflowData.stepData.blowerDoor = {
-          cfm50: Math.round(cfm50),
-          ach50: Number(ach50.toFixed(2)),
-          buildingVolume: Math.round(buildingVolume),
-          testDate: new Date().toISOString(),
-          passed: ach50 <= 3.0
-        };
-
-        // Duct leakage test
-        const totalDuctLeakage = 120 + (Math.random() * 60); // 120-180 CFM25
-        const leakageToOutside = 50 + (Math.random() * 40); // 50-90 CFM25
-        
-        workflowData.stepData.ductLeakage = {
-          totalDuctLeakage: Math.round(totalDuctLeakage),
-          leakageToOutside: Math.round(leakageToOutside),
-          testType: "DLO",
-          passed: leakageToOutside <= 90
-        };
-
-        // Ventilation test
-        workflowData.stepData.ventilation = {
-          ervAirflow: 80 + Math.floor(Math.random() * 40), // 80-120 CFM
-          ervType: "ERV",
-          passed: true
-        };
-      }
-
-      await db.insert(jobWorkflow).values(workflowData);
-    }
-
-    serverLogger.info(`[Seed:MIHomesTC] Created ${completedJobs.length} visits with workflow data`);
-
-    // ============================================================================
-    // 5. QA ITEMS (5 quality issues)
-    // ============================================================================
-    
-    const qaItemData = [
-      {
-        jobId: createdJobs[5]?.id,
-        category: "duct_leakage",
-        severity: "high",
-        description: "Total duct leakage (TDL) exceeds threshold at 195 CFM25. Specification requires ≤ 180 CFM25.",
-        status: "open",
-        identifiedBy: adminUser?.id
-      },
-      {
-        jobId: createdJobs[12]?.id,
-        category: "equipment",
-        severity: "medium",
-        description: "ERV damper found in closed position. Must be open for proper ventilation.",
-        status: "resolved",
-        identifiedBy: inspectors[0]?.id,
-        resolvedBy: inspectors[0]?.id,
-        resolvedAt: new Date()
-      },
-      {
-        jobId: createdJobs[18]?.id,
-        category: "air_sealing",
-        severity: "high",
-        description: "Leaky boot connection at register R-12. Requires mastic seal.",
-        status: "open",
-        identifiedBy: adminUser?.id
-      },
-      {
-        jobId: createdJobs[25]?.id,
-        category: "photo_quality",
-        severity: "low",
-        description: "Photo MIH-ROS-125-blowerdoor.jpg is blurry. Retake required for compliance documentation.",
-        status: "in_progress",
-        identifiedBy: adminUser?.id,
-        assignedTo: inspectors[1]?.id
-      },
-      {
-        jobId: createdJobs[30]?.id,
-        category: "insulation",
-        severity: "medium",
-        description: "Attic insulation R-value appears below R-49 in northwest corner. Verification needed.",
-        status: "open",
-        identifiedBy: inspectors[0]?.id
-      }
-    ].filter(item => item.jobId); // Only create if job exists
-
-    for (const qa of qaItemData) {
-      await db.insert(qaItems).values({
-        ...qa,
-        createdAt: new Date()
-      });
-    }
-
-    serverLogger.info(`[Seed:MIHomesTC] Created ${qaItemData.length} QA items`);
-
-    // ============================================================================
-    // 6. 45L TAX CREDITS (seed active cases)
+    // 4. 45L TAX CREDITS (seed active cases)
     // ============================================================================
     
     const credit45LData = [
       {
-        name: "Rush Hollow North - 2025 Q1",
+        projectName: "Rush Hollow North - 2025 Q1",
         builderId: builder.id,
-        community: "Rush Hollow North",
-        status: "docs_complete",
-        dwellingUnits: 12,
-        certificationBody: "RESNET",
-        notes: "Q1 2025 batch - 12 units completed, documentation submitted"
+        projectType: "single-family",
+        totalUnits: 12,
+        qualifiedUnits: 12,
+        taxYear: 2025,
+        status: "certified",
+        softwareTool: "REM/Rate",
+        softwareVersion: "16.5"
       },
       {
-        name: "Valley Crest - February 2025",
+        projectName: "Valley Crest - February 2025",
         builderId: builder.id,
-        community: "Valley Crest",
-        status: "builder_review",
-        dwellingUnits: 8,
-        certificationBody: "RESNET",
-        notes: "Awaiting builder sign-off on 8 villa units"
+        projectType: "single-family",
+        totalUnits: 8,
+        qualifiedUnits: 8,
+        taxYear: 2025,
+        status: "pending",
+        softwareTool: "REM/Rate",
+        softwareVersion: "16.5"
       },
       {
-        name: "Oneka Shores - Q4 2024",
+        projectName: "Oneka Shores - Q4 2024",
         builderId: builder.id,
-        community: "Oneka Shores",
-        status: "submitted",
-        dwellingUnits: 15,
-        certificationBody: "RESNET",
-        submittedDate: new Date("2024-12-15"),
-        notes: "Submitted to IRS December 2024"
+        projectType: "multifamily",
+        totalUnits: 15,
+        qualifiedUnits: 15,
+        taxYear: 2024,
+        status: "claimed",
+        certificationDate: new Date("2024-12-15"),
+        softwareTool: "REM/Rate",
+        softwareVersion: "16.5"
       }
     ];
 
     for (const credit of credit45LData) {
-      await db.insert(credits45L).values({
+      await db.insert(taxCreditProjects).values({
         ...credit,
         createdBy: adminUser?.id,
         createdAt: new Date()
@@ -437,9 +303,7 @@ export async function seedMIHomesTC() {
     const summary = {
       builder: 1,
       plans: createdPlans.length,
-      jobs: createdJobs.length,
-      visits: completedJobs.length,
-      qaItems: qaItemData.length,
+      jobs: jobCount,
       credits45L: credit45LData.length,
       communities: COMMUNITIES.length
     };
@@ -450,9 +314,7 @@ export async function seedMIHomesTC() {
     serverLogger.info(`[Seed:MIHomesTC] - Builder: ${summary.builder}`);
     serverLogger.info(`[Seed:MIHomesTC] - Plans: ${summary.plans}`);
     serverLogger.info(`[Seed:MIHomesTC] - Jobs: ${summary.jobs}`);
-    serverLogger.info(`[Seed:MIHomesTC] - Visits: ${summary.visits}`);
-    serverLogger.info(`[Seed:MIHomesTC] - QA Items: ${summary.qaItems}`);
-    serverLogger.info(`[Seed:MIHomesTC] - 45L Credits: ${summary.credits45L}`);
+    serverLogger.info(`[Seed:MIHomesTC] - 45L Tax Credit Projects: ${summary.credits45L}`);
     serverLogger.info("[Seed:MIHomesTC] ============================================");
 
     return summary;
