@@ -296,6 +296,20 @@ export const constructionManagers = pgTable("construction_managers", {
   index("idx_cms_name").on(table.name),
 ]);
 
+// Construction Manager Cities - tracks which cities each CM covers
+export const constructionManagerCities = pgTable("construction_manager_cities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  constructionManagerId: varchar("construction_manager_id").notNull().references(() => constructionManagers.id, { onDelete: 'cascade' }),
+  city: text("city").notNull(),
+  state: text("state").notNull().default('MN'),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_cm_cities_cm_id").on(table.constructionManagerId),
+  index("idx_cm_cities_city").on(table.city),
+  index("idx_cm_cities_cm_city").on(table.constructionManagerId, table.city),
+]);
+
 // Pending calendar events from Building Knowledge calendar awaiting assignment
 export const pendingCalendarEvents = pgTable("pending_calendar_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -347,6 +361,21 @@ export const developments = pgTable("developments", {
   index("idx_developments_builder_status").on(table.builderId, table.status),
   index("idx_developments_municipality").on(table.municipality),
   index("idx_developments_created_by").on(table.createdBy),
+]);
+
+// Development Construction Managers - join table for many-to-many relationship between developments and construction managers
+export const developmentConstructionManagers = pgTable("development_construction_managers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  developmentId: varchar("development_id").notNull().references(() => developments.id, { onDelete: 'cascade' }),
+  constructionManagerId: varchar("construction_manager_id").notNull().references(() => constructionManagers.id, { onDelete: 'cascade' }),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  coverageNotes: text("coverage_notes"),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+  assignedBy: varchar("assigned_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+}, (table) => [
+  index("idx_dev_cms_dev_id").on(table.developmentId),
+  index("idx_dev_cms_cm_id").on(table.constructionManagerId),
+  index("idx_dev_cms_is_primary").on(table.isPrimary),
 ]);
 
 export const lots = pgTable("lots", {
@@ -2049,6 +2078,29 @@ export const insertConstructionManagerSchema = createInsertSchema(constructionMa
 });
 export type InsertConstructionManager = z.infer<typeof insertConstructionManagerSchema>;
 export type ConstructionManager = typeof constructionManagers.$inferSelect;
+
+export const insertConstructionManagerCitySchema = createInsertSchema(constructionManagerCities).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  city: z.string().min(1, "City is required"),
+  state: z.string().default('MN'),
+});
+export type InsertConstructionManagerCity = z.infer<typeof insertConstructionManagerCitySchema>;
+export type ConstructionManagerCity = typeof constructionManagerCities.$inferSelect;
+
+export const insertDevelopmentConstructionManagerSchema = createInsertSchema(developmentConstructionManagers).omit({
+  id: true,
+  assignedAt: true,
+  assignedBy: true,
+}).extend({
+  developmentId: z.string().uuid("Invalid development ID"),
+  constructionManagerId: z.string().uuid("Invalid construction manager ID"),
+  isPrimary: z.boolean().default(false),
+  coverageNotes: z.string().optional(),
+});
+export type InsertDevelopmentConstructionManager = z.infer<typeof insertDevelopmentConstructionManagerSchema>;
+export type DevelopmentConstructionManager = typeof developmentConstructionManagers.$inferSelect;
 
 export const insertPendingCalendarEventSchema = createInsertSchema(pendingCalendarEvents).omit({ 
   id: true, 

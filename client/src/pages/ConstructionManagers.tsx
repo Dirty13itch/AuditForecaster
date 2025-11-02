@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { UserCheck, Plus, Search, Edit, Trash2, RefreshCw, AlertCircle, Mail, Phone } from "lucide-react";
+import { UserCheck, Plus, Search, Edit, Trash2, RefreshCw, AlertCircle, Mail, Phone, MapPin, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +83,29 @@ function formatPhoneNumber(phone: string | null): string {
   return phone;
 }
 
+// Helper component to fetch and display cities for a CM
+function CMCities({ cmId }: { cmId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/construction-managers", cmId, "cities"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/construction-managers/${cmId}/cities`);
+      return res.json();
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-5 w-32" />;
+  
+  const cities = data?.data || [];
+  if (cities.length === 0) return <span className="text-muted-foreground">—</span>;
+  
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      <MapPin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+      <span className="text-sm">{cities.map((c: any) => c.city).join(", ")}</span>
+    </div>
+  );
+}
+
 export default function ConstructionManagers() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -94,6 +117,8 @@ export default function ConstructionManagers() {
   const [editingCM, setEditingCM] = useState<ConstructionManager | null>(null);
   const [deletingCM, setDeletingCM] = useState<ConstructionManager | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [cities, setCities] = useState<Array<{id: string; city: string; state: string}>>([]);
+  const [newCityName, setNewCityName] = useState("");
 
   // Debounce search input
   useEffect(() => {
@@ -212,6 +237,57 @@ export default function ConstructionManagers() {
     },
   });
 
+  const addCityMutation = useMutation({
+    mutationFn: async ({ cmId, city }: { cmId: string; city: string }) => {
+      const res = await apiRequest("POST", `/api/construction-managers/${cmId}/cities`, { city, state: "MN" });
+      return res.json();
+    },
+    onSuccess: (data, { cmId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ['/api/construction-managers', cmId, 'cities']
+      });
+      setCities(prev => [...prev, data]);
+      setNewCityName("");
+      toast({
+        title: "Success",
+        description: "City added successfully",
+        duration: 2000,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add city",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const removeCityMutation = useMutation({
+    mutationFn: async ({ cmId, cityId }: { cmId: string; cityId: string }) => {
+      const res = await apiRequest("DELETE", `/api/construction-managers/${cmId}/cities/${cityId}`);
+      return res.json();
+    },
+    onSuccess: (_data, { cmId, cityId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ['/api/construction-managers', cmId, 'cities']
+      });
+      setCities(prev => prev.filter(c => c.id !== cityId));
+      toast({
+        title: "Success",
+        description: "City removed successfully",
+        duration: 2000,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove city",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAdd = useCallback(() => {
     setEditingCM(null);
     form.reset({
@@ -222,10 +298,12 @@ export default function ConstructionManagers() {
       title: "construction_manager",
       notes: "",
     });
+    setCities([]);
+    setNewCityName("");
     setIsFormOpen(true);
   }, [form]);
 
-  const handleEdit = useCallback((cm: ConstructionManager) => {
+  const handleEdit = useCallback(async (cm: ConstructionManager) => {
     setEditingCM(cm);
     form.reset({
       name: cm.name,
@@ -235,6 +313,17 @@ export default function ConstructionManagers() {
       title: cm.title,
       notes: cm.notes || "",
     });
+    
+    // Fetch cities for this CM
+    try {
+      const res = await apiRequest("GET", `/api/construction-managers/${cm.id}/cities`);
+      const citiesData = await res.json();
+      setCities(citiesData.data || []);
+    } catch (error) {
+      console.error("Failed to fetch cities:", error);
+      setCities([]);
+    }
+    
     setIsFormOpen(true);
   }, [form]);
 
@@ -338,6 +427,7 @@ export default function ConstructionManagers() {
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Title</TableHead>
+                <TableHead>Coverage Cities</TableHead>
                 <TableHead>Status</TableHead>
                 {isAdmin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
@@ -350,13 +440,14 @@ export default function ConstructionManagers() {
                     <TableCell><Skeleton className="h-5 w-48" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-40" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                     {isAdmin && <TableCell><Skeleton className="h-8 w-20 ml-auto" /></TableCell>}
                   </TableRow>
                 ))
               ) : constructionManagers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 6 : 5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-muted-foreground py-8">
                     No construction managers found
                   </TableCell>
                 </TableRow>
@@ -393,6 +484,9 @@ export default function ConstructionManagers() {
                       >
                         {TITLE_LABELS[cm.title]}
                       </Badge>
+                    </TableCell>
+                    <TableCell data-testid={`text-cm-cities-${cm.id}`}>
+                      <CMCities cmId={cm.id} />
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -629,6 +723,71 @@ export default function ConstructionManagers() {
                   </FormItem>
                 )}
               />
+
+              {/* City Management - Only show when editing existing CM */}
+              {editingCM && isAdmin && (
+                <div className="space-y-3 pt-2 border-t">
+                  <Label>Coverage Cities</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="Add city (e.g., Minneapolis)" 
+                      value={newCityName}
+                      onChange={(e) => setNewCityName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newCityName.trim() && editingCM) {
+                          e.preventDefault();
+                          addCityMutation.mutate({ cmId: editingCM.id, city: newCityName.trim() });
+                        }
+                      }}
+                      data-testid="input-add-city"
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (newCityName.trim() && editingCM) {
+                          addCityMutation.mutate({ cmId: editingCM.id, city: newCityName.trim() });
+                        }
+                      }}
+                      disabled={!newCityName.trim() || addCityMutation.isPending}
+                      data-testid="button-add-city"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {cities.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No cities added yet</p>
+                    ) : (
+                      cities.map((city) => (
+                        <Badge 
+                          key={city.id} 
+                          variant="secondary"
+                          className="flex items-center gap-1"
+                          data-testid={`badge-city-${city.id}`}
+                        >
+                          <MapPin className="h-3 w-3" />
+                          {city.city}, {city.state}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4 p-0 hover:bg-transparent"
+                            onClick={() => {
+                              if (editingCM) {
+                                removeCityMutation.mutate({ cmId: editingCM.id, cityId: city.id });
+                              }
+                            }}
+                            disabled={removeCityMutation.isPending}
+                            data-testid={`button-remove-city-${city.id}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
 
               <DialogFooter>
                 <Button

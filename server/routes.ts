@@ -24,7 +24,12 @@ import {
   insertBuilderInteractionSchema,
   updateBuilderInteractionSchema,
   insertConstructionManagerSchema,
+  insertConstructionManagerCitySchema,
+  insertDevelopmentConstructionManagerSchema,
   constructionManagers,
+  constructionManagerCities,
+  developmentConstructionManagers,
+  developments,
   insertDevelopmentSchema,
   updateDevelopmentSchema,
   insertLotSchema,
@@ -1894,6 +1899,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Construction Manager Cities routes
+  app.get("/api/construction-managers/:cmId/cities", isAuthenticated, async (req, res) => {
+    try {
+      const { cmId } = req.params;
+      
+      const cities = await db.select()
+        .from(constructionManagerCities)
+        .where(eq(constructionManagerCities.constructionManagerId, cmId))
+        .orderBy(constructionManagerCities.city);
+      
+      res.json({ data: cities });
+    } catch (error) {
+      logError('ConstructionManagerCities/GET', error);
+      const { status, message } = handleDatabaseError(error, 'fetch construction manager cities');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/construction-managers/:cmId/cities", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { cmId } = req.params;
+      
+      // Check if CM exists
+      const [cm] = await db.select()
+        .from(constructionManagers)
+        .where(eq(constructionManagers.id, cmId))
+        .limit(1);
+      
+      if (!cm) {
+        return res.status(404).json({ message: "Construction manager not found" });
+      }
+      
+      const validated = insertConstructionManagerCitySchema.parse({
+        ...req.body,
+        constructionManagerId: cmId,
+      });
+      
+      const [city] = await db.insert(constructionManagerCities)
+        .values(validated)
+        .returning();
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'construction_manager_city.create',
+        resourceType: 'construction_manager_city',
+        resourceId: city.id,
+        metadata: { cmName: cm.name, city: city.city, state: city.state },
+      }, storage);
+      
+      res.status(201).json(city);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('ConstructionManagerCities/POST', error);
+      const { status, message } = handleDatabaseError(error, 'create construction manager city');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/construction-managers/:cmId/cities/:cityId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { cmId, cityId } = req.params;
+      
+      const [city] = await db.delete(constructionManagerCities)
+        .where(and(
+          eq(constructionManagerCities.id, cityId),
+          eq(constructionManagerCities.constructionManagerId, cmId)
+        ))
+        .returning();
+      
+      if (!city) {
+        return res.status(404).json({ message: "City not found" });
+      }
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'construction_manager_city.delete',
+        resourceType: 'construction_manager_city',
+        resourceId: cityId,
+        metadata: { city: city.city, state: city.state },
+      }, storage);
+      
+      res.json({ message: "City removed successfully" });
+    } catch (error) {
+      logError('ConstructionManagerCities/DELETE', error);
+      const { status, message } = handleDatabaseError(error, 'delete construction manager city');
+      res.status(status).json({ message });
+    }
+  });
+
   // Developments routes
   app.get("/api/builders/:builderId/developments", isAuthenticated, async (req, res) => {
     try {
@@ -2445,6 +2542,190 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(lot);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch lot');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Development Construction Managers routes
+  app.get("/api/developments/:developmentId/construction-managers", isAuthenticated, async (req, res) => {
+    try {
+      const { developmentId } = req.params;
+      
+      // Check if development exists
+      const [development] = await db.select()
+        .from(developments)
+        .where(eq(developments.id, developmentId))
+        .limit(1);
+      
+      if (!development) {
+        return res.status(404).json({ message: "Development not found" });
+      }
+      
+      // Get all CMs assigned to this development with full CM details
+      const assignments = await db.select({
+        id: developmentConstructionManagers.id,
+        developmentId: developmentConstructionManagers.developmentId,
+        constructionManagerId: developmentConstructionManagers.constructionManagerId,
+        isPrimary: developmentConstructionManagers.isPrimary,
+        coverageNotes: developmentConstructionManagers.coverageNotes,
+        assignedAt: developmentConstructionManagers.assignedAt,
+        assignedBy: developmentConstructionManagers.assignedBy,
+        cmName: constructionManagers.name,
+        cmEmail: constructionManagers.email,
+        cmPhone: constructionManagers.phone,
+        cmMobilePhone: constructionManagers.mobilePhone,
+        cmTitle: constructionManagers.title,
+        cmIsActive: constructionManagers.isActive,
+      })
+        .from(developmentConstructionManagers)
+        .innerJoin(constructionManagers, eq(developmentConstructionManagers.constructionManagerId, constructionManagers.id))
+        .where(eq(developmentConstructionManagers.developmentId, developmentId))
+        .orderBy(desc(developmentConstructionManagers.isPrimary), constructionManagers.name);
+      
+      res.json({ data: assignments });
+    } catch (error) {
+      logError('DevelopmentConstructionManagers/GET', error);
+      const { status, message } = handleDatabaseError(error, 'fetch development construction managers');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/developments/:developmentId/construction-managers", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { developmentId } = req.params;
+      
+      // Check if development exists
+      const [development] = await db.select()
+        .from(developments)
+        .where(eq(developments.id, developmentId))
+        .limit(1);
+      
+      if (!development) {
+        return res.status(404).json({ message: "Development not found" });
+      }
+      
+      const validated = insertDevelopmentConstructionManagerSchema.parse({
+        ...req.body,
+        developmentId,
+      });
+      
+      // Check if CM exists
+      const [cm] = await db.select()
+        .from(constructionManagers)
+        .where(eq(constructionManagers.id, validated.constructionManagerId))
+        .limit(1);
+      
+      if (!cm) {
+        return res.status(404).json({ message: "Construction manager not found" });
+      }
+      
+      // Check if already assigned (prevent duplicates)
+      const [existing] = await db.select()
+        .from(developmentConstructionManagers)
+        .where(and(
+          eq(developmentConstructionManagers.developmentId, developmentId),
+          eq(developmentConstructionManagers.constructionManagerId, validated.constructionManagerId)
+        ))
+        .limit(1);
+      
+      if (existing) {
+        return res.status(409).json({ message: "This construction manager is already assigned to this development" });
+      }
+      
+      // If setting as primary, unset other primary CMs for this development
+      if (validated.isPrimary) {
+        await db.update(developmentConstructionManagers)
+          .set({ isPrimary: false })
+          .where(eq(developmentConstructionManagers.developmentId, developmentId));
+      }
+      
+      // Create assignment
+      const [assignment] = await db.insert(developmentConstructionManagers)
+        .values({
+          ...validated,
+          assignedBy: req.user.id,
+        })
+        .returning();
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'development_construction_manager.create',
+        resourceType: 'development_construction_manager',
+        resourceId: assignment.id,
+        metadata: { 
+          developmentName: development.name,
+          cmName: cm.name,
+          isPrimary: assignment.isPrimary,
+        },
+      }, storage);
+      
+      res.status(201).json(assignment);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('DevelopmentConstructionManagers/POST', error);
+      const { status, message } = handleDatabaseError(error, 'assign construction manager to development');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/developments/:developmentId/construction-managers/:cmId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { developmentId, cmId } = req.params;
+      
+      // Find the assignment
+      const [assignment] = await db.select()
+        .from(developmentConstructionManagers)
+        .where(and(
+          eq(developmentConstructionManagers.developmentId, developmentId),
+          eq(developmentConstructionManagers.constructionManagerId, cmId)
+        ))
+        .limit(1);
+      
+      if (!assignment) {
+        return res.status(404).json({ message: "Construction manager assignment not found" });
+      }
+      
+      const wasPrimary = assignment.isPrimary;
+      
+      // Delete the assignment
+      await db.delete(developmentConstructionManagers)
+        .where(and(
+          eq(developmentConstructionManagers.developmentId, developmentId),
+          eq(developmentConstructionManagers.constructionManagerId, cmId)
+        ));
+      
+      // Check if there are other CMs for this development
+      const [remainingCMs] = await db.select({ count: count() })
+        .from(developmentConstructionManagers)
+        .where(eq(developmentConstructionManagers.developmentId, developmentId));
+      
+      let warning = null;
+      if (wasPrimary && remainingCMs && remainingCMs.count > 0) {
+        warning = "You removed the primary contact. Consider setting another CM as primary.";
+      }
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'development_construction_manager.delete',
+        resourceType: 'development_construction_manager',
+        resourceId: assignment.id,
+        metadata: { 
+          developmentId,
+          cmId,
+          wasPrimary,
+        },
+      }, storage);
+      
+      res.json({ 
+        message: "Construction manager removed successfully",
+        warning,
+      });
+    } catch (error) {
+      logError('DevelopmentConstructionManagers/DELETE', error);
+      const { status, message } = handleDatabaseError(error, 'remove construction manager from development');
       res.status(status).json({ message });
     }
   });
