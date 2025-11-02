@@ -123,6 +123,7 @@ import { createReadStream } from "fs";
 import { unlink } from "fs/promises";
 import rateLimit from "express-rate-limit";
 import { registerSettingsRoutes } from "./routes/settings";
+import { registerStatusRoutes } from "./routes/status";
 import { sanitizeText, validateFileUpload } from './validation';
 import { withCache, buildersCache, inspectorsCache, statsCache, invalidateCachePattern } from './cache';
 import { monitorQuery, getSlowQueryStats, clearSlowQueryStats } from './query-monitor';
@@ -14143,6 +14144,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register Settings routes
   registerSettingsRoutes(app);
+  
+  // Register Status routes (feature readiness dashboard)
+  registerStatusRoutes(app);
   
   const httpServer = createServer(app);
 

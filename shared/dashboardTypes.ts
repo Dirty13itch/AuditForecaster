@@ -1,3 +1,7 @@
+import type { FeatureMaturity } from './featureFlags';
+import type { UserRole } from './types';
+import type { FeatureFlagKey } from './featureFlags';
+
 export interface TierDistribution {
   tier: string;
   count: number;
@@ -64,4 +68,104 @@ export function calculateTier(ach50: number): TierName {
 export function getTierColor(tier: TierName): string {
   const config = TIER_CONFIGS.find(t => t.name === tier);
   return config?.color || '#6C757D';
+}
+
+/**
+ * Feature Status Dashboard Types
+ * 
+ * Types for the /status/features admin dashboard that displays
+ * maturity status and Golden Path test results for all routes.
+ */
+
+/**
+ * Route Readiness Information
+ * 
+ * Complete metadata about a route's maturity, testing status,
+ * access control, and quality metrics.
+ */
+export interface RouteReadiness {
+  /** Route path (e.g., "/jobs", "/inspection/:id") */
+  path: string;
+  
+  /** Human-readable page title */
+  title: string;
+  
+  /** Release maturity level (ga, beta, experimental) */
+  maturity: FeatureMaturity;
+  
+  /** Associated Golden Path test ID (e.g., "GP-01", "GP-02") */
+  goldenPathId?: string;
+  
+  /** Golden Path test result status */
+  goldenPathStatus?: 'pass' | 'fail' | 'pending' | 'n/a';
+  
+  /** Required user roles for access */
+  roles?: UserRole[];
+  
+  /** Optional feature flag key */
+  flag?: FeatureFlagKey;
+  
+  /** Route description */
+  description?: string;
+  
+  /** Navigation category (e.g., "Field Work", "Admin") */
+  category?: string;
+  
+  // Future extensibility: Quality metrics
+  
+  /** Number of accessibility violations (Axe) */
+  axeViolations?: number;
+  
+  /** Lighthouse performance score (0-100) */
+  lighthouseScore?: number;
+  
+  /** Test coverage percentage (0-100) */
+  testCoverage?: number;
+  
+  /** Open TODOs or blockers */
+  openTodos?: string[];
+}
+
+/**
+ * Readiness Summary Statistics
+ * 
+ * Aggregated counts and percentages for feature maturity levels.
+ */
+export interface ReadinessSummary {
+  /** Total number of routes */
+  totalRoutes: number;
+  
+  /** Number of GA routes */
+  ga: number;
+  
+  /** Number of Beta routes */
+  beta: number;
+  
+  /** Number of Experimental routes */
+  experimental: number;
+  
+  /** Percentage of GA routes (0-100) */
+  gaPercentage: number;
+  
+  /** Percentage of Beta routes (0-100) */
+  betaPercentage: number;
+  
+  /** Percentage of Experimental routes (0-100) */
+  experimentalPercentage: number;
+}
+
+/**
+ * Features Dashboard Response
+ * 
+ * Complete API response for /api/status/features endpoint.
+ */
+export interface FeaturesDashboardResponse {
+  /** List of all routes with readiness info */
+  routes: RouteReadiness[];
+  
+  /** Summary statistics */
+  summary: ReadinessSummary;
+  
+  /** Timestamp of data generation */
+  timestamp: string;
 }

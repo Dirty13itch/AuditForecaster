@@ -833,10 +833,10 @@ export const ROUTE_REGISTRY: Record<string, RouteMetadata> = {
   '/status/features': {
     path: '/status/features',
     title: 'Feature Status',
-    maturity: FeatureMaturity.EXPERIMENTAL,
+    maturity: FeatureMaturity.GA,
     roles: ['admin'],
     icon: ShieldCheck,
-    description: 'Feature maturity dashboard (consumes this registry)',
+    description: 'Comprehensive feature readiness dashboard showing maturity status and Golden Path test results for all routes',
     showInNav: true,
   },
   
