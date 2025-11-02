@@ -27,6 +27,20 @@ export type FormSection = {
 
 export type Role = 'admin' | 'inspector' | 'partner_contractor';
 
+/**
+ * User Role Type
+ * 
+ * Defines all valid user roles based on the roles-matrix.md documentation.
+ * Used for route-level access control in navigation registry.
+ * 
+ * Roles:
+ * - admin: System administrator with full control
+ * - inspector: Field inspector conducting energy audits
+ * - lead: Senior inspector with team oversight (Inspector Lead)
+ * - builderviewer: Builder/contractor partner with read-only access (Partner)
+ */
+export type UserRole = 'admin' | 'inspector' | 'lead' | 'builderviewer';
+
 export interface FeatureStatus {
   path: string;
   title: string;

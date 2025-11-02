@@ -290,6 +290,14 @@ export const FEATURE_FLAGS: Record<string, FeatureFlag> = {
 };
 
 /**
+ * Feature Flag Key Type
+ * 
+ * Union type of all valid feature flag keys from FEATURE_FLAGS registry.
+ * Use this type to ensure compile-time type safety when referencing flags.
+ */
+export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
+
+/**
  * Get current environment from Node.env or Vite import.meta.env
  */
 export function getCurrentEnvironment(): 'development' | 'staging' | 'production' {
