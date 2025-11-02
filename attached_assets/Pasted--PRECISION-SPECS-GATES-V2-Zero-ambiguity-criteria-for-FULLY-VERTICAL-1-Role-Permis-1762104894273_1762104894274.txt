@@ -1,0 +1,105 @@
+### PRECISION SPECS & GATES V2 — Zero-ambiguity criteria for FULLY VERTICAL
+
+#### 1) Role & Permissions Matrix (must exist as `/docs/product/roles-matrix.md`)
+Roles: Inspector, Lead, BuilderViewer, Admin.
+Entities: Builder, Plan, Address, Job, Visit, ChecklistItem, Photo, Equipment, Report, Credit45L, QAItem, AuditLog, User.
+For each role×entity define CRUD + “export” + “view-PII”. Enforce at API+UI; add unit tests per permission.
+
+#### 2) Environment & Flags Matrix
+Envs: dev, stage, prod. 
+- Default feature flags per env (calendar-import-v2, offline-sync, report-v2). 
+- Secrets: no secrets in repo; use env vars; CI checks for accidental commit. 
+- Experimental/Beta/GA maturity honored by Gatekeeper (prod shows GA only).
+
+#### 3) Data Contracts (versioned zod)
+- All entities have `v`, `id` (ULID), `createdAt`, `updatedAt`.
+- Idempotency: every mutating endpoint accepts `Idempotency-Key`; store & dedupe for 24h.
+- Error model: `{code:string, message:string, details?:object, correlationId}` with documented codes in `/docs/product/errors.md`.
+- Migrations must be reversible; seed kit lives at `/scripts/seed.ts` with 50 demo jobs across both stages.
+
+#### 4) Offline-First Spec (Field Visit)
+- Cache budget: ≤50 MB per visit (configurable).
+- Background sync cadence: exponential backoff (1m, 5m, 15m, 60m) with jitter.
+- Conflict policy: field-level merge; numbers -> last-writer-wins, arrays -> union by id, photos -> union.
+- Reconciliation UI shows diff and lets user accept per field; audited outcome.
+
+#### 5) Golden Path Scenarios (tests + instrumentation)
+Create Playwright specs under `/tests/e2e/golden-path/`:
+GP-01 CalendarImport→Review→JobCreate→Route→FieldVisit(PreDrywall)→Report(PDF)
+GP-02 Final Visit: measurements, photos, equipment capture, report → export history
+GP-03 Photos capture offline → reconnect → sync & tag to checklist items
+GP-04 45L Credits: doc ingestion → status → export
+GP-05 QA triage: create QAItem from report → assign → resolve
+
+Each GP test must:
+- Assert analytics events fired (typed), audit log entries written.
+- Run Axe (no violations) and Lighthouse with budgets (see §7).
+- Produce artifacts to `/docs/product/golden-path-report.md`.
+
+#### 6) Test Coverage Thresholds
+- Domain (pure logic) unit coverage ≥ 80% lines.
+- Routes have Storybook stories for: loading, empty, error, data.
+- E2E exists for all Golden Paths (5+). 
+- Visual regressions on critical components (tables, forms, dialogs).
+
+#### 7) Performance Budgets (route-scoped)
+- LCP < 2.5s on Schedule, Jobs, Field Visit, Reports.
+- CLS < 0.1 everywhere; TBT < 200ms on interactive actions.
+- Route JS ≤ 180 KB gz (Field Visit ≤ 220 KB). 
+- Use code splitting; images lazy-load; prefetch next job on Route.
+
+#### 8) Accessibility Contract
+- Color contrast ≥ 4.5:1; focus-visible on all interactive elements.
+- Keyboard map: `/` focuses global search; `n` new entity; `s` save; `?` help.
+- Dialogs: focus trap, aria-labelledby/aria-describedby, ESC close, Return default action.
+- Tables: header scope, sortable buttons with `aria-sort`, row actions reachable by keyboard.
+
+#### 9) Observability Schema
+- Analytics event names: `view_<route>`, `search_<entity>`, `create_<entity>`, `update_<entity>`, `delete_<entity>`, `export_<kind>`, `import_<kind>`.
+- Required properties: `actorId`, `tenantId`, `entityId`, `route`, `ts`, `corrId`, `metadata`.
+- Audit log entry: `{actorId, action, entityRef, before?, after?, corrId, ts}`; store immutable.
+
+#### 10) Photos & Evidence Handling
+- Accept EXIF; persist `capturedAt`, `gps`; strip PII if `privacy.strict=true`.
+- Auto-tag photos to checklist item or job; ensure lossless originals; generate view-optimized derivatives (max 1920px long edge).
+- Integrity: compute SHA-256; show hash in report metadata.
+
+#### 11) Reports (PDF/CSV)
+- Deterministic render: embed fonts; stable pagination; include hash, corrId, app version.
+- DPI ≥ 144 for images; margins & header/footer with job meta.
+- Retention policy documented; storage adapter interchangeable; signed URL timeouts.
+
+#### 12) Import/Export Contracts
+- CSV schemas documented with examples; max rows 10k; streaming parse with row-level error report.
+- Partial success is allowed; produce a reconciliation report and a re-try file with failed rows only.
+
+#### 13) Mobile & Responsiveness
+- Breakpoints: sm=360, md=768, lg=1024, xl=1280.
+- Touch targets ≥ 44×44; bottom-sheet variant for dialogs on sm.
+- Field Visit forms optimized for one-hand use; photo capture big primary.
+
+#### 14) Naming & Structure Conventions (linted)
+- Files kebab-case; components PascalCase; hooks use `use*`.
+- Route components under `/features/<pillar>/<route>/`.
+- DTOs live in `/domain/dto/`; API handlers in `/app/api/*`.
+
+#### 15) Readiness Surfaces
+- `/status/features` lists every route with maturity, last GP result, Axe/Lighthouse metrics, and coverage.
+- Header readiness chip reflects GA/Beta/Experimental; click opens status.
+
+#### 16) CI Enforcements
+Jobs: typecheck, lint, unit, storybook build, visual, e2e (golden-path), a11y (axe), perf (lighthouse), release-gates.
+Fail CI if:
+  - any GA route’s golden path fails,
+  - perf/a11y budgets regress,
+  - domain unit coverage < 80%,
+  - route bundle > limits.
+
+#### 17) Competitive Inspiration Linkage
+Maintain `/docs/product/inspiration-matrix.md` mapping each gap to a reference pattern from iAuditor, CompanyCam, SafetyCulture, UpKeep, BuilderTrend. Each backlog item includes `inspiration_reference`.
+
+#### 18) Seed Kit
+Seeds must cover: 2 builders, 6 plans (varied sqft/elevations), 50 jobs (balanced stages), 15 visits with photos, 3 failed imports, 5 QA items, 2 45L cases. Use realistic timestamps and addresses.
+
+### OPERATIONAL RULE
+A feature may be promoted to `maturity="ga"` ONLY when every item in §§1–16 passes AND the corresponding Golden Path test is green. Gatekeeper demotes automatically on failure and surfaces status.
