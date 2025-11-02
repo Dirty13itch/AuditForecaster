@@ -5,6 +5,7 @@ import { GoogleCalendarService } from './googleCalendar';
 import { processCalendarEvents } from './calendarImportService';
 import { DateTime } from 'luxon';
 import { backgroundJobTracker } from './backgroundJobTracker';
+import { safeParseInt } from '../shared/numberUtils';
 
 const googleCalendarService = new GoogleCalendarService();
 
@@ -12,7 +13,7 @@ const googleCalendarService = new GoogleCalendarService();
 const CALENDAR_IMPORT_ENABLED = process.env.CALENDAR_IMPORT_ENABLED !== 'false';
 const CALENDAR_IMPORT_SCHEDULE = process.env.CALENDAR_IMPORT_SCHEDULE || '0 */6 * * *'; // Every 6 hours by default
 const BUILDING_KNOWLEDGE_CALENDAR_NAME = process.env.BUILDING_KNOWLEDGE_CALENDAR_NAME || 'Building Knowledge';
-const CALENDAR_IMPORT_LOOKAHEAD_DAYS = parseInt(process.env.CALENDAR_IMPORT_LOOKAHEAD_DAYS || '30');
+const CALENDAR_IMPORT_LOOKAHEAD_DAYS = safeParseInt(process.env.CALENDAR_IMPORT_LOOKAHEAD_DAYS, 30);
 
 // System user for automated imports - configurable for production
 // In production, create a dedicated system user or use admin ID

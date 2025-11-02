@@ -126,6 +126,7 @@ import { registerSettingsRoutes } from "./routes/settings";
 import { sanitizeText, validateFileUpload } from './validation';
 import { withCache, buildersCache, inspectorsCache, statsCache, invalidateCachePattern } from './cache';
 import { monitorQuery, getSlowQueryStats, clearSlowQueryStats } from './query-monitor';
+import { safeDivide, safeParseFloat, safeParseInt, safeToFixed } from '../shared/numberUtils';
 
 /**
  * API Error Response Standard
@@ -574,9 +575,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             FROM sessions
           `);
           sessionStats = {
-            total: parseInt(sessionCountResult.rows[0]?.total as string || '0'),
-            active: parseInt(sessionCountResult.rows[0]?.active as string || '0'),
-            expired: parseInt(sessionCountResult.rows[0]?.expired as string || '0'),
+            total: safeParseInt(sessionCountResult.rows[0]?.total as string, 0),
+            active: safeParseInt(sessionCountResult.rows[0]?.active as string, 0),
+            expired: safeParseInt(sessionCountResult.rows[0]?.expired as string, 0),
           };
         } catch (error) {
           sessionStats = { error: 'Failed to fetch session statistics' };
@@ -1951,8 +1952,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const search = req.query.search as string | undefined;
       const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const page = Math.max(1, safeParseInt(req.query.page as string, 1));
+      const limit = Math.max(1, Math.min(1000, safeParseInt(req.query.limit as string, 50)));
       const offset = (page - 1) * limit;
 
       const conditions = [];
@@ -2550,8 +2551,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/agreements/expiring", isAuthenticated, async (req, res) => {
     try {
-      const days = req.query.days ? parseInt(req.query.days as string, 10) : 30;
-      if (isNaN(days) || days < 1) {
+      const days = safeParseInt(req.query.days as string, 30);
+      if (days < 1) {
         return res.status(400).json({ message: "Invalid days parameter. Must be a positive number." });
       }
       
@@ -3545,6 +3546,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // IMPORTANT: Specific routes must come BEFORE parameterized routes to avoid matching issues
+  // Get today's in-progress/scheduled jobs
+  app.get("/api/jobs/today", isAuthenticated, async (req, res) => {
+    try {
+      // Support both paginated and non-paginated responses for backward compatibility
+      if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        const params = paginationParamsSchema.parse(req.query);
+        const result = await storage.getTodaysJobsByStatusPaginated(
+          ['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review'],
+          params
+        );
+        return res.json(result);
+      }
+      
+      // Legacy non-paginated response
+      const jobs = await storage.getTodaysJobsByStatus(['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review']) ?? [];
+      res.json(jobs);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch today\'s jobs');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get today's completed jobs
+  app.get("/api/jobs/completed-today", isAuthenticated, async (req, res) => {
+    try {
+      // Support both paginated and non-paginated responses for backward compatibility
+      if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        const params = paginationParamsSchema.parse(req.query);
+        const result = await storage.getTodaysJobsByStatusPaginated(
+          ['completed'],
+          params
+        );
+        return res.json(result);
+      }
+      
+      // Legacy non-paginated response
+      const jobs = await storage.getTodaysJobsByStatus(['completed']) ?? [];
+      res.json(jobs);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch completed jobs');
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = flexibleIdParamSchema.parse(req.params);
@@ -4061,58 +4115,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get today's in-progress/scheduled jobs
-  app.get("/api/jobs/today", isAuthenticated, async (req, res) => {
-    try {
-      // Support both paginated and non-paginated responses for backward compatibility
-      if (req.query.limit !== undefined || req.query.offset !== undefined) {
-        const params = paginationParamsSchema.parse(req.query);
-        const result = await storage.getTodaysJobsByStatusPaginated(
-          ['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review'],
-          params
-        );
-        return res.json(result);
-      }
-      
-      // Legacy non-paginated response
-      const jobs = await storage.getTodaysJobsByStatus(['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review']) ?? [];
-      res.json(jobs);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        const { status, message } = handleValidationError(error);
-        return res.status(status).json({ message });
-      }
-      const { status, message } = handleDatabaseError(error, 'fetch today\'s jobs');
-      res.status(status).json({ message });
-    }
-  });
-
-  // Get today's completed jobs
-  app.get("/api/jobs/completed-today", isAuthenticated, async (req, res) => {
-    try {
-      // Support both paginated and non-paginated responses for backward compatibility
-      if (req.query.limit !== undefined || req.query.offset !== undefined) {
-        const params = paginationParamsSchema.parse(req.query);
-        const result = await storage.getTodaysJobsByStatusPaginated(
-          ['completed'],
-          params
-        );
-        return res.json(result);
-      }
-      
-      // Legacy non-paginated response
-      const jobs = await storage.getTodaysJobsByStatus(['completed']) ?? [];
-      res.json(jobs);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        const { status, message } = handleValidationError(error);
-        return res.status(status).json({ message });
-      }
-      const { status, message } = handleDatabaseError(error, 'fetch completed jobs');
-      res.status(status).json({ message });
-    }
-  });
-
   // Admin Dashboard Summary endpoint
   app.get("/api/dashboard/admin-summary", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -4178,21 +4180,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
-      const utilizationRate = totalHours > 0 ? (billableHours / totalHours) * 100 : 0;
+      const utilizationRate = safeDivide(billableHours, totalHours, 0) * 100;
       
       // First Pass Rate
       const passedJobs = allJobsResult.filter(j => j.status === 'done' || j.status === 'completed');
       const failedJobs = allJobsResult.filter(j => j.status === 'failed');
       const totalCompleted = passedJobs.length + failedJobs.length;
-      const firstPassRate = totalCompleted > 0 ? (passedJobs.length / totalCompleted) * 100 : 0;
+      const firstPassRate = safeDivide(passedJobs.length, totalCompleted, 0) * 100;
       
       // Revenue vs Target
       const actualRevenue = allJobsResult
         .filter(j => j.status === 'done' || j.status === 'completed' || j.status === 'failed')
-        .reduce((sum, j) => sum + (parseFloat(j.pricing?.toString() || '0')), 0);
+        .reduce((sum, j) => sum + safeParseFloat(j.pricing?.toString(), 0), 0);
       
       const targetRevenue = passedJobs.length * 150; // $150 average per job
-      const percentOfTarget = targetRevenue > 0 ? (actualRevenue / targetRevenue) * 100 : 0;
+      const percentOfTarget = safeDivide(actualRevenue, targetRevenue, 0) * 100;
       
       // Workload by Inspector
       const workloadByInspector = inspectors.map(inspector => {
@@ -4696,8 +4698,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (confidence) filters.confidence = confidence;
       if (builderUnmatched === 'true') filters.builderUnmatched = true;
       if (sortBy) filters.sortBy = sortBy;
-      if (limit) filters.limit = parseInt(limit);
-      if (offset) filters.offset = parseInt(offset);
+      if (limit) filters.limit = Math.max(1, Math.min(1000, safeParseInt(limit as string, 50)));
+      if (offset) filters.offset = Math.max(0, safeParseInt(offset as string, 0));
       
       serverLogger.info('[API] Fetching pending events with filters:', filters);
       
@@ -6318,7 +6320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         distanceMeters,
         durationSeconds,
         distance: String((distanceMeters * 0.000621371).toFixed(2)),
-        averageSpeed: durationSeconds > 0 ? String((distanceMeters / durationSeconds).toFixed(2)) : '0',
+        averageSpeed: String(safeToFixed(safeDivide(distanceMeters, durationSeconds, 0), 2)),
         startLatitude: points[0]?.latitude || null,
         startLongitude: points[0]?.longitude || null,
         endLatitude: points[points.length - 1]?.latitude || null,
@@ -7468,7 +7470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/analytics/cash-flow-forecast - Get cash flow forecast
   app.get("/api/analytics/cash-flow-forecast", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const daysAhead = req.query.daysAhead ? parseInt(req.query.daysAhead as string, 10) : 30;
+      const daysAhead = safeParseInt(req.query.daysAhead as string, 30);
 
       serverLogger.info('[Analytics/CashFlowForecast] Fetching cash flow forecast', {
         userId: req.user.id,
@@ -9103,7 +9105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/photos/recent", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = Math.max(1, Math.min(1000, safeParseInt(req.query.limit as string, 50)));
       const photos = await storage.getRecentPhotos(limit, userId);
       res.json(photos);
     } catch (error) {
@@ -9785,20 +9787,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate CFM per 100 sq ft if not provided
       if (validated.conditionedArea) {
         if (validated.cfm25Total && !validated.totalCfmPerSqFt) {
-          validated.totalCfmPerSqFt = (validated.cfm25Total / validated.conditionedArea) * 100;
+          validated.totalCfmPerSqFt = safeDivide(validated.cfm25Total, validated.conditionedArea, 0) * 100;
         }
         if (validated.cfm25Outside && !validated.outsideCfmPerSqFt) {
-          validated.outsideCfmPerSqFt = (validated.cfm25Outside / validated.conditionedArea) * 100;
+          validated.outsideCfmPerSqFt = safeDivide(validated.cfm25Outside, validated.conditionedArea, 0) * 100;
         }
       }
       
       // Calculate percentage of system flow if not provided
       if (validated.systemAirflow) {
         if (validated.cfm25Total && !validated.totalPercentOfFlow) {
-          validated.totalPercentOfFlow = (validated.cfm25Total / validated.systemAirflow) * 100;
+          validated.totalPercentOfFlow = safeDivide(validated.cfm25Total, validated.systemAirflow, 0) * 100;
         }
         if (validated.cfm25Outside && !validated.outsidePercentOfFlow) {
-          validated.outsidePercentOfFlow = (validated.cfm25Outside / validated.systemAirflow) * 100;
+          validated.outsidePercentOfFlow = safeDivide(validated.cfm25Outside, validated.systemAirflow, 0) * 100;
         }
       }
       
@@ -9854,10 +9856,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const cfm25Outside = validated.cfm25Outside ?? existing.cfm25Outside;
           
           if (cfm25Total) {
-            validated.totalCfmPerSqFt = (Number(cfm25Total) / Number(conditionedArea)) * 100;
+            validated.totalCfmPerSqFt = safeDivide(Number(cfm25Total), Number(conditionedArea), 0) * 100;
           }
           if (cfm25Outside) {
-            validated.outsideCfmPerSqFt = (Number(cfm25Outside) / Number(conditionedArea)) * 100;
+            validated.outsideCfmPerSqFt = safeDivide(Number(cfm25Outside), Number(conditionedArea), 0) * 100;
           }
         }
         
@@ -9867,10 +9869,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const cfm25Outside = validated.cfm25Outside ?? existing.cfm25Outside;
           
           if (cfm25Total) {
-            validated.totalPercentOfFlow = (Number(cfm25Total) / Number(systemAirflow)) * 100;
+            validated.totalPercentOfFlow = safeDivide(Number(cfm25Total), Number(systemAirflow), 0) * 100;
           }
           if (cfm25Outside) {
-            validated.outsidePercentOfFlow = (Number(cfm25Outside) / Number(systemAirflow)) * 100;
+            validated.outsidePercentOfFlow = safeDivide(Number(cfm25Outside), Number(systemAirflow), 0) * 100;
           }
         }
         
@@ -11386,18 +11388,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.query;
 
       const filters: any = {
-        limit: parseInt(limit as string, 10),
-        offset: parseInt(offset as string, 10),
+        limit: Math.max(1, Math.min(1000, safeParseInt(limit as string, 50))),
+        offset: Math.max(0, safeParseInt(offset as string, 0)),
       };
 
       if (status) {
         filters.status = status as string;
       }
       if (minConfidence) {
-        filters.minConfidence = parseInt(minConfidence as string, 10);
+        filters.minConfidence = safeParseInt(minConfidence as string, 0);
       }
       if (maxConfidence) {
-        filters.maxConfidence = parseInt(maxConfidence as string, 10);
+        filters.maxConfidence = safeParseInt(maxConfidence as string, 100);
       }
       if (startDate) {
         filters.startDate = new Date(startDate as string);
@@ -11593,8 +11595,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Calendar Import Logs
   app.get('/api/calendar/import-logs', isAuthenticated, requireRole('admin', 'manager'), async (req, res) => {
     try {
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+      const limit = Math.max(1, Math.min(1000, safeParseInt(req.query.limit as string, 50)));
+      const offset = Math.max(0, safeParseInt(req.query.offset as string, 0));
       const calendarId = req.query.calendarId as string | undefined;
       const hasErrors = req.query.hasErrors === 'true';
       
@@ -11789,9 +11791,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Audit Logs API Routes
   app.get("/api/audit-logs", isAuthenticated, requireRole('admin', 'manager'), async (req, res) => {
     try {
+      // SECURITY: Validate and bounds-check pagination parameters
+      const limit = Math.max(1, Math.min(1000, safeParseInt(req.query.limit as string, 50)));
+      const offset = Math.max(0, safeParseInt(req.query.offset as string, 0));
+      
       const params = {
-        limit: Number(req.query.limit) || 50,
-        offset: Number(req.query.offset) || 0,
+        limit,
+        offset,
         userId: req.query.userId as string | undefined,
         action: req.query.action as string | undefined,
         resourceType: req.query.resourceType as string | undefined,
@@ -11958,8 +11964,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tax-credit-projects/year/:year", isAuthenticated, async (req, res) => {
     try {
-      const year = parseInt(req.params.year);
-      if (isNaN(year)) {
+      const year = safeParseInt(req.params.year, 0);
+      if (year === 0) {
         return res.status(400).json({ message: "Invalid year parameter" });
       }
       const projects = await storage.getTaxCreditProjectsByYear(year);
@@ -12261,10 +12267,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         certifiedProjects: projects.filter(p => p.status === 'certified').length,
         totalUnits: projects.reduce((sum, p) => sum + (p.totalUnits || 0), 0),
         qualifiedUnits: projects.reduce((sum, p) => sum + (p.qualifiedUnits || 0), 0),
-        totalPotentialCredits: projects.reduce((sum, p) => sum + parseFloat(p.creditAmount || '0'), 0),
-        complianceRate: projects.length > 0 
-          ? (projects.filter(p => p.status === 'certified').length / projects.length) * 100 
-          : 0,
+        totalPotentialCredits: projects.reduce((sum, p) => sum + safeParseFloat(p.creditAmount, 0), 0),
+        complianceRate: safeDivide(projects.filter(p => p.status === 'certified').length, projects.length, 0) * 100,
         projectsByBuilder: projects.reduce((acc, p) => {
           acc[p.builderId] = (acc[p.builderId] || 0) + 1;
           return acc;
@@ -12294,7 +12298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       if (dueDays && typeof dueDays === 'string') {
-        const days = parseInt(dueDays);
+        const days = safeParseInt(dueDays, 30);
         const calibrationDue = await storage.getEquipmentDueForCalibration(days);
         const maintenanceDue = await storage.getEquipmentDueForMaintenance(days);
         return res.json({ calibrationDue, maintenanceDue });
@@ -12398,7 +12402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/calibrations/upcoming", isAuthenticated, async (req, res) => {
     try {
       const { days = '30' } = req.query;
-      const calibrations = await storage.getUpcomingCalibrations(parseInt(days as string));
+      const calibrations = await storage.getUpcomingCalibrations(safeParseInt(days as string, 30));
       res.json(calibrations);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch upcoming calibrations');
@@ -12458,7 +12462,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/maintenance/upcoming", isAuthenticated, async (req, res) => {
     try {
       const { days = '30' } = req.query;
-      const maintenance = await storage.getUpcomingMaintenance(parseInt(days as string));
+      const maintenance = await storage.getUpcomingMaintenance(safeParseInt(days as string, 30));
       res.json(maintenance);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch upcoming maintenance');
@@ -13475,7 +13479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { metric, lookbackDays } = req.query;
       const metricStr = (metric as string) || 'revenue';
-      const days = lookbackDays ? parseInt(lookbackDays as string) : 30;
+      const days = Math.max(1, safeParseInt(lookbackDays as string, 30));
       
       const forecasts = await storage.getForecastData(metricStr, days);
       res.json(forecasts);
@@ -13488,7 +13492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/analytics/builder-performance", isAuthenticated, blockFinancialAccess(), async (req, res) => {
     try {
       const { limit } = req.query;
-      const maxBuilders = limit ? parseInt(limit as string) : 10;
+      const maxBuilders = Math.max(1, Math.min(1000, safeParseInt(limit as string, 10)));
       
       const performance = await storage.getBuilderPerformance(maxBuilders);
       res.json(performance);
@@ -13775,8 +13779,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const previousPeriodMetrics = await storage.getQaPerformanceMetricsByUser(userId);
       let trend: 'up' | 'down' | 'stable' = 'stable';
       if (previousPeriodMetrics.length > 1) {
-        const prevScore = parseFloat(previousPeriodMetrics[1].avgScore || '0');
-        const currentScore = parseFloat(metric.avgScore || '0');
+        const prevScore = safeParseFloat(previousPeriodMetrics[1].avgScore, 0);
+        const currentScore = safeParseFloat(metric.avgScore, 0);
         if (currentScore > prevScore + 1) trend = 'up';
         else if (currentScore < prevScore - 1) trend = 'down';
       }
@@ -13789,12 +13793,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: metric.userId,
         name,
         period: metric.period,
-        avgScore: parseFloat(metric.avgScore || '0'),
+        avgScore: safeParseFloat(metric.avgScore, 0),
         jobsCompleted: metric.jobsCompleted || 0,
         jobsReviewed: metric.jobsReviewed || 0,
-        onTimeRate: parseFloat(metric.onTimeRate || '0'),
-        firstPassRate: parseFloat(metric.firstPassRate || '0'),
-        customerSatisfaction: parseFloat(metric.customerSatisfaction || '0'),
+        onTimeRate: safeParseFloat(metric.onTimeRate, 0),
+        firstPassRate: safeParseFloat(metric.firstPassRate, 0),
+        customerSatisfaction: safeParseFloat(metric.customerSatisfaction, 0),
         strongAreas: metric.strongAreas || [],
         improvementAreas: metric.improvementAreas || [],
         trend
@@ -13830,20 +13834,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let count = 0;
         
         for (const metric of teamMetrics) {
-          totalScore += parseFloat(metric.avgScore || '0');
+          totalScore += safeParseFloat(metric.avgScore, 0);
           totalCompletion += metric.jobsCompleted || 0;
-          totalCompliance += parseFloat(metric.firstPassRate || '0');
-          totalSatisfaction += parseFloat(metric.customerSatisfaction || '0');
+          totalCompliance += safeParseFloat(metric.firstPassRate, 0);
+          totalSatisfaction += safeParseFloat(metric.customerSatisfaction, 0);
           count++;
         }
         
         if (count > 0) {
           metrics.push({
             month: current.toLocaleDateString('en-US', { month: 'short' }),
-            avgScore: parseFloat((totalScore / count).toFixed(1)),
+            avgScore: safeParseFloat(safeToFixed(safeDivide(totalScore, count, 0), 1), 0),
             completionRate: 90 + Math.random() * 5, // Mock completion rate
-            complianceRate: parseFloat((totalCompliance / count).toFixed(1)),
-            customerSatisfaction: parseFloat((totalSatisfaction / count).toFixed(1))
+            complianceRate: safeParseFloat(safeToFixed(safeDivide(totalCompliance, count, 0), 1), 0),
+            customerSatisfaction: safeParseFloat(safeToFixed(safeDivide(totalSatisfaction, count, 0), 1), 0)
           });
         }
         
@@ -13878,7 +13882,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { period } = req.params;
       const { limit } = req.query;
       
-      const leaderboard = await storage.getQaLeaderboard(period, limit ? parseInt(limit as string) : 10);
+      const leaderboard = await storage.getQaLeaderboard(period, Math.max(1, Math.min(1000, safeParseInt(limit as string, 10))));
       res.json(leaderboard);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'fetch QA leaderboard');
@@ -13893,7 +13897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const trends = await storage.getQaScoreTrends(
         userId === 'team' ? undefined : userId,
-        days ? parseInt(days as string) : 30
+        Math.max(1, safeParseInt(days as string, 30))
       );
       res.json(trends);
     } catch (error) {
@@ -14009,7 +14013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const executions = await storage.getBackgroundJobExecutionHistory(
         jobName,
-        limit ? parseInt(limit as string) : 50
+        Math.max(1, Math.min(1000, safeParseInt(limit as string, 50)))
       );
       
       serverLogger.info('[Route/GET /api/admin/background-jobs/:jobName/executions] Successfully fetched execution history', { 
@@ -14038,7 +14042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const executions = await storage.getRecentBackgroundJobExecutions(
-        limit ? parseInt(limit as string) : 100
+        Math.max(1, Math.min(1000, safeParseInt(limit as string, 100)))
       );
       
       serverLogger.info('[Route/GET /api/admin/background-jobs/executions/recent] Successfully fetched recent executions', { 

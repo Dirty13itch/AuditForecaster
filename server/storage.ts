@@ -244,6 +244,7 @@ import { db } from "./db";
 import { eq, and, or, gte, lte, gt, lt, inArray, desc, asc, sql, count, isNull } from "drizzle-orm";
 import { serverLogger } from "./logger";
 import { updateJobComplianceStatus } from './complianceService.js';
+import { safeDivide, safeParseFloat, safeToFixed } from "../shared/numberUtils";
 
 // ID Validation function for robust user ID handling
 function validateUserId(id: any): { valid: boolean; error?: string } {
@@ -6175,7 +6176,7 @@ export class DatabaseStorage implements IStorage {
     const expenses = jobExpenses[0]?.total || 0;
     const mileageDeduction = jobMileage[0]?.totalDeduction || 0;
     const profit = revenue - expenses - mileageDeduction;
-    const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+    const margin = safeDivide(profit, revenue, 0) * 100;
 
     return {
       revenue,
@@ -7718,18 +7719,18 @@ export class DatabaseStorage implements IStorage {
     // Calculate metrics
     const totalJobs = jobsInRange.length;
     const completedJobs = jobsInRange.filter(j => j.status === 'done').length;
-    const completionRate = totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0;
+    const completionRate = safeDivide(completedJobs, totalJobs, 0) * 100;
     
     const totalRevenue = invoicesInRange.reduce((sum, inv) => 
-      sum + parseFloat(inv.totalAmount || '0'), 0
+      sum + safeParseFloat(inv.totalAmount, 0), 0
     );
     
     const totalExpenses = expensesInRange.reduce((sum, exp) => 
-      sum + parseFloat(exp.amount || '0'), 0
+      sum + safeParseFloat(exp.amount, 0), 0
     );
     
     const profit = totalRevenue - totalExpenses;
-    const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+    const profitMargin = safeDivide(profit, totalRevenue, 0) * 100;
     
     // Get photos count
     const photosInRange = await db
@@ -7743,11 +7744,11 @@ export class DatabaseStorage implements IStorage {
     return {
       totalJobs,
       completedJobs,
-      completionRate: parseFloat(completionRate.toFixed(1)),
-      totalRevenue: parseFloat(totalRevenue.toFixed(2)),
-      totalExpenses: parseFloat(totalExpenses.toFixed(2)),
-      profit: parseFloat(profit.toFixed(2)),
-      profitMargin: parseFloat(profitMargin.toFixed(1)),
+      completionRate: safeParseFloat(safeToFixed(completionRate, 1), 0),
+      totalRevenue: safeParseFloat(safeToFixed(totalRevenue, 2), 0),
+      totalExpenses: safeParseFloat(safeToFixed(totalExpenses, 2), 0),
+      profit: safeParseFloat(safeToFixed(profit, 2), 0),
+      profitMargin: safeParseFloat(safeToFixed(profitMargin, 1), 0),
       photosUploaded: photosInRange[0]?.count || 0,
       activeJobs: jobsInRange.filter(j => j.status === 'scheduled').length,
       pendingJobs: jobsInRange.filter(j => j.status === 'scheduled').length
@@ -8214,15 +8215,15 @@ export class DatabaseStorage implements IStorage {
       }
       
       const data = dataMap.get(key);
-      data.expenses += parseFloat(expense.amount || '0');
+      data.expenses += safeParseFloat(expense.amount, 0);
     });
     
     // Calculate profit for each period
     dataMap.forEach(data => {
       data.profit = data.revenue - data.expenses;
-      data.revenue = parseFloat(data.revenue.toFixed(2));
-      data.expenses = parseFloat(data.expenses.toFixed(2));
-      data.profit = parseFloat(data.profit.toFixed(2));
+      data.revenue = safeParseFloat(safeToFixed(data.revenue, 2), 0);
+      data.expenses = safeParseFloat(safeToFixed(data.expenses, 2), 0);
+      data.profit = safeParseFloat(safeToFixed(data.profit, 2), 0);
     });
     
     return Array.from(dataMap.values()).sort((a, b) => a.date.localeCompare(b.date));
@@ -8241,7 +8242,7 @@ export class DatabaseStorage implements IStorage {
     // Calculate trends
     const calculateTrend = (current: number, previous: number) => {
       if (previous === 0) return current > 0 ? 100 : 0;
-      return ((current - previous) / previous) * 100;
+      return safeDivide(current - previous, previous, 0) * 100;
     };
     
     return [

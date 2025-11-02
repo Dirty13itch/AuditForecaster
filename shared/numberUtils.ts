@@ -32,16 +32,36 @@ export function safeToFixed(value: number | null | undefined | string, decimals:
 /**
  * Safely parses a value to a float number
  * @param value - The value to parse
- * @returns A valid number or 0 if parsing fails
+ * @param defaultValue - The value to return if parsing fails (default: 0)
+ * @returns A valid number or the default value
  * 
  * @example
  * safeParseFloat("3.14") // 3.14
  * safeParseFloat("abc") // 0
  * safeParseFloat(null) // 0
+ * safeParseFloat("abc", 10) // 10
  */
-export function safeParseFloat(value: string | number | null | undefined): number {
+export function safeParseFloat(value: string | number | null | undefined, defaultValue: number = 0): number {
   const num = parseFloat(value as string);
-  return !isNaN(num) ? num : 0;
+  return !isNaN(num) ? num : defaultValue;
+}
+
+/**
+ * Safely parses a value to an integer number
+ * @param value - The value to parse
+ * @param defaultValue - The value to return if parsing fails (default: 0)
+ * @returns A valid integer or the default value
+ * 
+ * @example
+ * safeParseInt("42") // 42
+ * safeParseInt("abc") // 0
+ * safeParseInt(null) // 0
+ * safeParseInt("abc", 10) // 10
+ * safeParseInt("3.14") // 3
+ */
+export function safeParseInt(value: string | number | null | undefined, defaultValue: number = 0): number {
+  const num = parseInt(value as string, 10);
+  return !isNaN(num) ? num : defaultValue;
 }
 
 /**

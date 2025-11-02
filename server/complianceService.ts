@@ -1,6 +1,7 @@
 import type { IStorage } from "./storage";
 import type { Job, ReportInstance, Forecast, ChecklistItem, ComplianceRule } from "@shared/schema";
 import { serverLogger } from "./logger";
+import { safeParseFloat } from "../shared/numberUtils";
 
 export interface ComplianceViolation {
   ruleId: string;
@@ -62,8 +63,8 @@ export async function evaluateJobCompliance(
         );
 
         for (const rule of tdlRules) {
-          const actualValue = parseFloat(forecast.actualTdl.toString());
-          const thresholdValue = parseFloat(rule.threshold.toString());
+          const actualValue = safeParseFloat(forecast.actualTdl?.toString(), 0);
+          const thresholdValue = safeParseFloat(rule.threshold?.toString(), 0);
 
           if (actualValue > thresholdValue) {
             violations.push({
@@ -86,8 +87,8 @@ export async function evaluateJobCompliance(
         );
 
         for (const rule of dloRules) {
-          const actualValue = parseFloat(forecast.actualDlo.toString());
-          const thresholdValue = parseFloat(rule.threshold.toString());
+          const actualValue = safeParseFloat(forecast.actualDlo?.toString(), 0);
+          const thresholdValue = safeParseFloat(rule.threshold?.toString(), 0);
 
           if (actualValue > thresholdValue) {
             violations.push({
@@ -110,8 +111,8 @@ export async function evaluateJobCompliance(
         );
 
         for (const rule of ach50Rules) {
-          const actualValue = parseFloat(forecast.actualAch50.toString());
-          const thresholdValue = parseFloat(rule.threshold.toString());
+          const actualValue = safeParseFloat(forecast.actualAch50?.toString(), 0);
+          const thresholdValue = safeParseFloat(rule.threshold?.toString(), 0);
 
           if (actualValue > thresholdValue) {
             violations.push({
@@ -182,8 +183,8 @@ export async function evaluateReportCompliance(
         );
 
         for (const rule of tdlRules) {
-          const actualValue = parseFloat(forecast.actualTdl.toString());
-          const thresholdValue = parseFloat(rule.threshold.toString());
+          const actualValue = safeParseFloat(forecast.actualTdl?.toString(), 0);
+          const thresholdValue = safeParseFloat(rule.threshold?.toString(), 0);
 
           if (actualValue > thresholdValue) {
             violations.push({
@@ -206,8 +207,8 @@ export async function evaluateReportCompliance(
         );
 
         for (const rule of dloRules) {
-          const actualValue = parseFloat(forecast.actualDlo.toString());
-          const thresholdValue = parseFloat(rule.threshold.toString());
+          const actualValue = safeParseFloat(forecast.actualDlo?.toString(), 0);
+          const thresholdValue = safeParseFloat(rule.threshold?.toString(), 0);
 
           if (actualValue > thresholdValue) {
             violations.push({
@@ -230,8 +231,8 @@ export async function evaluateReportCompliance(
         );
 
         for (const rule of ach50Rules) {
-          const actualValue = parseFloat(forecast.actualAch50.toString());
-          const thresholdValue = parseFloat(rule.threshold.toString());
+          const actualValue = safeParseFloat(forecast.actualAch50?.toString(), 0);
+          const thresholdValue = safeParseFloat(rule.threshold?.toString(), 0);
 
           if (actualValue > thresholdValue) {
             violations.push({
@@ -329,7 +330,7 @@ export async function updateJobComplianceStatus(
     // Blower Door: ACH50 check using dynamic rules
     if (blowerDoorTest && blowerDoorTest.ach50 !== null && blowerDoorTest.ach50 !== undefined) {
       const ach50 = typeof blowerDoorTest.ach50 === 'string' 
-        ? parseFloat(blowerDoorTest.ach50) 
+        ? safeParseFloat(blowerDoorTest.ach50, 0) 
         : blowerDoorTest.ach50;
       
       testResults.ACH50 = ach50;
@@ -339,7 +340,7 @@ export async function updateJobComplianceStatus(
                      || activeRules.find(r => r.metricType === 'ACH50');
       
       if (ach50Rule) {
-        const thresholdValue = parseFloat(ach50Rule.threshold.toString());
+        const thresholdValue = safeParseFloat(ach50Rule.threshold?.toString(), 0);
         if (ach50 > thresholdValue) {
           violations.push({
             ruleId: ach50Rule.id,
@@ -360,7 +361,7 @@ export async function updateJobComplianceStatus(
     // Duct Leakage (DLO) check using dynamic rules
     if (dloTest && dloTest.leakageRate !== null && dloTest.leakageRate !== undefined) {
       const leakageRate = typeof dloTest.leakageRate === 'string' 
-        ? parseFloat(dloTest.leakageRate) 
+        ? safeParseFloat(dloTest.leakageRate, 0) 
         : dloTest.leakageRate;
       
       testResults.DLO = leakageRate;
@@ -370,7 +371,7 @@ export async function updateJobComplianceStatus(
                    || activeRules.find(r => r.metricType === 'DLO');
       
       if (dloRule) {
-        const thresholdValue = parseFloat(dloRule.threshold.toString());
+        const thresholdValue = safeParseFloat(dloRule.threshold?.toString(), 0);
         if (leakageRate > thresholdValue) {
           violations.push({
             ruleId: dloRule.id,
@@ -391,7 +392,7 @@ export async function updateJobComplianceStatus(
     // Duct Leakage (TDL) check using dynamic rules
     if (tdlTest && tdlTest.leakageRate !== null && tdlTest.leakageRate !== undefined) {
       const leakageRate = typeof tdlTest.leakageRate === 'string' 
-        ? parseFloat(tdlTest.leakageRate) 
+        ? safeParseFloat(tdlTest.leakageRate, 0) 
         : tdlTest.leakageRate;
       
       testResults.TDL = leakageRate;
@@ -401,7 +402,7 @@ export async function updateJobComplianceStatus(
                    || activeRules.find(r => r.metricType === 'TDL');
       
       if (tdlRule) {
-        const thresholdValue = parseFloat(tdlRule.threshold.toString());
+        const thresholdValue = safeParseFloat(tdlRule.threshold?.toString(), 0);
         if (leakageRate > thresholdValue) {
           violations.push({
             ruleId: tdlRule.id,
