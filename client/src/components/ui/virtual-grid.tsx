@@ -1,7 +1,29 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef, ReactNode, useMemo, useEffect } from "react";
+import { useRef, ReactNode, useMemo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+
+// Safe wrapper for useReducedMotion that handles errors gracefully
+function useSafeReducedMotion() {
+  // Check if we're in a browser environment and if the user prefers reduced motion
+  const [shouldReduceMotion, setShouldReduceMotion] = useState(false);
+  
+  useEffect(() => {
+    // Check for reduced motion preference using the native browser API
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setShouldReduceMotion(mediaQuery.matches);
+    
+    // Listen for changes to the preference
+    const handleChange = (e: MediaQueryListEvent) => {
+      setShouldReduceMotion(e.matches);
+    };
+    
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+  
+  return shouldReduceMotion;
+}
 
 interface VirtualGridProps<T> {
   items: T[];
@@ -35,7 +57,7 @@ export function VirtualGrid<T>({
   endReachedThreshold = 200,
 }: VirtualGridProps<T>) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useSafeReducedMotion();
 
   // Calculate rows from items and columns
   const rows = useMemo(() => {
@@ -179,7 +201,7 @@ export function VirtualList<T>({
   getItemKey,
 }: VirtualListProps<T>) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useSafeReducedMotion();
 
   const virtualizer = useVirtualizer({
     count: items.length,

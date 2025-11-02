@@ -515,7 +515,21 @@ async function startServer() {
           
           const updateJobMetrics = async () => {
             try {
-              const jobs = await storage.getAllJobs();
+              // Try to get jobs with error handling for missing columns
+              let jobs = [];
+              try {
+                jobs = await storage.getAllJobs();
+              } catch (dbError: any) {
+                // Handle database column missing errors gracefully
+                if (dbError?.code === '42703') {
+                  serverLogger.warn('[Metrics] Database schema out of sync. Please run npm run db:push to sync the schema.', { error: dbError?.message });
+                  // Return early to avoid further errors
+                  return;
+                }
+                // Re-throw other errors
+                throw dbError;
+              }
+
               const statusCounts: Record<string, number> = {};
               
               for (const job of jobs) {

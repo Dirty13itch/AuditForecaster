@@ -2393,10 +2393,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (req.query.cursor !== undefined || req.query.sortBy !== undefined || req.query.sortOrder !== undefined) {
           const params = cursorPaginationParamsSchema.parse(req.query);
           const result = await storage.getJobsCursorPaginatedByUser(userId, params);
-          serverLogger.info('[Jobs] Returning cursor-paginated jobs for inspector', { count: result.items.length });
+          // Fix: Use result.data instead of result.items, and add null check
+          const count = result.data?.length ?? 0;
+          serverLogger.info('[Jobs] Returning cursor-paginated jobs for inspector', { count });
+          // Ensure we return empty array if no data
+          if (!result.data) {
+            result.data = [];
+          }
           return res.json(result);
         }
-        const jobs = await storage.getJobsByUser(userId);
+        const jobs = await storage.getJobsByUser(userId) ?? [];
         serverLogger.info('[Jobs] Returning jobs for inspector', { count: jobs.length });
         return res.json(jobs);
       }
@@ -2405,16 +2411,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.query.cursor !== undefined || req.query.sortBy !== undefined || req.query.sortOrder !== undefined) {
         const params = cursorPaginationParamsSchema.parse(req.query);
         const result = await storage.getJobsCursorPaginated(params);
-        serverLogger.info('[Jobs] Returning cursor-paginated jobs for admin/manager/viewer', { count: result.items.length });
+        // Fix: Use result.data instead of result.items, and add null check
+        const count = result.data?.length ?? 0;
+        serverLogger.info('[Jobs] Returning cursor-paginated jobs for admin/manager/viewer', { count });
+        // Ensure we return empty array if no data
+        if (!result.data) {
+          result.data = [];
+        }
         return res.json(result);
       }
       if (req.query.limit !== undefined || req.query.offset !== undefined) {
         const params = paginationParamsSchema.parse(req.query);
         const result = await storage.getJobsPaginated(params);
-        serverLogger.info('[Jobs] Returning paginated jobs for admin/manager/viewer', { count: result.items.length });
+        // Fix: Use result.data instead of result.items, and add null check
+        const count = result.data?.length ?? 0;
+        serverLogger.info('[Jobs] Returning paginated jobs for admin/manager/viewer', { count });
+        // Ensure we return empty array if no data
+        if (!result.data) {
+          result.data = [];
+        }
         return res.json(result);
       }
-      const jobs = await storage.getAllJobs();
+      const jobs = await storage.getAllJobs() ?? [];
       serverLogger.info('[Jobs] Returning all jobs for admin/manager/viewer', { count: jobs.length });
       res.json(jobs);
     } catch (error) {
@@ -3072,7 +3090,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Legacy non-paginated response
-      const jobs = await storage.getTodaysJobsByStatus(['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review']);
+      const jobs = await storage.getTodaysJobsByStatus(['scheduled', 'in-progress', 'pre-inspection', 'testing', 'review']) ?? [];
       res.json(jobs);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -3098,7 +3116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Legacy non-paginated response
-      const jobs = await storage.getTodaysJobsByStatus(['completed']);
+      const jobs = await storage.getTodaysJobsByStatus(['completed']) ?? [];
       res.json(jobs);
     } catch (error) {
       if (error instanceof ZodError) {
