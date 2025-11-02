@@ -277,7 +277,7 @@ export default function FieldDay() {
           </p>
         </div>
         <Calendar className="h-8 w-8 text-muted-foreground" />
-      </div>
+      </motion.div>
 
       {/* Field Status Bar - Network, Battery, Sync Status */}
       {!isAdmin && (
