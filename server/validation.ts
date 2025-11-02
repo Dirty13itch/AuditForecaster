@@ -10,9 +10,24 @@ export function sanitizeHtml(dirty: string): string {
   });
 }
 
-// Sanitize text input (strip dangerous characters but allow basic formatting)
-export function sanitizeText(input: string | undefined | null): string {
-  if (!input) return '';
+// Sanitize text input (handles strings and numbers properly)
+export function sanitizeText(input: string | number | undefined | null): string {
+  // Handle null/undefined
+  if (input === null || input === undefined) {
+    return '';
+  }
+  
+  // Handle numbers - convert to string without sanitizing
+  if (typeof input === 'number') {
+    return String(input);
+  }
+  
+  // Handle empty strings
+  if (input === '') {
+    return '';
+  }
+  
+  // Sanitize string input
   return DOMPurify.sanitize(input.trim(), {
     ALLOWED_TAGS: [],
     ALLOWED_ATTR: []

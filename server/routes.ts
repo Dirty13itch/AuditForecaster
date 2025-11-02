@@ -1,6 +1,6 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
-import type { AuthenticatedRequest } from "./types";
+import type { AuthenticatedRequest, ApiErrorResponse, ValidationError } from "./types";
 import { format } from "date-fns";
 import { storage } from "./storage";
 import { googleCalendarService, getUncachableGoogleCalendarClient, allDayDateToUTC } from "./googleCalendar";
@@ -127,6 +127,88 @@ import { sanitizeText, validateFileUpload } from './validation';
 import { withCache, buildersCache, inspectorsCache, statsCache, invalidateCachePattern } from './cache';
 import { monitorQuery, getSlowQueryStats, clearSlowQueryStats } from './query-monitor';
 
+/**
+ * API Error Response Standard
+ * 
+ * All error responses follow this format:
+ * {
+ *   success: false,
+ *   message: "Human-readable error message",
+ *   error: "ERROR_CODE", // e.g., VALIDATION_ERROR, NOT_FOUND, FORBIDDEN
+ *   details: {...}, // Optional additional details
+ *   timestamp: "ISO 8601 timestamp",
+ *   path: "/api/endpoint" // Request path
+ * }
+ * 
+ * Success responses (optional to implement):
+ * {
+ *   success: true,
+ *   data: {...},
+ *   message: "Optional success message",
+ *   timestamp: "ISO 8601 timestamp"
+ * }
+ */
+
+// Helper to create standardized error responses
+function createErrorResponse(
+  message: string,
+  errorCode?: string,
+  details?: ValidationError[] | Record<string, any>,
+  path?: string
+): ApiErrorResponse {
+  return {
+    success: false,
+    message,
+    error: errorCode,
+    details,
+    timestamp: new Date().toISOString(),
+    path
+  };
+}
+
+// Helper for validation errors
+function validationErrorResponse(
+  errors: ValidationError[],
+  path?: string
+): ApiErrorResponse {
+  return createErrorResponse(
+    'Validation failed',
+    'VALIDATION_ERROR',
+    errors,
+    path
+  );
+}
+
+// Helper for not found errors
+function notFoundResponse(resource: string, path?: string): ApiErrorResponse {
+  return createErrorResponse(
+    `${resource} not found`,
+    'NOT_FOUND',
+    undefined,
+    path
+  );
+}
+
+// Helper for authorization errors
+function forbiddenResponse(message: string = 'Permission denied', path?: string): ApiErrorResponse {
+  return createErrorResponse(
+    message,
+    'FORBIDDEN',
+    undefined,
+    path
+  );
+}
+
+// Helper for internal server errors
+function serverErrorResponse(path?: string): ApiErrorResponse {
+  return createErrorResponse(
+    "We're having trouble processing your request. Please try again.",
+    'INTERNAL_SERVER_ERROR',
+    undefined,
+    path
+  );
+}
+
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -139,16 +221,28 @@ function logError(context: string, error: unknown, additionalInfo?: Record<strin
   });
 }
 
-function handleValidationError(error: unknown): { status: number; message: string } {
+function handleValidationError(error: unknown, path?: string): { status: number; response: ApiErrorResponse } {
   if (error instanceof ZodError) {
-    const firstError = error.errors[0];
-    const fieldName = firstError.path.join('.');
+    const validationErrors: ValidationError[] = error.errors.map(err => ({
+      field: err.path.join('.'),
+      message: err.message,
+      value: (err as any).received || (err as any).input || undefined
+    }));
+    
     return {
       status: 400,
-      message: `Please check your input: ${firstError.message}${fieldName ? ` (${fieldName})` : ''}`,
+      response: validationErrorResponse(validationErrors, path)
     };
   }
-  return { status: 400, message: "Please check your input and try again" };
+  return {
+    status: 400,
+    response: createErrorResponse(
+      "Please check your input and try again",
+      'VALIDATION_ERROR',
+      undefined,
+      path
+    )
+  };
 }
 
 function handleDatabaseError(error: unknown, operation: string): { status: number; message: string } {
@@ -193,7 +287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.end(await register.metrics());
     } catch (error) {
       logError('Metrics', error);
-      res.status(500).json({ message: "Failed to generate metrics" });
+      res.status(500).json(serverErrorResponse(req.path));
     }
   });
   
@@ -214,7 +308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ csrfToken });
     } catch (error) {
       logError('CSRF/GenerateToken', error);
-      res.status(500).json({ message: "Failed to generate CSRF token" });
+      res.status(500).json(serverErrorResponse(req.path));
     }
   });
 
@@ -237,7 +331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // The session now contains the full database user (fixed in verify function)
       if (!sessionUser.id || !sessionUser.email) {
         serverLogger.error(`[API/Auth/User] Invalid session user - missing core fields`);
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json(notFoundResponse('User', req.path));
       }
       
       // Return the user data from session (no database query needed!)
@@ -254,7 +348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       logError('Auth/GetUser', error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      res.status(500).json(serverErrorResponse(req.path));
     }
   });
 
@@ -270,7 +364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(inspectors);
     } catch (error) {
       logError('Users/GetInspectors', error);
-      res.status(500).json({ message: "Failed to fetch inspectors" });
+      res.status(500).json(serverErrorResponse(req.path));
     }
   });
   
@@ -1025,12 +1119,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = flexibleIdParamSchema.parse(req.params);
       const builder = await storage.getBuilder(id);
       if (!builder) {
-        return res.status(404).json({ message: "Builder not found. It may have been deleted." });
+        return res.status(404).json(notFoundResponse('Builder', req.path));
       }
       
       // Check ownership using checkResourceOwnership
       if (!checkResourceOwnership(builder.createdBy, req.user.id, req.user.role)) {
-        return res.status(403).json({ message: "Forbidden: Cannot access this builder" });
+        return res.status(403).json(forbiddenResponse('Cannot access this builder', req.path));
       }
       
       res.json(builder);
@@ -1066,7 +1160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const builder = await storage.updateBuilder(id, validated);
       if (!builder) {
-        return res.status(404).json({ message: "Builder not found. It may have been deleted." });
+        return res.status(404).json(notFoundResponse('Builder', req.path));
       }
       
       // Audit log: Builder update
@@ -1157,7 +1251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const builder = await storage.approveBuilder(req.params.id);
       if (!builder) {
-        return res.status(404).json({ message: "Builder not found" });
+        return res.status(404).json(notFoundResponse('Builder', req.path));
       }
       
       await createAuditLog(req, {
@@ -1192,7 +1286,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const targetBuilder = await storage.getBuilder(targetBuilderId);
       
       if (!sourceBuilder || !targetBuilder) {
-        return res.status(404).json({ message: "Builder not found" });
+        return res.status(404).json(notFoundResponse('Builder', req.path));
       }
       
       await storage.mergeBuilders(req.params.id, targetBuilderId);
@@ -3456,14 +3550,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = flexibleIdParamSchema.parse(req.params);
       const job = await storage.getJob(id);
       if (!job) {
-        return res.status(404).json({ message: "Job not found. It may have been deleted or the link may be outdated." });
+        return res.status(404).json(notFoundResponse('Job', req.path));
       }
       
       // Check ownership for inspectors
       const userRole = (req.user.role as UserRole) || 'inspector';
       const userId = req.user.id;
       if (userRole === 'inspector' && job.createdBy !== userId) {
-        return res.status(403).json({ message: 'Forbidden: You can only view your own jobs' });
+        return res.status(403).json(forbiddenResponse('You can only view your own jobs', req.path));
       }
       
       res.json(job);
@@ -3487,14 +3581,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Load existing job to check if status is changing to completed
       const existingJob = await storage.getJob(id);
       if (!existingJob) {
-        return res.status(404).json({ message: "Job not found. It may have been deleted." });
+        return res.status(404).json(notFoundResponse('Job', req.path));
       }
 
       // Check ownership for inspectors
       const userRole = (req.user.role as UserRole) || 'inspector';
       const userId = req.user.id;
       if (userRole === 'inspector' && existingJob.createdBy !== userId) {
-        return res.status(403).json({ message: 'Forbidden: You can only edit your own jobs' });
+        return res.status(403).json(forbiddenResponse('You can only edit your own jobs', req.path));
       }
 
       // BUGFIX: Map inspectorId to assignedTo for API compatibility

@@ -464,6 +464,5 @@ export function invalidateCachePattern(cacheInstance: NodeCache, pattern: string
   serverLogger.debug(`Invalidated ${matchingKeys.length} cache keys matching: ${pattern}`);
 }
 
-// Export everything
-export { cache, shortCache };
+// Default export for convenience
 export default cache;

@@ -36,10 +36,29 @@ export type RequestHandler = (
 export interface ValidationError {
   field: string;
   message: string;
+  value?: any;
 }
 
 export interface ApiError {
   status: number;
   message: string;
   errors?: ValidationError[];
+}
+
+// Standard API error response format
+export interface ApiErrorResponse {
+  success: false;
+  message: string;
+  error?: string;
+  details?: ValidationError[] | Record<string, any>;
+  timestamp?: string;
+  path?: string;
+}
+
+// Standard API success response format
+export interface ApiSuccessResponse<T = any> {
+  success: true;
+  data: T;
+  message?: string;
+  timestamp?: string;
 }
