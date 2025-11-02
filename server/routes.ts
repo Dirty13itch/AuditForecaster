@@ -161,6 +161,19 @@ function parseDateParams(query: any): { startDate?: Date; endDate?: Date } {
   return { startDate, endDate };
 }
 
+// Rate limiter for public endpoints (stricter than authenticated endpoints)
+// Public endpoints like unsubscribe should have aggressive rate limiting since they:
+// - Don't require authentication (vulnerable to abuse)
+// - Are typically one-time actions (legitimate users won't hit limits)
+// - Could be used for token scanning attacks
+const publicEndpointLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 requests per 15 minutes
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoints (no authentication required for monitoring)
   app.get("/healthz", healthz);
@@ -11352,7 +11365,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/email-preferences/unsubscribe/:token", async (req, res) => {
+  app.post("/api/email-preferences/unsubscribe/:token", publicEndpointLimiter, async (req, res) => {
     try {
       const { token } = req.params;
       const prefs = await storage.getEmailPreferencesByToken(token);
