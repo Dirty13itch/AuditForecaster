@@ -5761,7 +5761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk delete expenses
-  app.delete("/api/expenses/bulk", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/expenses/bulk", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkDeleteSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one expense ID is required"),
     });
@@ -5772,6 +5772,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Limit bulk operations to 200 items for safety
       if (ids.length > 200) {
         return res.status(400).json({ message: "Cannot delete more than 200 expenses at once" });
+      }
+
+      // SECURITY: Verify ownership of all expenses before deleting
+      const expenses = await Promise.all(ids.map(id => storage.getExpense(id)));
+      const invalidExpenses = expenses.filter((expense, index) => 
+        !expense || expense.userId !== req.user.id
+      );
+      
+      if (invalidExpenses.length > 0) {
+        return res.status(403).json({ 
+          message: "You do not have permission to delete some of these expenses" 
+        });
       }
 
       const deleted = await storage.bulkDeleteExpenses(ids);
@@ -8489,7 +8501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk delete photos
-  app.delete("/api/photos/bulk", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/photos/bulk", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkDeleteSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
     });
@@ -8502,8 +8514,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Cannot delete more than 200 photos at once" });
       }
 
-      // Fetch photos first to update checklist item counts
+      // Fetch photos first to verify ownership and update checklist item counts
       const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
+      
+      // SECURITY: Verify ownership of all photos before deleting
+      const invalidPhotos = photos.filter((photo, index) => 
+        !photo || photo.uploadedBy !== req.user.id
+      );
+      
+      if (invalidPhotos.length > 0) {
+        return res.status(403).json({ 
+          message: "You do not have permission to delete some of these photos" 
+        });
+      }
+      
       const validPhotos = photos.filter((p): p is NonNullable<typeof p> => p !== undefined);
 
       // Track checklist items that need count updates
@@ -8541,7 +8565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk tag photos
-  app.post("/api/photos/bulk-tag", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/photos/bulk-tag", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkTagSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       mode: z.enum(['add', 'remove', 'replace']),
@@ -8554,6 +8578,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Limit bulk operations to 200 items for safety
       if (ids.length > 200) {
         return res.status(400).json({ message: "Cannot tag more than 200 photos at once" });
+      }
+
+      // SECURITY: Verify ownership of all photos before tagging
+      const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
+      const invalidPhotos = photos.filter((photo, index) => 
+        !photo || photo.uploadedBy !== req.user.id
+      );
+      
+      if (invalidPhotos.length > 0) {
+        return res.status(403).json({ 
+          message: "You do not have permission to tag some of these photos" 
+        });
       }
 
       const updated = await storage.bulkUpdatePhotoTags(ids, mode, tags);
@@ -8569,7 +8605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk move photos to job
-  app.post("/api/photos/bulk-move", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/photos/bulk-move", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkMoveSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       jobId: z.string().min(1, "Job ID is required"),
@@ -8589,6 +8625,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Cannot move more than 200 photos at once" });
       }
 
+      // SECURITY: Verify ownership of all photos before moving
+      const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
+      const invalidPhotos = photos.filter((photo, index) => 
+        !photo || photo.uploadedBy !== req.user.id
+      );
+      
+      if (invalidPhotos.length > 0) {
+        return res.status(403).json({ 
+          message: "You do not have permission to move some of these photos" 
+        });
+      }
+
       const updated = await storage.bulkMovePhotosToJob(ids, jobId);
       res.json({ updated, total: ids.length, jobId });
     } catch (error) {
@@ -8602,7 +8650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk update photo favorites
-  app.post("/api/photos/bulk-favorites", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/photos/bulk-favorites", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkFavoritesSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       isFavorite: z.boolean(),
@@ -8614,6 +8662,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Limit bulk operations to 200 items for safety
       if (ids.length > 200) {
         return res.status(400).json({ message: "Cannot update more than 200 photos at once" });
+      }
+
+      // SECURITY: Verify ownership of all photos before updating favorites
+      const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
+      const invalidPhotos = photos.filter((photo, index) => 
+        !photo || photo.uploadedBy !== req.user.id
+      );
+      
+      if (invalidPhotos.length > 0) {
+        return res.status(403).json({ 
+          message: "You do not have permission to update some of these photos" 
+        });
       }
 
       const updated = await storage.bulkUpdatePhotoFavorites(ids, isFavorite);
