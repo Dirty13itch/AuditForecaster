@@ -3,6 +3,7 @@ initSentry();
 
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
+import compression from "compression";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import cron from "node-cron";
@@ -31,6 +32,20 @@ export { app };
 app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
   crossOriginEmbedderPolicy: false,
+}));
+
+// Add response compression for better network performance
+app.use(compression({
+  level: 6, // Compression level 1-9 (6 is good balance of speed/size)
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req, res) => {
+    // Don't compress if client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression filter
+    return compression.filter(req, res);
+  }
 }));
 
 // CORS configuration for preview deploys

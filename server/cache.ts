@@ -397,6 +397,73 @@ setInterval(() => {
   });
 }, 5 * 60 * 1000);
 
+// Additional cache instances for specific use cases (simpler API)
+// These complement the main cache with specific TTLs for common patterns
+export const queryCache = new NodeCache({
+  stdTTL: 300, // 5 minutes default
+  checkperiod: 120,
+  useClones: false, // Performance optimization - don't clone objects
+});
+
+export const buildersCache = new NodeCache({
+  stdTTL: 600, // 10 minutes
+  checkperiod: 120,
+  useClones: false,
+});
+
+export const inspectorsCache = new NodeCache({
+  stdTTL: 600, // 10 minutes
+  checkperiod: 120,
+  useClones: false,
+});
+
+export const statsCache = new NodeCache({
+  stdTTL: 180, // 3 minutes
+  checkperiod: 120,
+  useClones: false,
+});
+
+// Simple helper function for cache key generation
+export function generateCacheKey(prefix: string, ...params: (string | number | undefined)[]): string {
+  return `${prefix}:${params.filter(Boolean).join(':')}`;
+}
+
+// Simple helper function to wrap async functions with caching
+export async function withCache<T>(
+  cacheInstance: NodeCache,
+  key: string,
+  fetcher: () => Promise<T>,
+  ttl?: number
+): Promise<T> {
+  // Try to get from cache first
+  const cached = cacheInstance.get<T>(key);
+  if (cached !== undefined) {
+    serverLogger.debug(`Cache HIT: ${key}`);
+    return cached;
+  }
+
+  // Cache miss - fetch data
+  serverLogger.debug(`Cache MISS: ${key}`);
+  const data = await fetcher();
+  
+  // Store in cache
+  if (ttl !== undefined) {
+    cacheInstance.set(key, data, ttl);
+  } else {
+    cacheInstance.set(key, data);
+  }
+  
+  return data;
+}
+
+// Simple helper to invalidate cache patterns
+export function invalidateCachePattern(cacheInstance: NodeCache, pattern: string): void {
+  const keys = cacheInstance.keys();
+  const matchingKeys = keys.filter(key => key.includes(pattern));
+  matchingKeys.forEach(key => cacheInstance.del(key));
+  serverLogger.debug(`Invalidated ${matchingKeys.length} cache keys matching: ${pattern}`);
+}
+
 // Export everything
 export { cache, shortCache };
 export default cache;

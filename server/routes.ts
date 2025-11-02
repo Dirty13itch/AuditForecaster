@@ -124,6 +124,7 @@ import { unlink } from "fs/promises";
 import rateLimit from "express-rate-limit";
 import { registerSettingsRoutes } from "./routes/settings";
 import { sanitizeText, validateFileUpload } from './validation';
+import { withCache, buildersCache, inspectorsCache, statsCache, invalidateCachePattern } from './cache';
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
@@ -259,7 +260,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all inspectors - for dynamic assignment UI
   app.get("/api/users/inspectors", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const inspectors = await storage.getUsersByRole('inspector');
+      const inspectors = await withCache(
+        inspectorsCache,
+        'inspectors:all',
+        () => storage.getUsersByRole('inspector'),
+        600 // 10 minutes
+      );
       res.json(inspectors);
     } catch (error) {
       logError('Users/GetInspectors', error);
@@ -927,17 +933,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Inspectors only see their own builders
       if (userRole === 'inspector') {
-        const builders = await storage.getBuildersByUser(userId);
+        const builders = await withCache(
+          buildersCache,
+          `builders:user:${userId}`,
+          () => storage.getBuildersByUser(userId),
+          600 // 10 minutes
+        );
         return res.json(builders);
       }
       
       // Admins/managers see all builders
       if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        // Don't cache paginated requests - they change too frequently
         const params = paginationParamsSchema.parse(req.query);
         const result = await storage.getBuildersPaginated(params);
         return res.json(result);
       }
-      const builders = await storage.getAllBuilders();
+      const builders = await withCache(
+        buildersCache,
+        'builders:all',
+        () => storage.getAllBuilders(),
+        600 // 10 minutes
+      );
       res.json(builders);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -976,6 +993,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resourceId: builder.id,
         metadata: { builderName: builder.name, companyName: builder.companyName },
       }, storage);
+      
+      // Invalidate builder caches
+      invalidateCachePattern(buildersCache, 'builders:');
       
       res.status(201).json(builder);
     } catch (error) {
@@ -1046,6 +1066,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         changes: validated,
         metadata: { builderName: builder.name, companyName: builder.companyName },
       }, storage);
+      
+      // Invalidate builder caches
+      invalidateCachePattern(buildersCache, 'builders:');
       
       res.json(builder);
     } catch (error) {
@@ -3527,6 +3550,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           metadata: { jobName: existingJob.name },
         }, storage);
       }
+      
+      // Invalidate stats cache when job status changes (affects dashboard)
+      if (validated.status || validated.scheduledDate || validated.assignedTo) {
+        invalidateCachePattern(statsCache, 'inspector-summary:');
+      }
 
       res.json(job);
     } catch (error) {
@@ -3597,6 +3625,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           source: 'calendar_quick_update'
         },
       }, storage);
+      
+      // Invalidate stats cache (affects dashboard)
+      invalidateCachePattern(statsCache, 'inspector-summary:');
 
       res.json(job);
     } catch (error) {
@@ -10111,12 +10142,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Parse date param or use today
-      const queryDate = date ? new Date(date) : new Date();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Cache key includes inspector ID and date for proper cache isolation
+      const dateStr = date ? new Date(date as string).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const cacheKey = `inspector-summary:${targetInspectorId}:${dateStr}`;
       
-      // Smart week range logic
+      // Wrap the expensive computation in cache
+      const summary = await withCache(
+        statsCache,
+        cacheKey,
+        async () => {
+          // Parse date param or use today
+          const queryDate = date ? new Date(date) : new Date();
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          // Smart week range logic
       const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
       const currentHour = new Date().getHours();
       
@@ -10234,27 +10274,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offlineQueueCount = 0;
       const unsyncedPhotoCount = 0;
       
-      res.json({
-        todayJobs: {
-          total: todayJobs.length,
-          scheduled: scheduledCount,
-          done: doneCount,
-          failed: failedCount,
-          jobs: todayJobs,
+          return {
+            todayJobs: {
+              total: todayJobs.length,
+              scheduled: scheduledCount,
+              done: doneCount,
+              failed: failedCount,
+              jobs: todayJobs,
+            },
+            weekJobs: {
+              total: weekJobs.length,
+              byDay,
+            },
+            thisWeekRange: {
+              start: weekStart.toISOString(),
+              end: weekEnd.toISOString(),
+              includesNextMonday,
+            },
+            upcomingJobs,
+            offlineQueueCount,
+            unsyncedPhotoCount,
+          };
         },
-        weekJobs: {
-          total: weekJobs.length,
-          byDay,
-        },
-        thisWeekRange: {
-          start: weekStart.toISOString(),
-          end: weekEnd.toISOString(),
-          includesNextMonday,
-        },
-        upcomingJobs,
-        offlineQueueCount,
-        unsyncedPhotoCount,
-      });
+        180 // 3 minutes TTL
+      );
+      
+      res.json(summary);
     } catch (error) {
       logError('Dashboard/InspectorSummary', error);
       res.status(500).json({ message: "Failed to load inspector dashboard data" });
