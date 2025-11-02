@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index, date, time } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index, date, time, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -189,6 +189,8 @@ export const builders = pgTable("builders", {
   index("idx_builders_created_by").on(table.createdBy),
   index("idx_builders_status").on(table.status),
   index("idx_builders_needs_review").on(table.needsReview),
+  check("builders_rating_range", sql`${table.rating} IS NULL OR (${table.rating} >= 0 AND ${table.rating} <= 5)`),
+  check("builders_confidence_range", sql`${table.confidence} IS NULL OR (${table.confidence} >= 0 AND ${table.confidence} <= 100)`),
 ]);
 
 export const builderContacts = pgTable("builder_contacts", {
@@ -231,6 +233,7 @@ export const builderAgreements = pgTable("builder_agreements", {
   index("idx_builder_agreements_status").on(table.status),
   index("idx_builder_agreements_builder_status").on(table.builderId, table.status),
   index("idx_builder_agreements_created_by").on(table.createdBy),
+  check("builder_agreements_end_after_start", sql`${table.endDate} IS NULL OR ${table.endDate} > ${table.startDate}`),
 ]);
 
 export const builderPrograms = pgTable("builder_programs", {
@@ -774,6 +777,7 @@ export const expenses = pgTable("expenses", {
   index("idx_expenses_user_approval").on(table.userId, table.approvalStatus),
   index("idx_expenses_user_id").on(table.userId),
   index("idx_expenses_approved_by").on(table.approvedBy),
+  check("expenses_amount_positive", sql`${table.amount} > 0`),
 ]);
 
 export const mileageLogs = pgTable("mileage_logs", {
@@ -818,6 +822,7 @@ export const mileageLogs = pgTable("mileage_logs", {
   // Performance indexes for MileIQ functionality
   index("idx_mileage_unclassified").on(table.vehicleState, table.date).where(sql`vehicle_state = 'unclassified'`),
   index("idx_mileage_monthly_summary").on(table.date, table.purpose).where(sql`vehicle_state IN ('completed', 'unclassified')`),
+  check("mileage_logs_distance_positive", sql`${table.distance} > 0`),
 ]);
 
 export const mileageRoutePoints = pgTable("mileage_route_points", {
@@ -1255,6 +1260,8 @@ export const blowerDoorTests = pgTable("blower_door_tests", {
   index("idx_blower_door_tests_report_instance_id").on(table.reportInstanceId),
   index("idx_blower_door_tests_test_date").on(table.testDate),
   index("idx_blower_door_tests_meets_code").on(table.meetsCode),
+  check("blower_door_tests_cfm50_non_negative", sql`${table.cfm50} >= 0`),
+  check("blower_door_tests_ach50_non_negative", sql`${table.ach50} >= 0`),
 ]);
 
 // Duct leakage test data table for Minnesota code compliance
@@ -1316,6 +1323,8 @@ export const ductLeakageTests = pgTable("duct_leakage_tests", {
   index("idx_duct_leakage_tests_meets_code_tdl").on(table.meetsCodeTDL),
   index("idx_duct_leakage_tests_meets_code_dlo").on(table.meetsCodeDLO),
   index("idx_duct_leakage_tests_created_by").on(table.createdBy),
+  check("duct_leakage_tests_cfm25_total_non_negative", sql`${table.cfm25Total} IS NULL OR ${table.cfm25Total} >= 0`),
+  check("duct_leakage_tests_cfm25_outside_non_negative", sql`${table.cfm25Outside} IS NULL OR ${table.cfm25Outside} >= 0`),
 ]);
 
 // Ventilation Testing (ASHRAE 62.2)
@@ -1403,6 +1412,11 @@ export const ventilationTests = pgTable("ventilation_tests", {
   index("idx_ventilation_tests_test_date").on(table.testDate),
   index("idx_ventilation_tests_overall_compliant").on(table.overallCompliant),
   index("idx_ventilation_tests_meets_ventilation_requirement").on(table.meetsVentilationRequirement),
+  check("ventilation_tests_kitchen_rated_cfm_non_negative", sql`${table.kitchenRatedCFM} IS NULL OR ${table.kitchenRatedCFM} >= 0`),
+  check("ventilation_tests_kitchen_measured_cfm_non_negative", sql`${table.kitchenMeasuredCFM} IS NULL OR ${table.kitchenMeasuredCFM} >= 0`),
+  check("ventilation_tests_mechanical_rated_cfm_non_negative", sql`${table.mechanicalRatedCFM} IS NULL OR ${table.mechanicalRatedCFM} >= 0`),
+  check("ventilation_tests_mechanical_supply_cfm_non_negative", sql`${table.mechanicalMeasuredSupplyCFM} IS NULL OR ${table.mechanicalMeasuredSupplyCFM} >= 0`),
+  check("ventilation_tests_mechanical_exhaust_cfm_non_negative", sql`${table.mechanicalMeasuredExhaustCFM} IS NULL OR ${table.mechanicalMeasuredExhaustCFM} >= 0`),
 ]);
 
 // Financial Management Tables
@@ -1447,6 +1461,8 @@ export const invoices = pgTable("invoices", {
   index("idx_invoices_invoice_number").on(table.invoiceNumber),
   index("idx_invoices_builder_status").on(table.builderId, table.status),
   index("idx_invoices_period_start").on(table.periodStart),
+  check("invoices_subtotal_non_negative", sql`${table.subtotal} >= 0`),
+  check("invoices_total_non_negative", sql`${table.total} >= 0`),
 ]);
 
 // Invoice Line Items - Line items for each invoice
@@ -1481,6 +1497,7 @@ export const payments = pgTable("payments", {
   index("idx_payments_invoice_id").on(table.invoiceId),
   index("idx_payments_payment_date").on(table.paymentDate),
   index("idx_payments_created_by").on(table.createdBy),
+  check("payments_amount_positive", sql`${table.amount} > 0`),
 ]);
 
 // AR Snapshots - AR aging snapshots (daily)
@@ -1634,6 +1651,8 @@ export const equipment = pgTable("equipment", {
   index("idx_equipment_assigned_to").on(table.assignedTo),
   index("idx_equipment_calibration_due").on(table.calibrationDue),
   index("idx_equipment_maintenance_due").on(table.maintenanceDue),
+  check("equipment_purchase_cost_non_negative", sql`${table.purchaseCost} IS NULL OR ${table.purchaseCost} >= 0`),
+  check("equipment_current_value_non_negative", sql`${table.currentValue} IS NULL OR ${table.currentValue} >= 0`),
 ]);
 
 export const equipmentCalibrations = pgTable("equipment_calibrations", {
