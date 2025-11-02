@@ -123,6 +123,7 @@ import { createReadStream } from "fs";
 import { unlink } from "fs/promises";
 import rateLimit from "express-rate-limit";
 import { registerSettingsRoutes } from "./routes/settings";
+import { sanitizeText, validateFileUpload } from './validation';
 
 // Error handling helpers
 function logError(context: string, error: unknown, additionalInfo?: Record<string, any>) {
@@ -953,6 +954,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertBuilderSchema.parse(req.body);
       // Set createdBy to current user
       validated.createdBy = req.user.id;
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.name) validated.name = sanitizeText(validated.name);
+      if (validated.companyName) validated.companyName = sanitizeText(validated.companyName);
+      if (validated.email) validated.email = sanitizeText(validated.email);
+      if (validated.phone) validated.phone = sanitizeText(validated.phone);
+      if (validated.address) validated.address = sanitizeText(validated.address);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      if (validated.constructionManagerName) validated.constructionManagerName = sanitizeText(validated.constructionManagerName);
+      if (validated.constructionManagerEmail) validated.constructionManagerEmail = sanitizeText(validated.constructionManagerEmail);
+      if (validated.constructionManagerPhone) validated.constructionManagerPhone = sanitizeText(validated.constructionManagerPhone);
+      
       const builder = await storage.createBuilder(validated);
       
       // Audit log: Builder creation
@@ -1007,6 +1020,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = flexibleIdParamSchema.parse(req.params);
       
       const validated = insertBuilderSchema.partial().parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.name) validated.name = sanitizeText(validated.name);
+      if (validated.companyName) validated.companyName = sanitizeText(validated.companyName);
+      if (validated.email) validated.email = sanitizeText(validated.email);
+      if (validated.phone) validated.phone = sanitizeText(validated.phone);
+      if (validated.address) validated.address = sanitizeText(validated.address);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      if (validated.constructionManagerName) validated.constructionManagerName = sanitizeText(validated.constructionManagerName);
+      if (validated.constructionManagerEmail) validated.constructionManagerEmail = sanitizeText(validated.constructionManagerEmail);
+      if (validated.constructionManagerPhone) validated.constructionManagerPhone = sanitizeText(validated.constructionManagerPhone);
+      
       const builder = await storage.updateBuilder(id, validated);
       if (!builder) {
         return res.status(404).json({ message: "Builder not found. It may have been deleted." });
@@ -1208,6 +1233,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       // Set createdBy to current user
       validated.createdBy = req.user.id;
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.name) validated.name = sanitizeText(validated.name);
+      if (validated.email) validated.email = sanitizeText(validated.email);
+      if (validated.phone) validated.phone = sanitizeText(validated.phone);
+      if (validated.mobilePhone) validated.mobilePhone = sanitizeText(validated.mobilePhone);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const contact = await storage.createBuilderContact(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1262,6 +1295,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const validated = updateBuilderContactSchema.parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.name) validated.name = sanitizeText(validated.name);
+      if (validated.email) validated.email = sanitizeText(validated.email);
+      if (validated.phone) validated.phone = sanitizeText(validated.phone);
+      if (validated.mobilePhone) validated.mobilePhone = sanitizeText(validated.mobilePhone);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const contact = await storage.updateBuilderContact(req.params.id, validated);
       
       if (!contact) {
@@ -1376,6 +1417,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertBuilderAgreementSchema.parse({ ...req.body, builderId: req.params.builderId });
       // Set createdBy to current user
       validated.createdBy = req.user.id;
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.agreementName) validated.agreementName = sanitizeText(validated.agreementName);
+      if (validated.paymentTerms) validated.paymentTerms = sanitizeText(validated.paymentTerms);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const agreement = await storage.createBuilderAgreement(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1429,6 +1476,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const validated = updateBuilderAgreementSchema.parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.agreementName) validated.agreementName = sanitizeText(validated.agreementName);
+      if (validated.paymentTerms) validated.paymentTerms = sanitizeText(validated.paymentTerms);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const agreement = await storage.updateBuilderAgreement(req.params.id, validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1502,6 +1555,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertBuilderProgramSchema.parse({ ...req.body, builderId: req.params.builderId });
       // Set createdBy to current user
       validated.createdBy = req.user.id;
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.programName) validated.programName = sanitizeText(validated.programName);
+      if (validated.certificationNumber) validated.certificationNumber = sanitizeText(validated.certificationNumber);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const program = await storage.createBuilderProgram(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1555,6 +1614,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const validated = updateBuilderProgramSchema.parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.programName) validated.programName = sanitizeText(validated.programName);
+      if (validated.certificationNumber) validated.certificationNumber = sanitizeText(validated.certificationNumber);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const program = await storage.updateBuilderProgram(req.params.id, validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1630,6 +1695,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         builderId: req.params.builderId,
         createdBy: req.user.id,
       });
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.subject) validated.subject = sanitizeText(validated.subject);
+      if (validated.description) validated.description = sanitizeText(validated.description);
+      if (validated.outcome) validated.outcome = sanitizeText(validated.outcome);
+      
       const interaction = await storage.createBuilderInteraction(validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -1683,6 +1754,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const validated = updateBuilderInteractionSchema.parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.subject) validated.subject = sanitizeText(validated.subject);
+      if (validated.description) validated.description = sanitizeText(validated.description);
+      if (validated.outcome) validated.outcome = sanitizeText(validated.outcome);
+      
       const interaction = await storage.updateBuilderInteraction(req.params.id, validated);
       
       const builder = await storage.getBuilder(req.params.builderId);
@@ -3189,6 +3266,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set createdBy to current user
       validated.createdBy = req.user.id;
       
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.address) validated.address = sanitizeText(validated.address);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      if (validated.contractor) validated.contractor = sanitizeText(validated.contractor);
+      if (validated.name) validated.name = sanitizeText(validated.name);
+      if (validated.customFields) validated.customFields = sanitizeText(validated.customFields);
+      
       // Add breadcrumb for job creation attempt
       const { addBreadcrumb } = await import("./sentry");
       addBreadcrumb('jobs', 'Creating new job', {
@@ -3372,6 +3456,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (validated.builderId === '') {
         validated.builderId = undefined;
       }
+
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.address) validated.address = sanitizeText(validated.address);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      if (validated.contractor) validated.contractor = sanitizeText(validated.contractor);
+      if (validated.name) validated.name = sanitizeText(validated.name);
+      if (validated.customFields) validated.customFields = sanitizeText(validated.customFields);
 
       // Check if status is changing to "done"
       const isCompletingNow = validated.status === 'done' && existingJob.status !== 'done';
@@ -5719,6 +5810,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/expenses", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertExpenseSchema.parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.description) validated.description = sanitizeText(validated.description);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      if (validated.vendor) validated.vendor = sanitizeText(validated.vendor);
+      
       const expense = await storage.createExpense(validated);
       res.status(201).json(expense);
     } catch (error) {
@@ -5758,6 +5855,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.user.role !== 'admin' && existingExpense.userId !== req.user.id) {
         return res.status(403).json({ message: "You do not have permission to update this expense" });
       }
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.description) validated.description = sanitizeText(validated.description);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      if (validated.vendor) validated.vendor = sanitizeText(validated.vendor);
       
       const expense = await storage.updateExpense(req.params.id, validated);
       if (!expense) {
@@ -8459,6 +8561,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         filePath: objectPath,
       });
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.caption) validated.caption = sanitizeText(validated.caption);
+      if (validated.location) validated.location = sanitizeText(validated.location);
+      if (validated.tags && Array.isArray(validated.tags)) {
+        validated.tags = validated.tags.map(tag => sanitizeText(tag));
+      }
+      
       const photo = await storage.createPhoto(validated);
       
       if (photo.checklistItemId) {
@@ -8523,6 +8633,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // SECURITY: Verify ownership (allow admins to manage any resource)
       if (req.user.role !== 'admin' && existingPhoto.uploadedBy !== req.user.id) {
         return res.status(403).json({ message: "You do not have permission to update this photo" });
+      }
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.caption) validated.caption = sanitizeText(validated.caption);
+      if (validated.location) validated.location = sanitizeText(validated.location);
+      if (validated.tags && Array.isArray(validated.tags)) {
+        validated.tags = validated.tags.map(tag => sanitizeText(tag));
       }
       
       const photo = await storage.updatePhoto(req.params.id, validated);
@@ -10207,6 +10324,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/checklist-items", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = insertChecklistItemSchema.parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.title) validated.title = sanitizeText(validated.title);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const item = await storage.createChecklistItem(validated);
       
       // Trigger compliance evaluation for all checklist item changes
@@ -10246,6 +10368,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/checklist-items/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
       const validated = updateChecklistItemSchema.parse(req.body);
+      
+      // Sanitize user-provided text inputs to prevent XSS
+      if (validated.title) validated.title = sanitizeText(validated.title);
+      if (validated.notes) validated.notes = sanitizeText(validated.notes);
+      
       const item = await storage.updateChecklistItem(req.params.id, validated);
       if (!item) {
         return res.status(404).json({ message: "Checklist item not found. It may have been deleted." });
