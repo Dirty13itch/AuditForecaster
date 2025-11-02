@@ -9848,9 +9848,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const allJobs = await db.query.jobs.findMany({
         where: eq(jobs.assignedTo, targetInspectorId),
-        with: {
-          builder: true,
-        },
       });
       
       // Filter today's jobs
