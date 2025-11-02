@@ -1,157 +1,189 @@
 /**
- * Gatekeeper Middleware
+ * Gatekeeper Middleware - Server-Side Route Guards
  * 
- * Enforces feature maturity gates based on environment.
- * Routes are filtered by maturity level to control feature exposure.
+ * Express middleware for enforcing route access control based on:
+ * - Feature maturity level (GA, Beta, Experimental)
+ * - Environment (dev, staging, prod)
+ * - User roles and permissions
+ * - Golden Path test status
+ * 
+ * Integrates with shared/gatekeeping.ts for consistent server/client logic.
  * 
  * @module server/middleware/gatekeeper
  */
 
 import type { Request, Response, NextFunction } from 'express';
-import { FeatureMaturity, isFeatureEnabled, getCurrentEnvironment } from '@shared/featureFlags';
-import { getRouteMetadata, type RouteMetadata } from '../../client/src/lib/navigation';
+import { evaluateRouteAccess, getRuntimeEnv, type RouteAccessDecision } from '@shared/gatekeeping';
+import type { UserRole } from '@shared/types';
+import { serverLogger } from '../logger';
 
 /**
- * Extended request with route metadata
+ * Extended Express request with user and correlation ID
  */
 export interface GatekeeperRequest extends Request {
-  routeMetadata?: RouteMetadata;
+  user?: {
+    id: string;
+    email: string;
+    role?: UserRole;
+    roles?: UserRole[];
+    firstName?: string;
+    lastName?: string;
+  };
   correlationId?: string;
 }
 
 /**
- * Maturity gate configuration by environment
- */
-export const MATURITY_GATES: Record<string, FeatureMaturity[]> = {
-  development: [FeatureMaturity.EXPERIMENTAL, FeatureMaturity.BETA, FeatureMaturity.GA],
-  staging: [FeatureMaturity.BETA, FeatureMaturity.GA],
-  production: [FeatureMaturity.GA],
-};
-
-/**
- * Check if route is allowed in current environment
- */
-export function isRouteAllowed(route: RouteMetadata): boolean {
-  const currentEnv = getCurrentEnvironment();
-  const allowedMaturityLevels = MATURITY_GATES[currentEnv] || MATURITY_GATES.production;
-  
-  return allowedMaturityLevels.includes(route.maturity);
-}
-
-/**
- * Check if feature flag is enabled for route
- */
-export function isRouteFeatureEnabled(route: RouteMetadata): boolean {
-  if (!route.featureFlagKey) return true; // No feature flag = always enabled
-  
-  return isFeatureEnabled(route.featureFlagKey);
-}
-
-/**
- * Gatekeeper middleware
+ * Correlation ID Middleware
  * 
- * Blocks access to routes that don't meet maturity requirements for current environment.
+ * Generates and attaches correlation ID to every request for tracing.
  * 
- * Usage:
- * ```typescript
- * app.use(gatekeeperMiddleware());
- * ```
+ * @returns Express middleware
  */
-export function gatekeeperMiddleware() {
+export function correlationIdMiddleware() {
   return (req: GatekeeperRequest, res: Response, next: NextFunction) => {
-    // Skip gatekeeper for health check endpoints
-    if (req.path === '/healthz' || req.path === '/readyz' || req.path === '/api/status') {
-      return next();
-    }
-    
-    // Skip gatekeeper for public assets
-    if (req.path.startsWith('/assets/') || req.path.startsWith('/static/')) {
-      return next();
-    }
-
-    // Get route metadata
-    const routeMetadata = getRouteMetadata(req.path);
-    
-    // If no route metadata found, allow through (404 will be handled by route handler)
-    if (!routeMetadata) {
-      return next();
-    }
-    
-    // Attach route metadata to request for downstream use
-    req.routeMetadata = routeMetadata;
-    
-    // Check if route is public (no auth required)
-    if (routeMetadata.isPublic) {
-      return next();
-    }
-    
-    // Check maturity gate
-    if (!isRouteAllowed(routeMetadata)) {
-      const currentEnv = getCurrentEnvironment();
-      
-      return res.status(404).json({
-        code: 'FEATURE_NOT_AVAILABLE',
-        message: `This feature is not available in ${currentEnv} environment`,
-        details: {
-          route: req.path,
-          maturity: routeMetadata.maturity,
-          environment: currentEnv,
-          allowedMaturityLevels: MATURITY_GATES[currentEnv],
-        },
-        correlationId: req.correlationId || crypto.randomUUID(),
-      });
-    }
-    
-    // Check feature flag gate
-    if (!isRouteFeatureEnabled(routeMetadata)) {
-      return res.status(404).json({
-        code: 'FEATURE_DISABLED',
-        message: 'This feature is currently disabled',
-        details: {
-          route: req.path,
-          featureFlag: routeMetadata.featureFlagKey,
-        },
-        correlationId: req.correlationId || crypto.randomUUID(),
-      });
-    }
-    
-    // All gates passed
+    const correlationId = (req.headers['x-correlation-id'] as string) || crypto.randomUUID();
+    req.correlationId = correlationId;
+    res.setHeader('X-Correlation-ID', correlationId);
     next();
   };
 }
 
 /**
- * Role-based access control middleware
+ * Route Access Middleware
+ * 
+ * Evaluates route access using shared gatekeeping logic.
+ * Blocks access if user doesn't meet requirements (maturity, role, environment).
+ * 
+ * Usage:
+ * ```typescript
+ * // Apply to all routes
+ * app.use(requireRouteAccess());
+ * 
+ * // Apply to specific route
+ * app.get('/api/admin/settings', requireRouteAccess(), (req, res) => { ... });
+ * ```
+ * 
+ * @param options - Configuration options
+ * @returns Express middleware
+ */
+export function requireRouteAccess(options: {
+  /** Allow experimental routes (default: false) */
+  showExperimental?: boolean;
+} = {}) {
+  const { showExperimental = false } = options;
+  
+  return (req: GatekeeperRequest, res: Response, next: NextFunction) => {
+    // Skip for health check endpoints
+    if (req.path === '/healthz' || req.path === '/readyz' || req.path === '/api/status') {
+      return next();
+    }
+    
+    // Skip for public assets
+    if (req.path.startsWith('/assets/') || req.path.startsWith('/static/')) {
+      return next();
+    }
+    
+    // Skip for auth endpoints
+    if (req.path.startsWith('/api/login') || req.path.startsWith('/api/logout') || req.path.startsWith('/api/dev-login')) {
+      return next();
+    }
+    
+    // Get user roles
+    let userRoles: UserRole[] = [];
+    if (req.user) {
+      if (req.user.roles) {
+        userRoles = req.user.roles;
+      } else if (req.user.role) {
+        userRoles = [req.user.role];
+      }
+    }
+    
+    // Evaluate route access
+    const env = getRuntimeEnv();
+    const decision = evaluateRouteAccess(
+      req.path,
+      userRoles,
+      env,
+      showExperimental
+    );
+    
+    // Block if not allowed
+    if (!decision.allowed) {
+      serverLogger.warn('[Gatekeeper] Route access denied', {
+        path: req.path,
+        userId: req.user?.id,
+        userRoles,
+        environment: env,
+        maturity: decision.maturity,
+        reason: decision.message,
+        correlationId: req.correlationId,
+      });
+      
+      return res.status(403).json({
+        error: decision.message || 'Access denied',
+        code: 'ROUTE_ACCESS_DENIED',
+        details: {
+          path: req.path,
+          maturity: decision.maturity,
+          badge: decision.badge,
+          redirectTo: decision.redirectTo,
+        },
+        correlationId: req.correlationId,
+      });
+    }
+    
+    // Access granted
+    next();
+  };
+}
+
+/**
+ * Role-Based Access Control Middleware
  * 
  * Checks if user has required role to access route.
  * Should be used after authentication middleware.
  * 
  * Usage:
  * ```typescript
- * app.use(requireRole(['admin', 'inspector']));
+ * app.get('/api/admin/users', requireRole(['admin']), (req, res) => { ... });
+ * app.get('/api/inspections', requireRole(['admin', 'inspector', 'lead']), (req, res) => { ... });
  * ```
+ * 
+ * @param allowedRoles - Single role or array of allowed roles
+ * @returns Express middleware
  */
-export function requireRole(allowedRoles: string | string[]) {
+export function requireRole(allowedRoles: UserRole | UserRole[]) {
   const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
   
-  return (req: GatekeeperRequest & { user?: { role?: string; id?: string } }, res: Response, next: NextFunction) => {
+  return (req: GatekeeperRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({
+        error: 'Authentication required',
         code: 'AUTH_REQUIRED',
-        message: 'Authentication required',
-        correlationId: req.correlationId || crypto.randomUUID(),
+        correlationId: req.correlationId,
       });
     }
     
-    if (!req.user.role || !roles.includes(req.user.role)) {
+    const userRoles: UserRole[] = req.user.roles || (req.user.role ? [req.user.role] : []);
+    const hasRole = roles.some(role => userRoles.includes(role));
+    
+    if (!hasRole) {
+      serverLogger.warn('[Gatekeeper] Role access denied', {
+        path: req.path,
+        userId: req.user.id,
+        userRoles,
+        requiredRoles: roles,
+        correlationId: req.correlationId,
+      });
+      
       return res.status(403).json({
+        error: 'Insufficient permissions',
         code: 'FORBIDDEN_ROLE',
-        message: 'Your role does not allow this action',
         details: {
           requiredRoles: roles,
-          userRole: req.user.role,
+          userRole: userRoles,
         },
-        correlationId: req.correlationId || crypto.randomUUID(),
+        correlationId: req.correlationId,
       });
     }
     
@@ -160,7 +192,7 @@ export function requireRole(allowedRoles: string | string[]) {
 }
 
 /**
- * Ownership check middleware
+ * Ownership Check Middleware
  * 
  * Checks if user owns the resource they're trying to access.
  * Admins bypass ownership checks.
@@ -170,23 +202,27 @@ export function requireRole(allowedRoles: string | string[]) {
  * app.patch('/api/jobs/:id', requireOwnership(async (req) => {
  *   const job = await storage.getJob(req.params.id);
  *   return job.inspectorId === req.user.id;
- * }));
+ * }), (req, res) => { ... });
  * ```
+ * 
+ * @param ownershipCheck - Async function that returns true if user owns resource
+ * @returns Express middleware
  */
 export function requireOwnership(
-  ownershipCheck: (req: GatekeeperRequest & { user?: { role?: string; id?: string } }) => Promise<boolean>
+  ownershipCheck: (req: GatekeeperRequest) => Promise<boolean>
 ) {
-  return async (req: GatekeeperRequest & { user?: { role?: string; id?: string } }, res: Response, next: NextFunction) => {
+  return async (req: GatekeeperRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({
+        error: 'Authentication required',
         code: 'AUTH_REQUIRED',
-        message: 'Authentication required',
-        correlationId: req.correlationId || crypto.randomUUID(),
+        correlationId: req.correlationId,
       });
     }
     
     // Admins bypass ownership checks
-    if (req.user.role === 'admin') {
+    const userRoles: UserRole[] = req.user.roles || (req.user.role ? [req.user.role] : []);
+    if (userRoles.includes('admin')) {
       return next();
     }
     
@@ -194,86 +230,59 @@ export function requireOwnership(
       const isOwner = await ownershipCheck(req);
       
       if (!isOwner) {
+        serverLogger.warn('[Gatekeeper] Ownership check failed', {
+          path: req.path,
+          userId: req.user.id,
+          correlationId: req.correlationId,
+        });
+        
         return res.status(403).json({
+          error: 'You do not own this resource',
           code: 'FORBIDDEN_OWNERSHIP',
-          message: 'You do not own this resource',
-          correlationId: req.correlationId || crypto.randomUUID(),
+          correlationId: req.correlationId,
         });
       }
       
       next();
     } catch (error) {
+      serverLogger.error('[Gatekeeper] Ownership check error', {
+        path: req.path,
+        userId: req.user.id,
+        error,
+        correlationId: req.correlationId,
+      });
+      
       return res.status(500).json({
+        error: 'Error checking resource ownership',
         code: 'INTERNAL_ERROR',
-        message: 'Error checking resource ownership',
-        correlationId: req.correlationId || crypto.randomUUID(),
+        correlationId: req.correlationId,
       });
     }
   };
 }
 
 /**
- * Correlation ID middleware
+ * Get gatekeeper information for debugging
  * 
- * Generates and attaches correlation ID to every request.
+ * Returns current environment and maturity levels allowed.
+ * Useful for /api/status endpoint.
  * 
- * Usage:
- * ```typescript
- * app.use(correlationIdMiddleware());
- * ```
- */
-export function correlationIdMiddleware() {
-  return (req: GatekeeperRequest, res: Response, next: NextFunction) => {
-    // Check for existing correlation ID from client
-    const correlationId = (req.headers['x-correlation-id'] as string) || crypto.randomUUID();
-    
-    // Attach to request
-    req.correlationId = correlationId;
-    
-    // Return in response header
-    res.setHeader('X-Correlation-ID', correlationId);
-    
-    next();
-  };
-}
-
-/**
- * Get filtered routes for user
- * 
- * Returns list of routes accessible to user based on:
- * - Environment maturity gates
- * - Feature flags
- * - User role
- */
-export function getFilteredRoutes(userRole?: string): RouteMetadata[] {
-  const allRoutes = Object.values(require('../../client/src/lib/navigation').ROUTE_REGISTRY);
-  
-  return allRoutes.filter((route: RouteMetadata) => {
-    // Check maturity gate
-    if (!isRouteAllowed(route)) return false;
-    
-    // Check feature flag
-    if (!isRouteFeatureEnabled(route)) return false;
-    
-    // Check role (if provided)
-    if (userRole && !route.allowedRoles.includes(userRole as any)) return false;
-    
-    return true;
-  });
-}
-
-/**
- * Export environment info for debugging
+ * @returns Gatekeeper configuration info
  */
 export function getGatekeeperInfo() {
-  const currentEnv = getCurrentEnvironment();
-  const allowedMaturityLevels = MATURITY_GATES[currentEnv] || MATURITY_GATES.production;
+  const env = getRuntimeEnv();
   
   return {
-    environment: currentEnv,
-    allowedMaturityLevels,
-    experimentalEnabled: allowedMaturityLevels.includes(FeatureMaturity.EXPERIMENTAL),
-    betaEnabled: allowedMaturityLevels.includes(FeatureMaturity.BETA),
-    gaEnabled: allowedMaturityLevels.includes(FeatureMaturity.GA),
+    environment: env,
+    maturityGates: {
+      prod: ['ga'],
+      staging: ['ga', 'beta'],
+      dev: ['ga', 'beta', 'experimental (with toggle)'],
+    },
+    currentAllowed: env === 'prod' 
+      ? ['ga'] 
+      : env === 'staging' 
+        ? ['ga', 'beta'] 
+        : ['ga', 'beta', 'experimental (with toggle)'],
   };
 }

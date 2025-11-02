@@ -1,5 +1,6 @@
+import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, Calendar, Map, Building2, FileStack, DollarSign, FileText, BarChart3, ShieldCheck, Settings, Wifi, WifiOff, CloudUpload, RefreshCw, LogOut, Activity, CalendarClock, ClipboardCheck, History, Receipt, Package, Award, Trophy, Target, Camera, Car, Clock, Wind, Gauge, UserCheck } from "lucide-react";
+import { Wifi, WifiOff, CloudUpload, RefreshCw, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,230 +25,86 @@ import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
 import { RoleBadge } from "@/components/RoleBadge";
+import { ReadinessChip } from "@/components/ReadinessChip";
+import { useShowExperimental } from "@/components/DevModeBanner";
+import { getNavigationRoutes, getRuntimeEnv } from "@shared/gatekeeping";
+import { FeatureMaturity } from "@shared/featureFlags";
 
-const menuItems = [
-  {
-    title: "Dashboard",
-    url: "/",
-    icon: Home,
-    shortcut: "Alt+1",
-    shortcutKeys: ["g", "h"],
-  },
-  {
-    title: "Jobs",
-    url: "/jobs",
-    icon: ClipboardList,
-    shortcut: "Cmd+J",
-    shortcutAlt: "Alt+2",
-    shortcutKeys: ["g", "j"],
-  },
-  {
-    title: "Field Day",
-    url: "/field-day",
-    icon: Calendar,
-    shortcut: "Cmd+F",
-    shortcutAlt: "Alt+3",
-    shortcutKeys: ["g", "f"],
-  },
-  {
-    title: "Photos",
-    url: "/photos",
-    icon: Camera,
-    shortcut: "Cmd+P",
-    shortcutAlt: "Alt+4",
-    shortcutKeys: ["g", "p"],
-  },
-  {
-    title: "Schedule",
-    url: "/schedule",
-    icon: Calendar,
-    shortcutAlt: "Alt+5",
-    shortcutKeys: ["g", "s"],
-  },
-  {
-    title: "Route",
-    url: "/route",
-    icon: Map,
-    shortcutAlt: "Alt+6",
-  },
-  {
-    title: "Builders",
-    url: "/builders",
-    icon: Building2,
-    shortcutAlt: "Alt+7",
-    shortcutKeys: ["g", "b"],
-  },
-  {
-    title: "Builder Review",
-    url: "/builder-review",
-    icon: UserCheck,
-    adminOnly: true,
-  },
-  {
-    title: "Plans",
-    url: "/plans",
-    icon: FileStack,
-  },
-  {
-    title: "Equipment",
-    url: "/equipment",
-    icon: Package,
-  },
-  {
-    title: "Quality Assurance",
-    url: "/qa",
-    icon: Award,
-  },
-  {
-    title: "Achievements",
-    url: "/gamification",
-    icon: Trophy,
-  },
-  {
-    title: "Challenges",
-    url: "/challenges",
-    icon: Target,
-  },
-  {
-    title: "Compliance",
-    url: "/compliance",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Financials",
-    url: "/financials",
-    icon: DollarSign,
-  },
-  {
-    title: "Mileage",
-    url: "/mileage",
-    icon: Car,
-  },
-  {
-    title: "45L Tax Credits",
-    url: "/tax-credits",
-    icon: Receipt,
-  },
-  {
-    title: "Reports",
-    url: "/reports",
-    icon: FileText,
-  },
-  {
-    title: "Report Templates",
-    url: "/report-templates",
-    icon: FileText,
-  },
-  {
-    title: "Scheduled Exports",
-    url: "/scheduled-exports",
-    icon: Clock,
-  },
-  {
-    title: "Analytics",
-    url: "/analytics",
-    icon: BarChart3,
-  },
-  {
-    title: "Audit Logs",
-    url: "/audit-logs",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Settings",
-    url: "/settings",
-    icon: Settings,
-  },
-  {
-    title: "Settings Hub",
-    url: "/settings-hub",
-    icon: Settings,
-    adminOnly: true,
-  },
-  {
-    title: "Diagnostics",
-    url: "/admin/diagnostics",
-    icon: Activity,
-    adminOnly: true,
-  },
-  {
-    title: "Calendar Import",
-    url: "/admin/calendar-import",
-    icon: Calendar,
-    adminOnly: true,
-  },
-];
-
-const testingItems = [
-  {
-    title: "Blower Door Test",
-    url: "/blower-door-test",
-    icon: Wind,
-  },
-  {
-    title: "Duct Leakage Test",
-    url: "/duct-leakage-test",
-    icon: Activity,
-  },
-  {
-    title: "Ventilation Tests",
-    url: "/ventilation-tests",
-    icon: Gauge,
-  },
-];
-
-const businessDataItems = [
-  {
-    title: "Construction Managers",
-    url: "/business-data/construction-managers",
-    icon: UserCheck,
-  },
-];
-
-const calendarImportItems = [
-  {
-    title: "Calendar Management",
-    url: "/calendar-management",
-    icon: Calendar,
-  },
-  {
-    title: "POC Testing",
-    url: "/calendar-poc",
-    icon: CalendarClock,
-  },
-  {
-    title: "Review Queue",
-    url: "/calendar-review",
-    icon: ClipboardCheck,
-  },
-  {
-    title: "Import History",
-    url: "/calendar-imports",
-    icon: History,
-  },
-];
-
+/**
+ * AppSidebar Component
+ * 
+ * Main application sidebar with dynamic route filtering based on:
+ * - User roles and permissions
+ * - Feature maturity level
+ * - Environment (dev, staging, prod)
+ * - Experimental routes toggle (dev only)
+ * 
+ * Routes are sourced from shared/navigation.ts ROUTE_REGISTRY and filtered
+ * using shared/gatekeeping.ts logic for consistent access control.
+ */
 export function AppSidebar() {
   const [location] = useLocation();
   const { isOnline, pendingSync, isSyncing, forceSync } = useNetworkStatus();
   const { toast } = useToast();
   const { user } = useAuth();
+  const showExperimental = useShowExperimental();
   
-  const userRole = (user?.role as UserRole) || 'inspector';
+  // Get user roles
+  const userRoles = useMemo<UserRole[]>(() => {
+    if (!user) return [];
+    if (user.roles) return user.roles;
+    if (user.role) return [user.role as UserRole];
+    return ['inspector']; // default
+  }, [user]);
   
-  // Filter menu items based on role
-  const filteredMenuItems = menuItems.filter(item => {
-    // Audit Logs only for admin and manager
-    if (item.url === '/audit-logs') {
-      return userRole === 'admin' || userRole === 'manager';
-    }
-    // Diagnostics only for admin
-    if ('adminOnly' in item && item.adminOnly) {
-      return userRole === 'admin';
-    }
-    // All other items accessible to all roles
-    return true;
-  });
+  // Get accessible navigation routes using gatekeeping logic
+  const accessibleRoutes = useMemo(() => {
+    const env = getRuntimeEnv();
+    return getNavigationRoutes(userRoles, env, showExperimental);
+  }, [userRoles, showExperimental]);
+  
+  // Group routes by category for organized sidebar
+  const routesByCategory = useMemo(() => {
+    const categories: Record<string, typeof accessibleRoutes> = {
+      'Core': [],
+      'Testing': [],
+      'Business Data': [],
+      'Reports & Analytics': [],
+      'Financial': [],
+      'Compliance': [],
+      'Calendar': [],
+      'Settings': [],
+      'Admin': [],
+    };
+    
+    accessibleRoutes.forEach((item) => {
+      const { route } = item;
+      const path = route.path;
+      
+      // Categorize routes based on path patterns
+      if (path.includes('blower-door') || path.includes('duct-leakage') || path.includes('ventilation')) {
+        categories['Testing'].push(item);
+      } else if (path.includes('construction-managers') || path === '/builders') {
+        categories['Business Data'].push(item);
+      } else if (path.includes('/financial') || path.includes('/invoices') || path === '/mileage' || path === '/expenses') {
+        categories['Financial'].push(item);
+      } else if (path.includes('/compliance') || path.includes('/tax-credit')) {
+        categories['Compliance'].push(item);
+      } else if (path.includes('/reports') || path.includes('/analytics') || path === '/scheduled-exports') {
+        categories['Reports & Analytics'].push(item);
+      } else if (path.includes('/calendar-') || path === '/calendar-management') {
+        categories['Calendar'].push(item);
+      } else if (path.includes('/settings') || path === '/audit-logs' || path === '/admin/diagnostics' || path === '/admin/background-jobs') {
+        categories['Admin'].push(item);
+      } else {
+        // Default: Core navigation
+        categories['Core'].push(item);
+      }
+    });
+    
+    // Remove empty categories
+    return Object.entries(categories).filter(([_, items]) => items.length > 0);
+  }, [accessibleRoutes]);
 
   const handleLogout = () => {
     window.location.href = "/api/logout";
@@ -313,134 +170,53 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Field Inspection System</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {filteredMenuItems.map((item, index) => {
-                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
-                const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-                const cmdKey = isMac ? '⌘' : 'Ctrl';
-                
-                // Determine which shortcut to show
-                let shortcutDisplay = '';
-                if (item.shortcut) {
-                  shortcutDisplay = item.shortcut.replace('Cmd', cmdKey);
-                } else if (index < 9 && item.shortcutAlt) {
-                  shortcutDisplay = item.shortcutAlt;
-                }
-                
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuButton asChild isActive={isActive}>
-                          <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
-                            <item.icon />
-                            <span className="flex-1">{item.title}</span>
-                            {shortcutDisplay && (
-                              <kbd className="ml-auto text-xs px-1.5 py-0.5 bg-muted rounded opacity-60">
-                                {shortcutDisplay}
-                              </kbd>
-                            )}
-                          </Link>
-                        </SidebarMenuButton>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="flex flex-col gap-1">
-                        <div>{item.title}</div>
-                        {item.shortcut && (
-                          <div className="text-xs opacity-75">
-                            Direct: {item.shortcut.replace('Cmd', cmdKey)}
-                          </div>
-                        )}
-                        {item.shortcutKeys && (
-                          <div className="text-xs opacity-75">
-                            Sequence: {item.shortcutKeys.join(' then ')}
-                          </div>
-                        )}
-                        {item.shortcutAlt && index < 9 && (
-                          <div className="text-xs opacity-75">
-                            Quick: {item.shortcutAlt}
-                          </div>
-                        )}
-                      </TooltipContent>
-                    </Tooltip>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-        <SidebarGroup>
-          <SidebarGroupLabel>Testing</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {testingItems.map((item) => {
-                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url} data-testid={`link-testing-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-        <SidebarGroup>
-          <SidebarGroupLabel>Business Data</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {businessDataItems.map((item) => {
-                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url} data-testid={`link-business-data-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {userRole === 'admin' && (
-          <>
-            <SidebarSeparator />
+        {routesByCategory.map(([category, routes]) => (
+          <div key={category}>
             <SidebarGroup>
-              <SidebarGroupLabel>Calendar Import</SidebarGroupLabel>
+              <SidebarGroupLabel>{category}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {calendarImportItems.map((item) => {
-                    const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                  {routes.map(({ route, decision }) => {
+                    const isActive = location === route.path || (route.path !== "/" && location.startsWith(route.path));
+                    const Icon = route.icon;
+                    
                     return (
-                      <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton asChild isActive={isActive}>
-                          <Link href={item.url} data-testid={`link-calendar-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                            <item.icon />
-                            <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
+                      <SidebarMenuItem key={route.path}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton asChild isActive={isActive}>
+                              <Link href={route.path} data-testid={`link-${route.path.replace(/\//g, '-').substring(1)}`}>
+                                {Icon && <Icon />}
+                                <span className="flex-1">{route.title}</span>
+                                {decision.badge && decision.maturity !== FeatureMaturity.GA && (
+                                  <ReadinessChip 
+                                    maturity={decision.maturity} 
+                                    compact 
+                                    tooltipLinkTo="/status/features"
+                                  />
+                                )}
+                              </Link>
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="flex flex-col gap-1">
+                            <div>{route.title}</div>
+                            {route.description && (
+                              <div className="text-xs opacity-75">{route.description}</div>
+                            )}
+                            {route.goldenPathId && (
+                              <div className="text-xs opacity-75">GP: {route.goldenPathId}</div>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
                       </SidebarMenuItem>
                     );
                   })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-          </>
-        )}
+            <SidebarSeparator />
+          </div>
+        ))}
       </SidebarContent>
       
       <SidebarFooter>
@@ -466,13 +242,13 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex items-center gap-3 p-2" data-testid="user-profile">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.profileImageUrl} alt={`${getUserName()} profile picture, ${userRole} role`} />
-                <AvatarFallback aria-label={`${getUserName()}, ${userRole}`}>{getUserInitials()}</AvatarFallback>
+                <AvatarImage src={user?.profileImageUrl} alt={`${getUserName()} profile picture`} />
+                <AvatarFallback aria-label={getUserName()}>{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-sm font-medium truncate">{getUserName()}</p>
-                  <RoleBadge role={userRole} size="sm" showIcon={false} />
+                  {user && <RoleBadge role={userRoles[0] || 'inspector'} size="sm" showIcon={false} />}
                 </div>
                 {user?.email && (
                   <p className="text-xs text-muted-foreground truncate mb-1" data-testid="user-email" title={user.email}>
