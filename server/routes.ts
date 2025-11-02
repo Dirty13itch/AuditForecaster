@@ -9077,6 +9077,175 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Inspector Dashboard Summary endpoint with smart week logic
+  app.get("/api/dashboard/inspector-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const { inspectorId, date } = req.query;
+      const currentUser = req.user;
+      
+      // Default to current user if no inspectorId specified
+      const targetInspectorId = inspectorId || currentUser.id;
+      
+      // Security: Inspectors can only query themselves, admins can query anyone
+      if (currentUser.role !== 'admin' && currentUser.id !== targetInspectorId) {
+        return res.status(403).json({ 
+          message: "You don't have permission to view this inspector's dashboard" 
+        });
+      }
+      
+      // Parse date param or use today
+      const queryDate = date ? new Date(date) : new Date();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Smart week range logic
+      const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+      const currentHour = new Date().getHours();
+      
+      let weekStart: Date;
+      let weekEnd: Date;
+      let includesNextMonday = false;
+      
+      // If (Monday, Tuesday, or Wednesday before 12pm)
+      if ((currentDay === 1 || currentDay === 2 || (currentDay === 3 && currentHour < 12))) {
+        // start = Monday of current week
+        const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1;
+        weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - daysFromMonday);
+        
+        // end = Sunday of current week
+        weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        
+        includesNextMonday = false;
+      } else {
+        // If (Wednesday after 12pm, Thursday, Friday, Saturday, or Sunday)
+        // start = today
+        weekStart = new Date(today);
+        
+        // end = Sunday of current week (or next Monday if today is Sunday)
+        if (currentDay === 0) {
+          // Today is Sunday, so end = next Monday
+          weekEnd = new Date(today);
+          weekEnd.setDate(today.getDate() + 1);
+          includesNextMonday = true;
+        } else {
+          // end = Sunday of current week
+          const daysUntilSunday = 7 - currentDay;
+          weekEnd = new Date(today);
+          weekEnd.setDate(today.getDate() + daysUntilSunday);
+          includesNextMonday = true;
+        }
+      }
+      
+      // Set end of day for weekEnd
+      weekEnd.setHours(23, 59, 59, 999);
+      
+      // Query today's jobs
+      const todayStart = new Date(queryDate);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(queryDate);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      const allJobs = await db.query.jobs.findMany({
+        where: eq(jobs.assignedTo, targetInspectorId),
+        with: {
+          builder: true,
+        },
+      });
+      
+      // Filter today's jobs
+      const todayJobs = allJobs.filter(job => {
+        if (!job.scheduledDate) return false;
+        const jobDate = new Date(job.scheduledDate);
+        return jobDate >= todayStart && jobDate <= todayEnd;
+      });
+      
+      // Count by status
+      const scheduledCount = todayJobs.filter(j => 
+        j.status.toLowerCase() === 'scheduled' || j.status.toLowerCase() === 'in_progress'
+      ).length;
+      const doneCount = todayJobs.filter(j => j.status.toLowerCase() === 'done').length;
+      const failedCount = todayJobs.filter(j => j.status.toLowerCase() === 'failed').length;
+      
+      // Filter and group week jobs by day
+      const weekJobs = allJobs.filter(job => {
+        if (!job.scheduledDate) return false;
+        const jobDate = new Date(job.scheduledDate);
+        return jobDate >= weekStart && jobDate <= weekEnd;
+      });
+      
+      // Group by date
+      const jobsByDay = new Map<string, any[]>();
+      weekJobs.forEach(job => {
+        const jobDate = new Date(job.scheduledDate!);
+        const dateKey = jobDate.toISOString().split('T')[0];
+        if (!jobsByDay.has(dateKey)) {
+          jobsByDay.set(dateKey, []);
+        }
+        jobsByDay.get(dateKey)!.push(job);
+      });
+      
+      // Create byDay array with all days in range
+      const byDay = [];
+      const currentDate = new Date(weekStart);
+      while (currentDate <= weekEnd) {
+        const dateKey = currentDate.toISOString().split('T')[0];
+        const dayJobs = jobsByDay.get(dateKey) || [];
+        byDay.push({
+          date: dateKey,
+          count: dayJobs.length,
+          jobs: dayJobs,
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Get upcoming jobs (next 5 jobs after today)
+      const upcomingJobs = allJobs
+        .filter(job => {
+          if (!job.scheduledDate) return false;
+          const jobDate = new Date(job.scheduledDate);
+          return jobDate >= today;
+        })
+        .sort((a, b) => {
+          const dateA = new Date(a.scheduledDate!).getTime();
+          const dateB = new Date(b.scheduledDate!).getTime();
+          return dateA - dateB;
+        })
+        .slice(0, 5);
+      
+      // Offline queue and unsynced photos count
+      // Since sync_queue and photos.synced don't exist, return 0
+      const offlineQueueCount = 0;
+      const unsyncedPhotoCount = 0;
+      
+      res.json({
+        todayJobs: {
+          total: todayJobs.length,
+          scheduled: scheduledCount,
+          done: doneCount,
+          failed: failedCount,
+          jobs: todayJobs,
+        },
+        weekJobs: {
+          total: weekJobs.length,
+          byDay,
+        },
+        thisWeekRange: {
+          start: weekStart.toISOString(),
+          end: weekEnd.toISOString(),
+          includesNextMonday,
+        },
+        upcomingJobs,
+        offlineQueueCount,
+        unsyncedPhotoCount,
+      });
+    } catch (error) {
+      logError('Dashboard/InspectorSummary', error);
+      res.status(500).json({ message: "Failed to load inspector dashboard data" });
+    }
+  });
+
   app.post("/api/dashboard/export/email", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     const emailSchema = z.object({
       emails: z.array(z.string().email()).min(1, "At least one email address is required"),
