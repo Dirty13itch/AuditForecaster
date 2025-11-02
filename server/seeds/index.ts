@@ -6,11 +6,13 @@
 
 import { seedReportTemplates, clearSeedTemplates } from './reportTemplates';
 import { seedOrganizations } from './organizations';
+import { seedMIHomesTC } from './miHomesTC';
 import { serverLogger } from '../logger';
 
 async function main() {
   const args = process.argv.slice(2);
   const shouldClear = args.includes('--clear');
+  const includeMIHomes = args.includes('--mi-homes') || !args.some(arg => arg.startsWith('--'));
   
   try {
     if (shouldClear) {
@@ -26,6 +28,13 @@ async function main() {
       // Seed report templates
       const result = await seedReportTemplates();
       serverLogger.info(`[Seed] Database seeded successfully: ${result.created} templates created`);
+      
+      // Seed M/I Homes Twin Cities data (optional, defaults to true)
+      if (includeMIHomes) {
+        serverLogger.info('[Seed] Seeding M/I Homes Twin Cities data...');
+        const miHomesResult = await seedMIHomesTC();
+        serverLogger.info('[Seed] M/I Homes data seeded successfully', miHomesResult);
+      }
     }
     
     process.exit(0);
