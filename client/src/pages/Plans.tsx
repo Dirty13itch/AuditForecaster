@@ -1,11 +1,14 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { FileText, Plus, Trash2, Pencil, Building2, AlertCircle } from "lucide-react";
+import { FileText, Plus, Trash2, Pencil, Building2, AlertCircle, Settings, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +37,7 @@ import { DashboardCardSkeleton } from "@/components/ui/skeleton-variants";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Plan, InsertPlan, Builder } from "@shared/schema";
+import type { Plan, InsertPlan, Builder, PlanOptionalFeature, InsertPlanOptionalFeature } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -65,6 +68,39 @@ const DEFAULT_FORM_VALUES: PlanFormValues = {
   notes: "",
 };
 
+// Feature form schema
+const featureFormSchema = z.object({
+  featureName: z.string().min(1, "Feature name is required").max(100, "Feature name too long"),
+  featureType: z.enum(["room", "upgrade", "structural"], { required_error: "Feature type is required" }),
+  impactsFloorArea: z.boolean().default(false),
+  floorAreaDelta: z.coerce.number().positive("Must be greater than 0").optional().nullable(),
+  impactsVolume: z.boolean().default(false),
+  volumeDelta: z.coerce.number().positive("Must be greater than 0").optional().nullable(),
+}).refine((data) => {
+  // If impacts floor area is checked, delta must be provided and > 0
+  if (data.impactsFloorArea && (!data.floorAreaDelta || data.floorAreaDelta <= 0)) {
+    return false;
+  }
+  // If impacts volume is checked, delta must be provided and > 0
+  if (data.impactsVolume && (!data.volumeDelta || data.volumeDelta <= 0)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Delta value must be greater than 0 when impact is selected",
+});
+
+type FeatureFormValues = z.infer<typeof featureFormSchema>;
+
+const DEFAULT_FEATURE_FORM_VALUES: FeatureFormValues = {
+  featureName: "",
+  featureType: "room" as const,
+  impactsFloorArea: false,
+  floorAreaDelta: null,
+  impactsVolume: false,
+  volumeDelta: null,
+};
+
 // Phase 6 - DOCUMENT: Filter option for showing all builders
 const ALL_BUILDERS_FILTER = "all" as const;
 
@@ -75,6 +111,11 @@ function PlansContent() {
   const [planToEdit, setPlanToEdit] = useState<Plan | null>(null);
   const [planToDelete, setPlanToDelete] = useState<string | null>(null);
   const [selectedBuilderId, setSelectedBuilderId] = useState<string | typeof ALL_BUILDERS_FILTER>(ALL_BUILDERS_FILTER);
+  
+  // Features management state
+  const [featuresDialogPlanId, setFeaturesDialogPlanId] = useState<string | null>(null);
+  const [isFeatureFormOpen, setIsFeatureFormOpen] = useState(false);
+  const [featureToEdit, setFeatureToEdit] = useState<PlanOptionalFeature | null>(null);
 
   // Phase 5 - HARDEN: All queries have retry: 2 for resilience against transient failures
   // Phase 2 - BUILD: Query for fetching all plans with error state
@@ -175,6 +216,105 @@ function PlansContent() {
     },
   });
 
+  // Features management
+  const featureForm = useForm<FeatureFormValues>({
+    resolver: zodResolver(featureFormSchema),
+    defaultValues: DEFAULT_FEATURE_FORM_VALUES,
+  });
+
+  const { data: featuresData, isLoading: featuresLoading } = useQuery<{ data: PlanOptionalFeature[] }>({
+    queryKey: ["/api/plans", featuresDialogPlanId, "features"],
+    enabled: !!featuresDialogPlanId,
+    retry: 2,
+  });
+
+  const features = featuresData?.data || [];
+
+  const createFeatureMutation = useMutation({
+    mutationFn: async (data: InsertPlanOptionalFeature) => {
+      const res = await apiRequest("POST", `/api/plans/${featuresDialogPlanId}/features`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plans", featuresDialogPlanId, "features"] });
+      setIsFeatureFormOpen(false);
+      setFeatureToEdit(null);
+      featureForm.reset(DEFAULT_FEATURE_FORM_VALUES);
+      toast({
+        title: "Success",
+        description: "Feature added successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add feature",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateFeatureMutation = useMutation({
+    mutationFn: async ({ featureId, data }: { featureId: string; data: Partial<InsertPlanOptionalFeature> }) => {
+      const res = await apiRequest("PATCH", `/api/plans/${featuresDialogPlanId}/features/${featureId}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plans", featuresDialogPlanId, "features"] });
+      setIsFeatureFormOpen(false);
+      setFeatureToEdit(null);
+      featureForm.reset(DEFAULT_FEATURE_FORM_VALUES);
+      toast({
+        title: "Success",
+        description: "Feature updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update feature",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteFeatureMutation = useMutation({
+    mutationFn: async (featureId: string) => {
+      await apiRequest("DELETE", `/api/plans/${featuresDialogPlanId}/features/${featureId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plans", featuresDialogPlanId, "features"] });
+      toast({
+        title: "Success",
+        description: "Feature disabled successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to disable feature",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggleFeatureAvailableMutation = useMutation({
+    mutationFn: async ({ featureId, isAvailable }: { featureId: string; isAvailable: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/plans/${featuresDialogPlanId}/features/${featureId}`, { isAvailable });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plans", featuresDialogPlanId, "features"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update feature availability",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Phase 3 - OPTIMIZE: useCallback prevents function recreation on every render
   // Phase 6 - DOCUMENT: Form submission handler that routes to create or update mutation
   const handleSubmit = useCallback((data: PlanFormValues) => {
@@ -216,6 +356,42 @@ function PlansContent() {
       deleteMutation.mutate(planToDelete);
     }
   }, [planToDelete, deleteMutation]);
+
+  // Feature handlers
+  const handleManageFeatures = useCallback((planId: string) => {
+    setFeaturesDialogPlanId(planId);
+  }, []);
+
+  const handleAddFeature = useCallback(() => {
+    setFeatureToEdit(null);
+    featureForm.reset(DEFAULT_FEATURE_FORM_VALUES);
+    setIsFeatureFormOpen(true);
+  }, [featureForm]);
+
+  const handleEditFeature = useCallback((feature: PlanOptionalFeature) => {
+    setFeatureToEdit(feature);
+    featureForm.reset({
+      featureName: feature.featureName,
+      featureType: feature.featureType,
+      impactsFloorArea: feature.impactsFloorArea,
+      floorAreaDelta: feature.floorAreaDelta ? Number(feature.floorAreaDelta) : null,
+      impactsVolume: feature.impactsVolume,
+      volumeDelta: feature.volumeDelta ? Number(feature.volumeDelta) : null,
+    });
+    setIsFeatureFormOpen(true);
+  }, [featureForm]);
+
+  const handleFeatureSubmit = useCallback((data: FeatureFormValues) => {
+    if (featureToEdit) {
+      updateFeatureMutation.mutate({ featureId: featureToEdit.id, data });
+    } else {
+      createFeatureMutation.mutate(data);
+    }
+  }, [featureToEdit, createFeatureMutation, updateFeatureMutation]);
+
+  const handleToggleFeatureAvailable = useCallback((featureId: string, isAvailable: boolean) => {
+    toggleFeatureAvailableMutation.mutate({ featureId, isAvailable });
+  }, [toggleFeatureAvailableMutation]);
 
   // Phase 3 - OPTIMIZE: useMemo for expensive computation - groups plans by builder
   // Phase 6 - DOCUMENT: Creates a lookup map of builder ID to their plans for organized display
@@ -376,6 +552,15 @@ function PlansContent() {
                               {plan.planName}
                             </CardTitle>
                             <div className="flex gap-1" data-testid={`actions-plan-${plan.id}`}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleManageFeatures(plan.id)}
+                                data-testid={`button-manage-features-${plan.id}`}
+                                aria-label={`Manage Features for ${plan.planName}`}
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -656,6 +841,338 @@ function PlansContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Features Management Dialog */}
+      <Dialog open={!!featuresDialogPlanId} onOpenChange={() => setFeaturesDialogPlanId(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-features-management">
+          <DialogHeader>
+            <DialogTitle data-testid="text-features-dialog-title">
+              Optional Features
+              {features.length > 0 && (
+                <Badge variant="secondary" className="ml-2" data-testid="badge-features-count">
+                  {features.length}
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {featuresLoading ? (
+            <div className="space-y-3" data-testid="container-features-loading">
+              <DashboardCardSkeleton />
+              <DashboardCardSkeleton />
+            </div>
+          ) : features.length === 0 ? (
+            <div className="py-12 text-center" data-testid="container-features-empty">
+              <Settings className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No optional features defined for this plan</h3>
+              <p className="text-muted-foreground mb-4">Add features that can be selected when creating jobs</p>
+              <Button onClick={handleAddFeature} data-testid="button-add-plan-feature">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Feature
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="mb-4">
+                <Button onClick={handleAddFeature} data-testid="button-add-plan-feature">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Feature
+                </Button>
+              </div>
+
+              {/* Desktop: Table view */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2 font-medium">Feature Name</th>
+                      <th className="text-left p-2 font-medium">Type</th>
+                      <th className="text-left p-2 font-medium">Floor Area Impact</th>
+                      <th className="text-left p-2 font-medium">Volume Impact</th>
+                      <th className="text-left p-2 font-medium">Available</th>
+                      <th className="text-right p-2 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {features.map((feature) => (
+                      <tr key={feature.id} className="border-b">
+                        <td className="p-2" data-testid={`text-feature-name-${feature.id}`}>
+                          {feature.featureName}
+                        </td>
+                        <td className="p-2">
+                          <Badge variant="outline" data-testid={`badge-feature-type-${feature.id}`}>
+                            {feature.featureType}
+                          </Badge>
+                        </td>
+                        <td className="p-2" data-testid={`text-feature-floor-impact-${feature.id}`}>
+                          {feature.impactsFloorArea ? (
+                            <div className="flex items-center gap-1">
+                              <Check className="h-4 w-4 text-green-600" />
+                              <span className="text-sm">+{feature.floorAreaDelta} sq ft</span>
+                            </div>
+                          ) : (
+                            <X className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </td>
+                        <td className="p-2" data-testid={`text-feature-volume-impact-${feature.id}`}>
+                          {feature.impactsVolume ? (
+                            <div className="flex items-center gap-1">
+                              <Check className="h-4 w-4 text-green-600" />
+                              <span className="text-sm">+{feature.volumeDelta} cu ft</span>
+                            </div>
+                          ) : (
+                            <X className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </td>
+                        <td className="p-2">
+                          <Switch
+                            checked={feature.isAvailable}
+                            onCheckedChange={(checked) => handleToggleFeatureAvailable(feature.id, checked)}
+                            data-testid={`toggle-feature-available-${feature.id}`}
+                          />
+                        </td>
+                        <td className="p-2">
+                          <div className="flex gap-1 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditFeature(feature)}
+                              data-testid={`button-edit-feature-${feature.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteFeatureMutation.mutate(feature.id)}
+                              data-testid={`button-delete-feature-${feature.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: Card view */}
+              <div className="md:hidden space-y-3">
+                {features.map((feature) => (
+                  <Card key={feature.id} data-testid={`card-feature-${feature.id}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <CardTitle className="text-base">{feature.featureName}</CardTitle>
+                          <Badge variant="outline" className="mt-1">{feature.featureType}</Badge>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditFeature(feature)}
+                            data-testid={`button-edit-feature-${feature.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteFeatureMutation.mutate(feature.id)}
+                            data-testid={`button-delete-feature-${feature.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      {feature.impactsFloorArea && (
+                        <div className="flex items-center gap-1">
+                          <Check className="h-4 w-4 text-green-600" />
+                          <span>Floor Area: +{feature.floorAreaDelta} sq ft</span>
+                        </div>
+                      )}
+                      {feature.impactsVolume && (
+                        <div className="flex items-center gap-1">
+                          <Check className="h-4 w-4 text-green-600" />
+                          <span>Volume: +{feature.volumeDelta} cu ft</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-muted-foreground">Available</span>
+                        <Switch
+                          checked={feature.isAvailable}
+                          onCheckedChange={(checked) => handleToggleFeatureAvailable(feature.id, checked)}
+                          data-testid={`toggle-feature-available-${feature.id}`}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Feature Form Dialog */}
+      <Dialog open={isFeatureFormOpen} onOpenChange={setIsFeatureFormOpen}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-feature-form">
+          <DialogHeader>
+            <DialogTitle data-testid="text-feature-form-title">
+              {featureToEdit ? "Edit Optional Feature" : "Add Optional Feature"}
+            </DialogTitle>
+          </DialogHeader>
+          <Form {...featureForm}>
+            <form onSubmit={featureForm.handleSubmit(handleFeatureSubmit)} className="space-y-4">
+              <FormField
+                control={featureForm.control}
+                name="featureName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Feature Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Morning Room"
+                        {...field}
+                        data-testid="input-feature-name"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={featureForm.control}
+                name="featureType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Feature Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-feature-type">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="room">Room</SelectItem>
+                        <SelectItem value="upgrade">Upgrade</SelectItem>
+                        <SelectItem value="structural">Structural</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={featureForm.control}
+                name="impactsFloorArea"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="checkbox-feature-impacts-floor"
+                      />
+                    </FormControl>
+                    <FormLabel className="!mt-0">Impacts Floor Area</FormLabel>
+                  </FormItem>
+                )}
+              />
+
+              {featureForm.watch("impactsFloorArea") && (
+                <FormField
+                  control={featureForm.control}
+                  name="floorAreaDelta"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Floor Area Delta (sq ft)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="200"
+                          {...field}
+                          value={field.value ?? ""}
+                          data-testid="input-feature-floor-delta"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              <FormField
+                control={featureForm.control}
+                name="impactsVolume"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="checkbox-feature-impacts-volume"
+                      />
+                    </FormControl>
+                    <FormLabel className="!mt-0">Impacts Volume</FormLabel>
+                  </FormItem>
+                )}
+              />
+
+              {featureForm.watch("impactsVolume") && (
+                <FormField
+                  control={featureForm.control}
+                  name="volumeDelta"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Volume Delta (cu ft)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="1500"
+                          {...field}
+                          value={field.value ?? ""}
+                          data-testid="input-feature-volume-delta"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsFeatureFormOpen(false)}
+                  disabled={createFeatureMutation.isPending || updateFeatureMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createFeatureMutation.isPending || updateFeatureMutation.isPending}
+                  data-testid="button-save-feature"
+                >
+                  {(createFeatureMutation.isPending || updateFeatureMutation.isPending)
+                    ? "Saving..."
+                    : featureToEdit ? "Update Feature" : "Add Feature"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

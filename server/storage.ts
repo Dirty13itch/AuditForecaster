@@ -17,6 +17,8 @@ import {
   type InsertLot,
   type Plan,
   type InsertPlan,
+  type PlanOptionalFeature,
+  type InsertPlanOptionalFeature,
   type Job,
   type InsertJob,
   type ScheduleEvent,
@@ -176,6 +178,7 @@ import {
   developments,
   lots,
   plans,
+  planOptionalFeatures,
   jobs,
   scheduleEvents,
   expenses,
@@ -451,6 +454,12 @@ export interface IStorage {
   getAllPlans(): Promise<Plan[]>;
   updatePlan(id: string, plan: Partial<InsertPlan>): Promise<Plan | undefined>;
   deletePlan(id: string): Promise<boolean>;
+  
+  createPlanOptionalFeature(feature: InsertPlanOptionalFeature): Promise<PlanOptionalFeature>;
+  getPlanOptionalFeature(id: string): Promise<PlanOptionalFeature | undefined>;
+  getPlanOptionalFeatures(planId: string): Promise<PlanOptionalFeature[]>;
+  updatePlanOptionalFeature(id: string, feature: Partial<InsertPlanOptionalFeature>): Promise<PlanOptionalFeature | undefined>;
+  deletePlanOptionalFeature(id: string): Promise<boolean>;
 
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
@@ -1958,6 +1967,48 @@ export class DatabaseStorage implements IStorage {
 
   async deletePlan(id: string): Promise<boolean> {
     const result = await db.delete(plans).where(eq(plans.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createPlanOptionalFeature(insertFeature: InsertPlanOptionalFeature): Promise<PlanOptionalFeature> {
+    const values = {
+      ...insertFeature,
+      floorAreaDelta: insertFeature.floorAreaDelta != null ? String(insertFeature.floorAreaDelta) : null,
+      volumeDelta: insertFeature.volumeDelta != null ? String(insertFeature.volumeDelta) : null,
+    };
+    const result = await db.insert(planOptionalFeatures).values(values as any).returning();
+    return result[0];
+  }
+
+  async getPlanOptionalFeature(id: string): Promise<PlanOptionalFeature | undefined> {
+    const result = await db.select().from(planOptionalFeatures).where(eq(planOptionalFeatures.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getPlanOptionalFeatures(planId: string): Promise<PlanOptionalFeature[]> {
+    return await db.select().from(planOptionalFeatures)
+      .where(eq(planOptionalFeatures.planId, planId))
+      .orderBy(asc(planOptionalFeatures.featureName));
+  }
+
+  async updatePlanOptionalFeature(id: string, updates: Partial<InsertPlanOptionalFeature>): Promise<PlanOptionalFeature | undefined> {
+    const values = {
+      ...updates,
+      ...(updates.floorAreaDelta != null && { floorAreaDelta: String(updates.floorAreaDelta) }),
+      ...(updates.volumeDelta != null && { volumeDelta: String(updates.volumeDelta) }),
+    };
+    const result = await db.update(planOptionalFeatures)
+      .set(values as any)
+      .where(eq(planOptionalFeatures.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deletePlanOptionalFeature(id: string): Promise<boolean> {
+    const result = await db.update(planOptionalFeatures)
+      .set({ isAvailable: false })
+      .where(eq(planOptionalFeatures.id, id))
+      .returning();
     return result.length > 0;
   }
 

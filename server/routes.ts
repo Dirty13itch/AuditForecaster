@@ -35,6 +35,7 @@ import {
   insertLotSchema,
   updateLotSchema,
   insertPlanSchema,
+  insertPlanOptionalFeatureSchema,
   insertJobSchema,
   insertScheduleEventSchema,
   insertExpenseSchema,
@@ -2840,6 +2841,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete plan');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Plan Optional Features endpoints
+  app.get("/api/plans/:planId/features", isAuthenticated, async (req, res) => {
+    try {
+      const { planId } = req.params;
+      
+      // Verify plan exists
+      const plan = await storage.getPlan(planId);
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+      
+      const features = await storage.getPlanOptionalFeatures(planId);
+      res.json({ data: features });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'get plan features');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/plans/:planId/features", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { planId } = req.params;
+      
+      // Verify plan exists
+      const plan = await storage.getPlan(planId);
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+      
+      // Validate request body
+      const validated = insertPlanOptionalFeatureSchema.parse({
+        ...req.body,
+        planId,
+      });
+      
+      const feature = await storage.createPlanOptionalFeature(validated);
+      
+      // Audit log: Plan feature creation
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'plan_feature.create',
+        resourceType: 'plan_feature',
+        resourceId: feature.id,
+        changes: validated,
+        metadata: { planId, featureName: feature.featureName },
+      }, storage);
+      
+      res.status(201).json(feature);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create plan feature');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/plans/:planId/features/:featureId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { planId, featureId } = req.params;
+      
+      // Verify plan exists
+      const plan = await storage.getPlan(planId);
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+      
+      // Verify feature exists and belongs to this plan
+      const existingFeature = await storage.getPlanOptionalFeature(featureId);
+      if (!existingFeature) {
+        return res.status(404).json({ message: "Feature not found" });
+      }
+      if (existingFeature.planId !== planId) {
+        return res.status(400).json({ message: "Feature does not belong to this plan" });
+      }
+      
+      // Validate request body (partial update)
+      const validated = insertPlanOptionalFeatureSchema.partial().parse(req.body);
+      
+      const feature = await storage.updatePlanOptionalFeature(featureId, validated);
+      if (!feature) {
+        return res.status(404).json({ message: "Feature not found" });
+      }
+      
+      // Audit log: Plan feature update
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'plan_feature.update',
+        resourceType: 'plan_feature',
+        resourceId: featureId,
+        changes: validated,
+        metadata: { planId, featureName: feature.featureName },
+      }, storage);
+      
+      res.json(feature);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update plan feature');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/plans/:planId/features/:featureId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { planId, featureId } = req.params;
+      
+      // Verify plan exists
+      const plan = await storage.getPlan(planId);
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+      
+      // Verify feature exists and belongs to this plan
+      const existingFeature = await storage.getPlanOptionalFeature(featureId);
+      if (!existingFeature) {
+        return res.status(404).json({ message: "Feature not found" });
+      }
+      if (existingFeature.planId !== planId) {
+        return res.status(400).json({ message: "Feature does not belong to this plan" });
+      }
+      
+      // Soft delete: set isAvailable=false
+      const deleted = await storage.deletePlanOptionalFeature(featureId);
+      if (!deleted) {
+        return res.status(404).json({ message: "Feature not found" });
+      }
+      
+      // Audit log: Plan feature deletion (soft)
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'plan_feature.delete',
+        resourceType: 'plan_feature',
+        resourceId: featureId,
+        metadata: { planId, featureName: existingFeature.featureName },
+      }, storage);
+      
+      res.status(200).json({ message: "Feature disabled successfully" });
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'delete plan feature');
       res.status(status).json({ message });
     }
   });

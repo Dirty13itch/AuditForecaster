@@ -19,7 +19,7 @@ import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveIndicator } from "@/components/AutoSaveIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import { generateJobName } from "@shared/jobNameGenerator";
-import { insertJobSchema, type Job, type Builder, type Plan, type Development, type Lot } from "@shared/schema";
+import { insertJobSchema, type Job, type Builder, type Plan, type Development, type Lot, type PlanOptionalFeature } from "@shared/schema";
 import { INSPECTION_TYPE_OPTIONS, getDefaultPricing, getInspectionTypeLabel } from "@shared/inspectionTypes";
 
 const jobFormSchema = insertJobSchema.pick({
@@ -43,6 +43,10 @@ const jobFormSchema = insertJobSchema.pick({
   pricing: true,
   fieldWorkComplete: true,
   photoUploadComplete: true,
+  selectedOptionalFeatures: true,
+  adjustedFloorArea: true,
+  adjustedVolume: true,
+  adjustedSurfaceArea: true,
 });
 
 type JobFormValues = z.infer<typeof jobFormSchema>;
@@ -66,6 +70,8 @@ export default function JobDialog({
 }: JobDialogProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [selectedDevelopmentId, setSelectedDevelopmentId] = useState<string>("");
+  const [manualOverride, setManualOverride] = useState(false);
+  const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([]);
   const { user } = useAuth();
 
   const form = useForm<JobFormValues>({
@@ -91,6 +97,10 @@ export default function JobDialog({
       notes: job?.notes || "",
       fieldWorkComplete: job?.fieldWorkComplete ?? false,
       photoUploadComplete: job?.photoUploadComplete ?? false,
+      selectedOptionalFeatures: job?.selectedOptionalFeatures || [],
+      adjustedFloorArea: job?.adjustedFloorArea ? parseFloat(job.adjustedFloorArea as any) : undefined,
+      adjustedVolume: job?.adjustedVolume ? parseFloat(job.adjustedVolume as any) : undefined,
+      adjustedSurfaceArea: job?.adjustedSurfaceArea ? parseFloat(job.adjustedSurfaceArea as any) : undefined,
     },
   });
 
@@ -125,6 +135,18 @@ export default function JobDialog({
     }
   }, [inspectionType, scheduledDate, address, job, form]);
 
+  // Fix 2: Initialize feature selection when editing an existing job
+  useEffect(() => {
+    if (job?.selectedOptionalFeatures) {
+      setSelectedFeatureIds(job.selectedOptionalFeatures as string[]);
+    }
+  }, [job]);
+
+  // Fix 1: Always sync selected features to form (regardless of measurement impacts)
+  useEffect(() => {
+    form.setValue('selectedOptionalFeatures', selectedFeatureIds);
+  }, [selectedFeatureIds, form]);
+
   // Fetch plans for the selected builder
   const { data: plans = [], isLoading: plansLoading } = useQuery<Plan[]>({
     queryKey: ['/api/plans/builder', builderId],
@@ -156,9 +178,52 @@ export default function JobDialog({
     enabled: !!selectedDevelopmentId,
   });
 
+  // Fetch optional features for the selected plan
+  const { data: featuresData, isLoading: featuresLoading } = useQuery<{ data: PlanOptionalFeature[] }>({
+    queryKey: ['/api/plans', planId, 'features'],
+    enabled: !!planId,
+  });
+
+  const features = featuresData?.data || [];
+
+  // Calculate adjusted measurements based on selected features
+  const calculateAdjustedMeasurements = () => {
+    if (!planId || !plans.length || manualOverride) return;
+    
+    const selectedPlan = plans.find(p => p.id === planId);
+    if (!selectedPlan) return;
+
+    const baseFloorArea = selectedPlan.floorArea ? parseFloat(selectedPlan.floorArea as any) : 0;
+    const baseVolume = selectedPlan.houseVolume ? parseFloat(selectedPlan.houseVolume as any) : 0;
+
+    let floorAreaDelta = 0;
+    let volumeDelta = 0;
+
+    selectedFeatureIds.forEach(featureId => {
+      const feature = features.find(f => f.id === featureId);
+      if (feature) {
+        if (feature.impactsFloorArea && feature.floorAreaDelta) {
+          floorAreaDelta += parseFloat(feature.floorAreaDelta as any);
+        }
+        if (feature.impactsVolume && feature.volumeDelta) {
+          volumeDelta += parseFloat(feature.volumeDelta as any);
+        }
+      }
+    });
+
+    return {
+      adjustedFloorArea: baseFloorArea + floorAreaDelta,
+      adjustedVolume: baseVolume + volumeDelta,
+      floorAreaDelta,
+      volumeDelta,
+    };
+  };
+
+  const adjustedMeasurements = calculateAdjustedMeasurements();
+
   // Auto-fill house specifications when a plan is selected
   useEffect(() => {
-    if (planId && plans.length > 0) {
+    if (planId && plans.length > 0 && !manualOverride) {
       const selectedPlan = plans.find(p => p.id === planId);
       if (selectedPlan) {
         if (selectedPlan.floorArea) {
@@ -173,9 +238,29 @@ export default function JobDialog({
         if (selectedPlan.stories) {
           form.setValue('stories', parseFloat(selectedPlan.stories as any));
         }
+        // Reset selected features when plan changes
+        setSelectedFeatureIds([]);
       }
     }
-  }, [planId, plans, form]);
+  }, [planId, plans, form, manualOverride]);
+
+  // Fix 3: Write adjusted measurements to form fields (or clear them when not applicable)
+  useEffect(() => {
+    if (manualOverride) {
+      // Don't auto-calculate in manual override mode
+      return;
+    }
+
+    if (adjustedMeasurements && (adjustedMeasurements.floorAreaDelta > 0 || adjustedMeasurements.volumeDelta > 0)) {
+      // Set adjusted measurements when features are selected that impact measurements
+      form.setValue('adjustedFloorArea', adjustedMeasurements.adjustedFloorArea > 0 ? adjustedMeasurements.adjustedFloorArea : undefined);
+      form.setValue('adjustedVolume', adjustedMeasurements.adjustedVolume > 0 ? adjustedMeasurements.adjustedVolume : undefined);
+    } else {
+      // Clear adjusted measurements when no features selected or features don't impact measurements
+      form.setValue('adjustedFloorArea', undefined);
+      form.setValue('adjustedVolume', undefined);
+    }
+  }, [selectedFeatureIds, features, form, adjustedMeasurements, manualOverride]);
 
   // Auto-fill address when a lot is selected
   useEffect(() => {
@@ -636,6 +721,91 @@ export default function JobDialog({
               />
             </div>
 
+            {/* Manual Override Toggle */}
+            {planId && (
+              <div className="flex items-center gap-2 py-2">
+                <Checkbox
+                  id="manual-override"
+                  checked={manualOverride}
+                  onCheckedChange={setManualOverride}
+                  data-testid="toggle-manual-measurements"
+                />
+                <label
+                  htmlFor="manual-override"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Manual Override
+                </label>
+                <p className="text-xs text-muted-foreground ml-2">
+                  Enable to manually edit measurements instead of using plan defaults
+                </p>
+              </div>
+            )}
+
+            {/* Optional Features Section */}
+            {planId && features.length > 0 && !manualOverride && (
+              <div className="border rounded-md p-4 space-y-3">
+                <div>
+                  <h3 className="font-medium">Optional Features</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Select any additional features for this specific house
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {features.filter(f => f.isAvailable).map((feature) => (
+                    <div key={feature.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`feature-${feature.id}`}
+                        checked={selectedFeatureIds.includes(feature.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedFeatureIds([...selectedFeatureIds, feature.id]);
+                          } else {
+                            setSelectedFeatureIds(selectedFeatureIds.filter(id => id !== feature.id));
+                          }
+                        }}
+                        data-testid={`checkbox-job-feature-${feature.id}`}
+                      />
+                      <label
+                        htmlFor={`feature-${feature.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        {feature.featureName}
+                      </label>
+                      <span className="text-xs text-muted-foreground">
+                        {feature.impactsFloorArea && feature.floorAreaDelta && `(+${feature.floorAreaDelta} sq ft)`}
+                        {feature.impactsFloorArea && feature.impactsVolume && " "}
+                        {feature.impactsVolume && feature.volumeDelta && `(+${feature.volumeDelta} cu ft)`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Adjusted Measurements Card */}
+            {planId && selectedFeatureIds.length > 0 && adjustedMeasurements && !manualOverride && (
+              <div className="border rounded-md p-4 bg-blue-50 dark:bg-blue-950 space-y-2">
+                <h3 className="font-medium">Adjusted Measurements</h3>
+                {adjustedMeasurements.floorAreaDelta > 0 && (
+                  <div className="text-sm" data-testid="text-adjusted-floor-area">
+                    <span className="text-muted-foreground">Adjusted Floor Area:</span>{" "}
+                    <span className="font-medium">
+                      {form.watch('floorArea') || 0} + {adjustedMeasurements.floorAreaDelta} = {adjustedMeasurements.adjustedFloorArea} sq ft
+                    </span>
+                  </div>
+                )}
+                {adjustedMeasurements.volumeDelta > 0 && (
+                  <div className="text-sm" data-testid="text-adjusted-volume">
+                    <span className="text-muted-foreground">Adjusted Volume:</span>{" "}
+                    <span className="font-medium">
+                      {form.watch('houseVolume') || 0} + {adjustedMeasurements.volumeDelta} = {adjustedMeasurements.adjustedVolume} cu ft
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -651,7 +821,8 @@ export default function JobDialog({
                         {...field}
                         onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
                         value={field.value || ""}
-                        data-testid="input-floor-area"
+                        disabled={planId && !manualOverride}
+                        data-testid="input-job-floor-area"
                       />
                     </FormControl>
                     <FormMessage />
@@ -673,7 +844,8 @@ export default function JobDialog({
                         {...field}
                         onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
                         value={field.value || ""}
-                        data-testid="input-surface-area"
+                        disabled={planId && !manualOverride}
+                        data-testid="input-job-surface-area"
                       />
                     </FormControl>
                     <FormMessage />
@@ -697,7 +869,8 @@ export default function JobDialog({
                         {...field}
                         onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
                         value={field.value || ""}
-                        data-testid="input-house-volume"
+                        disabled={planId && !manualOverride}
+                        data-testid="input-job-volume"
                       />
                     </FormControl>
                     <FormMessage />
@@ -719,7 +892,8 @@ export default function JobDialog({
                         {...field}
                         onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
                         value={field.value || ""}
-                        data-testid="input-stories"
+                        disabled={planId && !manualOverride}
+                        data-testid="input-job-stories"
                       />
                     </FormControl>
                     <FormMessage />

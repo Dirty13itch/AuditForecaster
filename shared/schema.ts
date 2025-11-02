@@ -414,6 +414,22 @@ export const plans = pgTable("plans", {
   index("idx_plans_plan_name").on(table.planName),
 ]);
 
+export const planOptionalFeatures = pgTable("plan_optional_features", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: varchar("plan_id").notNull().references(() => plans.id, { onDelete: 'cascade' }),
+  featureName: text("feature_name").notNull(),
+  featureType: text("feature_type", { enum: ["room", "upgrade", "structural"] }).notNull(),
+  impactsFloorArea: boolean("impacts_floor_area").default(false),
+  impactsVolume: boolean("impacts_volume").default(false),
+  floorAreaDelta: decimal("floor_area_delta", { precision: 10, scale: 2 }),
+  volumeDelta: decimal("volume_delta", { precision: 10, scale: 2 }),
+  isAvailable: boolean("is_available").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_plan_features_plan_id").on(table.planId),
+  index("idx_plan_features_feature_name").on(table.featureName),
+]);
+
 export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -496,6 +512,10 @@ export const jobs = pgTable("jobs", {
   builderVerifiedItemsCount: integer("builder_verified_items_count"),
   builderVerifiedItemsPhotoRequired: boolean("builder_verified_items_photo_required").default(false),
   billedInInvoiceId: varchar("billed_in_invoice_id").references(() => invoices.id, { onDelete: 'set null' }),
+  selectedOptionalFeatures: jsonb("selected_optional_features").default('[]'),
+  adjustedFloorArea: decimal("adjusted_floor_area", { precision: 10, scale: 2 }),
+  adjustedVolume: decimal("adjusted_volume", { precision: 10, scale: 2 }),
+  adjustedSurfaceArea: decimal("adjusted_surface_area", { precision: 10, scale: 2 }),
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
   index("idx_jobs_plan_id").on(table.planId),
@@ -2125,6 +2145,32 @@ export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, creat
   houseVolume: z.coerce.number().nullable().optional(),
   stories: z.coerce.number().nullable().optional(),
 });
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
+export type Plan = typeof plans.$inferSelect;
+
+export const insertPlanOptionalFeatureSchema = createInsertSchema(planOptionalFeatures).omit({ 
+  id: true, 
+  createdAt: true 
+}).extend({
+  floorAreaDelta: z.coerce.number().min(0, "Floor area delta must be >= 0").nullable().optional(),
+  volumeDelta: z.coerce.number().min(0, "Volume delta must be >= 0").nullable().optional(),
+}).refine(
+  (data) => {
+    if (data.impactsFloorArea && (!data.floorAreaDelta || data.floorAreaDelta <= 0)) {
+      return false;
+    }
+    if (data.impactsVolume && (!data.volumeDelta || data.volumeDelta <= 0)) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "When a feature impacts floor area or volume, the corresponding delta must be greater than 0",
+  }
+);
+export type InsertPlanOptionalFeature = z.infer<typeof insertPlanOptionalFeatureSchema>;
+export type PlanOptionalFeature = typeof planOptionalFeatures.$inferSelect;
+
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
   planId: z.preprocess(
     (val) => (val === "" || val === undefined ? null : val),
@@ -2148,6 +2194,10 @@ export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).exten
   surfaceArea: z.coerce.number().nullable().optional(),
   houseVolume: z.coerce.number().nullable().optional(),
   stories: z.coerce.number().nullable().optional(),
+  selectedOptionalFeatures: z.array(z.string().uuid()).optional().default([]),
+  adjustedFloorArea: z.coerce.number().nullable().optional(),
+  adjustedVolume: z.coerce.number().nullable().optional(),
+  adjustedSurfaceArea: z.coerce.number().nullable().optional(),
 });
 export const insertScheduleEventSchema = createInsertSchema(scheduleEvents).omit({ id: true }).extend({
   startTime: z.coerce.date(),
