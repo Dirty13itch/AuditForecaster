@@ -1,63 +1,67 @@
 # Energy Auditing Field Application
 
 ## Overview
-This full-stack energy auditing field application optimizes energy auditing workflows for field inspectors. It enables management of inspections, job tracking, event scheduling, and report generation. Key capabilities include outdoor readability, offline-first operation, rapid data entry, enhanced data accuracy via photo documentation and OCR, and robust analytics. The project aims to provide a comprehensive, user-friendly, and powerful mobile solution for field operations, offering significant market potential by streamlining energy audit processes and improving data reliability. The application has achieved a 40/40 production standard, signifying AAA-level quality and readiness for deployment.
+This full-stack energy auditing field application optimizes energy auditing workflows for field inspectors. It enables management of inspections, job tracking, event scheduling, and report generation. Key capabilities include outdoor readability, offline-first operation, rapid data entry, enhanced data accuracy via photo documentation and OCR, and robust analytics. The project aims to provide a comprehensive, user-friendly, and powerful mobile solution for field operations, offering significant market potential by streamlining energy audit processes and improving data reliability.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application features a **React** and **TypeScript** frontend, built with **Vite** and utilizing **Wouter** for routing. UI components are developed with **shadcn/ui** (Radix UI) and **Tailwind CSS**, incorporating a custom color system for outdoor readability. **TanStack Query** manages server state, while a **Service Worker**, **IndexedDB**, and a custom sync queue provide offline-first functionality.
+The application uses a **React** and **TypeScript** frontend with **Vite**, **Wouter** for routing, and **shadcn/ui** (Radix UI) and **Tailwind CSS** for UI, including a custom color system for outdoor readability. **TanStack Query** manages server state, while **Service Worker**, **IndexedDB**, and a custom sync queue provide offline-first functionality.
 
-The backend is developed with **Express.js** and **Node.js** in **TypeScript**, with **PostgreSQL** (Neon serverless) as the primary database, accessed via **Drizzle ORM**. The API is RESTful, with **Zod** schemas for validation. **Replit Auth** (OpenID Connect) handles authentication, with sessions stored in PostgreSQL.
+The backend is developed with **Express.js** and **Node.js** in **TypeScript**, using **PostgreSQL** (Neon serverless) via **Drizzle ORM**. The API is RESTful, with **Zod** for schema validation. **Replit Auth** handles authentication, with sessions stored in PostgreSQL.
 
 Core architectural decisions and features include:
--   **Comprehensive Error Prevention**: Centralized logging, extensive type safety, and a two-layer Error Boundary system.
--   **Bulletproof Authentication System**: Robust session management, triple-layer admin protection, and enhanced security measures.
--   **Builder Hierarchy System**: Manages contacts, agreements, programs, and interactions within a geographic hierarchy (Development → Lot → Job).
--   **Bulk Operations**: Multi-select functionality for Photos, Jobs, and Expenses with bulk actions.
+-   **Error Prevention**: Centralized logging, type safety, and a two-layer Error Boundary system.
+-   **Authentication System**: Robust session management and triple-layer admin protection.
+-   **Builder Hierarchy System**: Manages contacts, agreements, programs, and interactions within a geographic hierarchy.
+-   **Bulk Operations**: Multi-select for Photos, Jobs, and Expenses with bulk actions.
 -   **Search & Filtering**: Advanced search across Jobs, Builders, and Photos with real-time filtering and pagination.
 -   **Analytics Dashboard**: Provides metrics on inspection volume, photo tag analysis, and builder performance.
--   **PDF Export System**: Uses `@react-pdf/renderer` for professional, dynamic PDF generation.
--   **Photo Documentation**: Supports multi-tagging, annotations, OCR, photo-required checklists, dual capture, offline queue, duplicate detection, compression, and smart tag suggestions.
+-   **PDF Export System**: Uses `@react-pdf/renderer` for dynamic PDF generation.
+-   **Photo Documentation**: Supports multi-tagging, annotations, OCR, photo-required checklists, offline queue, and compression.
 -   **Offline-First Functionality**: Utilizes service workers, IndexedDB, and a custom sync queue.
--   **Automated Calendar Import System**: Smart parsing of calendar events with confidence scoring, fuzzy matching, deduplication, and automated polling.
--   **Unified Schedule Page with Admin Assignment Workflow**: Production-ready calendar system with role-based visibility, responsive design, and admin assignment controls.
+-   **Automated Calendar Import System**: Smart parsing of calendar events with confidence scoring and automated polling.
+-   **Unified Schedule Page**: Production-ready calendar system with role-based visibility and admin assignment controls.
 -   **Google Calendar Integration**: Multi-calendar integration with OAuth2 for two-way sync.
 -   **Conditional Logic**: Dynamic inspection forms driven by a conditional logic engine.
--   **Gamification & Achievements System**: Tracks predefined achievements with automated criteria evaluation.
--   **Database Optimization**: Over 35 strategic database indexes across key tables for enhanced query performance.
--   **Enterprise Hardening**: Includes **Sentry** integration for error monitoring, multi-layered security (CSRF, rate limiting, Helmet), and secure sessions.
+-   **Gamification & Achievements System**: Tracks predefined achievements.
+-   **Database Optimization**: Over 35 strategic database indexes for query performance.
+-   **Enterprise Hardening**: **Sentry** integration for error monitoring, multi-layered security (CSRF, rate limiting, Helmet), and secure sessions.
 -   **WebSocket Notifications**: Real-time notification system with exponential backoff and HTTP polling fallback.
--   **Database Schema Integrity**: Comprehensive schema synchronization, including dedicated columns for assignment tracking, OCR, financial tracking, and notification preferences.
--   **Report Template System - JSON-Only Architecture**: Complete migration to a pure JSON architecture for report templates, supporting standalone reports and version tracking.
--   **Testing Systems**: Production-grade systems for Blower Door, Duct Leakage, and Ventilation testing with automated calculations and compliance verification.
--   **Equipment Management System**: Production-grade equipment inventory, calibration tracking, maintenance scheduling, and checkout workflows.
--   **Scheduled Exports System**: Production-grade automated data export system with cron scheduling, multi-format support, and email delivery.
--   **Jobs Management System**: Production-grade job tracking with automated compliance evaluation, inspector assignment workflows, and billing-ready notifications.
--   **Job-Type-Specific Workflow System**: Guided step-by-step workflows with 9 job templates, each with custom checklists, required tests, photo requirements, and completion enforcement.
--   **Automated Retest Workflow**: One-click retest job creation for failed blower door tests, linking to previous failed tests.
--   **Mobile-Optimized Workflow UI**: Touch-friendly design, responsive typography, and layouts optimized for field use on mobile devices.
--   **Financial Management System**: Comprehensive standalone financial module with partner contractor access control, monthly invoicing, payment tracking with AR aging, expense management (MileIQ-style, OCR), job cost ledger, and profitability analytics.
--   **Minnesota Multifamily Compliance Suite**: Complete compliance tracking system for ENERGY STAR MFNC, MN Housing EGCC, ZERH, and Building Energy Benchmarking, with a comprehensive compliance documents library.
--   **Field Day Experience**: Mobile-first daily workload view showing inspector's assigned jobs with role-based access (admin sees both "My Jobs Today" section for their assignments and "All Jobs Today" for management oversight; inspectors see only "My Jobs Today" for their assignments). Features large touch-friendly status toggle buttons (Done/Failed/Reschedule) for efficient field updates, proper CSRF token handling via apiRequest utility, and inspector edit_job permission for status updates.
--   **Real-Time Sync Infrastructure**: Google Calendar-style live updates using WebSockets. Any changes to jobs, schedules, or assignments are instantly visible across all connected sessions without manual refresh.
--   **Flexible Inspection Workflows**: Non-linear workflow system allowing inspectors to jump directly to any step, test, or photo capture without forced sequence. Supports out-of-order completion with partial saves and clear required vs optional distinctions.
--   **Simplified Job Status Workflow**: Streamlined status management using only: scheduled, done, failed, and reschedule. Removed "in-progress" state to match field inspector reality where jobs are either scheduled or completed with outcome.
--   **Construction Manager Report Routing**: Report scheduling system that routes completed inspection reports to builder-specific construction managers (not builders directly). Supports template selection and automated delivery after inspection completion.
--   **TEC Auto Test Integration**: Import blower door test results from TEC Auto Test application with automatic population of CFM50, ACH50, and building volume data.
--   **Photo-Based Duct Testing**: Simplified duct leakage testing with manual CFM entry (total duct leakage, leakage to outside) and photo documentation of manometer display readings.
--   **Production Readiness Infrastructure (Phase 4)**: Comprehensive production monitoring and observability:
-    * **Background Job Monitoring Dashboard**: Admin-only dashboard at `/admin/background-jobs` for monitoring all cron jobs (calendar import, daily digest, weekly summary, scheduled exports). Displays job status, execution history, success/failure rates, last run time, next scheduled run, and error logs. Features real-time updates, health indicators (green/yellow/red), filtering by status, and detailed execution logs. All background jobs automatically tracked in database with timing, status, and error information. **Status**: ✅ Production-ready (database tables created, all 3 background jobs successfully registered).
-    * **Enhanced Logging & Metrics**: Comprehensive Prometheus metrics integration tracking HTTP requests (duration, totals, errors), database queries, background job executions (duration, status, errors), WebSocket connections, business metrics, and cache performance. Automatic request/response logging with timing via Express middleware. Structured logging for API requests, background jobs, WebSocket events, and errors.
-    * **Health Check Endpoints**: Production-ready health checks at `/healthz` (liveness), `/readyz` (database readiness), and `/api/status` (detailed system info). Used for deployment health checks, load balancer probes, and monitoring.
-    * **WebSocket Scaling Documentation**: Comprehensive scaling guide in `WEBSOCKET_SCALING.md` covering single-server architecture, sticky session scaling (2-5 servers), Redis pub/sub scaling (5+ servers), Socket.IO migration path, connection limits, performance optimization, monitoring, and troubleshooting.
-    * **Metrics Endpoint**: Prometheus-compatible metrics available at `/metrics` for integration with monitoring tools like Grafana, Datadog, or New Relic.
-    * **Automated Calendar Import**: Production-grade cron job running every 6 hours (schedule: `0 */6 * * *`) to import events from "Building Knowledge" Google Calendar. Features system user authentication, 30-day lookahead window, comprehensive error handling with audit logging, and background job tracking integration. **Status**: ✅ Production-ready (syntax errors fixed, successfully initialized).
-    * **Vertical Integration Testing (November 1, 2025)**: Comprehensive end-to-end validation of production readiness identified and resolved critical authorization bug in background jobs monitoring dashboard. Testing confirmed all core infrastructure operational:
-      - **Critical Fix**: Resolved authorization bug where `requireRole(['admin'])` was incorrectly passing array to spread parameter function, causing all admin users to receive 403 errors on 4 background job endpoints (GET /api/admin/background-jobs, GET /api/admin/background-jobs/:jobName/executions, GET /api/admin/background-jobs/executions/recent, PATCH /api/admin/background-jobs/:jobName). Changed to `requireRole('admin')` following pattern used throughout codebase.
-      - **Verification**: End-to-end testing confirmed background jobs dashboard fully operational with proper admin authentication, all 3 registered jobs displaying correctly, and API endpoints returning 200 status with valid JSON data.
-      - **Production Status**: ✅ All core systems validated and ready for deployment. See `VERTICAL_INTEGRATION_REPORT.md` for comprehensive findings.
+-   **Database Schema Integrity**: Comprehensive schema synchronization with dedicated columns for tracking.
+-   **Report Template System**: JSON-only architecture for report templates, supporting standalone reports and version tracking.
+-   **Testing Systems**: Production-grade systems for Blower Door, Duct Leakage, and Ventilation testing with automated calculations.
+-   **Equipment Management System**: Production-grade equipment inventory, calibration tracking, and maintenance scheduling.
+-   **Scheduled Exports System**: Automated data export system with cron scheduling, multi-format support, and email delivery.
+-   **Jobs Management System**: Job tracking with automated compliance evaluation, inspector assignment, and billing notifications.
+-   **Job-Type-Specific Workflow System**: Guided step-by-step workflows with job templates, custom checklists, and completion enforcement.
+-   **Automated Retest Workflow**: One-click retest job creation for failed tests.
+-   **Mobile-Optimized Workflow UI**: Touch-friendly design optimized for field use.
+-   **Financial Management System**: Comprehensive standalone financial module with invoicing, payment tracking, expense management, and profitability analytics.
+-   **Minnesota Multifamily Compliance Suite**: Complete compliance tracking system for various standards.
+-   **Field Day Experience**: Mobile-first daily workload view with role-based access and large touch-friendly status toggle buttons.
+-   **Real-Time Sync Infrastructure**: Google Calendar-style live updates using WebSockets.
+-   **Flexible Inspection Workflows**: Non-linear workflow system allowing inspectors to jump directly to any step.
+-   **Simplified Job Status Workflow**: Streamlined status management (scheduled, done, failed, reschedule).
+-   **Construction Manager Report Routing**: Report scheduling system routing completed reports to construction managers.
+-   **TEC Auto Test Integration**: Import blower door test results from TEC Auto Test application.
+-   **Photo-Based Duct Testing**: Simplified duct leakage testing with manual CFM entry and photo documentation.
+-   **Production Readiness Infrastructure**:
+    *   **Background Job Monitoring Dashboard**: Admin-only dashboard for monitoring cron jobs with real-time updates and error logs.
+    *   **Enhanced Logging & Metrics**: Prometheus metrics integration, structured logging, and automatic request/response logging.
+    *   **Health Check Endpoints**: Liveness and readiness health checks (`/healthz`, `/readyz`, `/api/status`).
+    *   **WebSocket Scaling Documentation**: Comprehensive guide for scaling WebSockets.
+    *   **Metrics Endpoint**: Prometheus-compatible metrics at `/metrics`.
+    *   **Automated Calendar Import**: Production-grade cron job for importing events.
+-   **Feature Maturity & Release Gating System**: AAA Blueprint-compliant release gating infrastructure.
+    *   **Navigation Registry**: Centralized source for all application routes with typed metadata (maturity, roles, feature flags).
+    *   **Gatekeeper Middleware**: Environment-aware route access control enforcing maturity visibility rules.
+    *   **Route Guards & Protected Routes**: HOC component wrapping routes with access checks.
+    *   **Readiness UI Components**: Color-coded badges for maturity levels.
+    *   **Dev Mode Experimental Toggle**: Development-only "Show Experimental Routes" checkbox.
+    *   **Dynamic Sidebar Navigation**: Dynamic route filtering with gatekeeping system integration.
+    *   **/status/features Dashboard**: Admin-only comprehensive feature readiness surface with Golden Path test results.
 
 ## External Dependencies
 
