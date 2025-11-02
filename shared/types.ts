@@ -1,3 +1,5 @@
+import { FeatureMaturity } from '@shared/featureFlags';
+
 export type FieldType = 'text' | 'number' | 'select' | 'radio' | 'checkbox' | 'textarea' | 'date';
 
 export type ConditionalRule = {
@@ -21,4 +23,27 @@ export type FormSection = {
   title: string;
   description?: string;
   fields: FormField[];
+}
+
+export type Role = 'admin' | 'inspector' | 'partner_contractor';
+
+export interface FeatureStatus {
+  path: string;
+  title: string;
+  category: string;
+  maturity: FeatureMaturity;
+  goldenPathId?: string;
+  allowedRoles: Role[];
+  lastGPResult?: {
+    status: 'pass' | 'fail' | 'pending' | 'not_run';
+    timestamp?: number;
+    duration?: number;
+    violations?: number;
+  };
+  metrics?: {
+    lighthouse?: { lcp?: number; cls?: number; tbt?: number; score?: number };
+    axe?: { violations: number; lastRun?: number };
+    coverage?: { lines?: number; branches?: number };
+  };
+  todos?: string[];
 }

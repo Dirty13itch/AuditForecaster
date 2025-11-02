@@ -88,6 +88,7 @@ const AdminDiagnostics = lazy(() => import("@/pages/AdminDiagnostics"));
 const BackgroundJobs = lazy(() => import("@/pages/BackgroundJobs"));
 const AuditLogs = lazy(() => import("@/pages/AuditLogs"));
 const KPISettings = lazy(() => import("@/pages/KPISettings"));
+const StatusFeaturesPage = lazy(() => import("@/pages/StatusFeaturesPage"));
 
 // Tier 6: Specialized features and testing
 const BlowerDoorTest = lazy(() => import("@/pages/BlowerDoorTest"));
@@ -400,6 +401,11 @@ function Router() {
       <Route path="/admin/background-jobs" component={() => (
         <RouteErrorBoundary>
           <BackgroundJobs />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/status/features" component={() => (
+        <RouteErrorBoundary>
+          <StatusFeaturesPage />
         </RouteErrorBoundary>
       )} />
       <Route path="/admin/calendar-import" component={() => (

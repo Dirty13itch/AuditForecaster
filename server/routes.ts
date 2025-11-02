@@ -127,6 +127,8 @@ import { sanitizeText, validateFileUpload } from './validation';
 import { withCache, buildersCache, inspectorsCache, statsCache, invalidateCachePattern } from './cache';
 import { monitorQuery, getSlowQueryStats, clearSlowQueryStats } from './query-monitor';
 import { safeDivide, safeParseFloat, safeParseInt, safeToFixed } from '../shared/numberUtils';
+import { ROUTE_REGISTRY } from '../client/src/lib/navigation';
+import type { FeatureStatus } from '@shared/types';
 
 /**
  * API Error Response Standard
@@ -279,6 +281,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/healthz", healthz);
   app.get("/readyz", readyz);
   app.get("/api/status", status);
+
+  // Status Dashboard - Feature Registry (admin-only)
+  app.get('/api/status/features', isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const routes = Object.values(ROUTE_REGISTRY);
+      const features: FeatureStatus[] = routes.map(route => ({
+        path: route.path,
+        title: route.title,
+        category: route.category,
+        maturity: route.maturity,
+        goldenPathId: route.goldenPathId,
+        allowedRoles: route.allowedRoles,
+        // TODO: Wire to actual GP test results
+        lastGPResult: route.goldenPathId ? { status: 'not_run' as const } : undefined,
+        // TODO: Wire to actual metrics
+        metrics: {},
+        todos: [], // TODO: Scan for TODOs
+      }));
+      res.json({ features });
+    } catch (error) {
+      logError('StatusFeatures', error);
+      res.status(500).json(serverErrorResponse(req.path));
+    }
+  });
 
   // Prometheus metrics endpoint (no authentication for monitoring systems)
   const { register } = await import('./metrics');
