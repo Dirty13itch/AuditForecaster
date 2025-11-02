@@ -81,6 +81,20 @@ export async function seedMIHomesTC() {
     serverLogger.info("[Seed:MIHomesTC] Starting M/I Homes Twin Cities seed...");
 
     // ============================================================================
+    // 0. USER LOOKUP (Required for createdBy fields)
+    // ============================================================================
+    
+    const adminUser = await db.query.users.findFirst({
+      where: (users, { eq }) => eq(users.id, "test-admin")
+    });
+
+    if (!adminUser) {
+      throw new Error("Admin user (test-admin) not found. Ensure user seed runs before this seed.");
+    }
+
+    serverLogger.info(`[Seed:MIHomesTC] Using admin user: ${adminUser.email}`);
+
+    // ============================================================================
     // 1. BUILDER SETUP
     // ============================================================================
     
@@ -94,7 +108,8 @@ export async function seedMIHomesTC() {
       volumeTier: "premium",
       status: "active",
       constructionManagerName: "John Smith",
-      constructionManagerEmail: "jsmith@mihomes.com"
+      constructionManagerEmail: "jsmith@mihomes.com",
+      createdBy: adminUser.id
     }).returning().onConflictDoNothing();
 
     if (!miHomes) {
@@ -176,16 +191,12 @@ export async function seedMIHomesTC() {
 
     let jobCount = 0;
     
-    // Get test users for assignment
+    // Get test inspectors for assignment
     const inspectors = await db.query.users.findMany({
       where: (users, { or, eq }) => or(
         eq(users.id, "test-inspector1"),
         eq(users.id, "test-inspector2")
       )
-    });
-
-    const adminUser = await db.query.users.findFirst({
-      where: (users, { eq }) => eq(users.id, "test-admin")
     });
 
     // Job types and statuses
@@ -235,11 +246,11 @@ export async function seedMIHomesTC() {
           inspectionType: inspectionType as any,
           scheduledDate: scheduledDate,
           assignedTo: inspector?.id,
-          createdBy: adminUser?.id || null,
+          createdBy: adminUser.id,
           latitude: community.gps.lat,
           longitude: community.gps.lng,
           notes: `${community.name} - Lot ${lot} - ${plan.name} plan (${plan.planType})`
-        });
+        }).onConflictDoNothing();
       }
     }
 
