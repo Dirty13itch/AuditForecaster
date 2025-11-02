@@ -5812,14 +5812,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // SECURITY: Verify ownership of all expenses before deleting
       const expenses = await Promise.all(ids.map(id => storage.getExpense(id)));
-      const invalidExpenses = expenses.filter((expense, index) => 
-        !expense || expense.userId !== req.user.id
-      );
       
-      if (invalidExpenses.length > 0) {
-        return res.status(403).json({ 
-          message: "You do not have permission to delete some of these expenses" 
-        });
+      // Admin bypass - admins can manage all resources
+      if (req.user.role !== 'admin') {
+        const invalidExpenses = expenses.filter((expense, index) => 
+          !expense || expense.userId !== req.user.id
+        );
+        
+        if (invalidExpenses.length > 0) {
+          return res.status(403).json({ 
+            message: "You do not have permission to delete some of these expenses" 
+          });
+        }
       }
 
       const deleted = await storage.bulkDeleteExpenses(ids);
@@ -8594,14 +8598,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
       
       // SECURITY: Verify ownership of all photos before deleting
-      const invalidPhotos = photos.filter((photo, index) => 
-        !photo || photo.uploadedBy !== req.user.id
-      );
-      
-      if (invalidPhotos.length > 0) {
-        return res.status(403).json({ 
-          message: "You do not have permission to delete some of these photos" 
-        });
+      // Admin bypass - admins can manage all resources
+      if (req.user.role !== 'admin') {
+        const invalidPhotos = photos.filter((photo, index) => 
+          !photo || photo.uploadedBy !== req.user.id
+        );
+        
+        if (invalidPhotos.length > 0) {
+          return res.status(403).json({ 
+            message: "You do not have permission to delete some of these photos" 
+          });
+        }
       }
       
       const validPhotos = photos.filter((p): p is NonNullable<typeof p> => p !== undefined);
@@ -8658,14 +8665,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // SECURITY: Verify ownership of all photos before tagging
       const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
-      const invalidPhotos = photos.filter((photo, index) => 
-        !photo || photo.uploadedBy !== req.user.id
-      );
       
-      if (invalidPhotos.length > 0) {
-        return res.status(403).json({ 
-          message: "You do not have permission to tag some of these photos" 
-        });
+      // Admin bypass - admins can manage all resources
+      if (req.user.role !== 'admin') {
+        const invalidPhotos = photos.filter((photo, index) => 
+          !photo || photo.uploadedBy !== req.user.id
+        );
+        
+        if (invalidPhotos.length > 0) {
+          return res.status(403).json({ 
+            message: "You do not have permission to tag some of these photos" 
+          });
+        }
       }
 
       const updated = await storage.bulkUpdatePhotoTags(ids, mode, tags);
@@ -8703,14 +8714,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // SECURITY: Verify ownership of all photos before moving
       const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
-      const invalidPhotos = photos.filter((photo, index) => 
-        !photo || photo.uploadedBy !== req.user.id
-      );
       
-      if (invalidPhotos.length > 0) {
-        return res.status(403).json({ 
-          message: "You do not have permission to move some of these photos" 
-        });
+      // Admin bypass - admins can manage all resources
+      if (req.user.role !== 'admin') {
+        const invalidPhotos = photos.filter((photo, index) => 
+          !photo || photo.uploadedBy !== req.user.id
+        );
+        
+        if (invalidPhotos.length > 0) {
+          return res.status(403).json({ 
+            message: "You do not have permission to move some of these photos" 
+          });
+        }
       }
 
       const updated = await storage.bulkMovePhotosToJob(ids, jobId);
@@ -8742,14 +8757,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // SECURITY: Verify ownership of all photos before updating favorites
       const photos = await Promise.all(ids.map(id => storage.getPhoto(id)));
-      const invalidPhotos = photos.filter((photo, index) => 
-        !photo || photo.uploadedBy !== req.user.id
-      );
       
-      if (invalidPhotos.length > 0) {
-        return res.status(403).json({ 
-          message: "You do not have permission to update some of these photos" 
-        });
+      // Admin bypass - admins can manage all resources
+      if (req.user.role !== 'admin') {
+        const invalidPhotos = photos.filter((photo, index) => 
+          !photo || photo.uploadedBy !== req.user.id
+        );
+        
+        if (invalidPhotos.length > 0) {
+          return res.status(403).json({ 
+            message: "You do not have permission to update some of these photos" 
+          });
+        }
       }
 
       const updated = await storage.bulkUpdatePhotoFavorites(ids, isFavorite);
