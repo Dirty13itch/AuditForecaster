@@ -17,6 +17,7 @@ import { setupWebSocket } from "./websocket";
 import { registerNotificationRoutes } from "./notificationRoutes";
 import testNotificationRoutes from "./testNotifications";
 import { createServer } from "http";
+import { logFailedAuth } from "./security-audit";
 
 const app = express();
 
@@ -28,10 +29,35 @@ if (isSentryEnabled()) {
 // Export app for testing
 export { app };
 
-// Security headers
+// Enhanced helmet configuration for production-grade security
 app.use(helmet({
-  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
-  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for React
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for React
+      imgSrc: ["'self'", "data:", "https:", "blob:"], // Allow images from various sources
+      connectSrc: ["'self'", "https://storage.googleapis.com"], // Allow API calls
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for some third-party services
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow resource loading
+  dnsPrefetchControl: { allow: false },
+  frameguard: { action: 'deny' }, // Prevent clickjacking
+  hsts: {
+    maxAge: 31536000, // 1 year in seconds
+    includeSubDomains: true,
+    preload: true
+  },
+  ieNoOpen: true,
+  noSniff: true,
+  permittedCrossDomainPolicies: { permittedPolicies: "none" },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  xssFilter: true,
 }));
 
 // Add response compression for better network performance
@@ -48,15 +74,18 @@ app.use(compression({
   }
 }));
 
-// CORS configuration for preview deploys
+// Production-grade CORS configuration
 const allowedOrigins = [
-  ...process.env.REPLIT_DOMAINS?.split(',').map(d => `https://${d.trim()}`) || [],
-  'http://localhost:5000', // Dev mode
-  'http://127.0.0.1:5000'  // Dev mode (some browsers use IP instead of localhost)
+  'http://localhost:5000',
+  'http://localhost:3000',
+  'http://127.0.0.1:5000',
+  'http://127.0.0.1:3000',
+  // Add Replit domains
+  ...((process.env.REPLIT_DOMAINS || '').split(',').filter(Boolean).map(d => `https://${d.trim()}`))
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
@@ -82,8 +111,15 @@ app.use(cors({
     serverLogger.warn(`[CORS] Blocked origin: ${origin}`);
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: true
-}));
+  credentials: true, // Allow cookies/auth headers
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
+  exposedHeaders: ['X-CSRF-Token'],
+  maxAge: 86400, // Cache preflight requests for 24 hours
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
 
 serverLogger.info('[Server] CORS configured', {
   allowedOrigins,
@@ -144,6 +180,9 @@ app.use(requestLoggingMiddleware);
 // Prometheus metrics middleware
 import { metricsMiddleware } from "./middleware/metricsMiddleware";
 app.use(metricsMiddleware);
+
+// Security audit logging middleware
+app.use(logFailedAuth);
 
 app.use((req, res, next) => {
   const start = Date.now();
