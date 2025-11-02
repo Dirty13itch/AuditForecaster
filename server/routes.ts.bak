@@ -309,7 +309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // DEV MODE: Instant login endpoint (development only)
   // SECURITY: Returns 404 in production to ensure this endpoint is completely inaccessible
-  app.get("/api/dev-login/:userId", async (req: Request, res: Response) => {
+  app.get("/api/dev-login/:userId", async (req: any, res) => {
     // CRITICAL: Check development mode first - return 404 in production
     if (!isDevelopment()) {
       return res.status(404).json({ message: "Not found" });
@@ -449,7 +449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Diagnostics endpoint - authenticated admin only
   // SECURITY WARNING: This endpoint is production-safe because it uses sanitizeEnvironmentForClient()
   // to ensure NO secrets (SESSION_SECRET, DATABASE_URL credentials, full REPL_ID) are exposed
-  app.get("/api/auth/diagnostics", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/auth/diagnostics", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       const config = getConfig();
       const oidcConfig = await getOidcConfig();
@@ -539,7 +539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Auth metrics endpoint - authenticated admin only
-  app.get("/api/auth/metrics", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/auth/metrics", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       const { authMonitoring } = await import("./auth/monitoring");
       const metrics = authMonitoring.getMetrics();
@@ -593,13 +593,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dev mode login bypass - development only
-  app.get("/api/dev/login-as", async (req: Request, res: Response) => {
+  app.get("/api/dev/login-as", async (req: any, res) => {
     const { devModeLogin } = await import("./auth/devMode");
     await devModeLogin(req, res);
   });
 
   // Dev mode status endpoint - check if dev mode is enabled
-  app.get("/api/dev/status", async (req: Request, res: Response) => {
+  app.get("/api/dev/status", async (req: any, res) => {
     try {
       const { getDevModeStatus } = await import("./auth/devMode");
       const status = getDevModeStatus(req);
@@ -618,7 +618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==========================
   
   // Get user's WebAuthn credentials
-  app.get("/api/webauthn/credentials", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/webauthn/credentials", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
@@ -646,7 +646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Begin WebAuthn registration
-  app.post("/api/webauthn/register/begin", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/webauthn/register/begin", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const user = req.session.user;
       if (!user) {
@@ -673,7 +673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Complete WebAuthn registration
-  app.post("/api/webauthn/register/complete", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/webauthn/register/complete", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const user = req.session.user;
       if (!user) {
@@ -728,7 +728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Begin WebAuthn authentication
-  app.post("/api/webauthn/authenticate/begin", csrfSynchronisedProtection, async (req: Request, res: Response) => {
+  app.post("/api/webauthn/authenticate/begin", csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.session?.user?.id;
       
@@ -752,7 +752,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Complete WebAuthn authentication
-  app.post("/api/webauthn/authenticate/complete", csrfSynchronisedProtection, async (req: Request, res: Response) => {
+  app.post("/api/webauthn/authenticate/complete", csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const {
         credentialId,
@@ -810,7 +810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Revoke a WebAuthn credential
-  app.delete("/api/webauthn/credentials/:credentialId", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/webauthn/credentials/:credentialId", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const user = req.session.user;
       if (!user) {
@@ -835,7 +835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Check if user has WebAuthn enabled
-  app.get("/api/webauthn/status", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/webauthn/status", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
@@ -853,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Domain testing endpoint - authenticated admin only
-  app.post("/api/auth/test-domain", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/auth/test-domain", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { domain } = req.body;
       
@@ -919,7 +919,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/builders", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/builders", isAuthenticated, async (req: any, res) => {
     try {
       const userRole = (req.user.role as UserRole) || 'inspector';
       const userId = req.user.id;
@@ -948,7 +948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderSchema.parse(req.body);
       // Set createdBy to current user
@@ -975,7 +975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/builders/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/builders/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = flexibleIdParamSchema.parse(req.params);
       const builder = await storage.getBuilder(id);
@@ -1001,7 +1001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/builders/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Validate ID parameter (accepts UUID v4 or slug format)
       const { id } = flexibleIdParamSchema.parse(req.params);
@@ -1035,7 +1035,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/builders/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Validate ID parameter (accepts UUID v4 or slug format)
       const { id } = flexibleIdParamSchema.parse(req.params);
@@ -1071,7 +1071,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Builder Review Queue routes (admin-only)
-  app.get("/api/builders/review", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/builders/review", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       const builders = await storage.getBuildersNeedingReview();
       
@@ -1093,7 +1093,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders/:id/approve", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders/:id/approve", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const builder = await storage.approveBuilder(req.params.id);
       if (!builder) {
@@ -1115,7 +1115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders/:id/merge", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders/:id/merge", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     const mergeSchema = z.object({
       targetBuilderId: z.string().uuid("Target builder ID must be a valid UUID"),
     });
@@ -1160,7 +1160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:id/reject", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/builders/:id/reject", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { unknownBuilderId } = req.body;
       if (!unknownBuilderId) {
@@ -1200,7 +1200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders/:builderId/contacts", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders/:builderId/contacts", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderContactSchema.parse({
         ...req.body,
@@ -1251,7 +1251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existing = await storage.getBuilderContact(req.params.id);
       if (!existing) {
@@ -1293,7 +1293,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/builders/:builderId/contacts/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const contact = await storage.getBuilderContact(req.params.id);
       if (!contact) {
@@ -1328,7 +1328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:builderId/contacts/:id/primary", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/builders/:builderId/contacts/:id/primary", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const contact = await storage.getBuilderContact(req.params.id);
       if (!contact) {
@@ -1371,7 +1371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders/:builderId/agreements", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders/:builderId/agreements", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderAgreementSchema.parse({ ...req.body, builderId: req.params.builderId });
       // Set createdBy to current user
@@ -1418,7 +1418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:builderId/agreements/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/builders/:builderId/agreements/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existing = await storage.getBuilderAgreement(req.params.id);
       if (!existing) {
@@ -1455,7 +1455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:builderId/agreements/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/builders/:builderId/agreements/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const agreement = await storage.getBuilderAgreement(req.params.id);
       if (!agreement) {
@@ -1497,7 +1497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders/:builderId/programs", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders/:builderId/programs", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderProgramSchema.parse({ ...req.body, builderId: req.params.builderId });
       // Set createdBy to current user
@@ -1544,7 +1544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:builderId/programs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/builders/:builderId/programs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existing = await storage.getBuilderProgram(req.params.id);
       if (!existing) {
@@ -1581,7 +1581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:builderId/programs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/builders/:builderId/programs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const program = await storage.getBuilderProgram(req.params.id);
       if (!program) {
@@ -1623,7 +1623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders/:builderId/interactions", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders/:builderId/interactions", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBuilderInteractionSchema.parse({ 
         ...req.body, 
@@ -1672,7 +1672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:builderId/interactions/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/builders/:builderId/interactions/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existing = await storage.getBuilderInteraction(req.params.id);
       if (!existing) {
@@ -1709,7 +1709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:builderId/interactions/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/builders/:builderId/interactions/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const interaction = await storage.getBuilderInteraction(req.params.id);
       if (!interaction) {
@@ -1741,7 +1741,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Construction Managers routes
-  app.get("/api/construction-managers", requireRole(['admin', 'inspector']), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/construction-managers", requireRole(['admin', 'inspector']), async (req: any, res) => {
     try {
       const search = req.query.search as string | undefined;
       const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
@@ -1789,7 +1789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/construction-managers", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/construction-managers", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertConstructionManagerSchema.parse(req.body);
       
@@ -1831,7 +1831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/construction-managers/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/construction-managers/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { id } = idParamSchema.parse(req.params);
       const validated = insertConstructionManagerSchema.partial().parse(req.body);
@@ -1887,7 +1887,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/construction-managers/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/construction-managers/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { id } = idParamSchema.parse(req.params);
       
@@ -1938,7 +1938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/construction-managers/:cmId/cities", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/construction-managers/:cmId/cities", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { cmId } = req.params;
       
@@ -1981,7 +1981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/construction-managers/:cmId/cities/:cityId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/construction-managers/:cmId/cities/:cityId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { cmId, cityId } = req.params;
       
@@ -2023,7 +2023,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/builders/:builderId/developments", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/builders/:builderId/developments", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertDevelopmentSchema.parse({ ...req.body, builderId: req.params.builderId });
       // Set createdBy to current user
@@ -2070,7 +2070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/builders/:builderId/developments/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/builders/:builderId/developments/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existing = await storage.getDevelopment(req.params.id);
       if (!existing) {
@@ -2107,7 +2107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/builders/:builderId/developments/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/builders/:builderId/developments/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const development = await storage.getDevelopment(req.params.id);
       if (!development) {
@@ -2139,7 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Builder Abbreviations CRUD
-  app.get('/api/builders/:builderId/abbreviations', isAuthenticated, requireRole('admin', 'manager'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/builders/:builderId/abbreviations', isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
     try {
       const { builderId } = req.params;
       const abbreviations = await storage.getBuilderAbbreviationsByBuilder(builderId);
@@ -2150,7 +2150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/builders/:builderId/abbreviations', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/builders/:builderId/abbreviations', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { builderId } = req.params;
       const validatedData = insertBuilderAbbreviationSchema.parse({
@@ -2183,7 +2183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { id } = req.params;
       const validatedData = insertBuilderAbbreviationSchema.partial().parse(req.body);
@@ -2215,7 +2215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { id } = req.params;
       const success = await storage.deleteBuilderAbbreviation(id);
@@ -2239,7 +2239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/builders/:builderId/abbreviations/:id/set-primary', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/builders/:builderId/abbreviations/:id/set-primary', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { builderId, id } = req.params;
 
@@ -2281,7 +2281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * GET /api/builders/:id/stats
    * Get comprehensive performance statistics for a builder
    */
-  app.get("/api/builders/:id/stats", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/builders/:id/stats", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = idParamSchema.parse(req.params);
       const builder = await storage.getBuilder(id);
@@ -2311,7 +2311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * GET /api/builders/:id/hierarchy
    * Get full builder hierarchy (builder → developments → lots → jobs)
    */
-  app.get("/api/builders/:id/hierarchy", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/builders/:id/hierarchy", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = idParamSchema.parse(req.params);
       const builder = await storage.getBuilder(id);
@@ -2438,7 +2438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/developments/:developmentId/lots", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/developments/:developmentId/lots", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertLotSchema.parse({ ...req.body, developmentId: req.params.developmentId });
       // Set createdBy to current user
@@ -2485,7 +2485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/developments/:developmentId/lots/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/developments/:developmentId/lots/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existing = await storage.getLot(req.params.id);
       if (!existing) {
@@ -2522,7 +2522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/developments/:developmentId/lots/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/developments/:developmentId/lots/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const lot = await storage.getLot(req.params.id);
       if (!lot) {
@@ -2611,7 +2611,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/developments/:developmentId/construction-managers", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/developments/:developmentId/construction-managers", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { developmentId } = req.params;
       
@@ -2692,7 +2692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/developments/:developmentId/construction-managers/:cmId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/developments/:developmentId/construction-managers/:cmId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { developmentId, cmId } = req.params;
       
@@ -2772,7 +2772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/plans", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/plans", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertPlanSchema.parse(req.body);
       const plan = await storage.createPlan(validated);
@@ -2810,7 +2810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/plans/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/plans/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertPlanSchema.partial().parse(req.body);
       const plan = await storage.updatePlan(req.params.id, validated);
@@ -2839,7 +2839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/plans/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/plans/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const plan = await storage.getPlan(req.params.id);
       const deleted = await storage.deletePlan(req.params.id);
@@ -2884,7 +2884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/plans/:planId/features", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/plans/:planId/features", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { planId } = req.params;
       
@@ -2923,7 +2923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/plans/:planId/features/:featureId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/plans/:planId/features/:featureId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { planId, featureId } = req.params;
       
@@ -2971,7 +2971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/plans/:planId/features/:featureId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/plans/:planId/features/:featureId", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { planId, featureId } = req.params;
       
@@ -3012,7 +3012,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/jobs", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/jobs", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
       const userRole = (req.user.role as UserRole) || 'inspector';
       const userId = req.user.id;
@@ -3078,7 +3078,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Field Day Experience - Mobile-first daily workload view
-  app.get("/api/field-day", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/field-day", isAuthenticated, async (req: any, res) => {
     try {
       const userRole = (req.user.role as UserRole) || 'inspector';
       const userId = req.user.id;
@@ -3179,7 +3179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/jobs", isAuthenticated, requirePermission('create_job'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/jobs", isAuthenticated, requirePermission('create_job'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertJobSchema.parse(req.body);
       // Sanitize builderId - convert empty string to undefined (which becomes null in DB)
@@ -3313,7 +3313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector', 'manager', 'viewer'), async (req: any, res) => {
     try {
       const { id } = flexibleIdParamSchema.parse(req.params);
       const job = await storage.getJob(id);
@@ -3341,7 +3341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Validate ID parameter (accepts UUID v4 or slug format)
       const { id } = flexibleIdParamSchema.parse(req.params);
@@ -3450,7 +3450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/jobs/:id/status", isAuthenticated, requirePermission('edit_job'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/jobs/:id/status", isAuthenticated, requirePermission('edit_job'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const existingJob = await storage.getJob(req.params.id);
       if (!existingJob) {
@@ -3518,7 +3518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/jobs/:id", isAuthenticated, requireRole('admin', 'inspector'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Validate ID parameter (accepts UUID v4 or slug format)
       const { id } = flexibleIdParamSchema.parse(req.params);
@@ -3867,7 +3867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Dashboard Summary endpoint
-  app.get("/api/dashboard/admin-summary", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/dashboard/admin-summary", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       const { startDate: startParam, endDate: endParam } = req.query;
       
@@ -4118,7 +4118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/schedule-events", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/schedule-events", isAuthenticated, async (req: any, res) => {
     try {
       // CRITICAL FIX: Use session user directly instead of re-fetching
       const user = req.user;
@@ -4281,7 +4281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sync Google Calendar events (admin only)
-  app.post('/api/google-calendar/sync', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/google-calendar/sync', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { startDate, endDate } = req.body;
       
@@ -4320,7 +4320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Calendar Management Routes - Building Knowledge Calendar Sync
   
   // Sync Building Knowledge calendar to pending events (instant on-demand sync)
-  app.post('/api/calendar/sync-now', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/calendar/sync-now', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       
@@ -4353,7 +4353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export job to Google Calendar (two-way sync)
-  app.post('/api/calendar/export-job/:jobId', isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/calendar/export-job/:jobId', isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const jobId = req.params.jobId;
@@ -4379,7 +4379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Update job in Google Calendar (two-way sync)
-  app.put('/api/calendar/update-job/:jobId', isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put('/api/calendar/update-job/:jobId', isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const jobId = req.params.jobId;
@@ -4403,7 +4403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Delete job from Google Calendar (two-way sync)
-  app.delete('/api/calendar/delete-event/:eventId', isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/calendar/delete-event/:eventId', isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const eventId = req.params.eventId;
@@ -4428,7 +4428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get pending calendar events with filters
-  app.get('/api/pending-events', isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/pending-events', isAuthenticated, async (req: any, res) => {
     try {
       const { status, builderId, startDate, endDate, jobType, confidence, builderUnmatched, sortBy, limit, offset } = req.query;
       
@@ -4468,7 +4468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Assign single pending event to inspector
-  app.post('/api/pending-events/:id/assign', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/pending-events/:id/assign', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { inspectorId } = req.body;
@@ -4512,7 +4512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk assign multiple pending events to inspector
-  app.post('/api/pending-events/bulk-assign', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/pending-events/bulk-assign', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { eventIds, inspectorId } = req.body;
       const userId = req.user.id;
@@ -4566,7 +4566,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reject pending event
-  app.delete('/api/pending-events/:id/reject', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete('/api/pending-events/:id/reject', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { id } = req.params;
       const userId = req.user.id;
@@ -4607,7 +4607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get weekly workload for inspectors
-  app.get('/api/weekly-workload', isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/weekly-workload', isAuthenticated, async (req: any, res) => {
     try {
       const { startDate, endDate } = req.query;
       
@@ -4644,7 +4644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     isAuthenticated, 
     requireRole('admin'), 
     csrfSynchronisedProtection,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: any, res) => {
       try {
         const { eventId, inspectorId } = req.body;
         const adminId = req.user.id;
@@ -4705,7 +4705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     isAuthenticated,
     requireRole('admin'),
     csrfSynchronisedProtection,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: any, res) => {
       try {
         const { eventIds, inspectorId } = req.body;
         const adminId = req.user.id;
@@ -4773,7 +4773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/inspectors/workload',
     isAuthenticated,
     requireRole('admin'),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: any, res) => {
       try {
         const { startDate, endDate } = req.query;
 
@@ -4877,7 +4877,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // GET /api/inspector-schedule/travel-analysis - Get travel time analysis for inspector's jobs
-  app.get('/api/inspector-schedule/travel-analysis', isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get('/api/inspector-schedule/travel-analysis', isAuthenticated, async (req: any, res) => {
     try {
       const { date, inspectorId } = req.query;
       
@@ -5373,7 +5373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Removed duplicate definition to prevent routing conflicts
 
   // Get workload for a specific inspector
-  app.get("/api/inspectors/:id/workload", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/inspectors/:id/workload", isAuthenticated, async (req: any, res) => {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
@@ -5406,7 +5406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get workload range for an inspector
-  app.get("/api/inspectors/:id/workload-range", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/inspectors/:id/workload-range", isAuthenticated, async (req: any, res) => {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
@@ -5429,7 +5429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all inspectors workload for a specific date (for assignment dialog)
-  app.get("/api/inspector-workload/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/inspector-workload/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
     try {
       const date = new Date(req.params.date);
       const workloads = await storage.getAllInspectorsWorkload(date);
@@ -5441,7 +5441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all inspector preferences
-  app.get("/api/inspector-preferences", isAuthenticated, requireRole('admin', 'manager'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/inspector-preferences", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
     try {
       const preferences = await storage.getAllInspectorPreferences();
       res.json(preferences);
@@ -5452,7 +5452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get inspector preferences
-  app.get("/api/inspectors/:id/preferences", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/inspectors/:id/preferences", isAuthenticated, async (req: any, res) => {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
@@ -5487,7 +5487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update inspector preferences
-  app.put("/api/inspectors/:id/preferences", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/inspectors/:id/preferences", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const inspectorId = req.params.id;
       const userRole = (req.user.role as UserRole) || 'inspector';
@@ -5523,7 +5523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Suggest optimal inspector for a job
-  app.post("/api/jobs/suggest-inspector/:jobId/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/jobs/suggest-inspector/:jobId/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
     try {
       const jobId = req.params.jobId;
       const date = new Date(req.params.date);
@@ -5542,7 +5542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Assign job to inspector
-  app.post("/api/jobs/:id/assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/jobs/:id/assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const jobId = req.params.id;
       const assignedBy = req.user.id;
@@ -5596,7 +5596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk assign jobs
-  app.post("/api/jobs/bulk-assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/jobs/bulk-assign", isAuthenticated, requireRole('admin', 'manager'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const assignedBy = req.user.id;
       
@@ -5650,7 +5650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get assignment history for a job
-  app.get("/api/jobs/:id/assignment-history", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/jobs/:id/assignment-history", isAuthenticated, async (req: any, res) => {
     try {
       const jobId = req.params.id;
       const history = await storage.getAssignmentHistory(jobId);
@@ -5662,7 +5662,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get jobs by date for conflict checking
-  app.get("/api/jobs/by-date/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/jobs/by-date/:date", isAuthenticated, requireRole('admin', 'manager'), async (req: any, res) => {
     try {
       const date = new Date(req.params.date);
       const startOfDay = new Date(date);
@@ -5744,7 +5744,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertExpenseSchema.partial().parse(req.body);
       
@@ -5774,7 +5774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // SECURITY: Fetch expense first to verify ownership
       const expense = await storage.getExpense(req.params.id);
@@ -5799,7 +5799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk delete expenses
-  app.delete("/api/expenses/bulk", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/expenses/bulk", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkDeleteSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one expense ID is required"),
     });
@@ -5981,7 +5981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertMileageLogSchema.partial().parse(req.body);
       
@@ -6011,7 +6011,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // SECURITY: Fetch mileage log first to verify ownership
       const log = await storage.getMileageLog(req.params.id);
@@ -6117,7 +6117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     message: 'Too many classification requests, please try again later',
   });
 
-  app.get("/api/mileage/unclassified", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/mileage/unclassified", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       
@@ -6137,7 +6137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/mileage/:id/classify", isAuthenticated, csrfSynchronisedProtection, classifyRateLimiter, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/mileage/:id/classify", isAuthenticated, csrfSynchronisedProtection, classifyRateLimiter, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const logId = req.params.id;
@@ -6187,7 +6187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/mileage/summary", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/mileage/summary", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const month = req.query.month as string;
@@ -6206,7 +6206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/mileage/export", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/mileage/export", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const month = req.query.month as string;
@@ -6238,7 +6238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Financial Management Endpoints
   // SECURITY: All financial routes protected by blockFinancialAccess() - admin only
   // Invoices
-  app.get("/api/invoices", isAuthenticated, blockFinancialAccess(), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/invoices", isAuthenticated, blockFinancialAccess(), async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { status, builderId, jobId, limit, offset } = req.query;
@@ -6271,7 +6271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/invoices", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       
@@ -6397,7 +6397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices/:id/send", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/invoices/:id/send", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) {
@@ -6491,7 +6491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payments", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/payments", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertPaymentSchema.parse(req.body);
       const payment = await storage.recordPayment({
@@ -6550,7 +6550,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Financial Settings
-  app.get("/api/financial-settings", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/financial-settings", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       let settings = await storage.getFinancialSettings(userId);
@@ -6573,7 +6573,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/financial-settings", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/financial-settings", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const validated = insertFinancialSettingsSchema.partial().parse(req.body);
@@ -6627,7 +6627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices/create-with-line-items", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/invoices/create-with-line-items", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { invoice: invoiceData, lineItems } = req.body;
@@ -6794,7 +6794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Expense Management Routes
   // POST /api/expenses - Create new expense with auto-classification
-  app.post("/api/expenses", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/expenses", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const userRole = req.user.role as UserRole;
@@ -6846,7 +6846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/expenses - Query expenses with role-based filtering
-  app.get("/api/expenses", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const userRole = req.user.role as UserRole;
@@ -6910,7 +6910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PATCH /api/expenses/:id/approve - Admin approves expense
-  app.patch("/api/expenses/:id/approve", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/expenses/:id/approve", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const expenseId = req.params.id;
       const approverId = req.user.id;
@@ -6944,7 +6944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PATCH /api/expenses/:id - Update pending expense
-  app.patch("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const expenseId = req.params.id;
       const userId = req.user.id;
@@ -7045,7 +7045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Financial Reports
-  app.get("/api/financial-summary", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/financial-summary", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { startDate, endDate } = req.query;
@@ -7061,7 +7061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/revenue-by-period", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/revenue-by-period", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { period = 'month' } = req.query;
@@ -7078,7 +7078,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/expenses-by-category", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/expenses-by-category", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { startDate, endDate } = req.query;
@@ -7094,7 +7094,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/mileage-summary", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/mileage-summary", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { startDate, endDate } = req.query;
@@ -7125,7 +7125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
 
   // GET /api/analytics/profitability-summary - Get profitability summary
-  app.get("/api/analytics/profitability-summary", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/analytics/profitability-summary", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       serverLogger.info('[Analytics/ProfitabilitySummary] Fetching profitability summary', {
         userId: req.user.id,
@@ -7152,7 +7152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/analytics/revenue-by-job-type - Get revenue breakdown by job type
-  app.get("/api/analytics/revenue-by-job-type", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/analytics/revenue-by-job-type", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       serverLogger.info('[Analytics/RevenueByJobType] Fetching revenue by job type', {
         userId: req.user.id,
@@ -7177,7 +7177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/analytics/builder-profitability - Get builder profitability with AR
-  app.get("/api/analytics/builder-profitability", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/analytics/builder-profitability", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       serverLogger.info('[Analytics/BuilderProfitability] Fetching builder profitability', {
         userId: req.user.id,
@@ -7202,7 +7202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/analytics/cash-flow-forecast - Get cash flow forecast
-  app.get("/api/analytics/cash-flow-forecast", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/analytics/cash-flow-forecast", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       const daysAhead = req.query.daysAhead ? parseInt(req.query.daysAhead as string, 10) : 30;
 
@@ -7230,7 +7230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/analytics/inspector-utilization - Get inspector productivity metrics
-  app.get("/api/analytics/inspector-utilization", isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/analytics/inspector-utilization", isAuthenticated, requireRole('admin'), async (req: any, res) => {
     try {
       const { userId } = req.query;
 
@@ -7528,7 +7528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-instances", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/report-instances", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertReportInstanceSchema.parse(req.body);
       const instance = await storage.createReportInstance(validated);
@@ -8510,7 +8510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertPhotoSchema.partial().parse(req.body);
       
@@ -8540,7 +8540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const photo = await storage.getPhoto(req.params.id);
       if (!photo) {
@@ -8583,7 +8583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk delete photos
-  app.delete("/api/photos/bulk", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/photos/bulk", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkDeleteSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
     });
@@ -8650,7 +8650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk tag photos
-  app.post("/api/photos/bulk-tag", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/photos/bulk-tag", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkTagSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       mode: z.enum(['add', 'remove', 'replace']),
@@ -8694,7 +8694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk move photos to job
-  app.post("/api/photos/bulk-move", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/photos/bulk-move", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkMoveSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       jobId: z.string().min(1, "Job ID is required"),
@@ -8743,7 +8743,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk update photo favorites
-  app.post("/api/photos/bulk-favorites", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/photos/bulk-favorites", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     const bulkFavoritesSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one photo ID is required"),
       isFavorite: z.boolean(),
@@ -9300,7 +9300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/blower-door-tests", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/blower-door-tests", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertBlowerDoorTestSchema.parse({
         ...req.body,
@@ -9391,7 +9391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/blower-door-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/blower-door-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const test = await storage.getBlowerDoorTest(req.params.id);
       if (!test) {
@@ -9473,7 +9473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/duct-leakage-tests", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/duct-leakage-tests", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertDuctLeakageTestSchema.parse({
         ...req.body,
@@ -9609,7 +9609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/duct-leakage-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/duct-leakage-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const test = await storage.getDuctLeakageTest(req.params.id);
       if (!test) {
@@ -9691,7 +9691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/ventilation-tests", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/ventilation-tests", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertVentilationTestSchema.parse({
         ...req.body,
@@ -9861,7 +9861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/ventilation-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/ventilation-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const test = await storage.getVentilationTest(req.params.id);
       if (!test) {
@@ -9979,7 +9979,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Inspector Dashboard Summary endpoint with smart week logic
-  app.get("/api/dashboard/inspector-summary", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/dashboard/inspector-summary", isAuthenticated, async (req: any, res) => {
     try {
       const { inspectorId, date } = req.query;
       const currentUser = req.user;
@@ -10512,7 +10512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===========================
 
   // POST /api/compliance/artifacts - Upload compliance artifact
-  app.post("/api/compliance/artifacts", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/compliance/artifacts", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       serverLogger.info('[API/ComplianceArtifacts/Upload] Request received', { 
         jobId: req.body.jobId,
@@ -11343,7 +11343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Email Preferences API
-  app.get("/api/email-preferences", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/email-preferences", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       let prefs = await storage.getEmailPreferences(userId);
@@ -11360,7 +11360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/email-preferences", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/email-preferences", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const validated = insertEmailPreferenceSchema.partial().parse(req.body);
@@ -11412,7 +11412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/email-preferences/test", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/email-preferences/test", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const user = await storage.getUser(userId);
@@ -11640,7 +11640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tax-credit-projects", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/tax-credit-projects", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const validated = insertTaxCreditProjectSchema.parse({
@@ -11669,7 +11669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const updates = req.body;
       
@@ -11697,7 +11697,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, requireRole('admin', 'manager'), async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, requireRole('admin', 'manager'), async (req: any, res) => {
     try {
       const success = await storage.deleteTaxCreditProject(req.params.id);
       if (!success) {
@@ -11728,7 +11728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tax-credit-requirements", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/tax-credit-requirements", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertTaxCreditRequirementSchema.parse(req.body);
       const requirement = await storage.createTaxCreditRequirement(validated);
@@ -11775,7 +11775,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tax-credit-documents", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/tax-credit-documents", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const validated = insertTaxCreditDocumentSchema.parse({
@@ -11803,7 +11803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tax-credit-documents/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/tax-credit-documents/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const success = await storage.deleteTaxCreditDocument(req.params.id);
       if (!success) {
@@ -11847,7 +11847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/unit-certifications", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/unit-certifications", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertUnitCertificationSchema.parse(req.body);
       
@@ -11949,7 +11949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Equipment Management Routes
-  app.get("/api/equipment", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/equipment", isAuthenticated, async (req: any, res) => {
     try {
       const { status, type, userId, dueDays } = req.query;
       
@@ -11991,7 +11991,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/equipment", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/equipment", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertEquipmentSchema.parse({
         ...req.body,
@@ -12205,7 +12205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/checkouts", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/checkouts", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertEquipmentCheckoutSchema.parse({
         ...req.body,
@@ -12325,7 +12325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Scheduled Exports API Endpoints
   // ==============================================================
 
-  app.get("/api/scheduled-exports", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/scheduled-exports", isAuthenticated, async (req: any, res) => {
     try {
       const exports = await storage.listScheduledExports(req.user.id);
       res.json(exports);
@@ -12335,7 +12335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/scheduled-exports/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/scheduled-exports/:id", isAuthenticated, async (req: any, res) => {
     try {
       const exp = await storage.getScheduledExport(req.params.id);
       if (!exp) {
@@ -12354,7 +12354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/scheduled-exports", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/scheduled-exports", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertScheduledExportSchema.parse({
         ...req.body,
@@ -12373,7 +12373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/scheduled-exports/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/scheduled-exports/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Verify ownership before update
       const existing = await storage.getScheduledExport(req.params.id);
@@ -12404,7 +12404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/scheduled-exports/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/scheduled-exports/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Verify ownership before delete
       const existing = await storage.getScheduledExport(req.params.id);
@@ -12424,7 +12424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/scheduled-exports/:id/enable", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/scheduled-exports/:id/enable", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Verify ownership before enable
       const existing = await storage.getScheduledExport(req.params.id);
@@ -12445,7 +12445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/scheduled-exports/:id/disable", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/scheduled-exports/:id/disable", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Verify ownership before disable
       const existing = await storage.getScheduledExport(req.params.id);
@@ -12465,7 +12465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/scheduled-exports/:id/test", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/scheduled-exports/:id/test", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       // Verify ownership before test run
       const existing = await storage.getScheduledExport(req.params.id);
@@ -12490,7 +12490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==============================================================
 
   // Export jobs data
-  app.post("/api/export/jobs", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/export/jobs", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const options: ExportOptions = {
         format: req.body.format || 'csv',
@@ -12525,7 +12525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export financial data (invoices, expenses, mileage)
-  app.post("/api/export/financial", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/export/financial", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const options: ExportOptions & { dataType: 'invoices' | 'expenses' | 'mileage' } = {
         format: req.body.format || 'csv',
@@ -12559,7 +12559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export equipment data
-  app.post("/api/export/equipment", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/export/equipment", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const options: ExportOptions = {
         format: req.body.format || 'csv',
@@ -12589,7 +12589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export QA scores
-  app.post("/api/export/qa-scores", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/export/qa-scores", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const options: ExportOptions = {
         format: req.body.format || 'csv',
@@ -12622,7 +12622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export analytics report
-  app.post("/api/export/analytics", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/export/analytics", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const options: ExportOptions & { reportType: string } = {
         format: req.body.format || 'pdf',
@@ -12655,7 +12655,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export photo metadata
-  app.post("/api/export/photos", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/export/photos", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const options: ExportOptions = {
         format: req.body.format || 'csv',
@@ -12689,7 +12689,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export AR Aging report
-  app.post("/api/export/ar-aging", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/export/ar-aging", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const options: ExportOptions = {
         format: req.body.format || 'xlsx',
@@ -12727,7 +12727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==============================================================
 
   // Get user's achievements
-  app.get("/api/achievements/user/:userId", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/achievements/user/:userId", isAuthenticated, async (req: any, res) => {
     try {
       const { userId } = req.params;
       
@@ -12760,7 +12760,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get achievement progress for current user
-  app.get("/api/achievements/progress", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/achievements/progress", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const achievements = await storage.getUserAchievements(userId);
@@ -12783,7 +12783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Unlock an achievement
-  app.post("/api/achievements/unlock", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/achievements/unlock", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const schema = z.object({
         userId: z.string(),
@@ -12873,7 +12873,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user's leaderboard position
-  app.get("/api/leaderboard/position", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/leaderboard/position", isAuthenticated, async (req: any, res) => {
     try {
       const schema = z.object({
         period: z.enum(['week', 'month', 'year', 'all_time']).optional().default('month'),
@@ -12898,7 +12898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user's XP and level
-  app.get("/api/stats/xp", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/stats/xp", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const xp = await storage.getUserXP(userId);
@@ -12921,7 +12921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user's streaks
-  app.get("/api/streaks/:userId", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/streaks/:userId", isAuthenticated, async (req: any, res) => {
     try {
       const { userId } = req.params;
 
@@ -12939,7 +12939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a streak
-  app.post("/api/streaks/:userId", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/streaks/:userId", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { userId } = req.params;
       const { type, current, best, lastDate } = req.body;
@@ -12987,7 +12987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Join a challenge
-  app.post("/api/challenges/:challengeId/join", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/challenges/:challengeId/join", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { challengeId } = req.params;
       const userId = req.user.id;
@@ -13058,7 +13058,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/analytics/custom-report", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/analytics/custom-report", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { 
         reportType, 
@@ -13316,7 +13316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/custom-reports", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/custom-reports", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { name, type, config } = req.body;
       const userId = req.user.id;
@@ -13377,7 +13377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/kpi-settings", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.put("/api/kpi-settings", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { selectedKpis, layout, refreshRate, thresholds } = req.body;
@@ -13400,7 +13400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // QA Performance API Routes
-  app.get("/api/qa/performance/:userId/:period", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/qa/performance/:userId/:period", isAuthenticated, async (req: any, res) => {
     try {
       const { userId, period } = req.params;
       const currentUser = req.user.id;
@@ -13477,7 +13477,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/qa/performance/team/:period", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/qa/performance/team/:period", isAuthenticated, async (req: any, res) => {
     try {
       const { period } = req.params;
       const { startDate, endDate } = req.query;
@@ -13527,7 +13527,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/qa/performance/category-breakdown/:userId", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/qa/performance/category-breakdown/:userId", isAuthenticated, async (req: any, res) => {
     try {
       const { userId } = req.params;
       const { startDate, endDate } = req.query;
@@ -13582,7 +13582,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/qa/performance/export", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/qa/performance/export", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { format, period, userId } = req.body;
       const currentUser = req.user.id;
@@ -13724,7 +13724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update job configuration (enable/disable)
-  app.patch("/api/admin/background-jobs/:jobName", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/admin/background-jobs/:jobName", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const { jobName } = req.params;
       const { enabled } = req.body;
