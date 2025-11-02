@@ -276,6 +276,26 @@ export const builderInteractions = pgTable("builder_interactions", {
   index("idx_builder_interactions_contact_id").on(table.contactId),
 ]);
 
+export const constructionManagers = pgTable("construction_managers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  phone: text("phone"),
+  mobilePhone: text("mobile_phone"),
+  title: text("title", {
+    enum: ["construction_manager", "area_construction_manager", "director", "superintendent"]
+  }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_cms_email").on(table.email),
+  index("idx_cms_isActive").on(table.isActive),
+  index("idx_cms_name").on(table.name),
+]);
+
 // Pending calendar events from Building Knowledge calendar awaiting assignment
 export const pendingCalendarEvents = pgTable("pending_calendar_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2018,6 +2038,17 @@ export const insertBuilderInteractionSchema = createInsertSchema(builderInteract
   followUpDate: z.coerce.date().nullable().optional(),
 });
 export const updateBuilderInteractionSchema = insertBuilderInteractionSchema.omit({ builderId: true, createdBy: true }).partial();
+
+export const insertConstructionManagerSchema = createInsertSchema(constructionManagers).omit({
+  id: true,
+  createdBy: true,
+  createdAt: true,
+  updatedAt: true
+}).extend({
+  email: z.string().email("Please enter a valid email address"),
+});
+export type InsertConstructionManager = z.infer<typeof insertConstructionManagerSchema>;
+export type ConstructionManager = typeof constructionManagers.$inferSelect;
 
 export const insertPendingCalendarEventSchema = createInsertSchema(pendingCalendarEvents).omit({ 
   id: true, 

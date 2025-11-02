@@ -196,6 +196,14 @@ const testingItems = [
   },
 ];
 
+const businessDataItems = [
+  {
+    title: "Construction Managers",
+    url: "/business-data/construction-managers",
+    icon: UserCheck,
+  },
+];
+
 const calendarImportItems = [
   {
     title: "Calendar Management",
@@ -375,6 +383,28 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.url} data-testid={`link-testing-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+        <SidebarGroup>
+          <SidebarGroupLabel>Business Data</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {businessDataItems.map((item) => {
+                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url} data-testid={`link-business-data-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>

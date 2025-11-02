@@ -23,6 +23,8 @@ import {
   updateBuilderProgramSchema,
   insertBuilderInteractionSchema,
   updateBuilderInteractionSchema,
+  insertConstructionManagerSchema,
+  constructionManagers,
   insertDevelopmentSchema,
   updateDevelopmentSchema,
   insertLotSchema,
@@ -102,7 +104,7 @@ import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, 
 import { getConfig, isDevelopment } from "./config";
 import { getTroubleshootingGuide, getAllTroubleshootingGuides, suggestTroubleshootingGuide } from "./auth/troubleshooting";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, eq, and, or, ilike, count, desc } from "drizzle-orm";
 import { exportService, type ExportOptions } from "./exportService";
 import { createReadStream } from "fs";
 import { unlink } from "fs/promises";
@@ -1708,6 +1710,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete builder interaction');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Construction Managers routes
+  app.get("/api/construction-managers", requireRole(['admin', 'inspector']), async (req: any, res) => {
+    try {
+      const search = req.query.search as string | undefined;
+      const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = (page - 1) * limit;
+
+      const conditions = [];
+      if (search) {
+        conditions.push(
+          or(
+            ilike(constructionManagers.name, `%${search}%`),
+            ilike(constructionManagers.email, `%${search}%`)
+          )
+        );
+      }
+      if (isActive !== undefined) {
+        conditions.push(eq(constructionManagers.isActive, isActive));
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const [data, totalResult] = await Promise.all([
+        db.select()
+          .from(constructionManagers)
+          .where(whereClause)
+          .limit(limit)
+          .offset(offset)
+          .orderBy(desc(constructionManagers.createdAt)),
+        db.select({ count: count() })
+          .from(constructionManagers)
+          .where(whereClause)
+      ]);
+
+      res.json({
+        data,
+        total: totalResult[0]?.count || 0,
+        page,
+        limit
+      });
+    } catch (error) {
+      logError('ConstructionManagers/GET', error);
+      const { status, message } = handleDatabaseError(error, 'fetch construction managers');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/construction-managers", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const validated = insertConstructionManagerSchema.parse(req.body);
+      
+      const existing = await db.select()
+        .from(constructionManagers)
+        .where(eq(constructionManagers.email, validated.email))
+        .limit(1);
+      
+      if (existing.length > 0) {
+        return res.status(409).json({ 
+          message: "A construction manager with this email already exists" 
+        });
+      }
+
+      const [cm] = await db.insert(constructionManagers)
+        .values({
+          ...validated,
+          createdBy: req.user.id
+        })
+        .returning();
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'construction_manager.create',
+        resourceType: 'construction_manager',
+        resourceId: cm.id,
+        metadata: { name: cm.name, email: cm.email },
+      }, storage);
+      
+      res.status(201).json(cm);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('ConstructionManagers/POST', error);
+      const { status, message } = handleDatabaseError(error, 'create construction manager');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.patch("/api/construction-managers/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { id } = idParamSchema.parse(req.params);
+      const validated = insertConstructionManagerSchema.partial().parse(req.body);
+      
+      if (validated.email) {
+        const existing = await db.select()
+          .from(constructionManagers)
+          .where(
+            and(
+              eq(constructionManagers.email, validated.email),
+              sql`${constructionManagers.id} != ${id}`
+            )
+          )
+          .limit(1);
+        
+        if (existing.length > 0) {
+          return res.status(409).json({ 
+            message: "A construction manager with this email already exists" 
+          });
+        }
+      }
+
+      const [cm] = await db.update(constructionManagers)
+        .set({
+          ...validated,
+          updatedAt: new Date()
+        })
+        .where(eq(constructionManagers.id, id))
+        .returning();
+      
+      if (!cm) {
+        return res.status(404).json({ message: "Construction manager not found" });
+      }
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'construction_manager.update',
+        resourceType: 'construction_manager',
+        resourceId: id,
+        changes: validated,
+        metadata: { name: cm.name, email: cm.email },
+      }, storage);
+      
+      res.json(cm);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('ConstructionManagers/PATCH', error);
+      const { status, message } = handleDatabaseError(error, 'update construction manager');
+      res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/construction-managers/:id", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const { id } = idParamSchema.parse(req.params);
+      
+      const [cm] = await db.update(constructionManagers)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(constructionManagers.id, id))
+        .returning();
+      
+      if (!cm) {
+        return res.status(404).json({ message: "Construction manager not found" });
+      }
+      
+      await createAuditLog(req, {
+        userId: req.user.id,
+        action: 'construction_manager.delete',
+        resourceType: 'construction_manager',
+        resourceId: id,
+        metadata: { name: cm.name, email: cm.email },
+      }, storage);
+      
+      res.json({ message: "Construction manager deactivated successfully" });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('ConstructionManagers/DELETE', error);
+      const { status, message } = handleDatabaseError(error, 'delete construction manager');
       res.status(status).json({ message });
     }
   });

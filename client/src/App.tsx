@@ -49,6 +49,7 @@ const Inspection = lazy(() => import("@/pages/Inspection"));
 const Photos = lazy(() => import("@/pages/Photos"));
 const Schedule = lazy(() => import("@/pages/Schedule"));
 const Builders = lazy(() => import("@/pages/Builders"));
+const ConstructionManagers = lazy(() => import("@/pages/ConstructionManagers"));
 const Equipment = lazy(() => import("@/pages/Equipment"));
 
 // Tier 3: Heavy visualization and editing tools
@@ -194,6 +195,11 @@ function Router() {
       <Route path="/builders" component={() => (
         <RouteErrorBoundary>
           <Builders />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/business-data/construction-managers" component={() => (
+        <RouteErrorBoundary>
+          <ConstructionManagers />
         </RouteErrorBoundary>
       )} />
       <Route path="/builder-review" component={() => (
