@@ -59,7 +59,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton-variants";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { useHapticFeedback, HAPTIC_PATTERNS, type HapticPattern } from "@/hooks/useHapticFeedback";
