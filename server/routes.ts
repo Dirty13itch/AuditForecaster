@@ -36,6 +36,7 @@ import {
   updateLotSchema,
   insertPlanSchema,
   insertPlanOptionalFeatureSchema,
+  jobs,
   insertJobSchema,
   insertScheduleEventSchema,
   insertExpenseSchema,
@@ -79,6 +80,7 @@ import {
   updateScheduledExportSchema,
   insertMultifamilyProgramSchema,
   insertComplianceArtifactSchema,
+  backgroundJobExecutions,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
 import { jobAssignedTemplate } from "./email/templates/jobAssigned";
@@ -3736,6 +3738,258 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { status, message } = handleDatabaseError(error, 'fetch completed jobs');
       res.status(status).json({ message });
+    }
+  });
+
+  // Admin Dashboard Summary endpoint
+  app.get("/api/dashboard/admin-summary", isAuthenticated, requireRole('admin'), async (req: any, res) => {
+    try {
+      const { startDate: startParam, endDate: endParam } = req.query;
+      
+      // Default to current week (Monday to Sunday)
+      const now = new Date();
+      const currentDay = now.getDay();
+      const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay; // Sunday is 0, need to go back 6 days
+      
+      const defaultStartDate = new Date(now);
+      defaultStartDate.setDate(now.getDate() + mondayOffset);
+      defaultStartDate.setHours(0, 0, 0, 0);
+      
+      const defaultEndDate = new Date(defaultStartDate);
+      defaultEndDate.setDate(defaultStartDate.getDate() + 6); // Sunday
+      defaultEndDate.setHours(23, 59, 59, 999);
+      
+      const startDate = startParam ? new Date(startParam as string) : defaultStartDate;
+      const endDate = endParam ? new Date(endParam as string) : defaultEndDate;
+      
+      serverLogger.info(`[AdminDashboard] Fetching summary for ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      
+      // Fetch all inspectors
+      const inspectors = await storage.getUsersByRole('inspector');
+      
+      // Fetch all jobs in date range
+      const allJobsResult = await db
+        .select()
+        .from(jobs)
+        .where(
+          and(
+            sql`${jobs.scheduledDate} >= ${startDate}`,
+            sql`${jobs.scheduledDate} <= ${endDate}`
+          )
+        );
+      
+      // Fetch background job executions for alerts
+      const recentBackgroundJobs = await db
+        .select()
+        .from(backgroundJobExecutions)
+        .where(
+          and(
+            eq(backgroundJobExecutions.jobName, 'calendar_import'),
+            sql`${backgroundJobExecutions.startedAt} >= ${new Date(Date.now() - 24 * 60 * 60 * 1000)}` // Last 24 hours
+          )
+        )
+        .orderBy(desc(backgroundJobExecutions.startedAt))
+        .limit(5);
+      
+      // Calculate KPIs
+      const workingDaysInRange = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) || 5;
+      const totalHours = inspectors.length * workingDaysInRange * 8; // 8 hours/day
+      
+      let billableHours = 0;
+      allJobsResult.forEach(job => {
+        if (job.assignedTo && inspectors.some(i => i.id === job.assignedTo)) {
+          const duration = job.estimatedDuration || 120; // Default 2 hours
+          billableHours += duration / 60;
+        }
+      });
+      
+      const utilizationRate = totalHours > 0 ? (billableHours / totalHours) * 100 : 0;
+      
+      // First Pass Rate
+      const passedJobs = allJobsResult.filter(j => j.status === 'done' || j.status === 'completed');
+      const failedJobs = allJobsResult.filter(j => j.status === 'failed');
+      const totalCompleted = passedJobs.length + failedJobs.length;
+      const firstPassRate = totalCompleted > 0 ? (passedJobs.length / totalCompleted) * 100 : 0;
+      
+      // Revenue vs Target
+      const actualRevenue = allJobsResult
+        .filter(j => j.status === 'done' || j.status === 'completed' || j.status === 'failed')
+        .reduce((sum, j) => sum + (parseFloat(j.pricing?.toString() || '0')), 0);
+      
+      const targetRevenue = passedJobs.length * 150; // $150 average per job
+      const percentOfTarget = targetRevenue > 0 ? (actualRevenue / targetRevenue) * 100 : 0;
+      
+      // Workload by Inspector
+      const workloadByInspector = inspectors.map(inspector => {
+        const inspectorJobs = allJobsResult.filter(j => j.assignedTo === inspector.id);
+        return {
+          inspectorId: inspector.id,
+          inspectorName: `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown',
+          jobCounts: {
+            scheduled: inspectorJobs.filter(j => j.status === 'scheduled' || j.status === 'in-progress').length,
+            done: inspectorJobs.filter(j => j.status === 'done' || j.status === 'completed').length,
+            failed: inspectorJobs.filter(j => j.status === 'failed').length,
+            total: inspectorJobs.length,
+          },
+        };
+      });
+      
+      // Workload by Day
+      const dayMap = new Map<string, any>();
+      allJobsResult.forEach(job => {
+        if (!job.scheduledDate) return;
+        
+        const dateKey = new Date(job.scheduledDate).toISOString().split('T')[0];
+        if (!dayMap.has(dateKey)) {
+          dayMap.set(dateKey, {
+            date: dateKey,
+            jobCounts: {
+              total: 0,
+              byInspector: new Map<string, { inspectorId: string; inspectorName: string; count: number }>(),
+            },
+          });
+        }
+        
+        const dayData = dayMap.get(dateKey);
+        dayData.jobCounts.total++;
+        
+        if (job.assignedTo) {
+          const inspector = inspectors.find(i => i.id === job.assignedTo);
+          if (inspector) {
+            const inspectorKey = inspector.id;
+            if (!dayData.jobCounts.byInspector.has(inspectorKey)) {
+              dayData.jobCounts.byInspector.set(inspectorKey, {
+                inspectorId: inspector.id,
+                inspectorName: `${inspector.firstName || ''} ${inspector.lastName || ''}`.trim() || inspector.email || 'Unknown',
+                count: 0,
+              });
+            }
+            dayData.jobCounts.byInspector.get(inspectorKey).count++;
+          }
+        }
+      });
+      
+      const workloadByDay = Array.from(dayMap.values()).map(day => ({
+        date: day.date,
+        jobCounts: {
+          total: day.jobCounts.total,
+          byInspector: Array.from(day.jobCounts.byInspector.values()),
+        },
+      })).sort((a, b) => a.date.localeCompare(b.date));
+      
+      // Pending Actions
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Unassigned jobs
+      const unassignedJobs = await db
+        .select()
+        .from(jobs)
+        .where(
+          and(
+            sql`${jobs.assignedTo} IS NULL`,
+            sql`${jobs.scheduledDate} >= ${today}`
+          )
+        )
+        .orderBy(jobs.scheduledDate)
+        .limit(10);
+      
+      // Overdue reports (completed/failed jobs more than 7 days old without report)
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const overdueReports = await db
+        .select()
+        .from(jobs)
+        .where(
+          and(
+            or(
+              eq(jobs.status, 'done'),
+              eq(jobs.status, 'completed'),
+              eq(jobs.status, 'failed')
+            ),
+            sql`${jobs.completedDate} < ${sevenDaysAgo}`,
+            sql`${jobs.completedDate} IS NOT NULL`
+          )
+        )
+        .limit(10);
+      
+      // Failed tests in last 30 days
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const failedTests = await db
+        .select()
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.status, 'failed'),
+            sql`${jobs.scheduledDate} >= ${thirtyDaysAgo}`
+          )
+        )
+        .orderBy(desc(jobs.scheduledDate))
+        .limit(10);
+      
+      // Generate Alerts
+      const alerts: Array<{ type: 'warning' | 'error'; message: string; actionUrl?: string }> = [];
+      
+      // Check for overloaded days (more than 5 jobs for one inspector on same day)
+      workloadByDay.forEach(day => {
+        day.jobCounts.byInspector.forEach(inspector => {
+          if (inspector.count > 5) {
+            alerts.push({
+              type: 'warning',
+              message: `${inspector.inspectorName} has ${inspector.count} jobs scheduled on ${new Date(day.date).toLocaleDateString()}`,
+              actionUrl: `/work?view=day&date=${day.date}&inspector=${inspector.inspectorId}`,
+            });
+          }
+        });
+      });
+      
+      // Check for calendar sync failures
+      const failedCalendarImports = recentBackgroundJobs.filter(job => job.status === 'failed');
+      if (failedCalendarImports.length > 0) {
+        alerts.push({
+          type: 'error',
+          message: `Google Calendar import failed ${failedCalendarImports.length} time(s) in the last 24 hours`,
+          actionUrl: '/admin/background-jobs',
+        });
+      }
+      
+      // Limit alerts to 5
+      const limitedAlerts = alerts.slice(0, 5);
+      
+      const response = {
+        kpis: {
+          utilization: {
+            rate: Math.round(utilizationRate * 100) / 100,
+            totalHours,
+            billableHours: Math.round(billableHours * 100) / 100,
+          },
+          firstPassRate: {
+            rate: Math.round(firstPassRate * 100) / 100,
+            passed: passedJobs.length,
+            failed: failedJobs.length,
+          },
+          revenueVsTarget: {
+            actual: Math.round(actualRevenue * 100) / 100,
+            target: targetRevenue,
+            percentOfTarget: Math.round(percentOfTarget * 100) / 100,
+          },
+        },
+        workload: {
+          byInspector: workloadByInspector,
+          byDay: workloadByDay,
+        },
+        pendingActions: {
+          unassignedJobs,
+          overdueReports,
+          failedTests,
+        },
+        alerts: limitedAlerts,
+      };
+      
+      serverLogger.info(`[AdminDashboard] Returning summary with ${allJobsResult.length} jobs, ${alerts.length} alerts`);
+      res.json(response);
+    } catch (error) {
+      logError('AdminDashboard', error);
+      res.status(500).json({ message: "Failed to fetch admin dashboard summary" });
     }
   });
 
