@@ -12,6 +12,9 @@ export default defineConfig({
     baseURL: 'http://localhost:5000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    launchOptions: {
+      args: ['--remote-debugging-port=9222'],
+    },
   },
 
   projects: [

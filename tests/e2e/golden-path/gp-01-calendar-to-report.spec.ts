@@ -34,16 +34,9 @@ import { playAudit } from 'playwright-lighthouse';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 
-// Configure Playwright to launch Chrome with remote debugging enabled
-// Each worker gets a unique port to prevent contention in parallel execution
-test.use(async ({ }, use, testInfo) => {
-  const port = 9222 + testInfo.workerIndex;
-  await use({
-    launchOptions: {
-      args: [`--remote-debugging-port=${port}`],
-    },
-  });
-});
+// Lighthouse remote debugging port (configured in playwright.config.ts)
+// Since workers=1 (no parallel execution), we use a fixed port
+const LIGHTHOUSE_PORT = 9222;
 
 // Test timeout: 2 minutes for complex multi-step workflow
 test.setTimeout(120000);
@@ -413,27 +406,24 @@ async function runAxeScan(page: Page, pageName: string) {
 /**
  * Run real Lighthouse performance and accessibility audit
  * 
- * Uses a worker-specific remote debugging port instead of accessing
- * private Playwright internals, ensuring compatibility with Playwright workers
- * running in parallel.
+ * Uses remote debugging port configured in playwright.config.ts.
+ * Since workers=1 (no parallel execution), we use a fixed port (9222).
  * 
  * @param page - Playwright page object
  * @param pageName - Human-readable name for logging
  * @param url - Full URL to audit (including BASE_URL)
- * @param port - Worker-specific remote debugging port (9222 + workerIndex)
  * @returns Lighthouse audit results with scores
  */
-async function runLighthouseCheck(page: Page, pageName: string, url: string, port: number) {
+async function runLighthouseCheck(page: Page, pageName: string, url: string) {
   console.log(`\n🔍 Running Lighthouse audit for: ${pageName}`);
   console.log(`   URL: ${url}`);
-  console.log(`   Port: ${port}`);
+  console.log(`   Port: ${LIGHTHOUSE_PORT}`);
   
   try {
-    // Run Lighthouse audit using the worker-specific remote debugging port
-    // This uses supported Playwright APIs only (no private internals)
+    // Run Lighthouse audit using the remote debugging port from playwright.config.ts
     const lighthouseReport = await playAudit({
       page,
-      port: port,
+      port: LIGHTHOUSE_PORT,
       thresholds: {
         performance: 90,
         accessibility: 90,
@@ -509,10 +499,7 @@ test.describe('GP-01: Golden Path - Calendar to Report Journey', () => {
   let createdJobId: string | null = null;
   let approvedEventId: string | null = null;
 
-  test('Complete calendar-to-report workflow with accessibility checks', async ({ browser }, testInfo) => {
-    // Calculate worker-specific port to prevent parallel worker contention
-    const port = 9222 + testInfo.workerIndex;
-    
+  test('Complete calendar-to-report workflow with accessibility checks', async ({ browser }) => {
     // Create separate contexts for admin and inspector
     const adminContext = await browser.newContext();
     const inspectorContext = await browser.newContext();
@@ -663,8 +650,7 @@ test.describe('GP-01: Golden Path - Calendar to Report Journey', () => {
         const fieldDayResults = await runLighthouseCheck(
           inspectorPage,
           'Field Day',
-          `${BASE_URL}/field-day`,
-          port
+          `${BASE_URL}/field-day`
         );
         
         console.log('\n✅ Field Day Lighthouse audit completed:', fieldDayResults);
@@ -745,8 +731,7 @@ test.describe('GP-01: Lighthouse Performance Audits', () => {
     console.log('\n' + '='.repeat(80) + '\n');
   });
 
-  test('Field Day - Performance ≥90, Accessibility ≥90', async ({ browser }, testInfo) => {
-    const port = 9222 + testInfo.workerIndex;
+  test('Field Day - Performance ≥90, Accessibility ≥90', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     
@@ -755,7 +740,7 @@ test.describe('GP-01: Lighthouse Performance Audits', () => {
       await page.goto(`${BASE_URL}/field-day`);
       await page.waitForLoadState('networkidle');
       
-      const result = await runLighthouseCheck(page, 'Field Day', `${BASE_URL}/field-day`, port);
+      const result = await runLighthouseCheck(page, 'Field Day', `${BASE_URL}/field-day`);
       lighthouseResults.push(result);
       
       // Test passes if assertions in runLighthouseCheck pass
@@ -765,8 +750,7 @@ test.describe('GP-01: Lighthouse Performance Audits', () => {
     }
   });
 
-  test('Inspection Page - Performance ≥90, Accessibility ≥90', async ({ browser }, testInfo) => {
-    const port = 9222 + testInfo.workerIndex;
+  test('Inspection Page - Performance ≥90, Accessibility ≥90', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     
@@ -775,7 +759,7 @@ test.describe('GP-01: Lighthouse Performance Audits', () => {
       await page.goto(`${BASE_URL}/inspection/1`);
       await page.waitForLoadState('networkidle');
       
-      const result = await runLighthouseCheck(page, 'Inspection', `${BASE_URL}/inspection/1`, port);
+      const result = await runLighthouseCheck(page, 'Inspection', `${BASE_URL}/inspection/1`);
       lighthouseResults.push(result);
       
       // Test passes if assertions in runLighthouseCheck pass
@@ -785,8 +769,7 @@ test.describe('GP-01: Lighthouse Performance Audits', () => {
     }
   });
 
-  test('Calendar Management - Performance ≥90, Accessibility ≥90', async ({ browser }, testInfo) => {
-    const port = 9222 + testInfo.workerIndex;
+  test('Calendar Management - Performance ≥90, Accessibility ≥90', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     
@@ -795,7 +778,7 @@ test.describe('GP-01: Lighthouse Performance Audits', () => {
       await page.goto(`${BASE_URL}/calendar/management`);
       await page.waitForLoadState('networkidle');
       
-      const result = await runLighthouseCheck(page, 'Calendar Management', `${BASE_URL}/calendar/management`, port);
+      const result = await runLighthouseCheck(page, 'Calendar Management', `${BASE_URL}/calendar/management`);
       lighthouseResults.push(result);
       
       // Test passes if assertions in runLighthouseCheck pass
