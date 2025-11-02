@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 
 /**
  * Keyboard Shortcut Configuration
@@ -120,8 +120,35 @@ function isInputElement(target: EventTarget | null): boolean {
 export function useKeyboardShortcuts(shortcuts: ShortcutConfig[]) {
   const sequenceRef = useRef<{ key: string; timestamp: number } | null>(null);
   const sequenceTimeoutRef = useRef<NodeJS.Timeout>();
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(() => {
+    const stored = localStorage.getItem('keyboard-preferences');
+    if (stored) {
+      const prefs = JSON.parse(stored);
+      return prefs.enabled !== false;
+    }
+    return true;
+  });
+  
+  // Listen for preference changes
+  useEffect(() => {
+    const handlePreferenceChange = (event: CustomEvent) => {
+      if (event.detail && typeof event.detail.enabled === 'boolean') {
+        setShortcutsEnabled(event.detail.enabled);
+      }
+    };
+    
+    window.addEventListener('keyboard-preferences-changed', handlePreferenceChange as EventListener);
+    return () => {
+      window.removeEventListener('keyboard-preferences-changed', handlePreferenceChange as EventListener);
+    };
+  }, []);
   
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Skip if shortcuts are disabled
+    if (!shortcutsEnabled) {
+      return;
+    }
+    
     // Don't trigger shortcuts when typing in inputs
     if (isInputElement(event.target)) return;
     
@@ -217,17 +244,86 @@ export function useGlobalShortcuts(handlers: {
   onGoPhotos?: () => void;
   onGoSchedule?: () => void;
   onGoEquipment?: () => void;
+  onGoFieldDay?: () => void;
+  onNewJob?: () => void;
+  onQuickSearch?: () => void;
+  onSaveForm?: () => void;
+  onCloseModal?: () => void;
+  onQuickNav?: (index: number) => void;
 }) {
   const shortcuts: ShortcutConfig[] = [
-    // Command palette
-    handlers.onOpenCommandPalette && {
-      id: 'open-command-palette',
-      description: 'Open command palette',
+    // Quick search (Ctrl/Cmd + K)
+    handlers.onQuickSearch && {
+      id: 'quick-search',
+      description: 'Quick search',
       category: 'global',
       key: 'k',
       modifiers: { meta: true },
-      handler: handlers.onOpenCommandPalette,
+      handler: handlers.onQuickSearch,
       preventDefault: true
+    },
+    
+    // New Job (Ctrl/Cmd + N)
+    handlers.onNewJob && {
+      id: 'new-job',
+      description: 'Create new job',
+      category: 'actions',
+      key: 'n',
+      modifiers: { meta: true },
+      handler: handlers.onNewJob,
+      preventDefault: true
+    },
+    
+    // Direct navigation shortcuts
+    handlers.onGoPhotos && {
+      id: 'go-photos-direct',
+      description: 'Navigate to Photos',
+      category: 'navigation',
+      key: 'p',
+      modifiers: { meta: true },
+      handler: handlers.onGoPhotos,
+      preventDefault: true
+    },
+    
+    handlers.onGoJobs && {
+      id: 'go-jobs-direct',
+      description: 'Navigate to Jobs',
+      category: 'navigation',
+      key: 'j',
+      modifiers: { meta: true },
+      handler: handlers.onGoJobs,
+      preventDefault: true
+    },
+    
+    handlers.onGoFieldDay && {
+      id: 'go-fieldday-direct',
+      description: 'Navigate to Field Day',
+      category: 'navigation',
+      key: 'f',
+      modifiers: { meta: true },
+      handler: handlers.onGoFieldDay,
+      preventDefault: true
+    },
+    
+    // Save form (Ctrl/Cmd + S)
+    handlers.onSaveForm && {
+      id: 'save-form',
+      description: 'Save current form',
+      category: 'actions',
+      key: 's',
+      modifiers: { meta: true },
+      handler: handlers.onSaveForm,
+      preventDefault: true
+    },
+    
+    // Close modal/dialog (Escape)
+    handlers.onCloseModal && {
+      id: 'close-modal',
+      description: 'Close modal/dialog',
+      category: 'global',
+      key: 'Escape',
+      handler: handlers.onCloseModal,
+      preventDefault: false
     },
     
     // Show shortcuts
@@ -260,6 +356,17 @@ export function useGlobalShortcuts(handlers: {
       handler: handlers.onToggleSidebar,
       preventDefault: true
     },
+    
+    // Quick navigation with Alt + Number (1-9)
+    ...(handlers.onQuickNav ? Array.from({ length: 9 }, (_, i) => ({
+      id: `quick-nav-${i + 1}`,
+      description: `Quick navigate to menu item ${i + 1}`,
+      category: 'navigation',
+      key: String(i + 1),
+      modifiers: { alt: true },
+      handler: () => handlers.onQuickNav!(i + 1),
+      preventDefault: true
+    })) : []),
     
     // Navigation shortcuts (sequence: g + key)
     handlers.onGoHome && {
@@ -314,6 +421,69 @@ export function useGlobalShortcuts(handlers: {
       key: 'g+e',
       sequence: true,
       handler: handlers.onGoEquipment
+    },
+    
+    handlers.onGoFieldDay && {
+      id: 'go-fieldday',
+      description: 'Go to Field Day',
+      category: 'navigation',
+      key: 'g+f',
+      sequence: true,
+      handler: handlers.onGoFieldDay
+    }
+  ].filter(Boolean) as ShortcutConfig[];
+  
+  useKeyboardShortcuts(shortcuts);
+}
+
+/**
+ * Hook for form-specific keyboard shortcuts
+ * Provides enhanced keyboard navigation within forms
+ */
+export function useFormShortcuts(handlers: {
+  onSubmit?: () => void;
+  onSaveAndContinue?: () => void;
+  onCancel?: () => void;
+  onNextField?: () => void;
+  onPreviousField?: () => void;
+}) {
+  const shortcuts: ShortcutConfig[] = [
+    // Submit form (Enter - only when not in textarea)
+    handlers.onSubmit && {
+      id: 'form-submit',
+      description: 'Submit form',
+      category: 'context',
+      key: 'Enter',
+      handler: (event) => {
+        // Don't submit if in textarea or if shift is pressed
+        const target = event.target as HTMLElement;
+        if (target.tagName.toLowerCase() === 'textarea' || event.shiftKey) {
+          return;
+        }
+        handlers.onSubmit!();
+      },
+      preventDefault: true
+    },
+    
+    // Save and continue (Ctrl/Cmd + Enter)
+    handlers.onSaveAndContinue && {
+      id: 'form-save-continue',
+      description: 'Save and continue',
+      category: 'context',
+      key: 'Enter',
+      modifiers: { meta: true },
+      handler: handlers.onSaveAndContinue,
+      preventDefault: true
+    },
+    
+    // Cancel form (Escape)
+    handlers.onCancel && {
+      id: 'form-cancel',
+      description: 'Cancel form',
+      category: 'context',
+      key: 'Escape',
+      handler: handlers.onCancel,
+      preventDefault: false
     }
   ].filter(Boolean) as ShortcutConfig[];
   

@@ -41,6 +41,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,15 +52,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton-variants";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
+import { useHapticFeedback, HAPTIC_PATTERNS, type HapticPattern } from "@/hooks/useHapticFeedback";
+import { KeyboardPreferences } from "@/components/settings/KeyboardPreferences";
 import { 
   Settings, Mail, Bell, Calendar, FileText, TrendingUp, Sun, 
-  AlertCircle, RefreshCw, Send, CheckCircle2, Info 
+  AlertCircle, RefreshCw, Send, CheckCircle2, Info,
+  Vibrate, Smartphone, XCircle, Sparkles, Hand, Volume2, VolumeX,
+  Download, Share, Plus
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { EmailPreference } from "@shared/schema";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 
 // Phase 3 - OPTIMIZE: Module-level constants to prevent recreation on every render
 // Phase 6 - DOCUMENT: Email preference field definitions with descriptions
@@ -122,6 +135,60 @@ const EMAIL_PREFERENCE_SECTIONS = [
     ],
   },
 ] as const;
+
+// Haptic feedback pattern demonstrations
+interface PatternDemo {
+  name: HapticPattern;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  variant: "default" | "secondary" | "destructive" | "outline";
+}
+
+const HAPTIC_PATTERN_DEMOS: PatternDemo[] = [
+  {
+    name: "light",
+    label: "Light Tap",
+    description: "For button presses and routine actions",
+    icon: <Hand className="h-4 w-4" />,
+    variant: "outline",
+  },
+  {
+    name: "medium",
+    label: "Medium Tap",
+    description: "For successful actions like saves",
+    icon: <CheckCircle2 className="h-4 w-4" />,
+    variant: "default",
+  },
+  {
+    name: "strong",
+    label: "Strong Tap",
+    description: "For critical job status changes",
+    icon: <Bell className="h-4 w-4" />,
+    variant: "secondary",
+  },
+  {
+    name: "success",
+    label: "Success Pattern",
+    description: "For test completions and victories",
+    icon: <Sparkles className="h-4 w-4" />,
+    variant: "default",
+  },
+  {
+    name: "error",
+    label: "Error Pattern",
+    description: "For validation errors and failures",
+    icon: <XCircle className="h-4 w-4" />,
+    variant: "destructive",
+  },
+  {
+    name: "celebration",
+    label: "Celebration",
+    description: "For job completions and achievements",
+    icon: <Sparkles className="h-4 w-4" />,
+    variant: "default",
+  },
+];
 
 // Phase 6 - DOCUMENT: Default preference values when creating new user preferences
 const DEFAULT_PREFERENCES: Partial<EmailPreference> = {
@@ -217,11 +284,20 @@ function ErrorState({ message, onRetry }: ErrorStateProps) {
 // Phase 2 - BUILD: Main Settings content component
 function SettingsContent() {
   const { toast } = useToast();
+  const haptic = useHapticFeedback();
+  const pwaInstall = usePWAInstall();
   
   // Phase 3 - OPTIMIZE: Local state for preference changes before save
   const [preferences, setPreferences] = useState<Partial<EmailPreference>>({});
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // Haptic feedback state
+  const [hapticEnabled, setHapticEnabled] = useState(haptic.isEnabled);
+  const [testingPattern, setTestingPattern] = useState<string | null>(null);
+  
+  // PWA install state
+  const [showIOSDialog, setShowIOSDialog] = useState(false);
 
   // Phase 5 - HARDEN: Query with retry: 2 for resilience
   // Phase 6 - DOCUMENT: Fetches current user email notification preferences
@@ -329,6 +405,59 @@ function SettingsContent() {
   const handleRetry = useCallback(() => {
     refetch();
   }, [refetch]);
+  
+  // Haptic feedback handlers
+  const handleHapticToggle = useCallback((checked: boolean) => {
+    setHapticEnabled(checked);
+    haptic.setEnabled(checked);
+    
+    if (checked) {
+      // Give immediate feedback when enabling
+      haptic.vibrate('light');
+      toast({
+        title: "Haptic feedback enabled",
+        description: "You'll feel vibrations for important actions",
+      });
+    } else {
+      toast({
+        title: "Haptic feedback disabled",
+        description: "Vibrations have been turned off",
+      });
+    }
+  }, [haptic, toast]);
+  
+  const handleTestPattern = useCallback((pattern: HapticPattern) => {
+    setTestingPattern(pattern);
+    haptic.testPattern(pattern);
+    
+    // Reset testing state after pattern completes
+    setTimeout(() => {
+      setTestingPattern(null);
+    }, 1000);
+  }, [haptic]);
+
+  // PWA install handlers
+  const handlePWAInstall = useCallback(async () => {
+    haptic.vibrate('medium');
+    if (pwaInstall.isIOS) {
+      setShowIOSDialog(true);
+    } else {
+      await pwaInstall.installApp();
+      if (pwaInstall.isInstalled) {
+        toast({
+          title: "App installed",
+          description: "Energy Audit Pro has been added to your home screen",
+        });
+      }
+    }
+  }, [pwaInstall, haptic, toast]);
+
+  // Listen for iOS install instructions event
+  useEffect(() => {
+    const handleIOSInstructions = () => setShowIOSDialog(true);
+    window.addEventListener('show-ios-install-instructions', handleIOSInstructions);
+    return () => window.removeEventListener('show-ios-install-instructions', handleIOSInstructions);
+  }, []);
 
   // Phase 2 - BUILD: Loading state with skeleton
   if (isLoading) {
@@ -477,6 +606,327 @@ function SettingsContent() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Haptic Feedback Settings Card */}
+      <Card data-testid="card-haptic-settings" className="mt-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Vibrate className="h-5 w-5 text-primary" />
+              <div>
+                <CardTitle>Haptic Feedback</CardTitle>
+                <CardDescription>
+                  Vibration feedback for critical field inspector actions
+                </CardDescription>
+              </div>
+            </div>
+            {haptic.isSupported ? (
+              <Badge variant="default" className="gap-1">
+                <Smartphone className="h-3 w-3" />
+                Supported
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="gap-1">
+                <VolumeX className="h-3 w-3" />
+                Not Available
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        
+        <CardContent className="space-y-6">
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="haptic-toggle" className="text-base">
+                Enable Haptic Feedback
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Feel vibrations when performing important actions
+              </p>
+            </div>
+            <Switch
+              id="haptic-toggle"
+              checked={hapticEnabled}
+              onCheckedChange={handleHapticToggle}
+              disabled={!haptic.isSupported}
+              data-testid="switch-haptic-enabled"
+            />
+          </div>
+          
+          <Separator />
+          
+          {/* Support Status */}
+          {!haptic.isSupported && (
+            <Alert>
+              <AlertDescription className="flex items-start gap-2">
+                <VolumeX className="h-4 w-4 mt-0.5" />
+                <div>
+                  <strong>Haptic feedback is not available on this device.</strong>
+                  <br />
+                  Your browser or device doesn't support the Vibration API. This feature 
+                  works best on mobile devices with vibration capabilities.
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Pattern Testing */}
+          {haptic.isSupported && hapticEnabled && (
+            <>
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Test Haptic Patterns</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Try different vibration patterns used throughout the app
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {HAPTIC_PATTERN_DEMOS.map((demo) => (
+                    <Card 
+                      key={demo.name}
+                      className="cursor-pointer transition-all hover-elevate active-elevate-2"
+                      onClick={() => handleTestPattern(demo.name)}
+                      data-testid={`card-pattern-${demo.name}`}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <Badge variant={demo.variant} className="p-1.5">
+                            {demo.icon}
+                          </Badge>
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium text-sm">{demo.label}</p>
+                              {testingPattern === demo.name && (
+                                <Badge variant="outline" className="text-xs">
+                                  <Volume2 className="h-3 w-3 mr-1" />
+                                  Testing
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {demo.description}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+              
+              <Separator />
+              
+              {/* Usage Guide */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">When Haptic Feedback Is Used</h3>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span>Job status changes (Done, Failed, Reschedule)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span>Test completions and calculations</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span>Form saves and submissions</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span>Swipe gestures on job cards</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span>Validation errors and warnings</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span>Success celebrations and achievements</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          
+          {/* Battery Note */}
+          <Alert>
+            <AlertDescription>
+              <strong>Note:</strong> Haptic feedback uses minimal battery but can be 
+              disabled to extend battery life during long field days.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+
+      {/* PWA Installation Card */}
+      <Card data-testid="card-pwa-install" className="mt-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Download className="h-5 w-5 text-primary" />
+              <div>
+                <CardTitle>Install App</CardTitle>
+                <CardDescription>
+                  Add Energy Audit Pro to your home screen for quick access and offline functionality
+                </CardDescription>
+              </div>
+            </div>
+            {pwaInstall.isStandalone ? (
+              <Badge variant="default" className="gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                Installed
+              </Badge>
+            ) : pwaInstall.isInstallable ? (
+              <Badge variant="secondary" className="gap-1">
+                <Plus className="h-3 w-3" />
+                Available
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1">
+                <XCircle className="h-3 w-3" />
+                Not Available
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        
+        <CardContent className="space-y-4">
+          {pwaInstall.isStandalone ? (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertTitle>App Installed</AlertTitle>
+              <AlertDescription>
+                Energy Audit Pro is installed and running as a standalone app. You can access it directly from your home screen.
+              </AlertDescription>
+            </Alert>
+          ) : pwaInstall.isInstallable ? (
+            <>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Installing the app provides:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span className="text-sm">Full offline support</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span className="text-sm">Quick home screen access</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span className="text-sm">Full-screen experience</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600" />
+                    <span className="text-sm">Background sync</span>
+                  </div>
+                </div>
+              </div>
+              
+              <Button
+                onClick={handlePWAInstall}
+                className="w-full sm:w-auto"
+                data-testid="button-install-pwa"
+              >
+                {pwaInstall.isIOS ? (
+                  <>
+                    <Share className="h-4 w-4 mr-2" />
+                    View Install Instructions
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Install App
+                  </>
+                )}
+              </Button>
+              
+              {pwaInstall.isIOS && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    On iOS, you'll need to manually add the app to your home screen using Safari's Share menu.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          ) : (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>Installation Not Available</AlertTitle>
+              <AlertDescription>
+                App installation is not available in this browser. Try opening the app in Chrome, Edge, or Safari on mobile devices.
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Keyboard Shortcuts Settings */}
+      <div className="mt-6">
+        <KeyboardPreferences />
+      </div>
+
+      {/* iOS Install Instructions Dialog */}
+      <Dialog open={showIOSDialog} onOpenChange={setShowIOSDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Install on iOS</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-4 pt-4">
+                <p className="text-sm">
+                  To install Energy Audit Pro on your iPhone or iPad:
+                </p>
+                
+                <ol className="space-y-3 text-sm">
+                  <li className="flex gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-semibold">
+                      1
+                    </span>
+                    <div className="space-y-1">
+                      <p>Tap the Share button</p>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Share className="w-3 h-3" />
+                        <span>(at the bottom of Safari)</span>
+                      </div>
+                    </div>
+                  </li>
+                  
+                  <li className="flex gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-semibold">
+                      2
+                    </span>
+                    <div className="space-y-1">
+                      <p>Scroll down and tap</p>
+                      <p className="font-semibold">"Add to Home Screen"</p>
+                    </div>
+                  </li>
+                  
+                  <li className="flex gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-semibold">
+                      3
+                    </span>
+                    <div>
+                      <p>Tap "Add" in the top-right corner</p>
+                    </div>
+                  </li>
+                </ol>
+                
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">
+                    The app will appear on your home screen and work like a native app with offline support.
+                  </p>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
 
       {/* Phase 2 - BUILD: Test email confirmation dialog */}
       <AlertDialog open={testEmailDialogOpen} onOpenChange={setTestEmailDialogOpen}>

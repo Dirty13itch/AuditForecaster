@@ -5,7 +5,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { MobileOptimizedInput } from "@/components/ui/mobile-optimized-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import type { BlowerDoorTest, InsertBlowerDoorTest } from "@shared/schema";
 import { 
   Wind, 
@@ -94,6 +95,7 @@ const DEFAULT_TEST_POINTS: TestPoint[] = [
 
 function BlowerDoorTestContent() {
   const { toast } = useToast();
+  const haptic = useHapticFeedback();
   const { jobId } = useParams<{ jobId: string }>();
   const [activeTab, setActiveTab] = useState("setup");
   const [altitude, setAltitude] = useState(DEFAULT_ALTITUDE_MPLS);
@@ -315,6 +317,13 @@ function BlowerDoorTestContent() {
     }));
     
     // Phase 2 - BUILD: Replace emoji with lucide icons
+    // Haptic feedback for calculation result
+    if (meetsCode) {
+      haptic.vibrate('success'); // Success pattern for passing tests
+    } else {
+      haptic.vibrate('warning'); // Warning pattern for failing tests
+    }
+    
     toast({
       title: "Calculations complete",
       description: (
@@ -337,12 +346,14 @@ function BlowerDoorTestContent() {
       ),
       variant: meetsCode ? "default" : "destructive",
     });
-  }, [testData.testPoints, testData.houseVolume, calculateWeatherCorrection, toast]);
+  }, [testData.testPoints, testData.houseVolume, calculateWeatherCorrection, haptic, toast]);
 
   // Phase 3 - OPTIMIZE: Memoize save handler with useCallback
   const handleSaveTest = useCallback(() => {
     // Phase 5 - HARDEN: Validate test data before saving
     if (!testData.cfm50 || !testData.ach50) {
+      // Error haptic for validation failure
+      haptic.vibrate('error');
       toast({
         title: "Incomplete test",
         description: "Please calculate results before saving.",
@@ -350,8 +361,10 @@ function BlowerDoorTestContent() {
       });
       return;
     }
+    // Medium haptic for save action
+    haptic.vibrate('medium');
     saveTestMutation.mutate(testData);
-  }, [testData]);
+  }, [testData, haptic, saveTestMutation]);
 
   // Phase 3 - OPTIMIZE: Memoize PDF download handler with useCallback
   const handleDownloadPDF = useCallback(async () => {
@@ -420,12 +433,16 @@ function BlowerDoorTestContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "blower-door-tests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/blower-door-tests"] });
+      // Success haptic feedback for saved test
+      haptic.vibrate('success');
       toast({
         title: "Test saved",
         description: "Blower door test data has been saved successfully.",
       });
     },
     onError: (error) => {
+      // Error haptic feedback for save failure
+      haptic.vibrate('error');
       toast({
         title: "Save failed",
         description: "Failed to save test data. Please try again.",
@@ -672,34 +689,56 @@ function BlowerDoorTestContent() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="house-volume">House Volume (ft³)</Label>
-                  <Input
+                  <MobileOptimizedInput
                     id="house-volume"
-                    type="number"
+                    fieldType="volume"
                     value={testData.houseVolume}
                     onChange={(e) => setTestData({...testData, houseVolume: parseFloat(e.target.value) || 0})}
                     placeholder="e.g., 24000"
+                    defaultSuggestion={24000}
+                    suggestions={[18000, 20000, 24000, 28000, 32000]}
+                    enableVoice={true}
+                    showValidation={true}
+                    min={1000}
+                    max={100000}
+                    autoAdvance={true}
+                    onAdvance={() => document.getElementById("conditioned-area")?.focus()}
                     data-testid="input-house-volume"
                   />
                 </div>
                 <div>
                   <Label htmlFor="conditioned-area">Conditioned Area (ft²)</Label>
-                  <Input
+                  <MobileOptimizedInput
                     id="conditioned-area"
-                    type="number"
+                    fieldType="area"
                     value={testData.conditionedArea}
                     onChange={(e) => setTestData({...testData, conditionedArea: parseFloat(e.target.value) || 0})}
                     placeholder="e.g., 3000"
+                    defaultSuggestion={3000}
+                    suggestions={[1500, 2000, 2500, 3000, 3500, 4000]}
+                    enableVoice={true}
+                    showValidation={true}
+                    min={500}
+                    max={20000}
+                    autoAdvance={true}
+                    onAdvance={() => document.getElementById("surface-area")?.focus()}
                     data-testid="input-conditioned-area"
                   />
                 </div>
                 <div>
                   <Label htmlFor="surface-area">Surface Area (ft²)</Label>
-                  <Input
+                  <MobileOptimizedInput
                     id="surface-area"
-                    type="number"
+                    fieldType="area"
                     value={testData.surfaceArea}
                     onChange={(e) => setTestData({...testData, surfaceArea: parseFloat(e.target.value) || 0})}
                     placeholder="e.g., 5500"
+                    defaultSuggestion={5500}
+                    suggestions={[4000, 5000, 5500, 6000, 7000]}
+                    enableVoice={true}
+                    showValidation={true}
+                    min={1000}
+                    max={30000}
                     data-testid="input-surface-area"
                   />
                 </div>
@@ -760,21 +799,39 @@ function BlowerDoorTestContent() {
                   </h4>
                   <div>
                     <Label htmlFor="outdoor-temp">Outdoor Temperature (°F)</Label>
-                    <Input
+                    <MobileOptimizedInput
                       id="outdoor-temp"
-                      type="number"
+                      fieldType="integer"
                       value={testData.outdoorTemp}
                       onChange={(e) => setTestData({...testData, outdoorTemp: parseFloat(e.target.value) || 0})}
+                      placeholder="70"
+                      defaultSuggestion={70}
+                      suggestions={[20, 30, 50, 70, 90]}
+                      enableVoice={true}
+                      showValidation={true}
+                      min={-40}
+                      max={120}
+                      autoAdvance={true}
+                      onAdvance={() => document.getElementById("indoor-temp")?.focus()}
                       data-testid="input-outdoor-temp"
                     />
                   </div>
                   <div>
                     <Label htmlFor="indoor-temp">Indoor Temperature (°F)</Label>
-                    <Input
+                    <MobileOptimizedInput
                       id="indoor-temp"
-                      type="number"
+                      fieldType="integer"
                       value={testData.indoorTemp}
                       onChange={(e) => setTestData({...testData, indoorTemp: parseFloat(e.target.value) || 0})}
+                      placeholder="70"
+                      defaultSuggestion={70}
+                      suggestions={[68, 70, 72, 75]}
+                      enableVoice={true}
+                      showValidation={true}
+                      min={40}
+                      max={100}
+                      autoAdvance={true}
+                      onAdvance={() => document.getElementById("outdoor-humidity")?.focus()}
                       data-testid="input-indoor-temp"
                     />
                   </div>
@@ -894,8 +951,8 @@ function BlowerDoorTestContent() {
                       className="bg-muted"
                       data-testid={`input-house-pressure-${index}`}
                     />
-                    <Input
-                      type="number"
+                    <MobileOptimizedInput
+                      fieldType="pressure"
                       value={point.fanPressure}
                       onChange={(e) => {
                         const newPoints = [...(testData.testPoints as TestPoint[])];
@@ -904,6 +961,15 @@ function BlowerDoorTestContent() {
                         setTestData({...testData, testPoints: newPoints});
                       }}
                       placeholder="Enter reading"
+                      enableVoice={true}
+                      showValidation={true}
+                      min={0}
+                      max={500}
+                      autoAdvance={index < (testData.testPoints as TestPoint[]).length - 1}
+                      onAdvance={() => {
+                        const nextInput = document.querySelector(`[data-testid="input-fan-pressure-${index + 1}"]`) as HTMLInputElement;
+                        nextInput?.focus();
+                      }}
                       data-testid={`input-fan-pressure-${index}`}
                     />
                     <Select

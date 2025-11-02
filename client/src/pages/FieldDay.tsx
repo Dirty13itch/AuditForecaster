@@ -1,23 +1,30 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Calendar, MapPin, Building2, CheckCircle2, XCircle, CalendarClock, Loader2, Check } from "lucide-react";
+import { Calendar, MapPin, Building2, CheckCircle2, XCircle, CalendarClock, Loader2, Check, Battery, Wifi, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
+import { useGeolocation } from "@/hooks/useGeolocation";
+import { useBatteryStatus } from "@/hooks/useBatteryStatus";
+import { useNetworkQuality } from "@/hooks/useNetworkQuality";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Job, Builder } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { SwipeableFieldDayCard } from "@/components/SwipeableFieldDayCard";
 import { JobCompletionCelebration } from "@/components/JobCompletionCelebration";
+import { FieldStatusBar } from "@/components/FieldStatusBar";
 import { JOB_TYPE_DISPLAY_NAMES } from "@shared/hersInspectionTypes";
 import { VirtualList } from "@/components/ui/virtual-grid";
 import { JobListLoadingFallback } from "@/components/LoadingStates";
 import { PageTransition } from "@/components/ui/page-transition";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { PullToRefreshIndicator } from "@/components/PullToRefreshIndicator";
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => format(new Date(), 'yyyy-MM-dd');
@@ -44,10 +51,26 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 export default function FieldDay() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const haptic = useHapticFeedback();
   const [, navigate] = useLocation();
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
   const [completedJob, setCompletedJob] = useState<Job | null>(null);
+  
+  // Location, battery, and network monitoring
+  const { getPosition, hasPermission, requestPermission } = useGeolocation();
+  const { battery, batteryPercentage, batteryLevel, shouldSyncFull, shouldPauseSync } = useBatteryStatus();
+  const {
+    online,
+    quality,
+    lastSyncTime,
+    pendingSyncCount,
+    isRemoteArea,
+    triggerManualSync,
+    updatePendingSyncCount,
+    markSyncComplete,
+    isRetrying
+  } = useNetworkQuality();
   
   const today = getTodayDate();
   const isAdmin = user?.role === 'admin';
@@ -68,7 +91,7 @@ export default function FieldDay() {
   });
 
   // Query for all jobs today (admin only)
-  const { data: allJobs, isLoading: isLoadingAllJobs } = useQuery<(Job & { builder?: Builder })[]>({
+  const { data: allJobs, isLoading: isLoadingAllJobs, refetch: refetchAllJobs } = useQuery<(Job & { builder?: Builder })[]>({
     queryKey: ['/api/jobs', { scheduledDate: today }],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -81,10 +104,73 @@ export default function FieldDay() {
     enabled: isAdmin,
   });
 
-  // Mutation to update job status
+  // Pull-to-refresh handler
+  const handleRefresh = useCallback(async () => {
+    haptic.vibrate('medium');
+    
+    try {
+      // Refetch all queries in parallel
+      const promises = [];
+      promises.push(queryClient.invalidateQueries({ queryKey: ['/api/jobs'] }));
+      
+      await Promise.all(promises);
+      
+      toast({
+        title: "Jobs refreshed",
+        description: "Latest job data loaded",
+      });
+    } catch (error) {
+      haptic.vibrate('error');
+      toast({
+        title: "Refresh failed",
+        description: "Unable to refresh jobs. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [haptic, toast]);
+
+  // Pull-to-refresh state
+  const pullToRefreshState = usePullToRefresh({
+    onRefresh: handleRefresh,
+    threshold: 80,
+    disabled: false,
+  });
+
+  // Mutation to update job status with GPS location
   const updateJobMutation = useMutation({
     mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
-      const response = await apiRequest('PATCH', `/api/jobs/${jobId}/status`, { status });
+      let locationData: any = {};
+      
+      // Capture GPS location when marking job status (done/failed)
+      if (status === 'done' || status === 'failed') {
+        try {
+          // Request permission if needed
+          if (!hasPermission) {
+            await requestPermission();
+          }
+          
+          const position = await getPosition();
+          locationData = {
+            latitude: position.latitude,
+            longitude: position.longitude,
+            locationAccuracy: position.accuracy,
+            locationCapturedAt: new Date().toISOString()
+          };
+          
+          console.log(`Captured GPS for job ${jobId}: ${position.latitude}, ${position.longitude} (±${position.accuracy}m)`);
+        } catch (error) {
+          console.error('Failed to get GPS location:', error);
+          // Continue without location data - don't block job status update
+        }
+      }
+      
+      // Update pending sync count for network quality indicator
+      updatePendingSyncCount(pendingSyncCount + 1);
+      
+      const response = await apiRequest('PATCH', `/api/jobs/${jobId}/status`, { 
+        status,
+        ...locationData 
+      });
       return response.json();
     },
     onMutate: async ({ jobId }) => {
@@ -94,13 +180,36 @@ export default function FieldDay() {
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
       
-      // Show celebration for completed jobs
+      // Mark sync as complete on successful update
+      markSyncComplete();
+      
+      // Show celebration for completed jobs with haptic feedback
       if (status === 'done') {
         const jobData = allJobsList.find(job => job.id === updatedJob.id);
         if (jobData) {
           setCompletedJob({...jobData, status: 'done'});
+          // Celebration haptic pattern for job completion
+          haptic.vibrate('celebration');
         }
+      } else if (status === 'failed') {
+        // Error haptic pattern for job failure
+        haptic.vibrate('error');
+        const statusLabel = STATUS_CONFIG[status]?.label || status;
+        toast({
+          title: "Status updated",
+          description: `Job marked as ${statusLabel.toLowerCase()}`,
+        });
+      } else if (status === 'reschedule') {
+        // Warning haptic pattern for reschedule
+        haptic.vibrate('warning');
+        const statusLabel = STATUS_CONFIG[status]?.label || status;
+        toast({
+          title: "Status updated",
+          description: `Job marked as ${statusLabel.toLowerCase()}`,
+        });
       } else {
+        // Medium tap for other status updates
+        haptic.vibrate('medium');
         const statusLabel = STATUS_CONFIG[status]?.label || status;
         toast({
           title: "Status updated",
@@ -109,6 +218,8 @@ export default function FieldDay() {
       }
     },
     onError: (error: Error) => {
+      // Error haptic feedback for failed update
+      haptic.vibrate('error');
       toast({
         title: "Update failed",
         description: error.message || "Failed to update job status. Please try again.",
@@ -122,6 +233,10 @@ export default function FieldDay() {
 
   const handleStatusUpdate = (status: string) => {
     if (!selectedJobId) return;
+    
+    // Strong haptic feedback for critical job status changes
+    haptic.vibrate('strong');
+    
     updateJobMutation.mutate({ jobId: selectedJobId, status });
     setSelectedJobId(null); // Clear selection after update
   };
@@ -131,16 +246,20 @@ export default function FieldDay() {
   const selectedJob = allJobsList.find(job => job.id === selectedJobId);
 
   return (
-    <PageTransition mode="fade" duration={0.3}>
-      <div className="container max-w-7xl mx-auto p-4 space-y-6 pb-32">
-        {/* Job Completion Celebration */}
-        {completedJob && (
-          <JobCompletionCelebration
-            job={completedJob}
-            onClose={() => setCompletedJob(null)}
-            autoCloseMs={5000}
-          />
-        )}
+    <>
+      {/* Pull-to-refresh indicator */}
+      <PullToRefreshIndicator {...pullToRefreshState} />
+      
+      <PageTransition mode="fade" duration={0.3}>
+        <div className="container max-w-7xl mx-auto p-4 space-y-6 pb-32">
+          {/* Job Completion Celebration */}
+          {completedJob && (
+            <JobCompletionCelebration
+              job={completedJob}
+              onClose={() => setCompletedJob(null)}
+              autoCloseMs={5000}
+            />
+          )}
 
         {/* Header */}
         <motion.div 
@@ -159,6 +278,14 @@ export default function FieldDay() {
         </div>
         <Calendar className="h-8 w-8 text-muted-foreground" />
       </div>
+
+      {/* Field Status Bar - Network, Battery, Sync Status */}
+      {!isAdmin && (
+        <FieldStatusBar 
+          className="mb-6"
+          onManualSync={triggerManualSync}
+        />
+      )}
 
       {/* My Jobs Section */}
       <section className="space-y-4">
@@ -190,6 +317,12 @@ export default function FieldDay() {
                   onStatusUpdate={(status) => {
                     updateJobMutation.mutate({ jobId: job.id, status });
                   }}
+                  syncStatus={{
+                    isSynced: pendingSyncCount === 0,
+                    lastSync: lastSyncTime,
+                    pendingChanges: pendingSyncCount
+                  }}
+                  networkQuality={quality}
                 />
               </div>
             )}
@@ -246,6 +379,12 @@ export default function FieldDay() {
                     onStatusUpdate={(status) => {
                       updateJobMutation.mutate({ jobId: job.id, status });
                     }}
+                    syncStatus={{
+                      isSynced: pendingSyncCount === 0,
+                      lastSync: lastSyncTime,
+                      pendingChanges: pendingSyncCount
+                    }}
+                    networkQuality={quality}
                   />
                 </div>
               )}
@@ -351,5 +490,6 @@ export default function FieldDay() {
       )}
       </div>
     </PageTransition>
+    </>
   );
 }

@@ -53,6 +53,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useWebAuthn } from "@/hooks/useWebAuthn";
+import { Fingerprint, Smartphone, Monitor } from "lucide-react";
 
 // Types
 interface Organization {
@@ -117,6 +119,337 @@ const organizationSchema = z.object({
   address: z.string().optional(),
   serviceAreas: z.array(z.string()).optional(),
 });
+
+// Biometric Authentication Component
+function BiometricAuthenticationSection({ user }: { user: any }) {
+  const { toast } = useToast();
+  const {
+    isSupported,
+    isPlatformAvailable,
+    isEnrolling,
+    isAuthenticating,
+    credentials,
+    credentialsLoading,
+    enrollBiometric,
+    authenticateBiometric,
+    revokeCredential,
+    testBiometric,
+    checkBiometricStatus
+  } = useWebAuthn();
+
+  const [showEnrollDialog, setShowEnrollDialog] = useState(false);
+  const [deviceName, setDeviceName] = useState("");
+  const [showCredentials, setShowCredentials] = useState(false);
+
+  const handleEnroll = async () => {
+    if (!deviceName.trim()) {
+      toast({
+        title: "Device Name Required",
+        description: "Please enter a name for this device",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await enrollBiometric(deviceName.trim());
+      setShowEnrollDialog(false);
+      setDeviceName("");
+    } catch (error) {
+      // Error handled in hook
+    }
+  };
+
+  const handleRevoke = async (credentialId: string, deviceName?: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to remove "${deviceName || 'this device'}"? You will need to re-enroll to use biometric authentication on this device again.`
+    );
+    
+    if (confirmed) {
+      try {
+        await revokeCredential(credentialId, "User requested removal");
+      } catch (error) {
+        // Error handled in hook
+      }
+    }
+  };
+
+  const getDeviceIcon = (deviceType?: string) => {
+    switch (deviceType) {
+      case 'platform':
+        return <Fingerprint className="h-4 w-4" />;
+      case 'cross-platform':
+        return <Key className="h-4 w-4" />;
+      default:
+        return <Smartphone className="h-4 w-4" />;
+    }
+  };
+
+  const formatLastUsed = (date?: Date | string) => {
+    if (!date) return "Never";
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return "Just now";
+  };
+
+  return (
+    <div>
+      <h3 className="text-lg font-medium mb-4">Biometric Authentication</h3>
+      
+      {!isSupported ? (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Your browser doesn't support WebAuthn for biometric authentication.
+            Please use a modern browser like Chrome, Safari, Edge, or Firefox.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <div className="space-y-4">
+          {/* Platform Status */}
+          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+            <div className="flex items-center gap-3">
+              <Fingerprint className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="font-medium">Biometric Authentication Status</p>
+                <p className="text-sm text-muted-foreground">
+                  {isPlatformAvailable 
+                    ? "Touch ID, Face ID, or Windows Hello available" 
+                    : "No biometric authenticator found on this device"}
+                </p>
+              </div>
+            </div>
+            <Badge variant={isPlatformAvailable ? "default" : "outline"}>
+              {isPlatformAvailable ? "Available" : "Not Available"}
+            </Badge>
+          </div>
+
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Enable Biometric Authentication</Label>
+              <p className="text-sm text-muted-foreground">
+                Use fingerprint, Face ID, or Windows Hello for quick and secure authentication
+              </p>
+            </div>
+            <Switch
+              checked={credentials && credentials.length > 0}
+              onCheckedChange={async (checked) => {
+                if (checked) {
+                  setShowEnrollDialog(true);
+                } else {
+                  // Revoke all credentials
+                  const confirmed = window.confirm(
+                    "This will remove all registered biometric devices. Are you sure?"
+                  );
+                  if (confirmed && credentials) {
+                    for (const cred of credentials) {
+                      await revokeCredential(cred.credentialId, "Biometric authentication disabled");
+                    }
+                  }
+                }
+              }}
+              disabled={!isPlatformAvailable}
+            />
+          </div>
+
+          {/* Registered Devices */}
+          {credentials && credentials.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Registered Devices</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCredentials(!showCredentials)}
+                >
+                  {showCredentials ? (
+                    <>
+                      <EyeOff className="h-4 w-4 mr-2" />
+                      Hide
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Show ({credentials.length})
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              {showCredentials && (
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Device</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Registered</TableHead>
+                        <TableHead>Last Used</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {credentials.map((credential) => (
+                        <TableRow key={credential.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getDeviceIcon(credential.deviceType)}
+                              <span className="font-medium">
+                                {credential.deviceName || "Unknown Device"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {credential.deviceType === 'platform' ? 'Platform' : 'Security Key'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {new Date(credential.createdAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatLastUsed(credential.lastUsedAt)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRevoke(
+                                credential.credentialId,
+                                credential.deviceName
+                              )}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowEnrollDialog(true)}
+              disabled={isEnrolling || !isPlatformAvailable}
+            >
+              <Fingerprint className="h-4 w-4 mr-2" />
+              {isEnrolling ? "Enrolling..." : "Add New Device"}
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={testBiometric}
+              disabled={isAuthenticating || !credentials || credentials.length === 0}
+            >
+              {isAuthenticating ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                <>
+                  <Shield className="h-4 w-4 mr-2" />
+                  Test Authentication
+                </>
+              )}
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={checkBiometricStatus}
+            >
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Check Status
+            </Button>
+          </div>
+
+          {/* Enrollment Dialog */}
+          <Dialog open={showEnrollDialog} onOpenChange={setShowEnrollDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Biometric Device</DialogTitle>
+                <DialogDescription>
+                  Register this device for biometric authentication. You'll be prompted to use your fingerprint, Face ID, or Windows Hello.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="device-name">Device Name</Label>
+                  <Input
+                    id="device-name"
+                    placeholder="e.g., MacBook Pro, iPhone 15"
+                    value={deviceName}
+                    onChange={(e) => setDeviceName(e.target.value)}
+                    className="mt-1"
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Choose a name to identify this device in your security settings
+                  </p>
+                </div>
+                
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    You'll be prompted by your device to verify your identity. This may be:
+                    <ul className="mt-2 ml-4 list-disc text-sm">
+                      <li>Touch ID or Face ID on Mac/iPhone/iPad</li>
+                      <li>Windows Hello on Windows</li>
+                      <li>Fingerprint or face recognition on Android</li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowEnrollDialog(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleEnroll}
+                  disabled={isEnrolling || !deviceName.trim()}
+                >
+                  {isEnrolling ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Enrolling...
+                    </>
+                  ) : (
+                    <>
+                      <Fingerprint className="h-4 w-4 mr-2" />
+                      Enroll Device
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Information */}
+          <Alert>
+            <Shield className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Enhanced Security:</strong> Biometric authentication provides an additional layer of security.
+              Your biometric data never leaves your device - only a cryptographic key is stored on our servers.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsHub() {
   const { user } = useAuth();
@@ -1615,6 +1948,11 @@ export default function SettingsHub() {
                   </div>
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Biometric Authentication */}
+              <BiometricAuthenticationSection user={user} />
 
               <Separator />
 

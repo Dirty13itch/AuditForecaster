@@ -410,6 +410,8 @@ export const jobs = pgTable("jobs", {
   priority: text("priority").default('medium'),
   latitude: real("latitude"),
   longitude: real("longitude"),
+  locationAccuracy: real("location_accuracy"), // GPS accuracy in meters
+  locationCapturedAt: timestamp("location_captured_at"), // When GPS was captured
   floorArea: decimal("floor_area", { precision: 10, scale: 2 }),
   surfaceArea: decimal("surface_area", { precision: 10, scale: 2 }),
   houseVolume: decimal("house_volume", { precision: 10, scale: 2 }),
@@ -1903,6 +1905,48 @@ export const systemConfig = pgTable("system_config", {
   index("idx_system_config_updated_by").on(table.updatedBy),
 ]);
 
+// WebAuthn credentials table for storing biometric authentication data
+export const webauthnCredentials = pgTable("webauthn_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  credentialId: text("credential_id").notNull().unique(), // Base64 encoded credential ID
+  publicKey: text("public_key").notNull(), // Base64 encoded public key
+  counter: integer("counter").notNull().default(0), // Signature counter for replay protection
+  deviceName: text("device_name"), // User-friendly device name
+  deviceType: text("device_type", { 
+    enum: ["platform", "cross-platform", "unknown"] 
+  }).notNull().default("unknown"),
+  aaguid: text("aaguid"), // Authenticator Attestation GUID
+  transports: text("transports").array(), // Available transports (usb, nfc, ble, internal)
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  revokedAt: timestamp("revoked_at"), // For soft deletion
+  revokedReason: text("revoked_reason"),
+}, (table) => [
+  index("idx_webauthn_credentials_user_id").on(table.userId),
+  index("idx_webauthn_credentials_credential_id").on(table.credentialId),
+  index("idx_webauthn_credentials_created_at").on(table.createdAt),
+  index("idx_webauthn_credentials_last_used").on(table.lastUsedAt),
+]);
+
+// WebAuthn challenges table for tracking authentication attempts
+export const webauthnChallenges = pgTable("webauthn_challenges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  challenge: text("challenge").notNull(), // Base64 encoded challenge
+  type: text("type", { 
+    enum: ["registration", "authentication"] 
+  }).notNull(),
+  verified: boolean("verified").default(false),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+}, (table) => [
+  index("idx_webauthn_challenges_user_id").on(table.userId),
+  index("idx_webauthn_challenges_expires_at").on(table.expiresAt),
+]);
+
 // Background Jobs Tracking for Production Monitoring
 export const backgroundJobs = pgTable("background_jobs", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -2300,6 +2344,24 @@ export const insertEquipmentMaintenanceSchema = createInsertSchema(equipmentMain
 export const insertEquipmentCheckoutSchema = createInsertSchema(equipmentCheckouts).omit({ id: true, createdAt: true, checkoutDate: true }).extend({
   expectedReturn: z.coerce.date().nullable().optional(),
   actualReturn: z.coerce.date().nullable().optional(),
+});
+
+// WebAuthn Insert Schemas
+export const insertWebauthnCredentialSchema = createInsertSchema(webauthnCredentials).omit({ 
+  id: true, 
+  createdAt: true,
+  lastUsedAt: true,
+  revokedAt: true 
+}).extend({
+  counter: z.coerce.number().default(0),
+});
+
+export const insertWebauthnChallengeSchema = createInsertSchema(webauthnChallenges).omit({ 
+  id: true, 
+  createdAt: true 
+}).extend({
+  expiresAt: z.coerce.date(),
+  verified: z.boolean().default(false),
 });
 
 // QA Insert Schemas
@@ -2709,6 +2771,12 @@ export type FeatureFlag = typeof featureFlags.$inferSelect;
 export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
+
+// WebAuthn Types
+export type WebauthnCredential = typeof webauthnCredentials.$inferSelect;
+export type InsertWebauthnCredential = z.infer<typeof insertWebauthnCredentialSchema>;
+export type WebauthnChallenge = typeof webauthnChallenges.$inferSelect;
+export type InsertWebauthnChallenge = z.infer<typeof insertWebauthnChallengeSchema>;
 
 // Background Jobs Types
 export type BackgroundJob = typeof backgroundJobs.$inferSelect;

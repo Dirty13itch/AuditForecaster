@@ -15,6 +15,11 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
@@ -25,36 +30,52 @@ const menuItems = [
     title: "Dashboard",
     url: "/",
     icon: Home,
+    shortcut: "Alt+1",
+    shortcutKeys: ["g", "h"],
   },
   {
     title: "Jobs",
     url: "/jobs",
     icon: ClipboardList,
+    shortcut: "Cmd+J",
+    shortcutAlt: "Alt+2",
+    shortcutKeys: ["g", "j"],
   },
   {
     title: "Field Day",
     url: "/field-day",
     icon: Calendar,
+    shortcut: "Cmd+F",
+    shortcutAlt: "Alt+3",
+    shortcutKeys: ["g", "f"],
   },
   {
     title: "Photos",
     url: "/photos",
     icon: Camera,
+    shortcut: "Cmd+P",
+    shortcutAlt: "Alt+4",
+    shortcutKeys: ["g", "p"],
   },
   {
     title: "Schedule",
     url: "/schedule",
     icon: Calendar,
+    shortcutAlt: "Alt+5",
+    shortcutKeys: ["g", "s"],
   },
   {
     title: "Route",
     url: "/route",
     icon: Map,
+    shortcutAlt: "Alt+6",
   },
   {
     title: "Builders",
     url: "/builders",
     icon: Building2,
+    shortcutAlt: "Alt+7",
+    shortcutKeys: ["g", "b"],
   },
   {
     title: "Builder Review",
@@ -288,16 +309,54 @@ export function AppSidebar() {
           <SidebarGroupLabel>Field Inspection System</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {filteredMenuItems.map((item) => {
+              {filteredMenuItems.map((item, index) => {
                 const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+                const cmdKey = isMac ? '⌘' : 'Ctrl';
+                
+                // Determine which shortcut to show
+                let shortcutDisplay = '';
+                if (item.shortcut) {
+                  shortcutDisplay = item.shortcut.replace('Cmd', cmdKey);
+                } else if (index < 9 && item.shortcutAlt) {
+                  shortcutDisplay = item.shortcutAlt;
+                }
+                
                 return (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive}>
+                          <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
+                            <item.icon />
+                            <span className="flex-1">{item.title}</span>
+                            {shortcutDisplay && (
+                              <kbd className="ml-auto text-xs px-1.5 py-0.5 bg-muted rounded opacity-60">
+                                {shortcutDisplay}
+                              </kbd>
+                            )}
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="flex flex-col gap-1">
+                        <div>{item.title}</div>
+                        {item.shortcut && (
+                          <div className="text-xs opacity-75">
+                            Direct: {item.shortcut.replace('Cmd', cmdKey)}
+                          </div>
+                        )}
+                        {item.shortcutKeys && (
+                          <div className="text-xs opacity-75">
+                            Sequence: {item.shortcutKeys.join(' then ')}
+                          </div>
+                        )}
+                        {item.shortcutAlt && index < 9 && (
+                          <div className="text-xs opacity-75">
+                            Quick: {item.shortcutAlt}
+                          </div>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
                   </SidebarMenuItem>
                 );
               })}

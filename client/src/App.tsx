@@ -12,9 +12,11 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { PWAInstallBanner } from "@/components/PWAInstallBanner";
 import { DevModeIndicator } from "@/components/DevModeIndicator";
 import { DevModeBanner } from "@/components/DevModeBanner";
 import { useAuth } from "@/hooks/useAuth";
+import { BiometricEnrollmentPrompt } from "@/components/BiometricEnrollmentPrompt";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { fetchCsrfToken } from "@/lib/csrfToken";
@@ -23,6 +25,7 @@ import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { useGlobalShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import type { ShortcutConfig } from "@/hooks/useKeyboardShortcuts";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import {
   RouteLoadingFallback,
   DashboardLoadingFallback,
@@ -613,7 +616,7 @@ function AppContent() {
     "--sidebar-width-icon": "4rem",
   };
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts with enhanced functionality
   useGlobalShortcuts({
     onShowShortcuts: () => setShowShortcutsModal(true),
     onGoHome: () => navigate('/'),
@@ -622,6 +625,44 @@ function AppContent() {
     onGoPhotos: () => navigate('/photos'),
     onGoSchedule: () => navigate('/schedule'),
     onGoEquipment: () => navigate('/equipment'),
+    onGoFieldDay: () => navigate('/field-day'),
+    onNewJob: () => navigate('/jobs?new=true'),
+    onQuickSearch: () => {
+      // Open command palette/search - could integrate with a command palette component
+      const searchInput = document.querySelector('[data-testid="search-input"]') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.focus();
+      }
+    },
+    onSaveForm: () => {
+      // Trigger save on active form
+      const event = new CustomEvent('keyboard-save');
+      window.dispatchEvent(event);
+    },
+    onCloseModal: () => {
+      // Close active modal/dialog
+      const closeButton = document.querySelector('[data-testid*="close"], [aria-label*="close"]') as HTMLButtonElement;
+      if (closeButton) {
+        closeButton.click();
+      }
+    },
+    onQuickNav: (index: number) => {
+      // Quick navigation to menu items by index
+      const menuItems = [
+        '/',
+        '/jobs',
+        '/field-day',
+        '/photos',
+        '/builders',
+        '/schedule',
+        '/financial-dashboard',
+        '/reports',
+        '/settings'
+      ];
+      if (index <= menuItems.length) {
+        navigate(menuItems[index - 1]);
+      }
+    }
   });
 
   // Collect all shortcuts for the modal
@@ -723,14 +764,21 @@ function AppContent() {
         <div className="flex h-screen w-full">
           <AppSidebar />
           <div className="flex flex-col flex-1">
-            <header className="flex items-center justify-between p-2 border-b">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 border-b gap-2">
+              <div className="flex items-center gap-2 flex-1">
+                <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <Breadcrumbs className="hidden sm:flex flex-1" maxItems={4} />
+              </div>
               <div className="flex items-center gap-2">
                 <SyncStatusBadge />
                 <NotificationBell />
                 <OfflineIndicator />
               </div>
             </header>
+            {/* Mobile breadcrumbs - shown below header on small screens */}
+            <div className="sm:hidden px-2 py-1 border-b">
+              <Breadcrumbs maxItems={2} />
+            </div>
             <main className="flex-1 overflow-auto">
               <Router />
             </main>
@@ -756,8 +804,10 @@ function App() {
           <NotificationProvider>
             <AppContent />
             <Toaster />
+            <PWAInstallBanner />
             <InstallPrompt />
             <DevModeIndicator />
+            <BiometricEnrollmentPrompt />
           </NotificationProvider>
         </TooltipProvider>
       </QueryClientProvider>

@@ -5,7 +5,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { MobileOptimizedInput } from "@/components/ui/mobile-optimized-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import type { DuctLeakageTest, InsertDuctLeakageTest } from "@shared/schema";
 import { 
   Wind, 
@@ -83,6 +84,7 @@ const DEFAULT_PRESSURE_PAN_READINGS: PressurePanReading[] = [
 
 function DuctLeakageTestContent() {
   const { toast } = useToast();
+  const haptic = useHapticFeedback();
   const { jobId } = useParams<{ jobId: string }>();
   const [activeTab, setActiveTab] = useState("setup");
   
@@ -189,6 +191,7 @@ function DuctLeakageTestContent() {
   const calculateTotalDuctLeakage = useCallback(() => {
     // Phase 5 - HARDEN: Validate conditioned area input
     if (!testData.conditionedArea || testData.conditionedArea <= 0) {
+      haptic.vibrate('error');
       toast({
         title: "Missing data",
         description: "Please enter conditioned area first",
@@ -219,6 +222,9 @@ function DuctLeakageTestContent() {
     }));
     
     // Phase 2 - BUILD: Replace emoji with lucide icons in toast
+    // Provide haptic feedback based on code compliance
+    haptic.vibrate(meetsCode ? 'success' : 'warning');
+    
     toast({
       title: "TDL calculated",
       description: (
@@ -241,7 +247,7 @@ function DuctLeakageTestContent() {
       ),
       variant: meetsCode ? "default" : "destructive",
     });
-  }, [testData.conditionedArea, testData.totalFanPressure, testData.totalRingConfiguration, testData.systemAirflow, calculateCFM25, toast]);
+  }, [testData.conditionedArea, testData.totalFanPressure, testData.totalRingConfiguration, testData.systemAirflow, calculateCFM25, haptic, toast]);
 
   // Phase 3 - OPTIMIZE: Memoize Duct Leakage to Outside calculation with useCallback
   // Phase 6 - DOCUMENT: Calculate Duct Leakage to Outside results with Minnesota 2020 Energy Code compliance
@@ -251,6 +257,7 @@ function DuctLeakageTestContent() {
   const calculateLeakageToOutside = useCallback(() => {
     // Phase 5 - HARDEN: Validate conditioned area input
     if (!testData.conditionedArea || testData.conditionedArea <= 0) {
+      haptic.vibrate('error');
       toast({
         title: "Missing data",
         description: "Please enter conditioned area first",
@@ -291,6 +298,9 @@ function DuctLeakageTestContent() {
     }));
     
     // Phase 2 - BUILD: Replace emoji with lucide icons in toast
+    // Provide haptic feedback based on code compliance
+    haptic.vibrate(meetsCode ? 'success' : 'warning');
+    
     toast({
       title: "DLO calculated",
       description: (
@@ -313,7 +323,7 @@ function DuctLeakageTestContent() {
       ),
       variant: meetsCode ? "default" : "destructive",
     });
-  }, [testData.conditionedArea, testData.outsideHousePressure, testData.outsideFanPressure, testData.outsideRingConfiguration, testData.systemAirflow, calculateCFM25, toast]);
+  }, [testData.conditionedArea, testData.outsideHousePressure, testData.outsideFanPressure, testData.outsideRingConfiguration, testData.systemAirflow, calculateCFM25, haptic, toast]);
 
   // Phase 3 - OPTIMIZE: Memoize pressure pan evaluation with useCallback
   // Phase 6 - DOCUMENT: Evaluate pressure pan reading based on RESNET industry standards
@@ -440,12 +450,14 @@ function DuctLeakageTestContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "duct-leakage-tests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/duct-leakage-tests"] });
+      haptic.vibrate('success');
       toast({
         title: "Test saved",
         description: "Duct leakage test data has been saved successfully.",
       });
     },
     onError: (error) => {
+      haptic.vibrate('error');
       toast({
         title: "Save failed",
         description: "Failed to save test data. Please try again.",

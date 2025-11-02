@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Check, CheckCircle2, CalendarClock, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { MapPin, Check, CheckCircle2, CalendarClock, ChevronLeft, ChevronRight, Sparkles, Navigation, Wifi, WifiOff, CloudUpload, CloudOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cardAppear, popIn } from "@/lib/animations";
+import { formatCoordinates, navigateToLocation } from "@/hooks/useGeolocation";
+import { formatLastSync } from "@/hooks/useNetworkQuality";
 import type { Job, Builder } from "@shared/schema";
 
 // Job type display names
@@ -31,6 +35,12 @@ interface SwipeableFieldDayCardProps {
   onSelect: () => void;
   onNavigate: () => void;
   onStatusUpdate?: (status: 'done' | 'reschedule') => void;
+  syncStatus?: {
+    isSynced: boolean;
+    lastSync: Date | null;
+    pendingChanges: number;
+  };
+  networkQuality?: 'excellent' | 'good' | 'fair' | 'poor' | 'offline';
 }
 
 /**
@@ -43,18 +53,23 @@ export function SwipeableFieldDayCard({
   isSelected, 
   onSelect, 
   onNavigate, 
-  onStatusUpdate 
+  onStatusUpdate,
+  syncStatus,
+  networkQuality = 'good'
 }: SwipeableFieldDayCardProps) {
   const shouldReduceMotion = useReducedMotion();
+  const haptic = useHapticFeedback();
   const [isUpdating, setIsUpdating] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   
-  // Setup swipe gestures
+  // Setup swipe gestures with haptic feedback
   const swipeGesture = useSwipeGesture({
     onSwipeLeft: () => {
       if (onStatusUpdate && job.status !== 'done') {
         setIsUpdating(true);
         setJustCompleted(true);
+        // Swipe haptic pattern for action
+        haptic.vibrate('swipe');
         onStatusUpdate('done');
         // Reset states after animation
         setTimeout(() => {
@@ -66,6 +81,8 @@ export function SwipeableFieldDayCard({
     onSwipeRight: () => {
       if (onStatusUpdate && job.status !== 'reschedule') {
         setIsUpdating(true);
+        // Swipe haptic pattern for action
+        haptic.vibrate('swipe');
         onStatusUpdate('reschedule');
         setTimeout(() => setIsUpdating(false), 500);
       }
@@ -83,8 +100,12 @@ export function SwipeableFieldDayCard({
     
     // Left 80% selects, right 20% navigates
     if (clickX < cardWidth * 0.8) {
+      // Selection haptic feedback
+      haptic.vibrate('selection');
       onSelect();
     } else {
+      // Light tap for navigation
+      haptic.vibrate('light');
       onNavigate();
     }
   };
@@ -268,8 +289,80 @@ export function SwipeableFieldDayCard({
             </p>
           )}
           
+          {/* Location and sync status row */}
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            {/* Location info */}
+            <div className="flex items-center gap-2">
+              {job.latitude && job.longitude ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      haptic.vibrate('light');
+                      navigateToLocation(job.latitude!, job.longitude!, job.address);
+                    }}
+                    data-testid={`button-navigate-${job.id}`}
+                  >
+                    <Navigation className="h-3 w-3 mr-1" />
+                    Navigate
+                  </Button>
+                  {job.locationAccuracy && (
+                    <span className="text-muted-foreground">
+                      ±{Math.round(job.locationAccuracy)}m
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  No GPS data
+                </span>
+              )}
+            </div>
+            
+            {/* Sync status */}
+            <div className="flex items-center gap-2">
+              {networkQuality === 'offline' ? (
+                <WifiOff className="h-3 w-3 text-red-500" />
+              ) : (
+                <Wifi className={cn(
+                  "h-3 w-3",
+                  networkQuality === 'excellent' && "text-green-500",
+                  networkQuality === 'good' && "text-blue-500",
+                  networkQuality === 'fair' && "text-yellow-500",
+                  networkQuality === 'poor' && "text-orange-500"
+                )} />
+              )}
+              
+              {syncStatus && (
+                <>
+                  {syncStatus.isSynced ? (
+                    <CloudUpload className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <CloudOff className="h-3 w-3 text-orange-500" />
+                      {syncStatus.pendingChanges > 0 && (
+                        <span className="text-orange-500 font-medium">
+                          {syncStatus.pendingChanges}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {syncStatus.lastSync && (
+                    <span className="text-muted-foreground">
+                      {formatLastSync(syncStatus.lastSync)}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          
           {/* Swipe hints */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
             <span className="flex items-center gap-1">
               <ChevronLeft className="h-3 w-3" />
               Swipe for Done

@@ -1,10 +1,11 @@
 // Enhanced Service Worker with comprehensive offline capabilities
-const VERSION = 'v7';
+const VERSION = 'v8';
 const CACHE_NAME = `field-inspection-${VERSION}`;
 const API_CACHE_NAME = `field-inspection-api-${VERSION}`;
 const STATIC_CACHE_NAME = `field-inspection-static-${VERSION}`;
 const PHOTO_CACHE_NAME = `field-inspection-photos-${VERSION}`;
 const OFFLINE_PAGE_CACHE = `field-inspection-offline-${VERSION}`;
+const SYNC_QUEUE_NAME = 'field-inspection-sync-queue';
 
 // Cache size limits
 const CACHE_LIMITS = {
@@ -33,10 +34,12 @@ const STATIC_ASSETS = [
   '/icons/icon-512x512.png',
 ];
 
-// Critical API routes to pre-cache
+// Critical API routes to pre-cache (including Field Day specific routes)
 const CRITICAL_API_ROUTES = [
   '/api/auth/user',
   '/api/jobs',
+  '/api/jobs/today',
+  '/api/jobs/field-day',
   '/api/builders',
   '/api/report-templates',
 ];
@@ -560,6 +563,33 @@ self.addEventListener('message', event => {
         })
       );
       break;
+      
+    case 'QUEUE_SYNC':
+      // Queue a sync request for offline data
+      event.waitUntil(
+        queueOfflineRequest(data).then(() => {
+          logger.info('Queued offline request for sync');
+        })
+      );
+      break;
+      
+    case 'PULL_TO_REFRESH':
+      // Handle pull-to-refresh from the UI
+      event.waitUntil(
+        handlePullToRefresh(data).then(() => {
+          event.ports[0].postMessage({
+            type: 'PULL_REFRESH_COMPLETE',
+            success: true
+          });
+        }).catch(error => {
+          event.ports[0].postMessage({
+            type: 'PULL_REFRESH_COMPLETE',
+            success: false,
+            error: error.message
+          });
+        })
+      );
+      break;
   }
 });
 
@@ -590,6 +620,117 @@ async function getCacheStatus() {
   return status;
 }
 
+// Queue offline request for background sync
+async function queueOfflineRequest(data) {
+  if ('sync' in self.registration) {
+    // Use Background Sync API if available
+    await self.registration.sync.register('offline-sync');
+    
+    // Store the request data in IndexedDB or cache
+    const cache = await caches.open('offline-requests');
+    const timestamp = Date.now();
+    const request = new Request(`/offline/${timestamp}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    await cache.put(request, new Response(JSON.stringify({
+      queued: true,
+      timestamp,
+      data
+    })));
+    
+    logger.info('Request queued for background sync');
+  } else {
+    // Fallback for browsers without Background Sync
+    logger.warn('Background Sync not supported, will retry on next online event');
+  }
+}
+
+// Handle pull-to-refresh
+async function handlePullToRefresh(data) {
+  const { url = '/api/jobs/field-day' } = data || {};
+  
+  try {
+    // Force fresh fetch, bypass cache
+    const response = await fetch(url, {
+      cache: 'reload',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
+      }
+    });
+    
+    if (response.ok) {
+      // Update cache with fresh data
+      const cache = await caches.open(API_CACHE_NAME);
+      await cache.put(url, response.clone());
+      
+      logger.info('Pull-to-refresh completed successfully');
+      return response;
+    } else {
+      throw new Error(`Refresh failed: ${response.status}`);
+    }
+  } catch (error) {
+    logger.error('Pull-to-refresh error:', error);
+    throw error;
+  }
+}
+
+// Background sync event
+self.addEventListener('sync', event => {
+  if (event.tag === 'offline-sync') {
+    logger.info('Background sync triggered');
+    event.waitUntil(syncOfflineData());
+  }
+});
+
+// Sync offline data when connection restored
+async function syncOfflineData() {
+  const cache = await caches.open('offline-requests');
+  const requests = await cache.keys();
+  
+  const syncPromises = requests.map(async (request) => {
+    try {
+      const cachedResponse = await cache.match(request);
+      const data = await cachedResponse.json();
+      
+      // Process the queued request based on its type
+      if (data && data.data) {
+        const { type, payload } = data.data;
+        
+        // Send the actual request to the server
+        const response = await fetch(payload.url, {
+          method: payload.method || 'POST',
+          headers: payload.headers,
+          body: JSON.stringify(payload.body)
+        });
+        
+        if (response.ok) {
+          // Remove from queue on success
+          await cache.delete(request);
+          logger.info('Synced offline request successfully');
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to sync offline request:', error);
+    }
+  });
+  
+  await Promise.allSettled(syncPromises);
+  
+  // Notify all clients about sync completion
+  const clients = await self.clients.matchAll();
+  clients.forEach(client => {
+    client.postMessage({
+      type: 'SYNC_COMPLETE',
+      timestamp: Date.now()
+    });
+  });
+}
+
 // Periodic cache cleanup (every hour)
 setInterval(async () => {
   logger.debug('Running periodic cache cleanup');
@@ -597,5 +738,15 @@ setInterval(async () => {
   await evictLRUCache(PHOTO_CACHE_NAME, CACHE_LIMITS.photos);
   await evictLRUCache(STATIC_CACHE_NAME, CACHE_LIMITS.static);
 }, 60 * 60 * 1000);
+
+// Listen for online/offline events from clients
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'ONLINE_STATUS_CHANGED') {
+    if (event.data.online) {
+      // Trigger sync when coming back online
+      syncOfflineData();
+    }
+  }
+});
 
 logger.info('Service Worker script loaded', { version: VERSION });

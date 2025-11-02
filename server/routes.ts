@@ -585,6 +585,245 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==========================
+  // WebAuthn Biometric Routes
+  // ==========================
+  
+  // Get user's WebAuthn credentials
+  app.get("/api/webauthn/credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.user?.id;
+      if (!userId) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+      
+      const { getUserCredentials } = await import("./webauthnService");
+      const credentials = await getUserCredentials(userId);
+      
+      // Return credentials without sensitive data
+      const sanitizedCredentials = credentials.map(c => ({
+        id: c.id,
+        credentialId: c.credentialId,
+        deviceName: c.deviceName,
+        deviceType: c.deviceType,
+        lastUsedAt: c.lastUsedAt,
+        createdAt: c.createdAt,
+      }));
+      
+      res.json(sanitizedCredentials);
+    } catch (error) {
+      logError('WebAuthn/GetCredentials', error);
+      res.status(500).json({ message: "Failed to fetch credentials" });
+    }
+  });
+  
+  // Begin WebAuthn registration
+  app.post("/api/webauthn/register/begin", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const user = req.session.user;
+      if (!user) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+      
+      const { getRegistrationOptions, storeChallenge } = await import("./webauthnService");
+      const options = getRegistrationOptions(user);
+      
+      // Store challenge for verification
+      await storeChallenge(
+        user.id,
+        options.challenge,
+        'registration',
+        req.headers['user-agent'],
+        req.ip
+      );
+      
+      res.json(options);
+    } catch (error) {
+      logError('WebAuthn/RegisterBegin', error);
+      res.status(500).json({ message: "Failed to initiate registration" });
+    }
+  });
+  
+  // Complete WebAuthn registration
+  app.post("/api/webauthn/register/complete", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const user = req.session.user;
+      if (!user) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+      
+      const {
+        credentialId,
+        publicKey,
+        attestationObject,
+        clientDataJSON,
+        deviceName,
+        deviceType,
+        transports,
+      } = req.body;
+      
+      if (!credentialId || !publicKey || !attestationObject || !clientDataJSON) {
+        return res.status(400).json({ message: "Missing required registration data" });
+      }
+      
+      const { verifyChallenge, storeCredential } = await import("./webauthnService");
+      
+      // Parse clientDataJSON to extract challenge
+      const clientData = JSON.parse(Buffer.from(clientDataJSON, 'base64').toString());
+      const challenge = clientData.challenge;
+      
+      // Verify challenge
+      const isValidChallenge = await verifyChallenge(user.id, challenge, 'registration');
+      if (!isValidChallenge) {
+        return res.status(400).json({ message: "Invalid or expired challenge" });
+      }
+      
+      // Store the credential
+      await storeCredential(
+        user.id,
+        credentialId,
+        publicKey,
+        deviceName,
+        deviceType,
+        transports
+      );
+      
+      res.json({ success: true, message: "Biometric credential registered successfully" });
+    } catch (error: any) {
+      logError('WebAuthn/RegisterComplete', error);
+      if (error.message === 'Credential already registered') {
+        res.status(409).json({ message: "This device is already registered" });
+      } else {
+        res.status(500).json({ message: "Failed to complete registration" });
+      }
+    }
+  });
+  
+  // Begin WebAuthn authentication
+  app.post("/api/webauthn/authenticate/begin", csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const userId = req.session?.user?.id;
+      
+      const { getAuthenticationOptions, storeChallenge } = await import("./webauthnService");
+      const options = await getAuthenticationOptions(userId);
+      
+      // Store challenge for verification
+      await storeChallenge(
+        userId,
+        options.challenge,
+        'authentication',
+        req.headers['user-agent'],
+        req.ip
+      );
+      
+      res.json(options);
+    } catch (error) {
+      logError('WebAuthn/AuthenticateBegin', error);
+      res.status(500).json({ message: "Failed to initiate authentication" });
+    }
+  });
+  
+  // Complete WebAuthn authentication
+  app.post("/api/webauthn/authenticate/complete", csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const {
+        credentialId,
+        authenticatorData,
+        clientDataJSON,
+        signature,
+        userHandle,
+      } = req.body;
+      
+      if (!credentialId || !authenticatorData || !clientDataJSON || !signature) {
+        return res.status(400).json({ message: "Missing required authentication data" });
+      }
+      
+      const { verifyChallenge, verifyCredential } = await import("./webauthnService");
+      
+      // Parse clientDataJSON to extract challenge
+      const clientData = JSON.parse(Buffer.from(clientDataJSON, 'base64').toString());
+      const challenge = clientData.challenge;
+      
+      // Verify challenge
+      const userId = req.session?.user?.id;
+      const isValidChallenge = await verifyChallenge(userId, challenge, 'authentication');
+      if (!isValidChallenge) {
+        return res.status(400).json({ message: "Invalid or expired challenge" });
+      }
+      
+      // Verify the credential
+      const { verified, userId: credentialUserId } = await verifyCredential(
+        credentialId,
+        Buffer.from(authenticatorData, 'base64'),
+        Buffer.from(clientDataJSON, 'base64'),
+        Buffer.from(signature, 'base64'),
+        userId
+      );
+      
+      if (!verified) {
+        return res.status(401).json({ message: "Authentication failed" });
+      }
+      
+      // If user wasn't already authenticated, authenticate them now
+      if (!req.session.user && credentialUserId) {
+        const user = await storage.getUser(credentialUserId);
+        if (user) {
+          req.session.user = user;
+          req.session.userId = user.id;
+          req.session.save();
+        }
+      }
+      
+      res.json({ success: true, message: "Biometric authentication successful" });
+    } catch (error) {
+      logError('WebAuthn/AuthenticateComplete', error);
+      res.status(500).json({ message: "Failed to complete authentication" });
+    }
+  });
+  
+  // Revoke a WebAuthn credential
+  app.delete("/api/webauthn/credentials/:credentialId", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
+    try {
+      const user = req.session.user;
+      if (!user) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+      
+      const { credentialId } = req.params;
+      const { reason } = req.body;
+      
+      const { revokeCredential } = await import("./webauthnService");
+      await revokeCredential(user.id, credentialId, reason);
+      
+      res.json({ success: true, message: "Credential revoked successfully" });
+    } catch (error: any) {
+      logError('WebAuthn/RevokeCredential', error);
+      if (error.message === 'Credential not found') {
+        res.status(404).json({ message: "Credential not found" });
+      } else {
+        res.status(500).json({ message: "Failed to revoke credential" });
+      }
+    }
+  });
+  
+  // Check if user has WebAuthn enabled
+  app.get("/api/webauthn/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.user?.id;
+      if (!userId) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+      
+      const { hasWebAuthnCredentials } = await import("./webauthnService");
+      const hasCredentials = await hasWebAuthnCredentials(userId);
+      
+      res.json({ enabled: hasCredentials });
+    } catch (error) {
+      logError('WebAuthn/Status', error);
+      res.status(500).json({ message: "Failed to check WebAuthn status" });
+    }
+  });
+
   // Domain testing endpoint - authenticated admin only
   app.post("/api/auth/test-domain", isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
