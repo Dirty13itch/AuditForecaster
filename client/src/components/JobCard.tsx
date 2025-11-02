@@ -52,6 +52,7 @@ interface JobCardProps {
   onClick?: () => void;
   onViewCompliance?: () => void;
   onGenerateReport?: () => void;
+  onPreviewReport?: () => void;
 }
 
 export default function JobCard({
@@ -83,7 +84,8 @@ export default function JobCard({
   onAssign,
   onClick,
   onViewCompliance,
-  onGenerateReport
+  onGenerateReport,
+  onPreviewReport
 }: JobCardProps) {
   const statusConfig: Record<string, { label: string; className: string }> = {
     pending: { label: "Pending", className: "bg-muted text-muted-foreground" },
@@ -326,6 +328,20 @@ export default function JobCard({
           Continue Inspection
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
+        {onPreviewReport && (status === 'done' || status === 'failed') && (
+          <Button 
+            variant="outline"
+            className="flex-1 min-h-[48px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPreviewReport();
+            }}
+            data-testid={`button-preview-report-${id}`}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Preview Report
+          </Button>
+        )}
         {onGenerateReport && (
           <Button 
             variant="outline"

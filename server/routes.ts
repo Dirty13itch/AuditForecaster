@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { format } from "date-fns";
 import { storage } from "./storage";
 import { googleCalendarService, getUncachableGoogleCalendarClient, allDayDateToUTC } from "./googleCalendar";
 import { setupAuth, isAuthenticated, setupForceAdminEndpoint, getOidcConfig, getRegisteredStrategies } from "./auth";
@@ -30,6 +31,7 @@ import {
   constructionManagerCities,
   developmentConstructionManagers,
   developments,
+  lots,
   insertDevelopmentSchema,
   updateDevelopmentSchema,
   insertLotSchema,
@@ -106,13 +108,14 @@ import { processCalendarEvents, type CalendarEvent } from './calendarImportServi
 import { scheduledExportService } from './scheduledExports';
 import { calculateACH50, checkMinnesotaCompliance } from './blowerDoorService';
 import { validateJobUpdate, validateJobCreation } from './jobService';
+import { calculateDayTravelTime } from '@shared/travelTime';
 import { z, ZodError } from "zod";
 import { serverLogger } from "./logger";
 import { validateAuthConfig, getRecentAuthErrors, sanitizeEnvironmentForClient, type ValidationReport } from "./auth/validation";
 import { getConfig, isDevelopment } from "./config";
 import { getTroubleshootingGuide, getAllTroubleshootingGuides, suggestTroubleshootingGuide } from "./auth/troubleshooting";
 import { db } from "./db";
-import { sql, eq, and, or, ilike, count, desc } from "drizzle-orm";
+import { sql, eq, and, or, ilike, count, desc, gte, lt, lte, asc } from "drizzle-orm";
 import { exportService, type ExportOptions } from "./exportService";
 import { createReadStream } from "fs";
 import { unlink } from "fs/promises";
@@ -3059,6 +3062,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Field Day Experience - Mobile-first daily workload view
+  app.get("/api/field-day", isAuthenticated, async (req: any, res) => {
+    try {
+      const userRole = (req.user.role as UserRole) || 'inspector';
+      const userId = req.user.id;
+      
+      // Parse query params with defaults
+      const fieldDayQuerySchema = z.object({
+        date: z.string().optional(),
+        view: z.enum(['today', 'week']).optional().default('today'),
+      });
+      
+      const { date: dateParam, view } = fieldDayQuerySchema.parse(req.query);
+      const targetDate = dateParam || format(new Date(), 'yyyy-MM-dd');
+      
+      serverLogger.info('[FieldDay] GET /api/field-day request', { userRole, userId, date: targetDate, view });
+      
+      // Parse the target date for querying
+      const targetDateObj = new Date(targetDate + 'T00:00:00.000Z');
+      const nextDateObj = new Date(targetDateObj);
+      nextDateObj.setDate(nextDateObj.getDate() + 1);
+      
+      let myJobs: any[] = [];
+      let allJobs: any[] = [];
+      
+      // Inspectors only see their assigned jobs
+      if (userRole === 'inspector') {
+        myJobs = await db
+          .select()
+          .from(jobs)
+          .where(
+            and(
+              eq(jobs.assignedTo, userId),
+              gte(jobs.scheduledDate, targetDateObj),
+              lt(jobs.scheduledDate, nextDateObj)
+            )
+          )
+          .orderBy(asc(jobs.scheduledDate));
+      } else if (userRole === 'admin') {
+        // Admins see both their own jobs and all jobs
+        myJobs = await db
+          .select()
+          .from(jobs)
+          .where(
+            and(
+              eq(jobs.assignedTo, userId),
+              gte(jobs.scheduledDate, targetDateObj),
+              lt(jobs.scheduledDate, nextDateObj)
+            )
+          )
+          .orderBy(asc(jobs.scheduledDate));
+        
+        allJobs = await db
+          .select()
+          .from(jobs)
+          .where(
+            and(
+              gte(jobs.scheduledDate, targetDateObj),
+              lt(jobs.scheduledDate, nextDateObj)
+            )
+          )
+          .orderBy(asc(jobs.scheduledDate));
+      }
+      
+      // Calculate summary stats
+      const allJobsList = userRole === 'admin' ? allJobs : myJobs;
+      const summary = {
+        total: allJobsList.length,
+        scheduled: allJobsList.filter((job: any) => job.status === 'scheduled').length,
+        done: allJobsList.filter((job: any) => job.status === 'done').length,
+        failed: allJobsList.filter((job: any) => job.status === 'failed').length,
+        reschedule: allJobsList.filter((job: any) => job.status === 'reschedule').length,
+      };
+      
+      serverLogger.info('[FieldDay] Returning field day data', { 
+        myJobsCount: myJobs.length, 
+        allJobsCount: userRole === 'admin' ? allJobs.length : 0,
+        summary 
+      });
+      
+      const response: any = {
+        myJobs,
+        date: targetDate,
+        summary,
+      };
+      
+      if (userRole === 'admin') {
+        response.allJobs = allJobs;
+      }
+      
+      res.json(response);
+    } catch (error) {
+      serverLogger.error('[FieldDay] GET /api/field-day error', { error, userRole: req.user?.role, userId: req.user?.id });
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch field day data');
+      res.status(status).json({ message });
+    }
+  });
+
   app.post("/api/jobs", isAuthenticated, requirePermission('create_job'), csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertJobSchema.parse(req.body);
@@ -3357,11 +3462,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(existingJob);
       }
 
-      const isCompletingNow = newStatus === 'done' && existingJob.status !== 'done';
-
       const updateData: any = { status: newStatus };
-      if (isCompletingNow && !existingJob.completedDate) {
+      
+      // Set completedDate for done or failed status
+      if ((newStatus === 'done' || newStatus === 'failed') && !existingJob.completedDate) {
         updateData.completedDate = new Date();
+      }
+      
+      // Clear scheduledDate for reschedule status (needs rescheduling)
+      if (newStatus === 'reschedule') {
+        updateData.scheduledDate = null;
       }
 
       const job = await storage.updateJob(req.params.id, updateData);
@@ -4750,6 +4860,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
+
+  // GET /api/inspector-schedule/travel-analysis - Get travel time analysis for inspector's jobs
+  app.get('/api/inspector-schedule/travel-analysis', isAuthenticated, async (req: any, res) => {
+    try {
+      const { date, inspectorId } = req.query;
+      
+      // Default to current user if not specified
+      const targetInspectorId = inspectorId || req.user?.id;
+      
+      // Security: Inspectors can only view their own schedule
+      if (req.user?.role === 'inspector' && targetInspectorId !== req.user?.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      
+      const targetDate = date ? new Date(date as string) : new Date();
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      // Get jobs for this inspector on this date, ordered by scheduledTime or created order
+      const jobsData = await db
+        .select({
+          id: jobs.id,
+          address: lots.address,
+          city: developments.city,
+          state: developments.state,
+          scheduledTime: jobs.scheduledTime,
+          scheduledDate: jobs.scheduledDate,
+          createdAt: jobs.createdAt,
+          status: jobs.status,
+        })
+        .from(jobs)
+        .leftJoin(lots, eq(jobs.lotId, lots.id))
+        .leftJoin(developments, eq(lots.developmentId, developments.id))
+        .where(
+          and(
+            eq(jobs.assignedTo, targetInspectorId),
+            gte(jobs.scheduledDate, startOfDay),
+            lte(jobs.scheduledDate, endOfDay)
+          )
+        )
+        .orderBy(asc(jobs.scheduledTime));
+      
+      // Calculate travel times
+      const travelAnalysis = calculateDayTravelTime(
+        jobsData.map(j => ({ 
+          address: j.address || 'Unknown', 
+          city: j.city || '', 
+          state: j.state || '' 
+        }))
+      );
+      
+      res.json({
+        date: targetDate.toISOString(),
+        inspectorId: targetInspectorId,
+        jobCount: jobsData.length,
+        ...travelAnalysis,
+      });
+    } catch (error) {
+      serverLogger.error('Error calculating travel times:', error);
+      res.status(500).json({ message: 'Failed to calculate travel times' });
+    }
+  });
 
   // Convert Google event to job
   app.post('/api/google-events/:id/convert', isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
@@ -7713,6 +7887,277 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logError('Reports/PreviewPDF', error);
       res.status(500).json({ message: "Failed to generate preview PDF" });
+    }
+  });
+
+  // Report Preview API - Get job data and template for PDF preview
+  app.get("/api/jobs/:jobId/report-preview", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { templateId } = req.query;
+      
+      // Fetch job with all relationships
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Security check: user must have access to this job
+      if (job.createdBy !== userId && job.assignedTo !== userId) {
+        const user = await storage.getUser(userId);
+        if (user?.role !== 'admin') {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Fetch all related data
+      const builder = job.builderId ? await storage.getBuilder(job.builderId) : null;
+      const plan = job.planId ? await storage.getPlan(job.planId) : null;
+      const lot = job.lotId ? await storage.getLot(job.lotId) : null;
+      const development = lot?.developmentId ? await storage.getDevelopment(lot.developmentId) : null;
+      const inspector = job.assignedTo ? await storage.getUser(job.assignedTo) : null;
+      const blowerDoorTest = await storage.getLatestBlowerDoorTest(job.id);
+      const ductLeakageTest = await storage.getLatestDuctLeakageTest(job.id);
+      
+      // Get all active templates for this job type
+      const allTemplates = await storage.getReportTemplates();
+      const availableTemplates = allTemplates.filter(t => 
+        t.isActive && t.status === 'published'
+      );
+      
+      // Get selected template or find default for job type
+      let selectedTemplate;
+      if (templateId && typeof templateId === 'string') {
+        selectedTemplate = await storage.getReportTemplate(templateId);
+      } else {
+        // Find default template matching job type category
+        selectedTemplate = availableTemplates.find(t => 
+          t.isDefault && (
+            (job.inspectionType.includes('rough') && t.category === 'pre_drywall') ||
+            (job.inspectionType.includes('final') && t.category === 'final') ||
+            (job.inspectionType.includes('blower') && t.category === 'blower_door') ||
+            (job.inspectionType.includes('duct') && t.category === 'duct_testing')
+          )
+        ) || availableTemplates[0]; // Fallback to first available template
+      }
+      
+      // Populate template data with job data
+      const populatedData = {
+        address: job.address,
+        builderName: builder?.companyName || builder?.name || 'N/A',
+        developmentName: development?.name || 'N/A',
+        planName: plan?.planName || 'N/A',
+        lotNumber: lot?.lotNumber || 'N/A',
+        floorArea: Number(job.floorArea || plan?.floorArea || 0),
+        volume: Number(job.houseVolume || plan?.houseVolume || 0),
+        surfaceArea: Number(job.surfaceArea || plan?.surfaceArea || 0),
+        stories: Number(job.stories || plan?.stories || 1),
+        inspectorName: inspector ? `${inspector.firstName} ${inspector.lastName}` : 'N/A',
+        scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), 'MM/dd/yyyy') : 'N/A',
+        completedDate: job.completedDate ? format(new Date(job.completedDate), 'MM/dd/yyyy') : 'N/A',
+        inspectionType: job.inspectionType,
+        status: job.status,
+        // Test results
+        blowerDoorResults: blowerDoorTest ? {
+          cfm50: blowerDoorTest.cfm50,
+          ach50: blowerDoorTest.ach50,
+          testStandard: blowerDoorTest.testStandard,
+          passedCompliance: blowerDoorTest.passedCompliance,
+        } : null,
+        ductLeakageResults: ductLeakageTest ? {
+          totalLeakage: ductLeakageTest.totalLeakage,
+          leakageToOutside: ductLeakageTest.leakageToOutside,
+          testStandard: ductLeakageTest.testStandard,
+          passedCompliance: ductLeakageTest.passedCompliance,
+        } : null,
+      };
+
+      res.json({
+        job,
+        template: selectedTemplate,
+        populatedData,
+        availableTemplates,
+      });
+    } catch (error) {
+      logError('Reports/ReportPreview', error, { jobId: req.params.jobId });
+      res.status(500).json({ message: "Failed to generate report preview" });
+    }
+  });
+
+  // Construction Manager Selection API - Get CMs for job's development
+  app.get("/api/jobs/:jobId/construction-managers", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      // Fetch job
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Security check: user must have access to this job
+      if (job.createdBy !== userId && job.assignedTo !== userId) {
+        const user = await storage.getUser(userId);
+        if (user?.role !== 'admin') {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Get job's development through lot
+      const lot = job.lotId ? await storage.getLot(job.lotId) : null;
+      const development = lot?.developmentId ? await storage.getDevelopment(lot.developmentId) : null;
+      
+      if (!development) {
+        return res.json({
+          constructionManagers: [],
+          development: null,
+          recommendedCM: null,
+        });
+      }
+
+      // Query development_construction_managers join table
+      const devCMs = await db
+        .select({
+          cm: constructionManagers,
+          isPrimary: developmentConstructionManagers.isPrimary,
+        })
+        .from(developmentConstructionManagers)
+        .innerJoin(
+          constructionManagers,
+          eq(developmentConstructionManagers.constructionManagerId, constructionManagers.id)
+        )
+        .where(
+          and(
+            eq(developmentConstructionManagers.developmentId, development.id),
+            eq(constructionManagers.isActive, true)
+          )
+        );
+
+      const cms = devCMs.map(({ cm, isPrimary }) => ({
+        ...cm,
+        isPrimary: isPrimary || false,
+      }));
+
+      const recommendedCM = cms.find(cm => cm.isPrimary) || null;
+
+      res.json({
+        constructionManagers: cms,
+        development,
+        recommendedCM,
+      });
+    } catch (error) {
+      logError('Reports/ConstructionManagers', error, { jobId: req.params.jobId });
+      res.status(500).json({ message: "Failed to fetch construction managers" });
+    }
+  });
+
+  // Report Scheduling/Sending API - Send or schedule report to CMs
+  app.post("/api/jobs/:jobId/schedule-report", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await storage.getUser(userId);
+      
+      // Security: requireRole(['admin', 'inspector'])
+      if (user?.role !== 'admin' && user?.role !== 'inspector') {
+        return res.status(403).json({ message: "Only admins and inspectors can send reports" });
+      }
+
+      const { templateId, constructionManagerIds, sendNow, scheduledFor, notes } = req.body;
+      
+      if (!constructionManagerIds || constructionManagerIds.length === 0) {
+        return res.status(400).json({ message: "Please select at least one construction manager" });
+      }
+
+      // Validate job
+      const job = await storage.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Validate job is complete
+      if (job.status !== 'done' && job.status !== 'failed') {
+        return res.status(400).json({ 
+          message: "Reports can only be sent for completed jobs (done or failed status)" 
+        });
+      }
+
+      // Get construction managers
+      const cms = await Promise.all(
+        constructionManagerIds.map(id => 
+          db.select().from(constructionManagers).where(eq(constructionManagers.id, id)).limit(1)
+        )
+      );
+      const validCMs = cms.flat().filter(cm => cm);
+      
+      if (validCMs.length === 0) {
+        return res.status(400).json({ message: "No valid construction managers found" });
+      }
+
+      if (sendNow) {
+        // Generate and send PDF immediately
+        // For now, stub with toast notification as per requirements
+        const emailAddresses = validCMs.map(cm => cm.email);
+        
+        // Update job.lastReportSentAt
+        await db
+          .update(jobs)
+          .set({ lastReportSentAt: new Date() })
+          .where(eq(jobs.id, job.id));
+
+        // Create audit log
+        await createAuditLog(db, {
+          userId,
+          action: 'report_sent',
+          resourceType: 'job',
+          resourceId: job.id,
+          details: {
+            templateId,
+            sentTo: emailAddresses,
+            notes,
+          },
+        });
+
+        serverLogger.info('[Reports/SendReport] Report sent', {
+          jobId: job.id,
+          sentTo: emailAddresses,
+          templateId,
+        });
+
+        res.json({
+          success: true,
+          reportId: job.id,
+          sentTo: emailAddresses,
+          message: `Report would be sent to ${emailAddresses.join(', ')}`,
+        });
+      } else {
+        // Schedule for later (stub for now)
+        const emailAddresses = validCMs.map(cm => cm.email);
+        
+        // Create audit log
+        await createAuditLog(db, {
+          userId,
+          action: 'report_scheduled',
+          resourceType: 'job',
+          resourceId: job.id,
+          details: {
+            templateId,
+            scheduledFor,
+            sentTo: emailAddresses,
+            notes,
+          },
+        });
+
+        res.json({
+          success: true,
+          reportId: job.id,
+          sentTo: emailAddresses,
+          scheduledFor,
+          message: `Report scheduled for ${scheduledFor}`,
+        });
+      }
+    } catch (error) {
+      logError('Reports/ScheduleReport', error, { jobId: req.params.jobId });
+      res.status(500).json({ message: "Failed to schedule report" });
     }
   });
 

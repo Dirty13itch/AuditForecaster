@@ -4,7 +4,7 @@ import { Calendar as BigCalendar, dateFnsLocalizer, View, Event } from "react-bi
 import { format, parse, startOfWeek, endOfWeek, getDay, addMonths, subMonths, addWeeks, addDays, startOfMonth, endOfMonth, startOfDay, endOfDay, addHours } from "date-fns";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2, Users, Activity, TrendingUp, BarChart3, Wind, Wrench, RotateCcw, AlertTriangle, Building2, Star, FileText, Check, CheckCheck, X, RotateCw, RefreshCw } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Search, Cloud, CloudOff, AlertCircle, Loader2, Users, Activity, TrendingUp, BarChart3, Wind, Wrench, RotateCcw, AlertTriangle, Building2, Star, FileText, Check, CheckCheck, X, RotateCw, RefreshCw, ChevronDown, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ConvertGoogleEventDialog } from "@/components/ConvertGoogleEventDialog";
 import { UnassignedQueue } from "@/components/UnassignedQueue";
 import { UnassignedQueueSheet } from "@/components/UnassignedQueueSheet";
+import JobWizard from "@/components/JobWizard";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Job, ScheduleEvent, GoogleEvent, PendingCalendarEvent, User } from "@shared/schema";
@@ -108,6 +111,62 @@ interface DraggableJobCardProps {
   job: Job;
 }
 
+interface MultiSelectProps {
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+  'data-testid'?: string;
+}
+
+function MultiSelect({ options, selected, onChange, placeholder, 'data-testid': testId }: MultiSelectProps) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="w-full justify-between min-h-12"
+          data-testid={testId}
+        >
+          <span className="truncate">
+            {selected.length === 0
+              ? placeholder
+              : `${selected.length} selected`}
+          </span>
+          <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[200px] p-0">
+        <Command>
+          <CommandInput placeholder={`Search ${placeholder.toLowerCase()}...`} />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  onSelect={() => {
+                    const newSelected = selected.includes(option.value)
+                      ? selected.filter((v) => v !== option.value)
+                      : [...selected, option.value];
+                    onChange(newSelected);
+                  }}
+                >
+                  <Checkbox
+                    checked={selected.includes(option.value)}
+                    className="mr-2"
+                  />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function DraggableJobCard({ job }: DraggableJobCardProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: JOB_DRAG_TYPE,
@@ -167,6 +226,13 @@ export default function Schedule() {
   const [view, setView] = useState<View>('month');
   const [date, setDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Multi-select filter state
+  const [selectedInspectors, setSelectedInspectors] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedBuilders, setSelectedBuilders] = useState<string[]>([]);
+  const [selectedDevelopments, setSelectedDevelopments] = useState<string[]>([]);
+  
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
@@ -179,9 +245,51 @@ export default function Schedule() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline'>('idle');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncStatusTimeoutId, setSyncStatusTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   // Configurable sync interval (default: 10 minutes)
   const SYNC_INTERVAL_MS = Number(import.meta.env.VITE_SYNC_INTERVAL_MS) || 10 * 60 * 1000;
+
+  // Load saved view preference from localStorage on mount
+  useEffect(() => {
+    const savedView = localStorage.getItem('schedule-preferred-view');
+    if (savedView && ['day', 'week', 'month', 'agenda'].includes(savedView)) {
+      setView(savedView as View);
+    }
+  }, []);
+
+  // Load saved filters from localStorage on mount
+  useEffect(() => {
+    const savedFilters = localStorage.getItem('schedule-filters');
+    if (savedFilters) {
+      try {
+        const filters = JSON.parse(savedFilters);
+        if (filters.inspectors) setSelectedInspectors(filters.inspectors);
+        if (filters.statuses) setSelectedStatuses(filters.statuses);
+        if (filters.builders) setSelectedBuilders(filters.builders);
+        if (filters.developments) setSelectedDevelopments(filters.developments);
+      } catch (error) {
+        console.error('Failed to load saved filters:', error);
+      }
+    }
+  }, []);
+
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    const filters = {
+      inspectors: selectedInspectors,
+      statuses: selectedStatuses,
+      builders: selectedBuilders,
+      developments: selectedDevelopments,
+    };
+    localStorage.setItem('schedule-filters', JSON.stringify(filters));
+  }, [selectedInspectors, selectedStatuses, selectedBuilders, selectedDevelopments]);
+
+  // Handle view change with localStorage persistence
+  const handleViewChange = useCallback((newView: View) => {
+    setView(newView);
+    localStorage.setItem('schedule-preferred-view', newView);
+  }, []);
 
   // View-aware date range helper - returns correct boundaries based on view
   const getViewDateRange = useMemo(() => (viewType: string, currentDate: Date) => {
@@ -216,14 +324,20 @@ export default function Schedule() {
     [getViewDateRange, view, date]
   );
   
-  // Auto-switch view based on screen size
+  // Auto-switch view based on screen size (respects user preference)
   useEffect(() => {
-    if (isMobile && view !== 'agenda') {
-      setView('agenda');
-    } else if (!isMobile && view === 'agenda') {
-      setView('month');
+    const savedView = localStorage.getItem('schedule-preferred-view');
+    
+    // On mobile, default to agenda if no preference is saved
+    // But allow user to manually override to other views
+    if (isMobile && !savedView && view !== 'agenda') {
+      handleViewChange('agenda');
+    } 
+    // On desktop, default to month if currently on agenda and no preference saved
+    else if (!isMobile && !savedView && view === 'agenda') {
+      handleViewChange('month');
     }
-  }, [isMobile, view]);
+  }, [isMobile, view, handleViewChange]);
 
   const { data: jobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
     queryKey: ['/api/jobs'],
@@ -327,6 +441,26 @@ export default function Schedule() {
   const { data: inspectors = [] } = useQuery<User[]>({
     queryKey: ['/api/users/inspectors'],
     enabled: isAdmin,
+  });
+
+  // Fetch all users (for inspector filtering)
+  const { data: users = [] } = useQuery<User[]>({
+    queryKey: ['/api/users'],
+  });
+
+  // Fetch builders for filter options
+  const { data: builders = [] } = useQuery<any[]>({
+    queryKey: ['/api/builders'],
+  });
+
+  // Fetch developments for filter options
+  const { data: developments = [] } = useQuery<any[]>({
+    queryKey: ['/api/developments'],
+  });
+
+  // Fetch lots to map jobs to developments
+  const { data: lots = [] } = useQuery<any[]>({
+    queryKey: ['/api/lots'],
   });
 
   const createEventMutation = useMutation({
@@ -694,6 +828,74 @@ export default function Schedule() {
     }
   };
 
+  // Create lookup map for lots to developments
+  const lotToDevelopmentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    lots.forEach((lot: any) => {
+      if (lot.id && lot.developmentId) {
+        map.set(lot.id, lot.developmentId);
+      }
+    });
+    return map;
+  }, [lots]);
+
+  // Filter options
+  const inspectorOptions = useMemo(() => {
+    const inspectorUsers = users.filter(u => u.role === 'inspector');
+    return inspectorUsers.map(u => ({
+      value: u.id,
+      label: `${u.firstName} ${u.lastName}`,
+    }));
+  }, [users]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'scheduled', label: 'Scheduled' },
+    { value: 'done', label: 'Done' },
+    { value: 'failed', label: 'Failed' },
+    { value: 'reschedule', label: 'Reschedule' },
+  ], []);
+
+  const builderOptions = useMemo(() => {
+    const uniqueBuilders = new Map();
+    jobs.forEach(job => {
+      if (job.builderId) {
+        const builder = builders.find((b: any) => b.id === job.builderId);
+        if (builder && !uniqueBuilders.has(builder.id)) {
+          uniqueBuilders.set(builder.id, {
+            value: builder.id,
+            label: builder.name || builder.companyName,
+          });
+        }
+      }
+    });
+    return Array.from(uniqueBuilders.values());
+  }, [jobs, builders]);
+
+  const developmentOptions = useMemo(() => {
+    const uniqueDevelopments = new Map();
+    jobs.forEach(job => {
+      if (job.lotId) {
+        const developmentId = lotToDevelopmentMap.get(job.lotId);
+        if (developmentId) {
+          const development = developments.find((d: any) => d.id === developmentId);
+          if (development && !uniqueDevelopments.has(development.id)) {
+            uniqueDevelopments.set(development.id, {
+              value: development.id,
+              label: development.name,
+            });
+          }
+        }
+      }
+    });
+    return Array.from(uniqueDevelopments.values());
+  }, [jobs, developments, lotToDevelopmentMap]);
+
+  // Calculate total active filters
+  const totalActiveFilters = useMemo(() => {
+    return selectedInspectors.length + selectedStatuses.length + 
+           selectedBuilders.length + selectedDevelopments.length;
+  }, [selectedInspectors, selectedStatuses, selectedBuilders, selectedDevelopments]);
+
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     const jobMap = new Map(jobs.map(j => [j.id, j]));
     
@@ -761,13 +963,13 @@ export default function Schedule() {
       }));
     
     // Combine all events
-    const allEvents = [...appEvents, ...jobOnlyEvents, ...googleEvents];
+    let allEvents = [...appEvents, ...jobOnlyEvents, ...googleEvents];
     
-    // Filter based on user role
+    // Filter based on user role first
     // Admin sees ALL events (all inspectors + Building Knowledge + unassigned)
     // Non-admin inspector users ONLY see events assigned to them
     if (!isAdmin && user?.id) {
-      return allEvents.filter(event => {
+      allEvents = allEvents.filter(event => {
         // Google-only events are visible to all users
         if (event.resource.eventType === 'google') {
           return true;
@@ -782,8 +984,45 @@ export default function Schedule() {
       });
     }
     
-    return allEvents;
-  }, [scheduleEvents, jobs, googleOnlyEvents, isAdmin, user?.id]);
+    // Apply multi-select filters
+    let filteredEvents = allEvents;
+
+    // Filter by inspector
+    if (selectedInspectors.length > 0) {
+      filteredEvents = filteredEvents.filter(event => {
+        const job = event.resource.job;
+        return job && selectedInspectors.includes(job.assignedTo || '');
+      });
+    }
+
+    // Filter by status
+    if (selectedStatuses.length > 0) {
+      filteredEvents = filteredEvents.filter(event => {
+        const status = event.resource.status || event.resource.job?.status;
+        return status && selectedStatuses.includes(status);
+      });
+    }
+
+    // Filter by builder
+    if (selectedBuilders.length > 0) {
+      filteredEvents = filteredEvents.filter(event => {
+        const job = event.resource.job;
+        return job && job.builderId && selectedBuilders.includes(job.builderId);
+      });
+    }
+
+    // Filter by development
+    if (selectedDevelopments.length > 0) {
+      filteredEvents = filteredEvents.filter(event => {
+        const job = event.resource.job;
+        if (!job || !job.lotId) return false;
+        const developmentId = lotToDevelopmentMap.get(job.lotId);
+        return developmentId && selectedDevelopments.includes(developmentId);
+      });
+    }
+    
+    return filteredEvents;
+  }, [scheduleEvents, jobs, googleOnlyEvents, isAdmin, user?.id, selectedInspectors, selectedStatuses, selectedBuilders, selectedDevelopments, lotToDevelopmentMap]);
 
   const unscheduledJobs = useMemo(() => {
     const scheduledJobIds = new Set(scheduleEvents.map(e => e.jobId));
@@ -1330,6 +1569,140 @@ export default function Schedule() {
             </div>
           )}
 
+          {/* Filter Panel */}
+          <div className="border-b bg-background p-4">
+            <Card data-testid="card-filters">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    Filters
+                    {totalActiveFilters > 0 && (
+                      <Badge variant="default" className="ml-2">
+                        {totalActiveFilters}
+                      </Badge>
+                    )}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedInspectors([]);
+                      setSelectedStatuses([]);
+                      setSelectedBuilders([]);
+                      setSelectedDevelopments([]);
+                    }}
+                    data-testid="button-clear-filters"
+                  >
+                    Clear All
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Inspector Filter */}
+                <div>
+                  <Label>Inspector</Label>
+                  <MultiSelect
+                    options={inspectorOptions}
+                    selected={selectedInspectors}
+                    onChange={setSelectedInspectors}
+                    placeholder="All Inspectors"
+                    data-testid="select-filter-inspector"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <Label>Status</Label>
+                  <MultiSelect
+                    options={statusOptions}
+                    selected={selectedStatuses}
+                    onChange={setSelectedStatuses}
+                    placeholder="All Statuses"
+                    data-testid="select-filter-status"
+                  />
+                </div>
+
+                {/* Builder Filter */}
+                <div>
+                  <Label>Builder</Label>
+                  <MultiSelect
+                    options={builderOptions}
+                    selected={selectedBuilders}
+                    onChange={setSelectedBuilders}
+                    placeholder="All Builders"
+                    data-testid="select-filter-builder"
+                  />
+                </div>
+
+                {/* Development Filter */}
+                <div>
+                  <Label>Development</Label>
+                  <MultiSelect
+                    options={developmentOptions}
+                    selected={selectedDevelopments}
+                    onChange={setSelectedDevelopments}
+                    placeholder="All Developments"
+                    data-testid="select-filter-development"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Active Filter Badges */}
+            {totalActiveFilters > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2" data-testid="container-active-filters">
+                {selectedInspectors.map(id => {
+                  const inspector = users.find(u => u.id === id);
+                  return inspector ? (
+                    <Badge key={id} variant="secondary" className="flex items-center gap-1">
+                      {inspector.firstName} {inspector.lastName}
+                      <X 
+                        className="ml-1 h-3 w-3 cursor-pointer hover-elevate" 
+                        onClick={() => setSelectedInspectors(prev => prev.filter(v => v !== id))}
+                      />
+                    </Badge>
+                  ) : null;
+                })}
+                {selectedStatuses.map(status => {
+                  const statusOption = statusOptions.find(s => s.value === status);
+                  return statusOption ? (
+                    <Badge key={status} variant="secondary" className="flex items-center gap-1">
+                      Status: {statusOption.label}
+                      <X 
+                        className="ml-1 h-3 w-3 cursor-pointer hover-elevate" 
+                        onClick={() => setSelectedStatuses(prev => prev.filter(v => v !== status))}
+                      />
+                    </Badge>
+                  ) : null;
+                })}
+                {selectedBuilders.map(builderId => {
+                  const builder = builders.find((b: any) => b.id === builderId);
+                  return builder ? (
+                    <Badge key={builderId} variant="secondary" className="flex items-center gap-1">
+                      {builder.name || builder.companyName}
+                      <X 
+                        className="ml-1 h-3 w-3 cursor-pointer hover-elevate" 
+                        onClick={() => setSelectedBuilders(prev => prev.filter(v => v !== builderId))}
+                      />
+                    </Badge>
+                  ) : null;
+                })}
+                {selectedDevelopments.map(devId => {
+                  const development = developments.find((d: any) => d.id === devId);
+                  return development ? (
+                    <Badge key={devId} variant="secondary" className="flex items-center gap-1">
+                      {development.name}
+                      <X 
+                        className="ml-1 h-3 w-3 cursor-pointer hover-elevate" 
+                        onClick={() => setSelectedDevelopments(prev => prev.filter(v => v !== devId))}
+                      />
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="border-b bg-background p-4">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -1371,6 +1744,18 @@ export default function Schedule() {
                   </span>
                 )}
                 
+                {!authLoading && (user?.role === 'admin' || user?.role === 'inspector') && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setWizardOpen(true)}
+                    data-testid="button-create-job-wizard"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Job (Wizard)
+                  </Button>
+                )}
+                
                 {!authLoading && isAdmin === true && (
                   <Button
                     variant="outline"
@@ -1409,7 +1794,7 @@ export default function Schedule() {
                   variant="outline"
                   size="icon"
                   onClick={() => handleNavigate('PREV')}
-                  data-testid="button-prev"
+                  data-testid="button-prev-period"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -1417,7 +1802,7 @@ export default function Schedule() {
                   variant="outline"
                   size="icon"
                   onClick={() => handleNavigate('NEXT')}
-                  data-testid="button-next"
+                  data-testid="button-next-period"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -1426,36 +1811,44 @@ export default function Schedule() {
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" data-testid="view-selector">
                 <Button
-                  variant={view === 'month' ? 'default' : 'outline'}
+                  variant={view === 'day' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setView('month')}
-                  data-testid="button-view-month"
+                  onClick={() => handleViewChange('day')}
+                  data-testid="button-view-today"
                 >
-                  Month
+                  Today
                 </Button>
                 <Button
                   variant={view === 'week' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setView('week')}
+                  onClick={() => handleViewChange('week')}
                   data-testid="button-view-week"
                 >
                   Week
                 </Button>
                 <Button
-                  variant={view === 'day' ? 'default' : 'outline'}
+                  variant={view === 'month' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setView('day')}
-                  data-testid="button-view-day"
+                  onClick={() => handleViewChange('month')}
+                  data-testid="button-view-month"
                 >
-                  Day
+                  Month
+                </Button>
+                <Button
+                  variant={view === 'agenda' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleViewChange('agenda')}
+                  data-testid="button-view-agenda"
+                >
+                  Agenda
                 </Button>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 p-4">
+          <div className="flex-1 p-4" data-testid="calendar-container">
             <CalendarWrapper>
               <BigCalendar
                 localizer={localizer}
@@ -1463,7 +1856,7 @@ export default function Schedule() {
                 startAccessor="start"
                 endAccessor="end"
                 view={view}
-                onView={setView}
+                onView={handleViewChange}
                 date={date}
                 onNavigate={setDate}
                 onSelectEvent={handleSelectEvent}
@@ -1712,6 +2105,17 @@ export default function Schedule() {
           setSelectedGoogleEvent(null);
           // Trigger a sync to refresh events
           handleGoogleCalendarSync();
+        }}
+      />
+
+      {/* Job Creation Wizard */}
+      <JobWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onSuccess={() => {
+          // Refresh schedule events and jobs after successful creation
+          queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/schedule-events'] });
         }}
       />
     </DndProvider>

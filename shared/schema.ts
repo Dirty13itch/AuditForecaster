@@ -488,6 +488,7 @@ export const jobs = pgTable("jobs", {
   complianceStatus: text("compliance_status"),
   complianceFlags: jsonb("compliance_flags"),
   lastComplianceCheck: timestamp("last_compliance_check"),
+  lastReportSentAt: timestamp("last_report_sent_at"), // When report was last sent to CM
   sourceGoogleEventId: varchar("source_google_event_id"),
   googleEventId: varchar("google_event_id").unique(),
   originalScheduledDate: timestamp("original_scheduled_date"),

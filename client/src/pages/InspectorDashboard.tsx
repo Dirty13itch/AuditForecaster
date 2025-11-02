@@ -18,6 +18,7 @@ import {
   ChevronRight,
   AlertCircle,
 } from "lucide-react";
+import { TravelTimeCard } from "@/components/TravelTimeCard";
 import { format, parseISO, startOfDay } from "date-fns";
 
 interface Job {
@@ -394,6 +395,11 @@ export default function InspectorDashboard() {
           </div>
         )}
       </section>
+
+      {/* Travel Time Analysis */}
+      {user?.id && todayTotal > 1 && (
+        <TravelTimeCard date={new Date()} inspectorId={user.id} />
+      )}
 
       {/* Today's Jobs */}
       <section data-testid="section-today-jobs" className="space-y-4">

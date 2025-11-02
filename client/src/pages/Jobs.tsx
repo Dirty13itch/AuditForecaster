@@ -28,6 +28,7 @@ import JobCard from "@/components/JobCard";
 import JobDialog from "@/components/JobDialog";
 import ExportDialog from "@/components/ExportDialog";
 import { QuickReportDialog } from "@/components/QuickReportDialog";
+import { ReportPreview } from "@/components/ReportPreview";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
 import { indexedDB } from "@/utils/indexedDB";
 import { syncQueue } from "@/utils/syncQueue";
@@ -202,6 +203,7 @@ function JobsContent() {
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [jobToEdit, setJobToEdit] = useState<Job | null>(null);
   const [selectedJobForReport, setSelectedJobForReport] = useState<Job | null>(null);
+  const [reportPreviewJobId, setReportPreviewJobId] = useState<string | null>(null);
   
   // Pagination state for different sections
   const todaysPagination = usePagination('today', 25);
@@ -799,6 +801,7 @@ function JobsContent() {
                         onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                         onClick={() => navigate(`/inspection/${job.id}`)}
                         onGenerateReport={() => setSelectedJobForReport(job)}
+                        onPreviewReport={() => setReportPreviewJobId(job.id)}
                       />
                     </div>
                   )}
@@ -877,6 +880,7 @@ function JobsContent() {
                         onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                         onClick={() => navigate(`/inspection/${job.id}`)}
                         onGenerateReport={() => setSelectedJobForReport(job)}
+                        onPreviewReport={() => setReportPreviewJobId(job.id)}
                       />
                     </div>
                   )}
@@ -959,6 +963,7 @@ function JobsContent() {
                         onAssign={(inspectorId) => assignJobMutation.mutate({ jobId: job.id, inspectorId })}
                         onClick={() => navigate(`/inspection/${job.id}`)}
                         onGenerateReport={() => setSelectedJobForReport(job)}
+                        onPreviewReport={() => setReportPreviewJobId(job.id)}
                       />
                     </div>
                   )}
@@ -1030,6 +1035,15 @@ function JobsContent() {
           open={!!selectedJobForReport}
           onOpenChange={(open) => !open && setSelectedJobForReport(null)}
           job={selectedJobForReport}
+        />
+      )}
+
+      {/* Report Preview Dialog */}
+      {reportPreviewJobId && (
+        <ReportPreview
+          jobId={reportPreviewJobId}
+          open={!!reportPreviewJobId}
+          onOpenChange={(open) => !open && setReportPreviewJobId(null)}
         />
       )}
     </div>

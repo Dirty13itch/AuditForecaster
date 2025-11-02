@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { generateJobName } from "@shared/jobNameGenerator";
 import { insertJobSchema, type Job, type Builder, type Plan, type Development, type Lot, type PlanOptionalFeature } from "@shared/schema";
 import { INSPECTION_TYPE_OPTIONS, getDefaultPricing, getInspectionTypeLabel } from "@shared/inspectionTypes";
+import { ReportPreview } from "./ReportPreview";
 
 const jobFormSchema = insertJobSchema.pick({
   name: true,
@@ -72,6 +73,7 @@ export default function JobDialog({
   const [selectedDevelopmentId, setSelectedDevelopmentId] = useState<string>("");
   const [manualOverride, setManualOverride] = useState(false);
   const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([]);
+  const [reportPreviewJobId, setReportPreviewJobId] = useState<string | null>(null);
   const { user } = useAuth();
 
   const form = useForm<JobFormValues>({
@@ -968,6 +970,18 @@ export default function JobDialog({
             />
 
             <DialogFooter>
+              {job && (job.status === 'done' || job.status === 'failed') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setReportPreviewJobId(job.id)}
+                  data-testid={`button-preview-report-${job.id}`}
+                  className="mr-auto"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Preview Report
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -984,6 +998,15 @@ export default function JobDialog({
           </form>
         </Form>
       </DialogContent>
+
+      {/* Report Preview Dialog */}
+      {reportPreviewJobId && (
+        <ReportPreview
+          jobId={reportPreviewJobId}
+          open={!!reportPreviewJobId}
+          onOpenChange={(open) => !open && setReportPreviewJobId(null)}
+        />
+      )}
     </Dialog>
   );
 }

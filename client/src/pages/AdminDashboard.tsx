@@ -20,6 +20,7 @@ import {
   RefreshCw,
   X
 } from "lucide-react";
+import { TravelTimeCard } from "@/components/TravelTimeCard";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
@@ -97,6 +98,8 @@ interface AdminDashboardData {
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const [dismissedAlerts, setDismissedAlerts] = useState<number[]>([]);
+  const [selectedInspector, setSelectedInspector] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   
   // Fetch dashboard data with auto-refresh every 5 minutes
   const { data, isLoading, error, refetch } = useQuery<AdminDashboardData>({
@@ -365,7 +368,8 @@ export default function AdminDashboard() {
                               className={`w-24 h-12 rounded border flex items-center justify-center text-sm font-semibold transition-colors hover-elevate ${getHeatmapColor(count)}`}
                               onClick={() => {
                                 if (count > 0) {
-                                  navigate(`/work?view=day&date=${day.date}&inspector=${inspector.inspectorId}`);
+                                  setSelectedInspector(inspector.inspectorId);
+                                  setSelectedDate(new Date(day.date));
                                 }
                               }}
                               data-testid={`cell-workload-${inspector.inspectorId}-${day.date}`}
@@ -384,6 +388,30 @@ export default function AdminDashboard() {
               </div>
             </TooltipProvider>
           </div>
+
+          {/* Travel Time Analysis for Selected Inspector */}
+          {selectedInspector && selectedDate && (
+            <div className="mt-6 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">
+                  Travel Analysis for {data.workload.byInspector.find(i => i.inspectorId === selectedInspector)?.inspectorName}
+                </h3>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    setSelectedInspector(null);
+                    setSelectedDate(null);
+                  }}
+                  data-testid="button-clear-travel-selection"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              </div>
+              <TravelTimeCard date={selectedDate} inspectorId={selectedInspector} />
+            </div>
+          )}
         </CardContent>
       </Card>
 
