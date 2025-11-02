@@ -119,6 +119,7 @@ export const organizationUsers = pgTable("organization_users", {
   index("idx_organization_users_user_id").on(table.userId),
   index("idx_organization_users_org_user").on(table.organizationId, table.userId),
   index("idx_organization_users_status").on(table.status),
+  index("idx_organization_users_invited_by").on(table.invitedBy),
 ]);
 
 // Organization settings for configurable behavior
@@ -136,6 +137,7 @@ export const organizationSettings = pgTable("organization_settings", {
   index("idx_organization_settings_org_id").on(table.organizationId),
   index("idx_organization_settings_category").on(table.category),
   index("idx_organization_settings_org_category").on(table.organizationId, table.category),
+  index("idx_organization_settings_updated_by").on(table.updatedBy),
 ]);
 
 // User invitations for team management
@@ -294,6 +296,7 @@ export const constructionManagers = pgTable("construction_managers", {
   index("idx_cms_email").on(table.email),
   index("idx_cms_isActive").on(table.isActive),
   index("idx_cms_name").on(table.name),
+  index("idx_cms_created_by").on(table.createdBy),
 ]);
 
 // Construction Manager Cities - tracks which cities each CM covers
@@ -339,6 +342,9 @@ export const pendingCalendarEvents = pgTable("pending_calendar_events", {
   index("idx_pending_events_date").on(table.eventDate),
   index("idx_pending_events_builder").on(table.parsedBuilderId),
   index("idx_pending_events_status_date").on(table.status, table.eventDate),
+  index("idx_pending_events_assigned_job_id").on(table.assignedJobId),
+  index("idx_pending_events_imported_by").on(table.importedBy),
+  index("idx_pending_events_processed_by").on(table.processedBy),
 ]);
 
 export const developments = pgTable("developments", {
@@ -376,6 +382,7 @@ export const developmentConstructionManagers = pgTable("development_construction
   index("idx_dev_cms_dev_id").on(table.developmentId),
   index("idx_dev_cms_cm_id").on(table.constructionManagerId),
   index("idx_dev_cms_is_primary").on(table.isPrimary),
+  index("idx_dev_cms_assigned_by").on(table.assignedBy),
 ]);
 
 export const lots = pgTable("lots", {
@@ -540,6 +547,7 @@ export const jobs = pgTable("jobs", {
   index("idx_jobs_photo_upload_complete").on(table.photoUploadComplete),
   // Invoice billing index
   index("idx_jobs_billed_in_invoice_id").on(table.billedInInvoiceId),
+  index("idx_jobs_assigned_by").on(table.assignedBy),
 ]);
 
 // Job Type Configuration table for storing job type metadata
@@ -608,6 +616,7 @@ export const googleEvents = pgTable("google_events", {
   index("idx_google_events_calendar_event").on(table.googleCalendarId, table.googleEventId),
   index("idx_google_events_is_converted").on(table.isConverted),
   index("idx_google_events_start_time").on(table.startTime),
+  index("idx_google_events_converted_to_job_id").on(table.convertedToJobId),
 ]);
 
 // Builder abbreviation lookup table for calendar event parsing
@@ -703,6 +712,7 @@ export const assignmentHistory = pgTable("assignment_history", {
   index("idx_assignment_history_assigned_to").on(table.assignedTo),
   index("idx_assignment_history_assigned_by").on(table.assignedBy),
   index("idx_assignment_history_assigned_at").on(table.assignedAt),
+  index("idx_assignment_history_previous_assignee").on(table.previousAssignee),
 ]);
 
 // Inspector Preferences table for territory and availability preferences
@@ -762,6 +772,8 @@ export const expenses = pgTable("expenses", {
   index("idx_expenses_category_id").on(table.categoryId),
   index("idx_expenses_approval_status").on(table.approvalStatus),
   index("idx_expenses_user_approval").on(table.userId, table.approvalStatus),
+  index("idx_expenses_user_id").on(table.userId),
+  index("idx_expenses_approved_by").on(table.approvedBy),
 ]);
 
 export const mileageLogs = pgTable("mileage_logs", {
@@ -1059,6 +1071,7 @@ export const photos = pgTable("photos", {
   index("idx_photos_is_favorite").on(table.isFavorite),
   index("idx_photos_order_index").on(table.orderIndex),
   index("idx_photos_location").on(table.location),
+  index("idx_photos_uploaded_by").on(table.uploadedBy),
 ]);
 
 export const complianceRules = pgTable("compliance_rules", {
@@ -1302,6 +1315,7 @@ export const ductLeakageTests = pgTable("duct_leakage_tests", {
   index("idx_duct_leakage_tests_test_type").on(table.testType),
   index("idx_duct_leakage_tests_meets_code_tdl").on(table.meetsCodeTDL),
   index("idx_duct_leakage_tests_meets_code_dlo").on(table.meetsCodeDLO),
+  index("idx_duct_leakage_tests_created_by").on(table.createdBy),
 ]);
 
 // Ventilation Testing (ASHRAE 62.2)
@@ -1702,6 +1716,8 @@ export const qaInspectionScores = pgTable("qa_inspection_scores", {
   index("idx_qa_inspection_scores_review_status").on(table.reviewStatus),
   index("idx_qa_inspection_scores_grade").on(table.grade),
   index("idx_qa_inspection_scores_created_at").on(table.createdAt),
+  index("idx_qa_inspection_scores_report_instance_id").on(table.reportInstanceId),
+  index("idx_qa_inspection_scores_reviewed_by").on(table.reviewedBy),
 ]);
 
 export const qaChecklists = pgTable("qa_checklists", {
