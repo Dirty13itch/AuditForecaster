@@ -5729,9 +5729,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.put("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertExpenseSchema.partial().parse(req.body);
+      
+      // SECURITY: Fetch expense first to verify ownership
+      const existingExpense = await storage.getExpense(req.params.id);
+      if (!existingExpense) {
+        return res.status(404).json({ message: "Expense not found. It may have been deleted." });
+      }
+      
+      // SECURITY: Verify ownership (allow admins to manage any resource)
+      if (req.user.role !== 'admin' && existingExpense.userId !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to update this expense" });
+      }
+      
       const expense = await storage.updateExpense(req.params.id, validated);
       if (!expense) {
         return res.status(404).json({ message: "Expense not found. It may have been deleted." });
@@ -5747,8 +5759,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/expenses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
+      // SECURITY: Fetch expense first to verify ownership
+      const expense = await storage.getExpense(req.params.id);
+      if (!expense) {
+        return res.status(404).json({ message: "Expense not found. It may have already been deleted." });
+      }
+      
+      // SECURITY: Verify ownership (allow admins to manage any resource)
+      if (req.user.role !== 'admin' && expense.userId !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to delete this expense" });
+      }
+      
       const deleted = await storage.deleteExpense(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Expense not found. It may have already been deleted." });
@@ -5939,9 +5962,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.put("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertMileageLogSchema.partial().parse(req.body);
+      
+      // SECURITY: Fetch mileage log first to verify ownership
+      const existingLog = await storage.getMileageLog(req.params.id);
+      if (!existingLog) {
+        return res.status(404).json({ message: "Mileage log not found. It may have been deleted." });
+      }
+      
+      // SECURITY: Verify ownership (allow admins to manage any resource)
+      if (req.user.role !== 'admin' && existingLog.userId !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to update this mileage log" });
+      }
+      
       const log = await storage.updateMileageLog(req.params.id, validated);
       if (!log) {
         return res.status(404).json({ message: "Mileage log not found. It may have been deleted." });
@@ -5957,8 +5992,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/mileage-logs/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
+      // SECURITY: Fetch mileage log first to verify ownership
+      const log = await storage.getMileageLog(req.params.id);
+      if (!log) {
+        return res.status(404).json({ message: "Mileage log not found. It may have already been deleted." });
+      }
+      
+      // SECURITY: Verify ownership (allow admins to manage any resource)
+      if (req.user.role !== 'admin' && log.userId !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to delete this mileage log" });
+      }
+      
       const deleted = await storage.deleteMileageLog(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Mileage log not found. It may have already been deleted." });
@@ -8445,9 +8491,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.patch("/api/photos/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const validated = insertPhotoSchema.partial().parse(req.body);
+      
+      // SECURITY: Fetch photo first to verify ownership
+      const existingPhoto = await storage.getPhoto(req.params.id);
+      if (!existingPhoto) {
+        return res.status(404).json({ message: "Photo not found. It may have been deleted." });
+      }
+      
+      // SECURITY: Verify ownership (allow admins to manage any resource)
+      if (req.user.role !== 'admin' && existingPhoto.uploadedBy !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to update this photo" });
+      }
+      
       const photo = await storage.updatePhoto(req.params.id, validated);
       if (!photo) {
         return res.status(404).json({ message: "Photo not found. It may have been deleted." });
@@ -8468,6 +8526,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const photo = await storage.getPhoto(req.params.id);
       if (!photo) {
         return res.status(404).json({ message: "Photo not found. It may have already been deleted." });
+      }
+      
+      // SECURITY: Verify ownership (allow admins to manage any resource)
+      if (req.user.role !== 'admin' && photo.uploadedBy !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to delete this photo" });
       }
       
       if (photo.checklistItemId) {
@@ -9294,16 +9357,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/blower-door-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/blower-door-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const test = await storage.getBlowerDoorTest(req.params.id);
+      if (!test) {
+        return res.status(404).json({ message: "Blower door test not found" });
+      }
+      
+      // SECURITY: Verify ownership via associated job
+      const job = await storage.getJob(test.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Associated job not found" });
+      }
+      
+      // SECURITY: Allow admins to manage any resource, otherwise check job ownership
+      if (req.user.role !== 'admin' && job.assignedTo !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to delete this test" });
+      }
+      
       const deleted = await storage.deleteBlowerDoorTest(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Blower door test not found" });
       }
       
       // Update job compliance status if needed
-      if (test?.jobId) {
+      if (test.jobId) {
         try {
           await updateJobComplianceStatus(storage, test.jobId);
         } catch (error) {
@@ -9497,16 +9575,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/duct-leakage-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/duct-leakage-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const test = await storage.getDuctLeakageTest(req.params.id);
+      if (!test) {
+        return res.status(404).json({ message: "Duct leakage test not found" });
+      }
+      
+      // SECURITY: Verify ownership via associated job
+      const job = await storage.getJob(test.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Associated job not found" });
+      }
+      
+      // SECURITY: Allow admins to manage any resource, otherwise check job ownership
+      if (req.user.role !== 'admin' && job.assignedTo !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to delete this test" });
+      }
+      
       const deleted = await storage.deleteDuctLeakageTest(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Duct leakage test not found" });
       }
       
       // Update job compliance status if needed
-      if (test?.jobId) {
+      if (test.jobId) {
         try {
           await updateJobComplianceStatus(storage, test.jobId);
         } catch (error) {
@@ -9734,16 +9827,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/ventilation-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/ventilation-tests/:id", isAuthenticated, csrfSynchronisedProtection, async (req: any, res) => {
     try {
       const test = await storage.getVentilationTest(req.params.id);
+      if (!test) {
+        return res.status(404).json({ message: "Ventilation test not found" });
+      }
+      
+      // SECURITY: Verify ownership via associated job
+      const job = await storage.getJob(test.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Associated job not found" });
+      }
+      
+      // SECURITY: Allow admins to manage any resource, otherwise check job ownership
+      if (req.user.role !== 'admin' && job.assignedTo !== req.user.id) {
+        return res.status(403).json({ message: "You do not have permission to delete this test" });
+      }
+      
       const deleted = await storage.deleteVentilationTest(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Ventilation test not found" });
       }
       
       // Update job compliance status if needed
-      if (test?.jobId) {
+      if (test.jobId) {
         try {
           await updateJobComplianceStatus(storage, test.jobId);
         } catch (error) {
