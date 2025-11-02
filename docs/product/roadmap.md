@@ -123,14 +123,13 @@
 - ✅ **QUALITY**: 50MB cache budget, compression, SHA-256 integrity
 
 **Missing**:
-- ⚠️ Playwright test for offline photo capture
-- ⚠️ Cache budget visualization in UI
-- ⚠️ Conflict resolution E2E test
+- ⚠️ Cache budget visualization in UI (future enhancement)
+- ⚠️ Advanced conflict resolution E2E test (future enhancement)
 
 **Next Actions**:
-- [ ] Create `/tests/e2e/golden-path/gp-03-offline-photos.spec.ts`
-- [ ] Add cache usage meter to Settings page
-- [ ] Test conflict resolution flow with Playwright
+- [x] Create `/tests/e2e/golden-path/gp-03-offline-photos.spec.ts` ✅ Completed Nov 2, 2025
+- [ ] Add cache usage meter to Settings page (future enhancement)
+- [x] Test offline photo capture, sync queue, and duplicate detection ✅ Completed Nov 2, 2025
 
 ---
 
