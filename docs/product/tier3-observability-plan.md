@@ -1,10 +1,10 @@
 # Tier-3 Observability Implementation Plan
 
 **Created**: November 3, 2025  
-**Last Revised**: November 3, 2025 (Phase 2B Complete - Service Logging)  
-**Status**: ✅ Phase 2B Complete - Ready for Phase 2C (Analytics Integration)  
+**Last Revised**: November 3, 2025 (Phase 2 Complete - Calendar Observability)  
+**Status**: ✅ Phase 2 Complete - Calendar Subsystem Ready for GA Promotion  
 **Priority**: High (Critical for AAA Certification)  
-**Estimated Effort**: 23-28 hours total (Phase 0: 2h ✅, Phase 1: 2h ✅, Analytics: 3h ✅, Phase 2A: 2h ✅, Phase 2B: 2.5h ✅, Remaining: 11.5-16.5h)  
+**Estimated Effort**: 23-28 hours total (Phase 0: 2h ✅, Phase 1: 2h ✅, Analytics: 3h ✅, Phase 2: 5.5h ✅, Remaining: 10.5-16.5h)  
 **Dependencies**: 
 1. ✅ Existing audit logger infrastructure (server/lib/audit.ts)
 2. ✅ AuditAction type extension completed (5 new verbs added)
@@ -611,6 +611,7 @@ Update the following files:
 | Nov 3, 2025 | 1.4 | **Analytics Infrastructure Complete**: Created `server/lib/analytics.ts` (350+ lines) with typed event taxonomy (18 operations), correlation ID integration, and `docs/product/analytics-integration.md` (comprehensive integration guide). Unblocks Phase 2C implementation. Total effort spent: 7h (Phase 0: 2h, Phase 1: 2h, Analytics: 3h). | - |
 | Nov 3, 2025 | 1.5 | **Phase 2A Complete (Migration)**: Migrated `server/scheduledCalendarImport.ts` from deprecated `storage.createAuditLog()` to modern `logImport()` API. Created synthetic `AuditRequest` pattern for system-initiated actions. Created `docs/product/audit-migration-pattern.md` (comprehensive migration guide). Application verified running successfully. Total effort spent: 9h (Phase 0: 2h, Phase 1: 2h, Analytics: 3h, Phase 2A: 2h). | - |
 | Nov 3, 2025 | 1.6 | **Phase 2B Complete (Service Logging)**: Added comprehensive audit logging throughout `server/calendarImportService.ts`. Implemented correlation ID propagation from cron → service. Added audit logs for: event parsing (`convert`), confidence-based decisions (`verify`), job creation (`create`), temporary builder creation (`create`), event queuing (`create`). Calendar workflow now has 100% audit coverage (up from 60%). Zero LSP diagnostics, application verified running. Total effort spent: 11.5h (Phase 0: 2h, Phase 1: 2h, Analytics: 3h, Phase 2A: 2h, Phase 2B: 2.5h). | - |
+| Nov 3, 2025 | 1.7 | **Phase 2 Complete (Calendar Observability)**: Added analytics tracking to `server/scheduledCalendarImport.ts`. Integrated `analytics.trackImport()` for both success and failure scenarios with full metadata (events processed, jobs created, correlation IDs). Calendar subsystem now has complete dual observability (audit logs + analytics events). Application verified running, zero LSP diagnostics. **Calendar subsystem ready for GA promotion**. Total effort spent: 12.5h (Phase 0: 2h, Phase 1: 2h, Analytics: 3h, Phase 2: 5.5h). Phase 2 actual: 5.5h vs estimated: 6-7h = **On target** ✅. | - |
 
 ---
 

@@ -8,6 +8,7 @@ import { DateTime } from 'luxon';
 import { backgroundJobTracker } from './backgroundJobTracker';
 import { safeParseInt } from '../shared/numberUtils';
 import { logImport, type AuditRequest } from './lib/audit';
+import { analytics } from './lib/analytics';
 
 const googleCalendarService = new GoogleCalendarService();
 
@@ -161,6 +162,25 @@ export async function startScheduledCalendarImport() {
           },
         });
         
+        // Track analytics event for import
+        analytics.trackImport({
+          actorId: SYSTEM_USER_ID,
+          importType: 'calendar_events',
+          correlationId,
+          metadata: {
+            source: 'automated_cron',
+            calendarName: BUILDING_KNOWLEDGE_CALENDAR_NAME,
+            calendarId: buildingKnowledgeCalendarId,
+            eventsProcessed: events.length,
+            jobsCreated: result.jobsCreated,
+            eventsQueued: result.eventsQueued,
+            errorCount: result.errors.length,
+            importLogId: result.importLogId,
+            schedule: CALENDAR_IMPORT_SCHEDULE,
+            lookAheadDays: CALENDAR_IMPORT_LOOKAHEAD_DAYS,
+          },
+        });
+        
         // Log individual errors if any occurred
         if (result.errors.length > 0) {
           serverLogger.warn('[ScheduledCalendarImport] Import completed with errors', {
@@ -174,9 +194,10 @@ export async function startScheduledCalendarImport() {
         
         // Log the failure for audit purposes
         try {
+          const failureCorrelationId = crypto.randomUUID();
           const systemReq = {
             user: { id: SYSTEM_USER_ID },
-            correlationId: crypto.randomUUID(),
+            correlationId: failureCorrelationId,
             ip: '127.0.0.1',
             get: () => 'System/Automated Calendar Import',
           } as AuditRequest;
@@ -192,6 +213,24 @@ export async function startScheduledCalendarImport() {
               source: BUILDING_KNOWLEDGE_CALENDAR_NAME,
               calendarId: buildingKnowledgeCalendarId || 'unknown',
               failed: true,
+            },
+          });
+          
+          // Track analytics event for failed import
+          analytics.trackImport({
+            actorId: SYSTEM_USER_ID,
+            importType: 'calendar_events',
+            correlationId: failureCorrelationId,
+            metadata: {
+              source: 'automated_cron',
+              calendarName: BUILDING_KNOWLEDGE_CALENDAR_NAME,
+              calendarId: buildingKnowledgeCalendarId || 'unknown',
+              eventsProcessed: 0,
+              jobsCreated: 0,
+              eventsQueued: 0,
+              errorCount: 1,
+              failed: true,
+              error: error instanceof Error ? error.message : 'Unknown error',
             },
           });
         } catch (auditError) {
