@@ -1,0 +1,142 @@
+{
+  "lastUpdated": "2025-11-03T00:00:00.000Z",
+  "environment": "development",
+  "goldenPathTests": {
+    "GP-01": {
+      "id": "GP-01",
+      "name": "Calendar Import → Job Creation → Field Visit → Report",
+      "status": "pending",
+      "lastRun": null,
+      "duration": 0,
+      "functional": {
+        "passed": 0,
+        "failed": 0,
+        "total": 0
+      },
+      "accessibility": {
+        "violations": 0,
+        "passes": 0,
+        "score": 0
+      },
+      "performance": {
+        "score": 0,
+        "lcp": 0,
+        "cls": 0,
+        "tbt": 0,
+        "budgetsPassed": false,
+        "budgetViolations": [],
+        "passed": false
+      },
+      "routes": ["/", "/calendar-management", "/calendar-review", "/field-day", "/inspection/:id", "/reports"]
+    },
+    "GP-02": {
+      "id": "GP-02",
+      "name": "Final Visit with Measurements → Report → Export History",
+      "status": "pending",
+      "lastRun": null,
+      "duration": 0,
+      "functional": {
+        "passed": 0,
+        "failed": 0,
+        "total": 0
+      },
+      "accessibility": {
+        "violations": 0,
+        "passes": 0,
+        "score": 0
+      },
+      "performance": {
+        "score": 0,
+        "lcp": 0,
+        "cls": 0,
+        "tbt": 0,
+        "budgetsPassed": false,
+        "budgetViolations": [],
+        "passed": false
+      },
+      "routes": ["/inspection/:id", "/blower-door-test", "/duct-leakage-test", "/ventilation-tests", "/reports", "/scheduled-exports"]
+    },
+    "GP-03": {
+      "id": "GP-03",
+      "name": "Photos Capture Offline → Reconnect → Sync + Tag",
+      "status": "pending",
+      "lastRun": null,
+      "duration": 0,
+      "functional": {
+        "passed": 0,
+        "failed": 0,
+        "total": 0
+      },
+      "accessibility": {
+        "violations": 0,
+        "passes": 0,
+        "score": 0
+      },
+      "performance": {
+        "score": 0,
+        "lcp": 0,
+        "cls": 0,
+        "tbt": 0,
+        "budgetsPassed": false,
+        "budgetViolations": [],
+        "passed": false
+      },
+      "routes": ["/photos", "/photos/:id", "/photos/annotate/:photoId"]
+    },
+    "GP-04": {
+      "id": "GP-04",
+      "name": "45L Credits - Document Ingestion → Status → Export",
+      "status": "pending",
+      "lastRun": null,
+      "duration": 0,
+      "functional": {
+        "passed": 0,
+        "failed": 0,
+        "total": 0
+      },
+      "accessibility": {
+        "violations": 0,
+        "passes": 0,
+        "score": 0
+      },
+      "performance": {
+        "score": 0,
+        "lcp": 0,
+        "cls": 0,
+        "tbt": 0,
+        "budgetsPassed": false,
+        "budgetViolations": [],
+        "passed": false
+      },
+      "routes": ["/tax-credit/45l", "/tax-credits/projects/new", "/tax-credits/projects/:id"]
+    },
+    "GP-05": {
+      "id": "GP-05",
+      "name": "QA Triage - Create QA Item → Assign → Resolve",
+      "status": "pending",
+      "lastRun": null,
+      "duration": 0,
+      "functional": {
+        "passed": 0,
+        "failed": 0,
+        "total": 0
+      },
+      "accessibility": {
+        "violations": 0,
+        "passes": 0,
+        "score": 0
+      },
+      "performance": {
+        "score": 0,
+        "lcp": 0,
+        "cls": 0,
+        "tbt": 0,
+        "budgetsPassed": false,
+        "budgetViolations": [],
+        "passed": false
+      },
+      "routes": ["/qa", "/qa/scoring", "/qa/checklists", "/qa/performance"]
+    }
+  },
+  "routes": {}
+}

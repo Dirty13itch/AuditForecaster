@@ -45,22 +45,8 @@ import {
   Package,
 } from 'lucide-react';
 import type { FeatureFlagKey } from './featureFlags';
+import { FeatureMaturity } from './featureFlags';
 import type { UserRole } from './types';
-
-/**
- * Feature Maturity Levels
- * 
- * Defines the release readiness of application routes based on
- * Golden Path (GP) test coverage and production stability.
- */
-export enum FeatureMaturity {
-  /** Generally Available: Production-ready with passing GP tests */
-  GA = 'ga',
-  /** Beta: Feature-complete with partial/rescoped GP coverage */
-  BETA = 'beta',
-  /** Experimental: Active development, unstable, dev-only */
-  EXPERIMENTAL = 'experimental',
-}
 
 /**
  * Breadcrumb Navigation Item
