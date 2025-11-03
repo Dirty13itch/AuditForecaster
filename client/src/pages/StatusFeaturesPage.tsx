@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, XCircle, Clock, AlertCircle, Download, Search } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, AlertCircle, Download, Search, Eye, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 
@@ -137,6 +137,26 @@ export default function StatusFeaturesPage() {
   const gaCount = summary?.ga || 0;
   const betaCount = summary?.beta || 0;
   const experimentalCount = summary?.experimental || 0;
+  
+  // Calculate accessibility compliance
+  const routesWithAxeData = routes.filter(r => r.axeStatus !== undefined);
+  const routesAccessibilityPassed = routes.filter(r => r.axeStatus === 'pass');
+  const accessibilityCompliance = routesWithAxeData.length > 0
+    ? Math.round((routesAccessibilityPassed.length / routesWithAxeData.length) * 100)
+    : 0;
+  
+  const getAxeStatusIcon = (status?: 'pass' | 'fail' | 'pending') => {
+    switch (status) {
+      case 'pass':
+        return <Shield className="h-4 w-4 text-green-500" data-testid="icon-axe-pass" />;
+      case 'fail':
+        return <AlertCircle className="h-4 w-4 text-red-500" data-testid="icon-axe-fail" />;
+      case 'pending':
+        return <Eye className="h-4 w-4 text-gray-400" data-testid="icon-axe-pending" />;
+      default:
+        return <span className="text-muted-foreground" data-testid="text-axe-none">—</span>;
+    }
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -171,7 +191,7 @@ export default function StatusFeaturesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card data-testid="card-total">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Routes</CardTitle>
@@ -212,6 +232,23 @@ export default function StatusFeaturesPage() {
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-experimental-count">{experimentalCount}</div>
             <p className="text-xs text-muted-foreground mt-1">{summary?.experimentalPercentage || 0}% of routes</p>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-accessibility">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Accessibility</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-accessibility-compliance">
+              {routesWithAxeData.length > 0 ? `${accessibilityCompliance}%` : '—'}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {routesWithAxeData.length > 0 
+                ? `${routesAccessibilityPassed.length}/${routesWithAxeData.length} passing`
+                : 'No audit data'}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -269,6 +306,7 @@ export default function StatusFeaturesPage() {
                       <TableHead data-testid="table-head-category">Category</TableHead>
                       <TableHead data-testid="table-head-maturity">Maturity</TableHead>
                       <TableHead data-testid="table-head-gp">GP Test</TableHead>
+                      <TableHead data-testid="table-head-axe">Accessibility</TableHead>
                       <TableHead data-testid="table-head-roles">Roles</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -292,6 +330,16 @@ export default function StatusFeaturesPage() {
                             {getGPStatusIcon(route.goldenPathStatus)}
                             {route.goldenPathId && (
                               <span className="text-xs text-muted-foreground">{route.goldenPathId}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell data-testid={`cell-axe-${route.path.replace(/\//g, '-')}`}>
+                          <div className="flex items-center gap-2">
+                            {getAxeStatusIcon(route.axeStatus)}
+                            {route.axeViolations !== undefined && route.axeViolations > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                {route.axeViolations}
+                              </Badge>
                             )}
                           </div>
                         </TableCell>
@@ -347,6 +395,20 @@ export default function StatusFeaturesPage() {
                           <div className="flex items-center gap-2" data-testid={`mobile-gp-${route.path.replace(/\//g, '-')}`}>
                             {getGPStatusIcon(route.goldenPathStatus)}
                             <span className="text-xs">{route.goldenPathId}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {route.axeStatus && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Accessibility</span>
+                          <div className="flex items-center gap-2" data-testid={`mobile-axe-${route.path.replace(/\//g, '-')}`}>
+                            {getAxeStatusIcon(route.axeStatus)}
+                            {route.axeViolations !== undefined && route.axeViolations > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                {route.axeViolations} violations
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       )}

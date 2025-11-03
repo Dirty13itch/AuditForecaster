@@ -1,0 +1,19 @@
+{
+  "timestamp": "2025-11-02T23:57:00.484Z",
+  "environment": "development",
+  "summary": {
+    "totalRoutes": 0,
+    "routesScanned": 0,
+    "routesSkipped": 0,
+    "routesErrored": 0,
+    "routesPassed": 0,
+    "routesFailed": 0
+  },
+  "violationsBySeverity": {
+    "critical": 0,
+    "serious": 0,
+    "moderate": 0,
+    "minor": 0
+  },
+  "routes": []
+}

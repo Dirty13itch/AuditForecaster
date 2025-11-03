@@ -116,6 +116,9 @@ export interface RouteReadiness {
   /** Number of accessibility violations (Axe) */
   axeViolations?: number;
   
+  /** Accessibility audit status */
+  axeStatus?: 'pass' | 'fail' | 'pending';
+  
   /** Lighthouse performance score (0-100) */
   lighthouseScore?: number;
   

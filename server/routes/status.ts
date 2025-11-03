@@ -14,12 +14,107 @@ import type { RouteReadiness, ReadinessSummary, FeaturesDashboardResponse } from
 import { FeatureMaturity } from '@shared/featureFlags';
 import { serverLogger } from '../logger';
 import { stringify } from 'csv-stringify/sync';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import NodeCache from 'node-cache';
 
 // Cache for status features data (5 minute TTL)
 const statusCache = new NodeCache({ stdTTL: 300 });
+
+// ============================================================================
+// ACCESSIBILITY AUDIT PARSING
+// ============================================================================
+
+/**
+ * Accessibility Audit Route Result
+ */
+interface AccessibilityRouteResult {
+  path: string;
+  title: string;
+  maturity: string;
+  status: 'pass' | 'fail' | 'error' | 'skipped';
+  violations: Array<{
+    id: string;
+    impact: string;
+    description: string;
+    helpUrl: string;
+    nodes: number;
+  }>;
+  errorMessage?: string;
+  skipReason?: string;
+}
+
+/**
+ * Accessibility Audit Report
+ */
+interface AccessibilityAuditReport {
+  timestamp: string;
+  environment: string;
+  summary: {
+    totalRoutes: number;
+    routesScanned: number;
+    routesSkipped: number;
+    routesErrored: number;
+    routesPassed: number;
+    routesFailed: number;
+  };
+  violationsBySeverity: {
+    critical: number;
+    serious: number;
+    moderate: number;
+    minor: number;
+  };
+  routes: AccessibilityRouteResult[];
+}
+
+/**
+ * Parse Accessibility Audit Report
+ * 
+ * Reads docs/audit-results/accessibility-audit.json and extracts
+ * violation counts and status per route.
+ */
+function parseAccessibilityAudit(): Map<string, { violations: number; status: 'pass' | 'fail' | 'pending' }> {
+  const accessibilityMap = new Map<string, { violations: number; status: 'pass' | 'fail' | 'pending' }>();
+  
+  try {
+    const auditPath = join(process.cwd(), 'docs/audit-results/accessibility-audit.json');
+    
+    if (!existsSync(auditPath)) {
+      serverLogger.debug('[StatusRoutes] Accessibility audit file not found, returning empty map');
+      return accessibilityMap;
+    }
+    
+    const content = readFileSync(auditPath, 'utf-8');
+    const report: AccessibilityAuditReport = JSON.parse(content);
+    
+    for (const routeResult of report.routes) {
+      const totalViolations = routeResult.violations.reduce((sum, v) => sum + v.nodes, 0);
+      
+      let status: 'pass' | 'fail' | 'pending' = 'pending';
+      if (routeResult.status === 'pass') {
+        status = 'pass';
+      } else if (routeResult.status === 'fail') {
+        status = 'fail';
+      }
+      
+      accessibilityMap.set(routeResult.path, {
+        violations: totalViolations,
+        status,
+      });
+    }
+    
+    serverLogger.info('[StatusRoutes] Parsed accessibility audit', {
+      totalRoutes: accessibilityMap.size,
+      timestamp: report.timestamp,
+    });
+  } catch (error) {
+    serverLogger.warn('[StatusRoutes] Could not parse accessibility audit, using defaults', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+  
+  return accessibilityMap;
+}
 
 /**
  * Parse Golden Path Report
@@ -89,10 +184,11 @@ export function parseGoldenPathReport(): Map<string, 'pass' | 'fail' | 'pending'
 /**
  * Build Route Readiness Data
  * 
- * Converts ROUTE_REGISTRY into RouteReadiness objects with GP status.
+ * Converts ROUTE_REGISTRY into RouteReadiness objects with GP status and accessibility metrics.
  */
 function buildRouteReadiness(): RouteReadiness[] {
   const gpStatusMap = parseGoldenPathReport();
+  const accessibilityMap = parseAccessibilityAudit();
   const routes: RouteReadiness[] = [];
   
   for (const [path, metadata] of Object.entries(ROUTE_REGISTRY)) {
@@ -101,6 +197,9 @@ function buildRouteReadiness(): RouteReadiness[] {
     if (metadata.goldenPathId) {
       goldenPathStatus = gpStatusMap.get(metadata.goldenPathId) || 'pending';
     }
+    
+    // Get accessibility audit results if available
+    const accessibilityResult = accessibilityMap.get(path);
     
     // Determine category from route metadata or path
     let category = 'Other';
@@ -128,6 +227,9 @@ function buildRouteReadiness(): RouteReadiness[] {
       flag: metadata.flag,
       description: metadata.description,
       category,
+      // Accessibility audit results
+      axeViolations: accessibilityResult?.violations,
+      axeStatus: accessibilityResult?.status,
     });
   }
   
