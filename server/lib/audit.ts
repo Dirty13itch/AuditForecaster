@@ -13,19 +13,35 @@ import type { Request } from 'express';
 
 /**
  * Audit action types
+ * 
+ * Extended November 3, 2025 to support Tier-3 observability (calendar, testing, tax credits)
  */
 export type AuditAction =
-  | 'create'
-  | 'update'
-  | 'delete'
-  | 'login'
-  | 'logout'
-  | 'approve'
-  | 'reject'
-  | 'assign'
-  | 'complete'
-  | 'export'
-  | 'import';
+  // Core CRUD operations
+  | 'create'      // Entity creation
+  | 'update'      // Entity modification
+  | 'delete'      // Entity removal
+  
+  // Authentication actions
+  | 'login'       // User sign-in
+  | 'logout'      // User sign-out
+  
+  // Workflow actions
+  | 'approve'     // Approval granted (QA scores, tax credit docs, builders)
+  | 'reject'      // Approval denied (QA scores, pending events)
+  | 'assign'      // Resource assignment (jobs to inspectors, events to jobs)
+  | 'complete'    // Task completion (checklist items, requirements)
+  
+  // Data operations
+  | 'export'      // Data export (reports, certifications)
+  | 'import'      // Data import (calendar events, test results)
+  
+  // Tier-3 operations (added Nov 3, 2025)
+  | 'sync'        // Calendar sync operations (Google Calendar ↔ schedule events)
+  | 'convert'     // Entity conversion (calendar event → job)
+  | 'submit'      // Formal submission (tax credit project for certification)
+  | 'recalculate' // Recomputation (test results, compliance scores)
+  | 'verify';     // Verification confirmation (requirements, certifications)
 
 /**
  * Entity reference format: {entityType}:{entityId}
@@ -314,6 +330,51 @@ export async function logImport(params: {
 
 /**
  * Log a custom action
+ * 
+ * Use this for workflow actions beyond basic CRUD (approve, reject, assign, complete, sync, etc.)
+ * 
+ * @example
+ * ```typescript
+ * // QA Score approval
+ * await logCustomAction({
+ *   req,
+ *   action: 'approve',
+ *   entityType: 'qa_inspection_score',
+ *   entityId: scoreId,
+ *   after: { reviewStatus: 'approved', reviewedBy: req.user.id }
+ * });
+ * 
+ * // Calendar event sync
+ * await logCustomAction({
+ *   req,
+ *   action: 'sync',
+ *   entityType: 'schedule_event',
+ *   entityId: eventId,
+ *   after: { googleCalendarEventId: 'abc123', lastSyncedAt: new Date() },
+ *   metadata: { calendarId: 'primary' }
+ * });
+ * 
+ * // Tax credit project submission
+ * await logCustomAction({
+ *   req,
+ *   action: 'submit',
+ *   entityType: 'tax_credit_project',
+ *   entityId: projectId,
+ *   after: { status: 'submitted', submittedAt: new Date() },
+ *   metadata: { certificationBody: 'RESNET' }
+ * });
+ * 
+ * // Test result recalculation
+ * await logCustomAction({
+ *   req,
+ *   action: 'recalculate',
+ *   entityType: 'blower_door_test',
+ *   entityId: testId,
+ *   before: { ach50: 2.8, meetsCode: false },
+ *   after: { ach50: 2.6, meetsCode: true },
+ *   metadata: { reason: 'altitude_correction' }
+ * });
+ * ```
  */
 export async function logCustomAction(params: {
   req: AuditRequest;
