@@ -61,6 +61,7 @@ import {
   insertCalendarPreferenceSchema,
   insertUploadSessionSchema,
   insertEmailPreferenceSchema,
+  insertAnalyticsEventSchema,
   insertBuilderAbbreviationSchema,
   insertBlowerDoorTestSchema,
   insertDuctLeakageTestSchema,
@@ -309,6 +310,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ features });
     } catch (error) {
       logError('StatusFeatures', error);
+      res.status(500).json(serverErrorResponse(req.path));
+    }
+  });
+
+  // Analytics Events - AAA Blueprint Observability
+  app.post('/api/analytics', isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      // Validate request body using Zod schema (omits actorId)
+      const validated = insertAnalyticsEventSchema.parse(req.body);
+      
+      // Build event data with server-injected fields
+      const eventData: Omit<AnalyticsEvent, 'id' | 'timestamp'> = {
+        eventType: validated.eventType,
+        entityType: validated.entityType || null,
+        entityId: validated.entityId || null,
+        route: validated.route,
+        correlationId: (req as any).correlationId || validated.correlationId || null,
+        metadata: validated.metadata || null,
+        actorId: req.user.id, // Server-side injection (source of truth)
+      };
+      
+      // Use storage layer to persist event
+      await storage.createAnalyticsEvent(eventData);
+      
+      // Return success (no need to return the created event)
+      res.status(201).json({ success: true });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError: ValidationError = {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid analytics event data',
+          errors: error.errors,
+        };
+        return res.status(400).json(validationError);
+      }
+      logError('AnalyticsEvent', error);
       res.status(500).json(serverErrorResponse(req.path));
     }
   });

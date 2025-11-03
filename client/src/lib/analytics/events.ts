@@ -116,8 +116,9 @@ function generateCorrelationId(): string {
 }
 
 function getActorId(): string {
-  // TODO: Get from auth context
-  return 'user-placeholder';
+  // Note: Backend will inject real actorId from req.user.id
+  // This is just a placeholder for client-side fallback
+  return 'client-placeholder';
 }
 
 function getCurrentRoute(): string {
@@ -126,7 +127,7 @@ function getCurrentRoute(): string {
 
 /**
  * Emit an analytics event
- * Currently logs to console. Replace with analytics provider (PostHog, Mixpanel, etc.)
+ * Sends events to backend for persistence and correlation with audit logs
  */
 export function emitAnalyticsEvent(event: AnalyticsEvent): void {
   const enrichedEvent = {
@@ -138,15 +139,38 @@ export function emitAnalyticsEvent(event: AnalyticsEvent): void {
     route: event.route || getCurrentRoute(),
   };
 
-  // TODO: Replace console.log with actual analytics provider
+  // Log to console for development debugging
   console.log('[Analytics]', enrichedEvent.eventType, enrichedEvent);
 
-  // TODO: Send to analytics backend
-  // await fetch('/api/analytics', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(enrichedEvent),
-  // });
+  // Send to analytics backend for persistence
+  // Note: Fire-and-forget pattern (no await) to avoid blocking UI
+  const payload: Record<string, any> = {
+    eventType: enrichedEvent.eventType,
+    route: enrichedEvent.route,
+  };
+  
+  // Only include defined optional fields
+  if ('entityType' in enrichedEvent && enrichedEvent.entityType) {
+    payload.entityType = enrichedEvent.entityType;
+  }
+  if ('entityId' in enrichedEvent && enrichedEvent.entityId) {
+    payload.entityId = enrichedEvent.entityId;
+  }
+  if (enrichedEvent.corrId) {
+    payload.correlationId = enrichedEvent.corrId;
+  }
+  if (enrichedEvent.metadata) {
+    payload.metadata = enrichedEvent.metadata;
+  }
+  
+  fetch('/api/analytics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(error => {
+    // Silently fail analytics errors (don't disrupt user experience)
+    console.warn('[Analytics] Failed to send event:', error);
+  });
 }
 
 // ============================================================================

@@ -71,6 +71,8 @@ import {
   type InsertEmailPreference,
   type AuditLog,
   type InsertAuditLog,
+  type AnalyticsEvent,
+  type InsertAnalyticsEvent,
   type Achievement,
   type InsertAchievement,
   type UserAchievement,
@@ -206,6 +208,7 @@ import {
   photoUploadSessions,
   emailPreferences,
   auditLogs,
+  analyticsEvents,
   achievements,
   userAchievements,
   builderAbbreviations,
@@ -4375,6 +4378,11 @@ export class DatabaseStorage implements IStorage {
   async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
     const [log] = await db.insert(auditLogs).values(data).returning();
     return log;
+  }
+
+  async createAnalyticsEvent(data: Omit<AnalyticsEvent, 'id' | 'timestamp'>): Promise<AnalyticsEvent> {
+    const [event] = await db.insert(analyticsEvents).values(data).returning();
+    return event;
   }
 
   async getAuditLogs(params: {

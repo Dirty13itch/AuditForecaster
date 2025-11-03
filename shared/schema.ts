@@ -1177,6 +1177,25 @@ export const auditLogs = pgTable("audit_logs", {
   index("idx_audit_logs_action").on(table.action),
 ]);
 
+// Analytics Events - AAA Blueprint Observability
+export const analyticsEvents = pgTable("analytics_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actorId: varchar("actor_id").references(() => users.id, { onDelete: 'set null' }), // Nullable - server injects from req.user.id
+  eventType: text("event_type").notNull(), // view_route, search_entity, create_entity, etc.
+  entityType: text("entity_type"), // job, photo, builder, etc. (optional)
+  entityId: varchar("entity_id"), // Specific entity ID (optional)
+  route: text("route").notNull(), // URL path where event occurred
+  correlationId: varchar("correlation_id"), // Request correlation ID for tracing
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  metadata: jsonb("metadata"), // Event-specific data (query, filters, counts, etc.)
+}, (table) => [
+  index("idx_analytics_events_actor_id").on(table.actorId),
+  index("idx_analytics_events_event_type").on(table.eventType),
+  index("idx_analytics_events_entity").on(table.entityType, table.entityId),
+  index("idx_analytics_events_timestamp").on(table.timestamp),
+  index("idx_analytics_events_correlation_id").on(table.correlationId),
+]);
+
 export const achievements = pgTable("achievements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -2361,6 +2380,7 @@ export const insertPhotoUploadSessionSchema = createInsertSchema(photoUploadSess
 });
 export const insertEmailPreferenceSchema = createInsertSchema(emailPreferences).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, timestamp: true });
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ id: true, timestamp: true, actorId: true }); // actorId injected server-side from req.user.id
 export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
 export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true }).extend({
   earnedAt: z.coerce.date().optional(),
@@ -2803,6 +2823,8 @@ export type EmailPreference = typeof emailPreferences.$inferSelect;
 export type InsertEmailPreference = z.infer<typeof insertEmailPreferenceSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
 export type UserAchievement = typeof userAchievements.$inferSelect;
