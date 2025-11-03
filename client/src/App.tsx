@@ -11,6 +11,7 @@ import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sid
 import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PWAInstallBanner } from "@/components/PWAInstallBanner";
 import { DevModeIndicator } from "@/components/DevModeIndicator";
@@ -167,7 +168,9 @@ function Router() {
       )} />
       <Route path="/jobs" component={() => (
         <RouteErrorBoundary>
-          <Jobs />
+          <ProtectedRoute path="/jobs">
+            <Jobs />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/jobs/:id" component={() => {
@@ -181,437 +184,611 @@ function Router() {
       }} />
       <Route path="/field-day" component={() => (
         <RouteErrorBoundary>
-          <FieldDay />
+          <ProtectedRoute path="/field-day">
+            <FieldDay />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/schedule" component={() => (
         <RouteErrorBoundary>
-          <Schedule />
+          <ProtectedRoute path="/schedule">
+            <Schedule />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/route" component={() => (
         <RouteErrorBoundary>
-          <RouteView />
+          <ProtectedRoute path="/route">
+            <RouteView />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/builders" component={() => (
         <RouteErrorBoundary>
-          <Builders />
+          <ProtectedRoute path="/builders">
+            <Builders />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/business-data/construction-managers" component={() => (
         <RouteErrorBoundary>
-          <ConstructionManagers />
+          <ProtectedRoute path="/business-data/construction-managers">
+            <ConstructionManagers />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/builder-review" component={() => (
         <RouteErrorBoundary>
-          <BuilderReview />
+          <ProtectedRoute path="/builder-review">
+            <BuilderReview />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/plans" component={() => (
         <RouteErrorBoundary>
-          <Plans />
+          <ProtectedRoute path="/plans">
+            <Plans />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/financials" component={() => (
         <RouteErrorBoundary>
-          <Financials />
+          <ProtectedRoute path="/financials">
+            <Financials />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/financial-dashboard" component={() => (
         <RouteErrorBoundary>
-          <FinancialDashboard />
+          <ProtectedRoute path="/financial-dashboard">
+            <FinancialDashboard />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/invoices" component={() => (
         <RouteErrorBoundary>
-          <Invoices />
+          <ProtectedRoute path="/invoices">
+            <Invoices />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/invoices/new" component={() => (
         <RouteErrorBoundary>
-          <Invoices />
+          <ProtectedRoute path="/invoices/new">
+            <Invoices />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/invoices/:id" component={() => (
         <RouteErrorBoundary>
-          <Invoices />
+          <ProtectedRoute path="/invoices/:id">
+            <Invoices />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/financial/payments" component={() => (
         <RouteErrorBoundary>
-          <Payments />
+          <ProtectedRoute path="/financial/payments">
+            <Payments />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/financial/ar-aging" component={() => (
         <RouteErrorBoundary>
-          <ARAgingReport />
+          <ProtectedRoute path="/financial/ar-aging">
+            <ARAgingReport />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/financial/unbilled-work" component={() => (
         <RouteErrorBoundary>
-          <UnbilledWorkTracker />
+          <ProtectedRoute path="/financial/unbilled-work">
+            <UnbilledWorkTracker />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/financial/expenses" component={() => (
         <RouteErrorBoundary>
-          <ExpensesSwipe />
+          <ProtectedRoute path="/financial/expenses">
+            <ExpensesSwipe />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/financial/analytics" component={() => (
         <RouteErrorBoundary>
-          <FinancialAnalytics />
+          <ProtectedRoute path="/financial/analytics">
+            <FinancialAnalytics />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/expenses" component={() => (
         <RouteErrorBoundary>
-          <Expenses />
+          <ProtectedRoute path="/expenses">
+            <Expenses />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/expenses/new" component={() => (
         <RouteErrorBoundary>
-          <Expenses />
+          <ProtectedRoute path="/expenses/new">
+            <Expenses />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/mileage" component={() => (
         <RouteErrorBoundary>
-          <Mileage />
+          <ProtectedRoute path="/mileage">
+            <Mileage />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/mileage/new" component={() => (
         <RouteErrorBoundary>
-          <Mileage />
+          <ProtectedRoute path="/mileage/new">
+            <Mileage />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/mileage/classify" component={() => (
         <RouteErrorBoundary>
-          <MileageClassify />
+          <ProtectedRoute path="/mileage/classify">
+            <MileageClassify />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/reports" component={() => (
         <RouteErrorBoundary>
-          <Reports />
+          <ProtectedRoute path="/reports">
+            <Reports />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/scheduled-exports" component={() => (
         <RouteErrorBoundary>
-          <ScheduledExports />
+          <ProtectedRoute path="/scheduled-exports">
+            <ScheduledExports />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/reports/:id" component={() => (
         <RouteErrorBoundary>
-          <ReportInstancePage />
+          <ProtectedRoute path="/reports/:id">
+            <ReportInstancePage />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/report-templates" component={() => (
         <RouteErrorBoundary>
-          <ReportTemplates />
+          <ProtectedRoute path="/report-templates">
+            <ReportTemplates />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/report-templates/:id" component={() => (
         <RouteErrorBoundary>
-          <ReportTemplateDetail />
+          <ProtectedRoute path="/report-templates/:id">
+            <ReportTemplateDetail />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/report-template-designer" component={() => (
         <RouteErrorBoundary>
-          <ReportTemplateDesigner />
+          <ProtectedRoute path="/report-template-designer">
+            <ReportTemplateDesigner />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/report-template-designer/:id" component={() => (
         <RouteErrorBoundary>
-          <ReportTemplateDesigner />
+          <ProtectedRoute path="/report-template-designer/:id">
+            <ReportTemplateDesigner />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/reports/fillout/:id" component={() => (
         <RouteErrorBoundary>
-          <ReportFillout />
+          <ProtectedRoute path="/reports/fillout/:id">
+            <ReportFillout />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/blower-door-test" component={() => (
         <RouteErrorBoundary>
-          <BlowerDoorTest />
+          <ProtectedRoute path="/blower-door-test">
+            <BlowerDoorTest />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/blower-door/:jobId" component={() => (
         <RouteErrorBoundary>
-          <BlowerDoorTest />
+          <ProtectedRoute path="/blower-door/:jobId">
+            <BlowerDoorTest />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/duct-leakage-test" component={() => (
         <RouteErrorBoundary>
-          <DuctLeakageTest />
+          <ProtectedRoute path="/duct-leakage-test">
+            <DuctLeakageTest />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/duct-leakage/:jobId" component={() => (
         <RouteErrorBoundary>
-          <DuctLeakageTest />
+          <ProtectedRoute path="/duct-leakage/:jobId">
+            <DuctLeakageTest />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/ventilation-tests" component={() => (
         <RouteErrorBoundary>
-          <VentilationTests />
+          <ProtectedRoute path="/ventilation-tests">
+            <VentilationTests />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/ventilation-tests/:jobId" component={() => (
         <RouteErrorBoundary>
-          <VentilationTests />
+          <ProtectedRoute path="/ventilation-tests/:jobId">
+            <VentilationTests />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/analytics" component={() => (
         <RouteErrorBoundary>
-          <Analytics />
+          <ProtectedRoute path="/analytics">
+            <Analytics />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/audit-logs" component={() => (
         <RouteErrorBoundary>
-          <AuditLogs />
+          <ProtectedRoute path="/audit-logs">
+            <AuditLogs />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/settings" component={() => (
         <RouteErrorBoundary>
-          <SettingsPage />
+          <ProtectedRoute path="/settings">
+            <SettingsPage />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/offline-test" component={() => (
         <RouteErrorBoundary>
-          <OfflineTest />
+          <ProtectedRoute path="/offline-test">
+            <OfflineTest />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/readiness-chip-test" component={() => (
         <RouteErrorBoundary>
-          <ReadinessChipTest />
+          <ProtectedRoute path="/readiness-chip-test">
+            <ReadinessChipTest />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/settings-hub" component={() => (
         <RouteErrorBoundary>
-          <SettingsHub />
+          <ProtectedRoute path="/settings-hub">
+            <SettingsHub />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/custom-reports" component={() => (
         <RouteErrorBoundary>
-          <CustomReports />
+          <ProtectedRoute path="/custom-reports">
+            <CustomReports />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/kpi-settings" component={() => (
         <RouteErrorBoundary>
-          <KPISettings />
+          <ProtectedRoute path="/kpi-settings">
+            <KPISettings />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/admin/diagnostics" component={() => (
         <RouteErrorBoundary>
-          <AdminDiagnostics />
+          <ProtectedRoute path="/admin/diagnostics">
+            <AdminDiagnostics />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/admin/background-jobs" component={() => (
         <RouteErrorBoundary>
-          <BackgroundJobs />
+          <ProtectedRoute path="/admin/background-jobs">
+            <BackgroundJobs />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/status/features" component={() => (
         <RouteErrorBoundary>
-          <StatusFeaturesPage />
+          <ProtectedRoute path="/status/features">
+            <StatusFeaturesPage />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/admin/calendar-import" component={() => (
         <RouteErrorBoundary>
-          <CalendarImportQueuePage />
+          <ProtectedRoute path="/admin/calendar-import">
+            <CalendarImportQueuePage />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/calendar-poc" component={() => (
         <RouteErrorBoundary>
-          <CalendarPOC />
+          <ProtectedRoute path="/calendar-poc">
+            <CalendarPOC />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/calendar-review" component={() => (
         <RouteErrorBoundary>
-          <CalendarReview />
+          <ProtectedRoute path="/calendar-review">
+            <CalendarReview />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/calendar-imports" component={() => (
         <RouteErrorBoundary>
-          <CalendarImportHistory />
+          <ProtectedRoute path="/calendar-imports">
+            <CalendarImportHistory />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/calendar-management" component={() => (
         <RouteErrorBoundary>
-          <CalendarManagement />
+          <ProtectedRoute path="/calendar-management">
+            <CalendarManagement />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/tax-credit/45l" component={() => (
         <RouteErrorBoundary>
-          <TaxCredit45L />
+          <ProtectedRoute path="/tax-credit/45l">
+            <TaxCredit45L />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/tax-credits" component={() => (
         <RouteErrorBoundary>
-          <TaxCredit45L />
+          <ProtectedRoute path="/tax-credits">
+            <TaxCredit45L />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/tax-credits/projects/new" component={() => (
         <RouteErrorBoundary>
-          <TaxCreditProject />
+          <ProtectedRoute path="/tax-credits/projects/new">
+            <TaxCreditProject />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/tax-credits/projects/:id" component={() => (
         <RouteErrorBoundary>
-          <TaxCreditProject />
+          <ProtectedRoute path="/tax-credits/projects/:id">
+            <TaxCreditProject />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/tax-credits/compliance" component={() => (
         <RouteErrorBoundary>
-          <TaxCreditCompliance />
+          <ProtectedRoute path="/tax-credits/compliance">
+            <TaxCreditCompliance />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/tax-credits/reports" component={() => (
         <RouteErrorBoundary>
-          <TaxCreditReports />
+          <ProtectedRoute path="/tax-credits/reports">
+            <TaxCreditReports />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/equipment" component={() => (
         <RouteErrorBoundary>
-          <Equipment />
+          <ProtectedRoute path="/equipment">
+            <Equipment />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/equipment/calibrations" component={() => (
         <RouteErrorBoundary>
-          <CalibrationSchedule />
+          <ProtectedRoute path="/equipment/calibrations">
+            <CalibrationSchedule />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/equipment/:id" component={() => (
         <RouteErrorBoundary>
-          <EquipmentDetails />
+          <ProtectedRoute path="/equipment/:id">
+            <EquipmentDetails />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/qa" component={() => (
         <RouteErrorBoundary>
-          <QualityAssurance />
+          <ProtectedRoute path="/qa">
+            <QualityAssurance />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/qa/scoring" component={() => (
         <RouteErrorBoundary>
-          <QAScoring />
+          <ProtectedRoute path="/qa/scoring">
+            <QAScoring />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/qa/scoring/:jobId" component={() => (
         <RouteErrorBoundary>
-          <QAScoring />
+          <ProtectedRoute path="/qa/scoring/:jobId">
+            <QAScoring />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/qa/checklists" component={() => (
         <RouteErrorBoundary>
-          <QAChecklists />
+          <ProtectedRoute path="/qa/checklists">
+            <QAChecklists />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/qa/performance" component={() => (
         <RouteErrorBoundary>
-          <QAPerformance />
+          <ProtectedRoute path="/qa/performance">
+            <QAPerformance />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/qa/review" component={() => (
         <RouteErrorBoundary>
-          <QAReview />
+          <ProtectedRoute path="/qa/review">
+            <QAReview />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/inspection/:id" component={() => (
         <RouteErrorBoundary>
-          <Inspection />
+          <ProtectedRoute path="/inspection/:id">
+            <Inspection />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/photos" component={() => (
         <RouteErrorBoundary>
-          <Photos />
+          <ProtectedRoute path="/photos">
+            <Photos />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/photos/:id" component={() => (
         <RouteErrorBoundary>
-          <Photos />
+          <ProtectedRoute path="/photos/:id">
+            <Photos />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/photos/annotate/:photoId" component={() => (
         <RouteErrorBoundary>
-          <PhotoAnnotation />
+          <ProtectedRoute path="/photos/annotate/:photoId">
+            <PhotoAnnotation />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/photos/cleanup" component={() => (
         <RouteErrorBoundary>
-          <PhotoCleanup />
+          <ProtectedRoute path="/photos/cleanup">
+            <PhotoCleanup />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/conflicts" component={() => (
         <RouteErrorBoundary>
-          <ConflictResolution />
+          <ProtectedRoute path="/conflicts">
+            <ConflictResolution />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/gamification" component={() => (
         <RouteErrorBoundary>
-          <Gamification />
+          <ProtectedRoute path="/gamification">
+            <Gamification />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/achievements" component={() => (
         <RouteErrorBoundary>
-          <Achievements />
+          <ProtectedRoute path="/achievements">
+            <Achievements />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/challenges" component={() => (
         <RouteErrorBoundary>
-          <Challenges />
+          <ProtectedRoute path="/challenges">
+            <Challenges />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/forecast/:id" component={() => (
         <RouteErrorBoundary>
-          <Forecast />
+          <ProtectedRoute path="/forecast/:id">
+            <Forecast />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/notification-test" component={() => (
         <RouteErrorBoundary>
-          <NotificationTest />
+          <ProtectedRoute path="/notification-test">
+            <NotificationTest />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance" component={() => (
         <RouteErrorBoundary>
-          <ComplianceHub />
+          <ProtectedRoute path="/compliance">
+            <ComplianceHub />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/multifamily-setup" component={() => (
         <RouteErrorBoundary>
-          <MultifamilyProgramSetup />
+          <ProtectedRoute path="/compliance/multifamily-setup">
+            <MultifamilyProgramSetup />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/builder-verified-items/:jobId" component={() => (
         <RouteErrorBoundary>
-          <BuilderVerifiedItemsTracker />
+          <ProtectedRoute path="/compliance/builder-verified-items/:jobId">
+            <BuilderVerifiedItemsTracker />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/sampling-calculator" component={() => (
         <RouteErrorBoundary>
-          <SamplingProtocolCalculator />
+          <ProtectedRoute path="/compliance/sampling-calculator">
+            <SamplingProtocolCalculator />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/energy-star-checklist/:jobId" component={() => (
         <RouteErrorBoundary>
-          <EnergyStarMFNCChecklist />
+          <ProtectedRoute path="/compliance/energy-star-checklist/:jobId">
+            <EnergyStarMFNCChecklist />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/mn-housing-egcc/:jobId" component={() => (
         <RouteErrorBoundary>
-          <MNHousingEGCCWorksheet />
+          <ProtectedRoute path="/compliance/mn-housing-egcc/:jobId">
+            <MNHousingEGCCWorksheet />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/zerh-tracker/:jobId" component={() => (
         <RouteErrorBoundary>
-          <ZERHComplianceTracker />
+          <ProtectedRoute path="/compliance/zerh-tracker/:jobId">
+            <ZERHComplianceTracker />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/benchmarking-tracker/:buildingId" component={() => (
         <RouteErrorBoundary>
-          <BenchmarkingDeadlineTracker />
+          <ProtectedRoute path="/compliance/benchmarking-tracker/:buildingId">
+            <BenchmarkingDeadlineTracker />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route path="/compliance/documents" component={() => (
         <RouteErrorBoundary>
-          <ComplianceDocumentsLibrary />
+          <ProtectedRoute path="/compliance/documents">
+            <ComplianceDocumentsLibrary />
+          </ProtectedRoute>
         </RouteErrorBoundary>
       )} />
       <Route component={() => (

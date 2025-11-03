@@ -326,6 +326,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { sentryUserMiddleware } = await import("./sentry");
   app.use(sentryUserMiddleware);
   
+  // Gatekeeper middleware for route access control (AAA Blueprint)
+  // Must be applied AFTER authentication so req.user is populated
+  const { requireRouteAccess } = await import("./middleware/gatekeeper");
+  const showExperimentalRoutes = process.env.NODE_ENV === 'development';
+  app.use(requireRouteAccess({
+    showExperimental: showExperimentalRoutes,
+  }));
+  serverLogger.info('[Server] Gatekeeper route access middleware enabled', {
+    environment: process.env.NODE_ENV || 'development',
+    showExperimental: showExperimentalRoutes,
+  });
+  
   // Setup force admin endpoint (for emergency admin role assignment)
   await setupForceAdminEndpoint(app);
 
