@@ -330,14 +330,20 @@ async function startServer() {
     try {
       const integrityCheck = await storage.verifyCriticalUsersIntegrity();
       if (!integrityCheck.success) {
-        serverLogger.error('[Server] Critical user integrity check failed:');
-        integrityCheck.errors.forEach(error => serverLogger.error(`  - ${error}`));
+        // In development, missing critical users are expected until first login
+        const logLevel = process.env.NODE_ENV === 'production' ? 'error' : 'warn';
+        const logMethod = logLevel === 'error' ? serverLogger.error.bind(serverLogger) : serverLogger.warn.bind(serverLogger);
+        
+        logMethod('[Server] Critical user integrity check failed:');
+        integrityCheck.errors.forEach(error => logMethod(`  - ${error}`));
         
         if (process.env.NODE_ENV === 'production') {
           serverLogger.error('╔════════════════════════════════════════════════════════════════╗');
           serverLogger.error('║  CRITICAL: User integrity check failed in production!         ║');
           serverLogger.error('║  Admin access may be compromised.                             ║');
           serverLogger.error('╚════════════════════════════════════════════════════════════════╝');
+        } else {
+          serverLogger.info('[Server] Note: Critical users will be created on first OIDC login');
         }
       } else {
         serverLogger.info('╔════════════════════════════════════════════════════════════════╗');
