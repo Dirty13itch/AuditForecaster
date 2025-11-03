@@ -14,6 +14,7 @@
  */
 
 import { nanoid } from 'nanoid';
+import { getLastCorrelationId } from '../queryClient';
 
 // ============================================================================
 // Core Event Types
@@ -131,7 +132,8 @@ export function emitAnalyticsEvent(event: AnalyticsEvent): void {
   const enrichedEvent = {
     ...event,
     ts: event.ts || Date.now(),
-    corrId: event.corrId || generateCorrelationId(),
+    // Use server-provided correlation ID when available, fallback to local generation
+    corrId: event.corrId || getLastCorrelationId() || generateCorrelationId(),
     actorId: event.actorId || getActorId(),
     route: event.route || getCurrentRoute(),
   };
@@ -158,7 +160,6 @@ export function trackPageView(routeName: string, actorId?: string): void {
     actorId: actorId || getActorId(),
     route: getCurrentRoute(),
     ts: Date.now(),
-    corrId: generateCorrelationId(),
   });
 }
 
@@ -177,7 +178,6 @@ export function trackSearch(
     actorId: getActorId(),
     route: getCurrentRoute(),
     ts: Date.now(),
-    corrId: generateCorrelationId(),
   });
 }
 
@@ -189,7 +189,6 @@ export function trackCreate(entityType: string, entityId: string): void {
     actorId: getActorId(),
     route: getCurrentRoute(),
     ts: Date.now(),
-    corrId: generateCorrelationId(),
   });
 }
 
@@ -208,7 +207,6 @@ export function trackUpdate(
     actorId: getActorId(),
     route: getCurrentRoute(),
     ts: Date.now(),
-    corrId: generateCorrelationId(),
   });
 }
 
@@ -220,7 +218,6 @@ export function trackDelete(entityType: string, entityId: string): void {
     actorId: getActorId(),
     route: getCurrentRoute(),
     ts: Date.now(),
-    corrId: generateCorrelationId(),
   });
 }
 
@@ -237,7 +234,6 @@ export function trackExport(
     actorId: getActorId(),
     route: getCurrentRoute(),
     ts: Date.now(),
-    corrId: generateCorrelationId(),
   });
 }
 
@@ -256,6 +252,5 @@ export function trackImport(
     actorId: getActorId(),
     route: getCurrentRoute(),
     ts: Date.now(),
-    corrId: generateCorrelationId(),
   });
 }

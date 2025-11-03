@@ -113,8 +113,8 @@ const corsOptions = {
   },
   credentials: true, // Allow cookies/auth headers
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
-  exposedHeaders: ['X-CSRF-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'X-Correlation-ID'],
+  exposedHeaders: ['X-CSRF-Token', 'X-Correlation-ID'],
   maxAge: 86400, // Cache preflight requests for 24 hours
   optionsSuccessStatus: 204
 };
@@ -172,6 +172,10 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+// Correlation ID middleware - MUST be early in chain for observability
+import { correlationIdMiddleware } from "./middleware/correlationId";
+app.use(correlationIdMiddleware);
 
 // Request logging middleware with correlation IDs
 import { requestLoggingMiddleware } from "./middleware/requestLogging";

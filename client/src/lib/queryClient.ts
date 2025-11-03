@@ -12,6 +12,27 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// Store last correlation ID from server response for analytics linking
+let lastCorrelationId: string | null = null;
+
+/**
+ * Get the last correlation ID received from the server
+ * Used by analytics to link client events to server audit logs
+ */
+export function getLastCorrelationId(): string | null {
+  return lastCorrelationId;
+}
+
+/**
+ * Store correlation ID from server response
+ */
+function storeCorrelationId(res: Response): void {
+  const corrId = res.headers.get('X-Correlation-ID');
+  if (corrId) {
+    lastCorrelationId = corrId;
+  }
+}
+
 export async function apiRequest(
   method: string,
   url: string,
@@ -39,6 +60,9 @@ export async function apiRequest(
       credentials: "include",
     });
 
+    // Store correlation ID from response for analytics linking
+    storeCorrelationId(res);
+
     // If CSRF validation fails, clear token and retry once
     if (res.status === 403) {
       const errorText = await res.text();
@@ -58,6 +82,9 @@ export async function apiRequest(
           body: data ? JSON.stringify(data) : undefined,
           credentials: "include",
         });
+
+        // Store correlation ID from retry response
+        storeCorrelationId(retryRes);
 
         await throwIfResNotOk(retryRes);
         return retryRes;
@@ -119,6 +146,9 @@ export const getQueryFn: <T>(options: {
       const res = await fetch(url, {
         credentials: "include",
       });
+
+      // Store correlation ID from response for analytics linking
+      storeCorrelationId(res);
 
       if (unauthorizedBehavior === "returnNull" && res.status === 401) {
         return null;
