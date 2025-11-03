@@ -1,14 +1,15 @@
 # Tier-3 Observability Implementation Plan
 
 **Created**: November 3, 2025  
-**Last Revised**: November 3, 2025 (Phase 0 Complete)  
-**Status**: ✅ Phase 0 Complete - Ready for Phase 1 (Coverage Verification)  
+**Last Revised**: November 3, 2025 (Phase 1 Complete)  
+**Status**: ✅ Phase 1 Complete - Ready for Phase 2 (Migration & Implementation)  
 **Priority**: High (Critical for AAA Certification)  
-**Estimated Effort**: 20-25 hours total (Phase 0: 2h complete, Remaining: 18-23h)  
+**Estimated Effort**: 23-28 hours total (Phase 0: 2h ✅, Phase 1: 2h ✅, Remaining: 19-24h)  
 **Dependencies**: 
 1. ✅ Existing audit logger infrastructure (server/lib/audit.ts)
 2. ✅ AuditAction type extension completed (5 new verbs added)
-3. ⚠️ Analytics infrastructure (server/lib/analytics.ts) - Not yet created (separate task)
+3. ✅ Calendar audit coverage analysis complete (60% baseline identified)
+4. ⚠️ Analytics infrastructure (server/lib/analytics.ts) - Not yet created (separate task, 3-4h)
 
 ---
 
@@ -23,9 +24,10 @@
 
 **Required Corrections**:
 - [x] Add Phase 0: Extend AuditAction type to support new verbs ✅ Completed Nov 3, 2025
-- [ ] Verify existing audit coverage for calendar entities to avoid duplication ← **NEXT STEP**
-- [x] Revise effort estimates to account for type system changes ✅ Completed (20-25h)
+- [x] Verify existing audit coverage for calendar entities to avoid duplication ✅ Completed Nov 3, 2025
+- [x] Revise effort estimates to account for type system changes ✅ Completed (23-28h)
 - [x] Document which proposed actions map to existing vs. new audit verbs ✅ Completed
+- [x] Document migration requirements for deprecated audit API usage ✅ Identified in Phase 1
 
 ---
 
@@ -144,36 +146,46 @@ export type AuditAction =
 
 ---
 
-### Phase 1: Verify Existing Coverage (1-2 hours) ⚠️ REQUIRED
+### Phase 1: Verify Existing Coverage (1-2 hours) ✅ COMPLETE
 
 **Purpose**: Validate current audit logging for calendar entities to avoid duplication or conflicts.
 
 #### Investigation Tasks
 
-1. **Grep for existing calendar audit logs**:
-```bash
-grep -r "calendar" server/routes.ts | grep -E "logCreate|logUpdate|logDelete|logCustomAction"
-```
+1. ✅ **Grep for existing calendar audit logs**: Completed analysis of all calendar endpoints
+2. ✅ **Check calendar import logs**: Confirmed no separate `calendar_import_logs` table exists
+3. ✅ **Document findings**: Created comprehensive `docs/product/calendar-audit-coverage.md` (400+ lines)
 
-2. **Check calendar import logs**:
-- Review `calendar_import_logs` table usage
-- Verify if sync operations are already logged
-- Identify gaps in current coverage
-
-3. **Document findings**:
-- Create `docs/product/calendar-audit-coverage.md` with current state
-- List entities with/without audit logging
-- Identify duplicate logging risks
+**Key Findings**:
+- **60% Baseline Coverage**: 5/6 calendar components have audit logging
+- **Migration Required**: Scheduled import cron uses deprecated `createAuditLog` API (needs migration to `logImport`)
+- **Critical Gap**: `calendarImportService.ts` core logic has zero audit logging
+- **No Duplicates**: Clean separation between API and cron logging - safe to proceed
+- **Action Mapping**:
+  - ✅ Calendar Preferences: Modern API (logCreate/logUpdate/logDelete)
+  - ✅ Pending Events: Modern API (logCustomAction for assign/approve/reject)
+  - ⚠️ Google Events: Custom actions need migration ('google_event_convert' → 'convert')
+  - ✅ Schedule Events: Modern API with sync operations
+  - ⚠️ Scheduled Import: **DEPRECATED API** - requires migration
 
 **Deliverables**:
-- [ ] Coverage audit completed
-- [ ] Findings documented
-- [ ] Duplication risks identified
-- [ ] Implementation plan adjusted if needed
+- [x] Coverage audit completed ✅ All calendar endpoints analyzed
+- [x] Findings documented ✅ See `docs/product/calendar-audit-coverage.md`
+- [x] Duplication risks identified ✅ NONE found - clear separation
+- [x] Implementation plan adjusted ✅ Phase 2 revised from 4-5h to 5-7h (migration-first approach)
+
+**Documentation**: ✅ `docs/product/calendar-audit-coverage.md` includes:
+- Detailed endpoint-by-endpoint analysis
+- Coverage summary table (60% baseline)
+- Migration requirements and patterns
+- Revised Phase 2 implementation plan
+- No duplicate logging risks identified
 
 ---
 
-### Phase 2: Calendar & Schedule Observability (4-5 hours)
+### Phase 2: Calendar & Schedule Observability (5-7 hours) ⚠️ REVISED
+
+**Revision Reason**: Phase 1 analysis identified migration requirements for deprecated audit API usage + critical gap in CalendarImportService
 
 #### Entities to Instrument
 1. **pending_calendar_events** - Calendar import queue
@@ -595,6 +607,7 @@ Update the following files:
 | Nov 3, 2025 | 1.0 | Initial plan (16-20h estimate) | - |
 | Nov 3, 2025 | 1.1 | Addressed architect feedback: added Phase 0 (type extension), Phase 1 (coverage verification), revised estimates to 20-25h, mapped actions to supported verbs | Architect |
 | Nov 3, 2025 | 1.2 | **Phase 0 Complete**: Extended AuditAction type with 5 new verbs (sync, convert, submit, recalculate, verify), added JSDoc examples, verified TypeScript compilation. Identified analytics.ts as separate prerequisite task. | - |
+| Nov 3, 2025 | 1.3 | **Phase 1 Complete**: Calendar audit coverage analysis complete (60% baseline identified). Created comprehensive `calendar-audit-coverage.md` (400+ lines). Identified migration requirements for deprecated API usage. Revised Phase 2 estimate from 4-5h to 5-7h. Total plan estimate revised to 23-28h. | - |
 
 ---
 
