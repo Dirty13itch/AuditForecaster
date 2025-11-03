@@ -151,6 +151,7 @@ const ComplianceDocumentsLibrary = lazy(() => import("@/pages/compliance/Complia
 const ConflictResolution = lazy(() => import("@/pages/ConflictResolution"));
 const NotificationTest = lazy(() => import("@/pages/NotificationTest"));
 const OfflineTest = lazy(() => import("@/pages/offline-test"));
+const ReadinessChipTest = lazy(() => import("@/pages/ReadinessChipTest"));
 
 // Generic loading fallback for most routes
 const LoadingFallback = () => <RouteLoadingFallback />;
@@ -376,6 +377,11 @@ function Router() {
       <Route path="/offline-test" component={() => (
         <RouteErrorBoundary>
           <OfflineTest />
+        </RouteErrorBoundary>
+      )} />
+      <Route path="/readiness-chip-test" component={() => (
+        <RouteErrorBoundary>
+          <ReadinessChipTest />
         </RouteErrorBoundary>
       )} />
       <Route path="/settings-hub" component={() => (

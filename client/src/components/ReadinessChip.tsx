@@ -66,19 +66,34 @@ export function ReadinessChip({
   const currentRoute = route || location;
   
   const badge = (
-    <Badge
+    <Button
+      variant="ghost"
+      size="default" // Ensures min-h-12 (48px) for proper touch target
       className={cn(
-        config.className,
-        compact ? "text-xs px-1.5 py-0.5" : "text-xs px-2 py-1",
-        "flex items-center gap-1 font-medium cursor-pointer hover:opacity-90 transition-opacity",
+        // Button sizing for accessibility (48px minimum touch target)
+        "relative rounded-full group", // Added group for hover interaction
+        // Remove default ghost hover background
+        "hover:bg-transparent active:bg-transparent",
+        // Focus styles for accessibility
+        "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring",
         className
       )}
       onClick={() => setDialogOpen(true)}
       data-testid={`chip-maturity-${maturity}`}
     >
-      {config.icon && <config.icon className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />}
-      <span>{config.label}</span>
-    </Badge>
+      {/* Visual badge content - styled to appear small */}
+      <span className={cn(
+        "inline-flex items-center gap-1 rounded-full whitespace-nowrap",
+        compact ? "text-xs px-1.5 py-0.5" : "text-xs px-2 py-1",
+        "font-semibold transition-opacity",
+        config.className,
+        // Hover state on the visual content
+        "group-hover:opacity-90"
+      )}>
+        {config.icon && <config.icon className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />}
+        <span>{config.label}</span>
+      </span>
+    </Button>
   );
   
   return (
@@ -234,18 +249,36 @@ export function NotReadyChip({
   className?: string;
 }) {
   const badge = (
-    <Badge
+    <Button
+      variant="ghost"
+      size="default" // Ensures min-h-12 (48px) for proper touch target
       className={cn(
-        "bg-red-500 dark:bg-red-600 text-white border-red-600 dark:border-red-700",
-        compact ? "text-xs px-1.5 py-0.5" : "text-xs px-2 py-1",
-        "flex items-center gap-1 font-medium",
+        // Button sizing for accessibility (48px minimum touch target)
+        "relative rounded-full group", // Added group for hover interaction
+        // Remove default ghost hover background
+        "hover:bg-transparent active:bg-transparent",
+        // Focus styles for accessibility
+        "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring",
         className
       )}
       data-testid="chip-not-ready"
+      asChild
     >
-      <AlertCircle className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
-      <span>Not Ready</span>
-    </Badge>
+      <Link href="/status/features" className="inline-flex items-center justify-center">
+        {/* Visual badge content - styled to appear small */}
+        <span className={cn(
+          "inline-flex items-center gap-1 rounded-full whitespace-nowrap",
+          compact ? "text-xs px-1.5 py-0.5" : "text-xs px-2 py-1",
+          "font-semibold transition-opacity",
+          "bg-red-500 dark:bg-red-600 text-white",
+          // Hover state on the visual content
+          "group-hover:opacity-90"
+        )}>
+          <AlertCircle className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
+          <span>Not Ready</span>
+        </span>
+      </Link>
+    </Button>
   );
   
   return (
@@ -259,11 +292,9 @@ export function NotReadyChip({
           <div className="text-xs text-muted-foreground">
             This feature has not passed Golden Path testing and is not ready for use.
           </div>
-          <Link href="/status/features">
-            <span className="text-xs text-primary hover:underline">
-              View feature status →
-            </span>
-          </Link>
+          <span className="text-xs text-primary">
+            Click to view feature status →
+          </span>
         </div>
       </TooltipContent>
     </Tooltip>

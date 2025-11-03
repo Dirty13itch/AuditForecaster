@@ -29,14 +29,17 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
-import { playAudit } from 'playwright-lighthouse';
-
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
-
-// Lighthouse remote debugging port (configured in playwright.config.ts)
-// Since workers=1 (no parallel execution), we use a fixed port
-const LIGHTHOUSE_PORT = 9222;
+import {
+  login,
+  runAxeScan,
+  runLighthouseCheck,
+  setupAnalyticsTracking,
+  assertAnalyticsEvent,
+  assertAuditLog,
+  updateGoldenPathReport,
+  createTestResult,
+  BASE_URL
+} from '../helpers';
 
 // Test timeout: 2 minutes for complex multi-step workflow
 test.setTimeout(120000);
@@ -375,121 +378,11 @@ class ReportsPage {
 }
 
 // ============================================================================
-// HELPER FUNCTIONS
+// TEST-SPECIFIC HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Login helper - authenticates as specified user
- */
-async function login(page: Page, userType: 'admin' | 'inspector1' | 'inspector2') {
-  const loginUrl = `${BASE_URL}/api/dev-login/test-${userType}`;
-  await page.goto(loginUrl);
-  await page.waitForURL(`${BASE_URL}/`);
-}
-
-/**
- * Run Axe accessibility scan on current page
- */
-async function runAxeScan(page: Page, pageName: string) {
-  const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
-  
-  // Assert no critical violations
-  const criticalViolations = accessibilityScanResults.violations.filter(
-    v => v.impact === 'critical' || v.impact === 'serious'
-  );
-  
-  expect(criticalViolations, `${pageName} has ${criticalViolations.length} critical accessibility violations`).toHaveLength(0);
-  
-  return accessibilityScanResults;
-}
-
-/**
- * Run real Lighthouse performance and accessibility audit
- * 
- * Uses remote debugging port configured in playwright.config.ts.
- * Since workers=1 (no parallel execution), we use a fixed port (9222).
- * 
- * @param page - Playwright page object
- * @param pageName - Human-readable name for logging
- * @param url - Full URL to audit (including BASE_URL)
- * @returns Lighthouse audit results with scores
- */
-async function runLighthouseCheck(page: Page, pageName: string, url: string) {
-  console.log(`\n🔍 Running Lighthouse audit for: ${pageName}`);
-  console.log(`   URL: ${url}`);
-  console.log(`   Port: ${LIGHTHOUSE_PORT}`);
-  
-  try {
-    // Run Lighthouse audit using the remote debugging port from playwright.config.ts
-    const lighthouseReport = await playAudit({
-      page,
-      port: LIGHTHOUSE_PORT,
-      thresholds: {
-        performance: 90,
-        accessibility: 90,
-        'best-practices': 80,
-        seo: 80,
-      },
-      opts: {
-        screenEmulation: {
-          disabled: true, // Use Playwright's viewport settings
-        },
-      },
-    });
-
-    // Extract scores from the report
-    const categories = lighthouseReport?.lhr?.categories || {};
-    const performanceScore = Math.round((categories.performance?.score || 0) * 100);
-    const accessibilityScore = Math.round((categories.accessibility?.score || 0) * 100);
-    const bestPracticesScore = Math.round((categories['best-practices']?.score || 0) * 100);
-    const seoScore = Math.round((categories.seo?.score || 0) * 100);
-
-    // Log scores for visibility
-    console.log(`\n📊 Lighthouse Results for ${pageName}:`);
-    console.log(`   Performance:     ${performanceScore}/100 ${performanceScore >= 90 ? '✅' : '❌'}`);
-    console.log(`   Accessibility:   ${accessibilityScore}/100 ${accessibilityScore >= 90 ? '✅' : '❌'}`);
-    console.log(`   Best Practices:  ${bestPracticesScore}/100 ${bestPracticesScore >= 80 ? '✅' : '⚠️'}`);
-    console.log(`   SEO:             ${seoScore}/100 ${seoScore >= 80 ? '✅' : '⚠️'}\n`);
-
-    // Assert performance score meets requirement (≥90)
-    expect(
-      performanceScore,
-      `${pageName}: Performance score must be ≥90 (actual: ${performanceScore})`
-    ).toBeGreaterThanOrEqual(90);
-
-    // Assert accessibility score meets requirement (≥90)
-    expect(
-      accessibilityScore,
-      `${pageName}: Accessibility score must be ≥90 (actual: ${accessibilityScore})`
-    ).toBeGreaterThanOrEqual(90);
-
-    return {
-      pageName,
-      url,
-      performance: performanceScore,
-      accessibility: accessibilityScore,
-      bestPractices: bestPracticesScore,
-      seo: seoScore,
-      passed: performanceScore >= 90 && accessibilityScore >= 90,
-    };
-  } catch (error) {
-    console.error(`\n❌ Lighthouse audit failed for ${pageName}:`, error);
-    
-    // Don't fail the test, but log the error
-    console.warn(`⚠️  Lighthouse audit could not be completed for ${pageName}. Skipping performance check.`);
-    
-    return {
-      pageName,
-      url,
-      performance: 0,
-      accessibility: 0,
-      bestPractices: 0,
-      seo: 0,
-      passed: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
+// Main helper functions are imported from '../helpers'
+// All authentication, accessibility, performance, and analytics helpers are available
 
 // ============================================================================
 // TEST SUITE
