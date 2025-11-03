@@ -1133,13 +1133,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const builder = await storage.createBuilder(validated);
       
       // Audit log: Builder creation
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder.create',
-        resourceType: 'builder',
-        resourceId: builder.id,
-        metadata: { builderName: builder.name, companyName: builder.companyName },
-      }, storage);
+      await logCreate({
+        req,
+        entityType: 'builder',
+        entityId: builder.id,
+        after: builder,
+      });
       
       // Invalidate builder caches
       invalidateCachePattern(buildersCache, 'builders:');
@@ -1186,6 +1185,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate ID parameter (accepts UUID v4 or slug format)
       const { id } = flexibleIdParamSchema.parse(req.params);
       
+      // Fetch existing builder for audit trail
+      const existingBuilder = await storage.getBuilder(id);
+      if (!existingBuilder) {
+        return res.status(404).json(notFoundResponse('Builder', req.path));
+      }
+      
       const validated = insertBuilderSchema.partial().parse(req.body);
       
       // Sanitize user-provided text inputs to prevent XSS
@@ -1205,14 +1210,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Audit log: Builder update
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder.update',
-        resourceType: 'builder',
-        resourceId: id,
-        changes: validated,
-        metadata: { builderName: builder.name, companyName: builder.companyName },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'builder',
+        entityId: id,
+        before: existingBuilder,
+        after: builder,
+      });
       
       // Invalidate builder caches
       invalidateCachePattern(buildersCache, 'builders:');
@@ -1236,21 +1240,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = flexibleIdParamSchema.parse(req.params);
       
       const builder = await storage.getBuilder(id);
+      if (!builder) {
+        return res.status(404).json({ message: "Builder not found. It may have already been deleted." });
+      }
+      
       const deleted = await storage.deleteBuilder(id);
       if (!deleted) {
         return res.status(404).json({ message: "Builder not found. It may have already been deleted." });
       }
       
       // Audit log: Builder deletion
-      if (builder) {
-        await createAuditLog(req, {
-          userId: req.user.id,
-          action: 'builder.delete',
-          resourceType: 'builder',
-          resourceId: id,
-          metadata: { builderName: builder.name, companyName: builder.companyName },
-        }, storage);
-      }
+      await logDelete({
+        req,
+        entityType: 'builder',
+        entityId: id,
+        before: builder,
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -1295,13 +1300,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json(notFoundResponse('Builder', req.path));
       }
       
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder.approve',
-        resourceType: 'builder',
-        resourceId: req.params.id,
-        metadata: { builderName: builder.name, companyName: builder.companyName },
-      }, storage);
+      await logCustomAction({
+        req,
+        action: 'approve',
+        entityType: 'builder',
+        entityId: req.params.id,
+        after: { approved: true, approvedAt: builder.approvedAt },
+      });
       
       res.json(builder);
     } catch (error) {
@@ -1332,17 +1337,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.mergeBuilders(req.params.id, targetBuilderId);
       
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder.merge',
-        resourceType: 'builder',
-        resourceId: req.params.id,
+      await logCustomAction({
+        req,
+        action: 'update',
+        entityType: 'builder',
+        entityId: targetBuilderId,
         metadata: { 
-          sourceBuilder: sourceBuilder.name,
-          targetBuilder: targetBuilder.name,
-          targetBuilderId,
+          mergedFrom: req.params.id,
+          sourceBuilderName: sourceBuilder.name,
+          targetBuilderName: targetBuilder.name,
         },
-      }, storage);
+      });
       
       res.json({ success: true, message: "Builder merged successfully" });
     } catch (error) {
@@ -1369,13 +1374,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.rejectBuilder(req.params.id, unknownBuilderId);
       
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder.reject',
-        resourceType: 'builder',
-        resourceId: req.params.id,
-        metadata: { builderName: builder.name, reassignedTo: unknownBuilderId },
-      }, storage);
+      await logCustomAction({
+        req,
+        action: 'reject',
+        entityType: 'builder',
+        entityId: req.params.id,
+        before: builder,
+        metadata: { reason: 'Builder rejected by admin', reassignedTo: unknownBuilderId },
+      });
       
       res.json({ success: true, message: "Builder rejected and deleted" });
     } catch (error) {
@@ -1413,19 +1419,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const contact = await storage.createBuilderContact(validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_contact.create',
-        resourceType: 'builder_contact',
-        resourceId: contact.id,
-        changes: validated,
-        metadata: { 
-          builderName: builder?.name,
-          contactName: contact.name,
-          contactRole: contact.role,
-        },
-      }, storage);
+      await logCreate({
+        req,
+        entityType: 'builder_contact',
+        entityId: contact.id,
+        after: contact,
+        metadata: { builderId: req.params.builderId, role: contact.role },
+      });
       
       res.status(201).json(contact);
     } catch (error) {
@@ -1479,19 +1479,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Contact not found" });
       }
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_contact.update',
-        resourceType: 'builder_contact',
-        resourceId: req.params.id,
-        changes: validated,
-        metadata: { 
-          builderName: builder?.name,
-          contactName: contact.name,
-          contactRole: contact.role,
-        },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'builder_contact',
+        entityId: req.params.id,
+        before: existing,
+        after: contact,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.json(contact);
     } catch (error) {
@@ -1519,18 +1514,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Contact not found" });
       }
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_contact.delete',
-        resourceType: 'builder_contact',
-        resourceId: req.params.id,
-        metadata: { 
-          builderName: builder?.name,
-          contactName: contact.name,
-          contactRole: contact.role,
-        },
-      }, storage);
+      await logDelete({
+        req,
+        entityType: 'builder_contact',
+        entityId: req.params.id,
+        before: contact,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -1551,18 +1541,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await storage.setPrimaryContact(req.params.builderId, req.params.id);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_contact.set_primary',
-        resourceType: 'builder_contact',
-        resourceId: req.params.id,
-        metadata: { 
-          builderName: builder?.name,
-          contactName: contact.name,
-          contactRole: contact.role,
-        },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'builder_contact',
+        entityId: req.params.id,
+        before: contact,
+        after: { ...contact, isPrimary: true },
+        changedFields: ['isPrimary'],
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -1595,18 +1582,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const agreement = await storage.createBuilderAgreement(validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_agreement.create',
-        resourceType: 'builder_agreement',
-        resourceId: agreement.id,
-        metadata: { 
-          builderName: builder?.name,
-          agreementName: agreement.agreementName,
-          status: agreement.status,
-        },
-      }, storage);
+      await logCreate({
+        req,
+        entityType: 'builder_agreement',
+        entityId: agreement.id,
+        after: agreement,
+        metadata: { builderId: req.params.builderId, startDate: agreement.startDate, endDate: agreement.endDate },
+      });
       
       res.status(201).json(agreement);
     } catch (error) {
@@ -1654,18 +1636,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const agreement = await storage.updateBuilderAgreement(req.params.id, validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_agreement.update',
-        resourceType: 'builder_agreement',
-        resourceId: req.params.id,
-        changes: validated,
-        metadata: { 
-          builderName: builder?.name,
-          agreementName: agreement?.agreementName,
-        },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'builder_agreement',
+        entityId: req.params.id,
+        before: existing,
+        after: agreement,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.json(agreement);
     } catch (error) {
@@ -1690,17 +1668,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const deleted = await storage.deleteBuilderAgreement(req.params.id);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_agreement.delete',
-        resourceType: 'builder_agreement',
-        resourceId: req.params.id,
-        metadata: { 
-          builderName: builder?.name,
-          agreementName: agreement.agreementName,
-        },
-      }, storage);
+      await logDelete({
+        req,
+        entityType: 'builder_agreement',
+        entityId: req.params.id,
+        before: agreement,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -1733,18 +1707,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const program = await storage.createBuilderProgram(validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_program.create',
-        resourceType: 'builder_program',
-        resourceId: program.id,
-        metadata: { 
-          builderName: builder?.name,
-          programName: program.programName,
-          programType: program.programType,
-        },
-      }, storage);
+      await logCreate({
+        req,
+        entityType: 'builder_program',
+        entityId: program.id,
+        after: program,
+        metadata: { builderId: req.params.builderId, programType: program.programType },
+      });
       
       res.status(201).json(program);
     } catch (error) {
@@ -1792,18 +1761,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const program = await storage.updateBuilderProgram(req.params.id, validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_program.update',
-        resourceType: 'builder_program',
-        resourceId: req.params.id,
-        changes: validated,
-        metadata: { 
-          builderName: builder?.name,
-          programName: program?.programName,
-        },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'builder_program',
+        entityId: req.params.id,
+        before: existing,
+        after: program,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.json(program);
     } catch (error) {
@@ -1828,17 +1793,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const deleted = await storage.deleteBuilderProgram(req.params.id);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_program.delete',
-        resourceType: 'builder_program',
-        resourceId: req.params.id,
-        metadata: { 
-          builderName: builder?.name,
-          programName: program.programName,
-        },
-      }, storage);
+      await logDelete({
+        req,
+        entityType: 'builder_program',
+        entityId: req.params.id,
+        before: program,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -1873,18 +1834,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const interaction = await storage.createBuilderInteraction(validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_interaction.create',
-        resourceType: 'builder_interaction',
-        resourceId: interaction.id,
-        metadata: { 
-          builderName: builder?.name,
-          interactionType: interaction.interactionType,
-          subject: interaction.subject,
-        },
-      }, storage);
+      await logCreate({
+        req,
+        entityType: 'builder_interaction',
+        entityId: interaction.id,
+        after: interaction,
+        metadata: { builderId: req.params.builderId, interactionType: interaction.interactionType, contactId: interaction.contactId },
+      });
       
       res.status(201).json(interaction);
     } catch (error) {
@@ -1932,18 +1888,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const interaction = await storage.updateBuilderInteraction(req.params.id, validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_interaction.update',
-        resourceType: 'builder_interaction',
-        resourceId: req.params.id,
-        changes: validated,
-        metadata: { 
-          builderName: builder?.name,
-          subject: interaction?.subject,
-        },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'builder_interaction',
+        entityId: req.params.id,
+        before: existing,
+        after: interaction,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.json(interaction);
     } catch (error) {
@@ -1968,17 +1920,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const deleted = await storage.deleteBuilderInteraction(req.params.id);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_interaction.delete',
-        resourceType: 'builder_interaction',
-        resourceId: req.params.id,
-        metadata: { 
-          builderName: builder?.name,
-          subject: interaction.subject,
-        },
-      }, storage);
+      await logDelete({
+        req,
+        entityType: 'builder_interaction',
+        entityId: req.params.id,
+        before: interaction,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -2277,18 +2225,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       validated.createdBy = req.user.id;
       const development = await storage.createDevelopment(validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'development.create',
-        resourceType: 'development',
-        resourceId: development.id,
-        metadata: { 
-          builderName: builder?.name,
-          developmentName: development.name,
-          status: development.status,
-        },
-      }, storage);
+      await logCreate({
+        req,
+        entityType: 'development',
+        entityId: development.id,
+        after: development,
+        metadata: { builderId: req.params.builderId, city: development.city, name: development.name },
+      });
       
       res.status(201).json(development);
     } catch (error) {
@@ -2330,18 +2273,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = updateDevelopmentSchema.parse(req.body);
       const development = await storage.updateDevelopment(req.params.id, validated);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'development.update',
-        resourceType: 'development',
-        resourceId: req.params.id,
-        changes: validated,
-        metadata: { 
-          builderName: builder?.name,
-          developmentName: development?.name,
-        },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'development',
+        entityId: req.params.id,
+        before: existing,
+        after: development,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.json(development);
     } catch (error) {
@@ -2366,17 +2305,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const deleted = await storage.deleteDevelopment(req.params.id);
       
-      const builder = await storage.getBuilder(req.params.builderId);
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'development.delete',
-        resourceType: 'development',
-        resourceId: req.params.id,
-        metadata: { 
-          builderName: builder?.name,
-          developmentName: development.name,
-        },
-      }, storage);
+      await logDelete({
+        req,
+        entityType: 'development',
+        entityId: req.params.id,
+        before: development,
+        metadata: { builderId: req.params.builderId },
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -2407,17 +2342,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const abbreviation = await storage.createBuilderAbbreviation(validatedData);
 
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_abbreviation.create',
-        resourceType: 'builder_abbreviation',
-        resourceId: abbreviation.id,
-        metadata: {
-          builderId,
-          abbreviation: abbreviation.abbreviation,
-          isPrimary: abbreviation.isPrimary,
-        },
-      }, storage);
+      await logCreate({
+        req,
+        entityType: 'builder_abbreviation',
+        entityId: abbreviation.id,
+        after: abbreviation,
+        metadata: { builderId, abbreviation: abbreviation.abbreviation, fullName: abbreviation.fullName },
+      });
 
       res.status(201).json(abbreviation);
     } catch (error) {
@@ -2432,8 +2363,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { id } = req.params;
+      const { builderId, id } = req.params;
       const validatedData = insertBuilderAbbreviationSchema.partial().parse(req.body);
+      
+      // Fetch existing abbreviation for audit trail
+      const abbreviations = await storage.getBuilderAbbreviationsByBuilder(builderId);
+      const existing = abbreviations.find(a => a.id === id);
+      
+      if (!existing) {
+        return res.status(404).json({ message: 'Abbreviation not found' });
+      }
 
       const abbreviation = await storage.updateBuilderAbbreviation(id, validatedData);
       
@@ -2441,15 +2380,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Abbreviation not found' });
       }
 
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_abbreviation.update',
-        resourceType: 'builder_abbreviation',
-        resourceId: id,
-        metadata: {
-          changes: validatedData,
-        },
-      }, storage);
+      await logUpdate({
+        req,
+        entityType: 'builder_abbreviation',
+        entityId: id,
+        before: existing,
+        after: abbreviation,
+      });
 
       res.json(abbreviation);
     } catch (error) {
@@ -2464,20 +2401,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/builders/:builderId/abbreviations/:id', isAuthenticated, requireRole('admin'), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { id } = req.params;
+      const { builderId, id } = req.params;
+      
+      // Fetch existing abbreviation for audit trail
+      const abbreviations = await storage.getBuilderAbbreviationsByBuilder(builderId);
+      const existing = abbreviations.find(a => a.id === id);
+      
+      if (!existing) {
+        return res.status(404).json({ message: 'Abbreviation not found' });
+      }
+      
       const success = await storage.deleteBuilderAbbreviation(id);
 
       if (!success) {
         return res.status(404).json({ message: 'Abbreviation not found' });
       }
 
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'builder_abbreviation.delete',
-        resourceType: 'builder_abbreviation',
-        resourceId: id,
-        metadata: {},
-      }, storage);
+      await logDelete({
+        req,
+        entityType: 'builder_abbreviation',
+        entityId: id,
+        before: existing,
+      });
 
       res.json({ success: true });
     } catch (error) {
@@ -2502,19 +2447,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.setPrimaryBuilderAbbreviation(builderId, id);
 
       // Audit log
-      const userId = req.user.id;
-      if (userId) {
-        await createAuditLog(req, {
-          userId,
-          action: 'set_primary_builder_abbreviation',
-          resourceType: 'builder_abbreviation',
-          resourceId: id,
-          metadata: {
-            builderId,
-            abbreviation: targetAbbreviation.abbreviation,
-          },
-        }, storage);
-      }
+      await logUpdate({
+        req,
+        entityType: 'builder_abbreviation',
+        entityId: id,
+        before: targetAbbreviation,
+        after: { ...targetAbbreviation, isPrimary: true },
+        changedFields: ['isPrimary'],
+      });
 
       res.json({ success: true, message: 'Primary abbreviation updated' });
     } catch (error) {
@@ -6188,6 +6128,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Expense not found. It may have already been deleted." });
       }
+
+      // Audit logging - financial compliance requires tracking deletions
+      await logDelete({
+        req,
+        entityType: 'expense',
+        entityId: req.params.id,
+        before: expense,
+        metadata: {
+          amount: expense.amount,
+          category: expense.category,
+        },
+      });
+
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete expense');
@@ -6226,6 +6179,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const deleted = await storage.bulkDeleteExpenses(ids);
+
+      // Audit logging - track each deleted expense for compliance
+      for (let i = 0; i < expenses.length; i++) {
+        const expense = expenses[i];
+        if (expense) {
+          await logDelete({
+            req,
+            entityType: 'expense',
+            entityId: ids[i],
+            before: expense,
+            metadata: {
+              bulkOperation: true,
+              amount: expense.amount,
+              category: expense.category,
+            },
+          });
+        }
+      }
+
       res.json({ deleted, total: ids.length });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -6238,7 +6210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export expenses
-  app.post("/api/expenses/export", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/expenses/export", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     const exportSchema = z.object({
       ids: z.array(z.string()).min(1, "At least one expense ID is required"),
       format: z.enum(['csv', 'json']),
@@ -6257,6 +6229,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ids.map(id => storage.getExpense(id))
       );
       const validExpenses = expenses.filter((e): e is NonNullable<typeof e> => e !== undefined);
+
+      // Audit logging - track financial data exports for compliance
+      await logExport({
+        req,
+        exportType: 'expenses',
+        recordCount: validExpenses.length,
+        format,
+        filters: { ids },
+        metadata: {
+          totalAmount: validExpenses.reduce((sum, e) => sum + (e.amount || 0), 0),
+        },
+      });
 
       // Fetch jobs for enrichment (for job names in export)
       const jobIds = Array.from(new Set(validExpenses.map(e => e.jobId).filter(Boolean)));
@@ -6681,6 +6665,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       invoiceData.userId = userId;
       const validated = insertInvoiceSchema.parse(invoiceData);
       const invoice = await storage.createInvoice(validated);
+
+      // Audit logging - financial compliance for invoice creation
+      await logCreate({
+        req,
+        entityType: 'invoice',
+        entityId: invoice.id,
+        after: invoice,
+        metadata: {
+          builderId: invoice.builderId,
+          totalAmount: invoice.total,
+          invoiceNumber: invoice.invoiceNumber,
+        },
+      });
+
       res.status(201).json(invoice);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -6723,13 +6721,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices/:id/mark-paid", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/invoices/:id/mark-paid", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const paymentDetails = insertPaymentSchema.partial().parse(req.body);
+      
+      // Fetch existing invoice for audit trail
+      const existingInvoice = await storage.getInvoice(req.params.id);
+      if (!existingInvoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
       const invoice = await storage.markInvoiceAsPaid(req.params.id, paymentDetails);
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
+
+      // Audit logging - mark-paid is completion action for invoice lifecycle
+      await logCustomAction({
+        req,
+        action: 'complete',
+        entityType: 'invoice',
+        entityId: req.params.id,
+        before: existingInvoice,
+        after: {
+          status: 'paid',
+          paidAt: new Date(),
+        },
+        metadata: {
+          paidAmount: invoice.total,
+          paymentMethod: paymentDetails.method,
+          invoiceNumber: invoice.invoiceNumber,
+        },
+      });
+
       res.json(invoice);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -6741,12 +6765,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/invoices/:id", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/invoices/:id", isAuthenticated, blockFinancialAccess(), csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Fetch existing invoice for audit trail
+      const existingInvoice = await storage.getInvoice(req.params.id);
+      if (!existingInvoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
       const deleted = await storage.deleteInvoice(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Invoice not found" });
       }
+
+      // Audit logging - financial compliance requires tracking deletions
+      await logDelete({
+        req,
+        entityType: 'invoice',
+        entityId: req.params.id,
+        before: existingInvoice,
+        metadata: {
+          invoiceNumber: existingInvoice.invoiceNumber,
+          totalAmount: existingInvoice.total,
+          builderId: existingInvoice.builderId,
+        },
+      });
+
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete invoice');
@@ -6853,6 +6897,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sentAt: new Date(),
       });
 
+      // Audit logging - invoice send is export action
+      await logCustomAction({
+        req,
+        action: 'export',
+        entityType: 'invoice',
+        entityId: invoice.id,
+        metadata: {
+          sentTo: recipientEmail,
+          sentAt: new Date().toISOString(),
+          method: 'email',
+          invoiceNumber: invoice.invoiceNumber,
+          totalAmount: invoice.total,
+        },
+      });
+
       res.json({ success: true, message: 'Invoice sent successfully' });
     } catch (error) {
       logError('send invoice', error);
@@ -6895,6 +6954,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...validated,
         createdBy: req.user.id,
       });
+
+      // Audit logging - financial compliance for payment tracking
+      await logCreate({
+        req,
+        entityType: 'payment',
+        entityId: payment.id,
+        after: payment,
+        metadata: {
+          invoiceId: payment.invoiceId,
+          amount: payment.amount,
+          method: payment.method,
+        },
+      });
+
       res.status(201).json(payment);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -7058,6 +7131,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
+
+      // Audit logging - financial compliance for invoice with line items
+      await logCreate({
+        req,
+        entityType: 'invoice',
+        entityId: invoice.id,
+        after: { invoice, lineItems: createdLineItems },
+        metadata: {
+          builderId: invoice.builderId,
+          totalAmount: invoice.total,
+          lineItemCount: createdLineItems.length,
+          invoiceNumber: invoice.invoiceNumber,
+        },
+      });
 
       res.status(201).json({
         invoice,
@@ -7225,6 +7312,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const expense = await storage.createExpense(expenseData);
       
+      // Audit logging - financial compliance
+      await logCreate({
+        req,
+        entityType: 'expense',
+        entityId: expense.id,
+        after: expense,
+        metadata: {
+          category: expense.category,
+          amount: expense.amount,
+          jobId: expense.jobId,
+        },
+      });
+      
       serverLogger.info('[Expenses/Create] Expense created successfully', {
         expenseId: expense.id,
         userId: expense.userId,
@@ -7327,6 +7427,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Expense not found' });
       }
 
+      // Audit logging - approval action for financial compliance
+      await logCustomAction({
+        req,
+        action: 'approve',
+        entityType: 'expense',
+        entityId: expense.id,
+        after: {
+          approved: true,
+          approvedAt: expense.approvedAt,
+          approvedBy: expense.approvedBy,
+        },
+        metadata: {
+          approvedBy: approverId,
+          amount: expense.amount,
+          category: expense.category,
+        },
+      });
+
       serverLogger.info('[Expenses/Approve] Expense approved successfully', {
         expenseId,
         approverId,
@@ -7384,12 +7502,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate and parse request body with restricted schema
       const validated = safeUpdateSchema.parse(req.body);
 
-      // Check ownership for inspectors
+      // Fetch existing expense for audit trail
+      let existingExpense;
       if (userRole === 'inspector') {
-        const existingExpense = await storage.getExpenses({ userId });
-        const expense = existingExpense.find(e => e.id === expenseId);
+        const userExpenses = await storage.getExpenses({ userId });
+        existingExpense = userExpenses.find(e => e.id === expenseId);
         
-        if (!expense) {
+        if (!existingExpense) {
           serverLogger.warn('[Expenses/Update] Inspector attempted to update non-existent or unauthorized expense', {
             userId,
             expenseId,
@@ -7397,15 +7516,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: 'Expense not found' });
         }
 
-        if (expense.userId !== userId) {
+        if (existingExpense.userId !== userId) {
           serverLogger.warn('[Expenses/Update] Inspector attempted to update another user\'s expense', {
             userId,
             expenseId,
-            expenseUserId: expense.userId,
+            expenseUserId: existingExpense.userId,
           });
           return res.status(403).json({ 
             message: 'Forbidden: You can only update your own expenses' 
           });
+        }
+      } else {
+        // Admin can update any expense
+        const allExpenses = await storage.getExpenses({});
+        existingExpense = allExpenses.find(e => e.id === expenseId);
+        if (!existingExpense) {
+          return res.status(404).json({ message: 'Expense not found' });
         }
       }
 
@@ -7424,6 +7550,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         return res.status(404).json({ message: 'Expense not found or already approved' });
       }
+
+      // Audit logging - track expense changes for financial compliance
+      await logUpdate({
+        req,
+        entityType: 'expense',
+        entityId: expenseId,
+        before: existingExpense,
+        after: updatedExpense,
+        changedFields: Object.keys(validated),
+        metadata: {
+          amount: updatedExpense.amount,
+          category: updatedExpense.category,
+        },
+      });
 
       serverLogger.info('[Expenses/Update] Expense updated successfully', {
         expenseId,
@@ -7675,10 +7815,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-templates", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/report-templates", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res) => {
     try {
       const validated = insertReportTemplateSchema.parse(req.body);
       const template = await storage.createReportTemplate(validated);
+      
+      // Audit log: Report template created
+      await logCreate({
+        req,
+        entityType: 'report_template',
+        entityId: template.id,
+        after: template,
+        metadata: {
+          name: template.name,
+          version: template.version,
+        },
+      });
+      
       res.status(201).json(template);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -7814,12 +7967,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/report-templates/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/report-templates/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res) => {
     try {
+      // Fetch template before deletion for audit log
+      const template = await storage.getReportTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Report template not found. It may have already been deleted." });
+      }
+      
       const deleted = await storage.deleteReportTemplate(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Report template not found. It may have already been deleted." });
       }
+      
+      // Audit log: Report template deleted
+      await logDelete({
+        req,
+        entityType: 'report_template',
+        entityId: req.params.id,
+        before: template,
+        metadata: {
+          name: template.name,
+          version: template.version,
+        },
+      });
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete report template');
@@ -7828,21 +8000,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Clone report template
-  app.post("/api/report-templates/:id/clone", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/report-templates/:id/clone", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res) => {
     try {
       const { name } = req.body;
+      const original = await storage.getReportTemplate(req.params.id);
+      if (!original) {
+        return res.status(404).json({ message: "Report template not found" });
+      }
+      
       const cloned = await storage.cloneReportTemplate(req.params.id, name);
       
-      await createAuditLog({
-        userId: (req as any).user?.claims?.sub || 'unknown',
-        action: 'template.cloned',
-        entityType: 'reportTemplate',
+      // Audit log: Report template cloned
+      await logCreate({
+        req,
+        entityType: 'report_template',
         entityId: cloned.id,
+        after: cloned,
         metadata: { 
-          originalId: req.params.id,
+          clonedFrom: req.params.id,
+          originalName: original.name,
           newName: cloned.name,
-          version: cloned.version
-        }
+          version: cloned.version,
+        },
       });
       
       res.status(201).json(cloned);
@@ -7856,22 +8035,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Archive report template
-  app.post("/api/report-templates/:id/archive", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/report-templates/:id/archive", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res) => {
     try {
+      // Fetch template before archiving for audit log
+      const before = await storage.getReportTemplate(req.params.id);
+      if (!before) {
+        return res.status(404).json({ message: "Report template not found" });
+      }
+      
       const archived = await storage.archiveReportTemplate(req.params.id);
       if (!archived) {
         return res.status(404).json({ message: "Report template not found" });
       }
       
-      await createAuditLog({
-        userId: (req as any).user?.claims?.sub || 'unknown',
-        action: 'template.archived',
-        entityType: 'reportTemplate',
+      // Audit log: Report template archived
+      await logUpdate({
+        req,
+        entityType: 'report_template',
         entityId: req.params.id,
+        before,
+        after: archived,
+        changedFields: ['isArchived'],
         metadata: { 
           templateName: archived.name,
-          archivedAt: new Date().toISOString()
-        }
+          archivedAt: new Date().toISOString(),
+        },
       });
       
       res.json(archived);
@@ -7938,14 +8126,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logError('ReportInstances/ComplianceEvaluation', error, { instanceId: instance.id });
       }
       
-      // Audit log: Report generation
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'report.generate',
-        resourceType: 'report',
-        resourceId: instance.id,
-        metadata: { jobId: instance.jobId, templateId: instance.templateId },
-      }, storage);
+      // Audit log: Report instance created
+      await logCreate({
+        req,
+        entityType: 'report_instance',
+        entityId: instance.id,
+        after: instance,
+        metadata: {
+          jobId: instance.jobId,
+          templateId: instance.templateId,
+          reportType: instance.reportType || 'standard',
+        },
+      });
       
       res.status(201).json(instance);
     } catch (error) {
@@ -7958,7 +8150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/report-instances/recalculate-scores", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/report-instances/recalculate-scores", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res) => {
     try {
       const jobs = await storage.getAllJobs();
       let recalculated = 0;
@@ -7970,6 +8162,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           recalculated++;
         }
       }
+      
+      // Audit log: Bulk recalculate scores
+      await logCustomAction({
+        req,
+        action: 'update',
+        entityType: 'report_instance',
+        entityId: 'bulk',
+        metadata: {
+          operation: 'recalculate_scores',
+          recalculatedCount: recalculated,
+          trigger: 'manual',
+        },
+      });
       
       res.json({ message: `Recalculated scores for ${recalculated} report instances` });
     } catch (error) {
@@ -7990,7 +8195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Save report field value
-  app.post("/api/report-field-values", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/report-field-values", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res) => {
     try {
       const validated = insertReportFieldValueSchema.parse(req.body);
       
@@ -7999,6 +8204,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingValue = existing.find(v => v.templateFieldId === validated.templateFieldId);
       
       let result;
+      let before = existingValue || null;
+      
       if (existingValue) {
         // Update existing value
         result = await storage.updateReportFieldValue(existingValue.id, validated);
@@ -8006,6 +8213,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create new value
         result = await storage.createReportFieldValue(validated);
       }
+      
+      // Audit log: Report field value saved/updated
+      await logUpdate({
+        req,
+        entityType: 'report_instance',
+        entityId: validated.reportInstanceId,
+        before: before ? { fieldValues: [before] } : {},
+        after: { fieldValues: [result] },
+        changedFields: [validated.templateFieldId],
+        metadata: {
+          fieldId: validated.templateFieldId,
+          sectionId: validated.sectionId,
+          operation: existingValue ? 'update' : 'create',
+        },
+      });
       
       res.json(result);
     } catch (error) {
@@ -8155,6 +8377,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedPath = `/objects/reports/${filename}`;
       await storage.updateReportInstance(req.params.id, {
         pdfUrl: normalizedPath,
+      });
+
+      // Audit log: Report finalized/PDF generated
+      await logCustomAction({
+        req: req as AuthenticatedRequest,
+        action: 'complete',
+        entityType: 'report_instance',
+        entityId: req.params.id,
+        after: {
+          pdfGenerated: true,
+          pdfUrl: normalizedPath,
+        },
+        metadata: {
+          finalizedAt: new Date().toISOString(),
+          reportType: reportInstance.reportType || 'standard',
+          jobId: reportInstance.jobId,
+          templateId: reportInstance.templateId,
+        },
       });
 
       res.json({
@@ -8925,6 +9165,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Audit log: Photo creation
+      await logCreate({
+        req,
+        entityType: 'photo',
+        entityId: photo.id,
+        after: photo,
+        metadata: {
+          jobId: photo.jobId,
+          tags: photo.tags,
+        },
+      });
+      
       // Trigger async thumbnail generation without blocking response
       setImmediate(async () => {
         try {
@@ -8991,6 +9243,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!photo) {
         return res.status(404).json({ message: "Photo not found. It may have been deleted." });
       }
+      
+      // Audit log: Photo update
+      await logUpdate({
+        req,
+        entityType: 'photo',
+        entityId: req.params.id,
+        before: existingPhoto,
+        after: photo,
+        changedFields: Object.keys(validated),
+      });
+      
       res.json(photo);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -9029,13 +9292,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Audit log: Photo deletion
-      await createAuditLog(req, {
-        userId: req.user.id,
-        action: 'photo.delete',
-        resourceType: 'photo',
-        resourceId: req.params.id,
-        metadata: { jobId: photo.jobId, filePath: photo.filePath },
-      }, storage);
+      await logDelete({
+        req,
+        entityType: 'photo',
+        entityId: req.params.id,
+        before: photo,
+      });
       
       res.status(204).send();
     } catch (error) {
@@ -9089,6 +9351,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Delete photos
       const deleted = await storage.bulkDeletePhotos(ids);
+
+      // Audit log: Bulk delete - log each individual deletion for complete audit trail
+      for (const photo of validPhotos) {
+        await logDelete({
+          req,
+          entityType: 'photo',
+          entityId: photo.id,
+          before: photo,
+          metadata: {
+            bulkOperation: true,
+            totalCount: ids.length,
+          },
+        });
+      }
 
       // Update checklist item photo counts
       for (const [checklistItemId, decrementBy] of checklistUpdates.entries()) {
@@ -9144,6 +9420,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updated = await storage.bulkUpdatePhotoTags(ids, mode, tags);
+      
+      // Audit log: Bulk tag - single entry for efficiency
+      await logCustomAction({
+        req,
+        action: 'update',
+        entityType: 'photo',
+        entityId: 'bulk',
+        after: {
+          tags: tags,
+          mode: mode,
+        },
+        metadata: {
+          bulkOperation: true,
+          photoIds: ids,
+          count: ids.length,
+        },
+      });
+      
       res.json({ updated, total: ids.length, mode, tags });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -9193,6 +9487,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updated = await storage.bulkMovePhotosToJob(ids, jobId);
+      
+      // Audit log: Bulk move - log each photo move for audit trail
+      const validPhotos = photos.filter((p): p is NonNullable<typeof p> => p !== undefined);
+      for (const photo of validPhotos) {
+        await logUpdate({
+          req,
+          entityType: 'photo',
+          entityId: photo.id,
+          before: photo,
+          after: { ...photo, jobId },
+          changedFields: ['jobId'],
+          metadata: {
+            bulkOperation: true,
+            targetJobId: jobId,
+            totalCount: ids.length,
+          },
+        });
+      }
+      
       res.json({ updated, total: ids.length, jobId });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -9236,6 +9549,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updated = await storage.bulkUpdatePhotoFavorites(ids, isFavorite);
+      
+      // Audit log: Bulk favorites - log each photo update for audit trail
+      const validPhotos = photos.filter((p): p is NonNullable<typeof p> => p !== undefined);
+      for (const photo of validPhotos) {
+        await logUpdate({
+          req,
+          entityType: 'photo',
+          entityId: photo.id,
+          before: photo,
+          after: { ...photo, isFavorite },
+          changedFields: ['isFavorite'],
+          metadata: {
+            bulkOperation: true,
+            isFavorite: isFavorite,
+            totalCount: ids.length,
+          },
+        });
+      }
+      
       res.json({ updated, total: ids.length, isFavorite });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -9447,10 +9779,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { annotations } = annotationsSchema.parse(req.body);
       
+      // Fetch existing photo for audit before updating
+      const existingPhoto = await storage.getPhoto(req.params.id);
+      if (!existingPhoto) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
       const photo = await storage.updatePhotoAnnotations(req.params.id, annotations);
       if (!photo) {
         return res.status(404).json({ message: "Photo not found" });
       }
+      
+      // Audit log: Photo annotations update
+      await logUpdate({
+        req,
+        entityType: 'photo',
+        entityId: req.params.id,
+        before: existingPhoto,
+        after: photo,
+        changedFields: ['annotations'],
+      });
       
       res.json(photo);
     } catch (error) {
@@ -9490,6 +9838,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Photo not found" });
       }
       
+      // Audit log: OCR processing as import action (extracts text data)
+      await logCustomAction({
+        req,
+        action: 'import',
+        entityType: 'photo',
+        entityId: req.params.id,
+        after: {
+          ocrText: ocrText,
+          ocrConfidence: ocrConfidence,
+        },
+        metadata: {
+          ocrProvider: ocrMetadata?.engine || 'tesseract',
+          language: ocrMetadata?.language,
+          processingTime: ocrMetadata?.processingTime,
+        },
+      });
+      
       res.json(photo);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -9525,6 +9890,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         deviceInfo,
       });
       
+      // Audit log: Cleanup session creation
+      await logCreate({
+        req,
+        entityType: 'photo_cleanup_session',
+        entityId: session.id,
+        after: session,
+        metadata: {
+          photoCount: photoCount,
+          deviceInfo: deviceInfo,
+        },
+      });
+      
       res.status(201).json(session);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'create cleanup session');
@@ -9538,6 +9915,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!session) {
         return res.status(404).json({ message: "Cleanup session not found" });
       }
+      
+      // Audit log: Cleanup confirmation (deletes photos)
+      await logCustomAction({
+        req,
+        action: 'delete',
+        entityType: 'photo_cleanup_session',
+        entityId: req.params.id,
+        after: session,
+        metadata: {
+          sessionConfirmed: true,
+          photoCount: session.photoCount,
+        },
+      });
       
       res.json(session);
     } catch (error) {
@@ -9585,6 +9975,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ids.map(id => storage.getPhoto(id))
       );
       const validPhotos = photos.filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+      // Audit log: Photo export
+      await logExport({
+        req,
+        exportType: 'photos',
+        recordCount: validPhotos.length,
+        format: format,
+        metadata: {
+          requestedIds: ids,
+          validCount: validPhotos.length,
+        },
+      });
 
       if (format === 'json') {
         // Return JSON directly
@@ -12509,6 +12911,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const equipment = await storage.createEquipment(validated);
+      
+      // Audit logging
+      await logCreate({
+        req,
+        entityType: 'equipment',
+        entityId: equipment.id,
+        after: equipment,
+        metadata: {
+          name: equipment.name,
+          type: equipment.type,
+          serialNumber: equipment.serialNumber,
+          purchaseDate: equipment.purchaseDate,
+        },
+      });
+      
       res.status(201).json(equipment);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -12520,12 +12937,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/equipment/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.patch("/api/equipment/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Fetch existing equipment for audit trail
+      const existingEquipment = await storage.getEquipment(req.params.id);
+      if (!existingEquipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      
       const equipment = await storage.updateEquipment(req.params.id, req.body);
       if (!equipment) {
         return res.status(404).json({ message: "Equipment not found" });
       }
+      
+      // Audit logging
+      const changedFields = Object.keys(req.body);
+      await logUpdate({
+        req,
+        entityType: 'equipment',
+        entityId: equipment.id,
+        before: existingEquipment,
+        after: equipment,
+        changedFields,
+      });
+      
       res.json(equipment);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'update equipment');
@@ -12533,12 +12968,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/equipment/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/equipment/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Fetch existing equipment for audit trail
+      const existingEquipment = await storage.getEquipment(req.params.id);
+      if (!existingEquipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      
       const deleted = await storage.deleteEquipment(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Equipment not found" });
       }
+      
+      // Audit logging
+      await logDelete({
+        req,
+        entityType: 'equipment',
+        entityId: req.params.id,
+        before: existingEquipment,
+      });
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete equipment');
