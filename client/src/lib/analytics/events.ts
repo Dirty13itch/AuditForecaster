@@ -45,7 +45,7 @@ export interface ViewRouteEvent extends BaseAnalyticsEvent {
 
 export interface SearchEntityEvent extends BaseAnalyticsEvent {
   eventType: 'search_entity';
-  entityType: 'jobs' | 'photos' | 'builders' | 'plans' | 'equipment';
+  entityType: 'jobs' | 'photos' | 'builders' | 'plans' | 'equipment' | 'routes';
   query: string;
   resultCount: number;
   filters?: Record<string, unknown>;

@@ -125,7 +125,10 @@ export interface RouteReadiness {
   /** Test coverage percentage (0-100) */
   testCoverage?: number;
   
-  /** Open TODOs or blockers */
+  /** Count of TODO comments related to this route */
+  todos?: number;
+  
+  /** Open TODOs or blockers (detailed list - future) */
   openTodos?: string[];
 }
 

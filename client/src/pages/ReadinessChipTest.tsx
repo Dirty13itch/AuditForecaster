@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import { TopBar } from "@/components/TopBar";
+import TopBar from "@/components/TopBar";
 import { ReadinessChip, NotReadyChip } from "@/components/ReadinessChip";
 import { FeatureMaturity } from "@shared/featureFlags";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

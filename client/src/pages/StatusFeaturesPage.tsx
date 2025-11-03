@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, XCircle, Clock, AlertCircle, Download, Search, Eye, Shield } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CheckCircle2, XCircle, Clock, AlertCircle, Download, Search, Eye, Shield, Info } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
+import { trackPageView, trackSearch, trackExport } from "@/lib/analytics/events";
 
 export default function StatusFeaturesPage() {
   const { user } = useAuth();
@@ -26,6 +28,13 @@ export default function StatusFeaturesPage() {
       setLocation('/');
     }
   }, [user, setLocation]);
+
+  // Track page view for analytics (OBSERVABILITY layer)
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      trackPageView('/status/features', user.id);
+    }
+  }, [user]);
 
   // Block query for non-admin users to avoid 403 error before redirect
   const { data, isLoading, error } = useQuery<FeaturesDashboardResponse>({
@@ -76,11 +85,16 @@ export default function StatusFeaturesPage() {
   };
 
   const handleExportCSV = () => {
+    // Track export event for analytics (OBSERVABILITY layer)
+    trackExport('csv', 'features', filteredRoutes.length);
     window.open('/api/status/features?format=csv', '_blank');
   };
 
   const handleExportJSON = () => {
     if (!data) return;
+    
+    // Track export event for analytics (OBSERVABILITY layer)
+    trackExport('json', 'features', filteredRoutes.length);
     
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -90,6 +104,24 @@ export default function StatusFeaturesPage() {
     a.download = 'feature-status.json';
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Track search input changes for analytics (OBSERVABILITY layer)
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    // Track search with debounced results count
+    if (query.trim()) {
+      trackSearch('routes', query, filteredRoutes.length);
+    }
+  };
+
+  // Track tab changes for analytics (OBSERVABILITY layer)
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    // Track filter change as a search event with filter criteria
+    trackSearch('routes', `filter:maturity:${value}`, filteredByTab.length);
   };
 
   if (isLoading) {
@@ -261,7 +293,7 @@ export default function StatusFeaturesPage() {
             type="text"
             placeholder="Search by path, title, or category..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={handleSearchChange}
             className="pl-10"
             data-testid="input-search"
           />
@@ -269,7 +301,7 @@ export default function StatusFeaturesPage() {
       </div>
 
       {/* Tabs and Table */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList data-testid="tabs-maturity-filter">
           <TabsTrigger value="all" data-testid="tab-all">
             All ({routes.length})
@@ -307,6 +339,51 @@ export default function StatusFeaturesPage() {
                       <TableHead data-testid="table-head-maturity">Maturity</TableHead>
                       <TableHead data-testid="table-head-gp">GP Test</TableHead>
                       <TableHead data-testid="table-head-axe">Accessibility</TableHead>
+                      <TableHead data-testid="table-head-performance">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1 cursor-help">
+                                Performance
+                                <Info className="h-3 w-3 text-muted-foreground" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Placeholder until Lighthouse CI is configured</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead data-testid="table-head-coverage">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1 cursor-help">
+                                Coverage
+                                <Info className="h-3 w-3 text-muted-foreground" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Placeholder until coverage reporting is integrated</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead data-testid="table-head-todos">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1 cursor-help">
+                                TODOs
+                                <Info className="h-3 w-3 text-muted-foreground" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Placeholder - route-specific counting not yet implemented</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
                       <TableHead data-testid="table-head-roles">Roles</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -342,6 +419,34 @@ export default function StatusFeaturesPage() {
                               </Badge>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell data-testid={`cell-performance-${route.path.replace(/\//g, '-')}`}>
+                          {route.lighthouseScore !== undefined ? (
+                            <div className="flex items-center gap-2">
+                              <Badge 
+                                variant={route.lighthouseScore >= 90 ? "default" : route.lighthouseScore >= 75 ? "secondary" : "destructive"}
+                                className="text-xs"
+                              >
+                                {route.lighthouseScore}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground" data-testid={`text-performance-none-${route.path.replace(/\//g, '-')}`}>—</span>
+                          )}
+                        </TableCell>
+                        <TableCell data-testid={`cell-coverage-${route.path.replace(/\//g, '-')}`}>
+                          {route.testCoverage !== undefined ? (
+                            <span className="text-xs">{route.testCoverage}%</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground" data-testid={`text-coverage-none-${route.path.replace(/\//g, '-')}`}>—</span>
+                          )}
+                        </TableCell>
+                        <TableCell data-testid={`cell-todos-${route.path.replace(/\//g, '-')}`}>
+                          {route.todos !== undefined ? (
+                            <span className="text-xs">{route.todos}</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground" data-testid={`text-todos-none-${route.path.replace(/\//g, '-')}`}>—</span>
+                          )}
                         </TableCell>
                         <TableCell data-testid={`cell-roles-${route.path.replace(/\//g, '-')}`}>
                           <div className="flex gap-1 flex-wrap">
@@ -410,6 +515,37 @@ export default function StatusFeaturesPage() {
                               </Badge>
                             )}
                           </div>
+                        </div>
+                      )}
+
+                      {route.lighthouseScore !== undefined && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Performance</span>
+                          <Badge 
+                            variant={route.lighthouseScore >= 90 ? "default" : route.lighthouseScore >= 75 ? "secondary" : "destructive"}
+                            className="text-xs"
+                            data-testid={`mobile-performance-${route.path.replace(/\//g, '-')}`}
+                          >
+                            {route.lighthouseScore}
+                          </Badge>
+                        </div>
+                      )}
+
+                      {route.testCoverage !== undefined && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Test Coverage</span>
+                          <span className="text-xs" data-testid={`mobile-coverage-${route.path.replace(/\//g, '-')}`}>
+                            {route.testCoverage}%
+                          </span>
+                        </div>
+                      )}
+
+                      {route.todos !== undefined && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">TODOs</span>
+                          <span className="text-xs" data-testid={`mobile-todos-${route.path.replace(/\//g, '-')}`}>
+                            {route.todos}
+                          </span>
                         </div>
                       )}
 
