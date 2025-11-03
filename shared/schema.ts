@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index, date, time, check } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, index, date, time, check, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1161,19 +1161,21 @@ export const emailPreferences = pgTable("email_preferences", {
 
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
+  actorId: varchar("actor_id").references(() => users.id, { onDelete: 'set null' }),
   action: text("action").notNull(),
-  resourceType: text("resource_type").notNull(),
-  resourceId: varchar("resource_id"),
-  changesJson: jsonb("changes_json"),
+  entityRef: text("entity_ref").notNull(), // Format: "type:id" e.g. "job:abc123"
+  before: jsonb("before"), // State before mutation (for updates/deletes)
+  after: jsonb("after"), // State after mutation (for creates/updates)
+  metadata: jsonb("metadata"),
+  corrId: varchar("corr_id").notNull(), // Correlation ID for request tracing
   ipAddress: varchar("ip_address"),
   userAgent: text("user_agent"),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-  metadata: jsonb("metadata"),
+  ts: bigint("ts", { mode: 'number' }).notNull(), // Unix timestamp in milliseconds
 }, (table) => [
-  index("idx_audit_logs_user_id").on(table.userId),
-  index("idx_audit_logs_resource").on(table.resourceType, table.resourceId),
-  index("idx_audit_logs_timestamp").on(table.timestamp),
+  index("idx_audit_logs_actor_id").on(table.actorId),
+  index("idx_audit_logs_entity_ref").on(table.entityRef),
+  index("idx_audit_logs_ts").on(table.ts),
+  index("idx_audit_logs_corr_id").on(table.corrId),
   index("idx_audit_logs_action").on(table.action),
 ]);
 
@@ -2419,7 +2421,7 @@ export const insertPhotoUploadSessionSchema = createInsertSchema(photoUploadSess
   cleanupConfirmedAt: z.coerce.date().nullable().optional(),
 });
 export const insertEmailPreferenceSchema = createInsertSchema(emailPreferences).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, timestamp: true });
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, ts: true });
 export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ id: true, timestamp: true, actorId: true }); // actorId injected server-side from req.user.id
 export const insertGoldenPathResultSchema = createInsertSchema(goldenPathResults).omit({ id: true, executedAt: true });
 export const insertAccessibilityAuditResultSchema = createInsertSchema(accessibilityAuditResults).omit({ id: true, auditedAt: true });

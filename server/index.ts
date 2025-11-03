@@ -567,6 +567,15 @@ async function startServer() {
           serverLogger.error('[Server] Failed to initialize calendar import cron job:', error);
         }
 
+        // Initialize automated audit log retention job
+        try {
+          const { startScheduledAuditRetention } = await import('./scheduledAuditRetention');
+          await startScheduledAuditRetention();
+          serverLogger.info('[Server] Automated audit log retention cron job initialized');
+        } catch (error) {
+          serverLogger.error('[Server] Failed to initialize audit retention cron job:', error);
+        }
+
         // Initialize periodic job status metrics update
         try {
           const { jobStatusGauge } = await import('./metrics');
