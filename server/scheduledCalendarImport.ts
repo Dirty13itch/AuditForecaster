@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import crypto from 'crypto';
 import { serverLogger } from './logger';
 import { storage } from './storage';
 import { GoogleCalendarService } from './googleCalendar';
@@ -6,6 +7,7 @@ import { processCalendarEvents } from './calendarImportService';
 import { DateTime } from 'luxon';
 import { backgroundJobTracker } from './backgroundJobTracker';
 import { safeParseInt } from '../shared/numberUtils';
+import { logImport, type AuditRequest } from './lib/audit';
 
 const googleCalendarService = new GoogleCalendarService();
 
@@ -129,19 +131,28 @@ export async function startScheduledCalendarImport() {
           importLogId: result.importLogId,
         });
         
-        // Create audit log for automated import
-        await storage.createAuditLog({
-          userId: SYSTEM_USER_ID,
-          action: 'calendar_import_automated',
-          resourceType: 'calendar',
-          resourceId: buildingKnowledgeCalendarId,
+        // Create synthetic request for system-initiated audit logging
+        const systemReq = {
+          user: { id: SYSTEM_USER_ID },
+          correlationId: crypto.randomUUID(),
+          ip: '127.0.0.1', // localhost for system actions
+          get: () => 'System/Automated Calendar Import',
+        } as AuditRequest;
+        
+        // Log import using modern audit API
+        await logImport({
+          req: systemReq,
+          importType: 'calendar_events',
+          recordCount: events.length,
+          successCount: result.jobsCreated + result.eventsQueued,
+          errorCount: result.errors.length,
+          errors: result.errors.length > 0 ? result.errors.map(e => e.toString()) : undefined,
           metadata: {
-            eventsProcessed: events.length,
+            source: BUILDING_KNOWLEDGE_CALENDAR_NAME,
+            calendarId: buildingKnowledgeCalendarId,
             jobsCreated: result.jobsCreated,
             eventsQueued: result.eventsQueued,
-            errors: result.errors.length,
             importLogId: result.importLogId,
-            source: 'automated_cron_job',
           },
         });
         
@@ -158,14 +169,24 @@ export async function startScheduledCalendarImport() {
         
         // Log the failure for audit purposes
         try {
-          await storage.createAuditLog({
-            userId: SYSTEM_USER_ID,
-            action: 'calendar_import_automated_failed',
-            resourceType: 'calendar',
-            resourceId: 'unknown',
+          const systemReq = {
+            user: { id: SYSTEM_USER_ID },
+            correlationId: crypto.randomUUID(),
+            ip: '127.0.0.1',
+            get: () => 'System/Automated Calendar Import',
+          } as AuditRequest;
+          
+          await logImport({
+            req: systemReq,
+            importType: 'calendar_events',
+            recordCount: 0,
+            successCount: 0,
+            errorCount: 1,
+            errors: [error instanceof Error ? error.message : 'Unknown error'],
             metadata: {
-              error: error instanceof Error ? error.message : 'Unknown error',
-              source: 'automated_cron_job',
+              source: BUILDING_KNOWLEDGE_CALENDAR_NAME,
+              calendarId: buildingKnowledgeCalendarId || 'unknown',
+              failed: true,
             },
           });
         } catch (auditError) {
