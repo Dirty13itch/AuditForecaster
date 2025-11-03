@@ -1,15 +1,20 @@
 import { Menu, Wifi, WifiOff, CloudUpload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ReadinessChip } from "@/components/ReadinessChip";
+import { useRouteMaturity } from "@/hooks/useRouteMaturity";
 
 interface TopBarProps {
   title: string;
   onMenuClick?: () => void;
   isOnline?: boolean;
   pendingSync?: number;
+  showReadinessChip?: boolean;
 }
 
-export default function TopBar({ title, onMenuClick, isOnline = true, pendingSync = 0 }: TopBarProps) {
+export default function TopBar({ title, onMenuClick, isOnline = true, pendingSync = 0, showReadinessChip = true }: TopBarProps) {
+  const maturity = useRouteMaturity();
+  
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-primary text-primary-foreground border-b border-primary-border z-50">
       <div className="flex items-center justify-between h-full px-4 gap-3">
@@ -25,7 +30,12 @@ export default function TopBar({ title, onMenuClick, isOnline = true, pendingSyn
               <Menu className="h-6 w-6" />
             </Button>
           )}
-          <h1 className="text-lg font-semibold truncate" data-testid="text-title">{title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold truncate" data-testid="text-title">{title}</h1>
+            {showReadinessChip && maturity && (
+              <ReadinessChip maturity={maturity} compact />
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

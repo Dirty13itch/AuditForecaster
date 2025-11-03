@@ -2,11 +2,12 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi, ChevronLeft, ChevronRight, Download, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, PlayCircle, Loader2, ChevronDown, WifiOff, Wifi, ChevronLeft, ChevronRight, Download, AlertCircle, RefreshCw, CheckCircle2, Briefcase } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageHeader } from "@/components/PageHeader";
 import { JobListLoadingFallback, CalendarEventsLoadingFallback } from "@/components/LoadingStates";
 import { 
   FadeIn, 
@@ -621,32 +622,34 @@ function JobsContent() {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-6 space-y-6">
-      {/* Page Header */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <h1 className="text-3xl font-bold" data-testid="heading-jobs">Jobs</h1>
-          <Badge variant={isOnline ? "success" : "secondary"} className="flex items-center gap-1">
-            {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {isOnline ? "Online" : "Offline"}
-          </Badge>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={() => setIsExportDialogOpen(true)} 
-            data-testid="button-export-jobs"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
-          {canCreateJobs && (
-            <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-create-job">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Job
+      {/* Page Header with ReadinessChip */}
+      <PageHeader
+        title="Jobs"
+        description="Manage inspection jobs and track field work"
+        icon={<Briefcase className="h-8 w-8 text-primary" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge variant={isOnline ? "success" : "secondary"} className="flex items-center gap-1">
+              {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {isOnline ? "Online" : "Offline"}
+            </Badge>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsExportDialogOpen(true)} 
+              data-testid="button-export-jobs"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
             </Button>
-          )}
-        </div>
-      </div>
+            {canCreateJobs && (
+              <Button onClick={() => setIsJobDialogOpen(true)} data-testid="button-create-job">
+                <Plus className="w-4 h-4 mr-2" />
+                Create Job
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {/* Job sections with pagination */}
       <Accordion type="multiple" defaultValue={["todays-work", "all-jobs"]} className="space-y-4">
