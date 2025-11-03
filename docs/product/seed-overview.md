@@ -38,7 +38,7 @@ The seed script creates the following entities:
 | **Duct Leakage Tests** | 15 | Total and outside duct leakage |
 | **Ventilation Tests** | 15 | ASHRAE 62.2 compliance tests |
 | **Forecasts** | 15 | Energy performance predictions |
-| **Photos** | 15 | Field photo records (3 photos each on first 5 completed jobs) |
+| **Photos** | 15 | Field photo records (1 photo per completed job) |
 | **QA Inspection Scores** | 5 | Quality assurance reviews |
 | **Tax Credit Projects** | 2 | 45L certification projects |
 
@@ -139,7 +139,7 @@ Below are representative examples of the seeded job data:
   - Duct Leakage: Total ~80-120 CFM25, Outside ~40-60 CFM25
   - Ventilation: 4 bedrooms, measured flows
   - Forecast: Predicted ACH50 2.8, TDL 4.0, DLO 2.0
-- **Photos:** 3 photos with tags (exterior, HVAC, insulation, etc.)
+- **Photos:** 1 photo with tags (exterior, HVAC, insulation, etc.)
 
 ### Example 2: Scheduled Job (Pending)
 - **Development:** Valley Crest
@@ -197,11 +197,11 @@ Jobs are evenly distributed across developments with 3 completed jobs per develo
 
 ### Photo Coverage
 - **Total Photos:** 15 total across all jobs
-- **Jobs with Photos:** First 5 completed jobs only (3 photos each)
-- **Completed Jobs WITHOUT Photos:** 10 completed jobs (no photos)
-- **Average Photos per Job with Photos:** 3
+- **Jobs with Photos:** All 15 completed jobs (1 photo each)
+- **Completed Jobs WITHOUT Photos:** 0 (all completed jobs have photos)
+- **Average Photos per Job:** 1
 
-**Note:** Out of 15 total completed jobs, only the first 5 receive photo documentation (15 photos total = 5 jobs × 3 photos). The remaining 10 completed jobs have test data but no photos.
+**Note:** All 15 completed jobs receive photo documentation (15 photos total = 15 jobs × 1 photo each). This ensures consistent photo coverage across all completed work.
 
 ### Photo Tags (Random Assignment)
 Photos are tagged with realistic field categories:
@@ -340,7 +340,7 @@ The seed data intentionally includes scenarios for validation:
 ### Completion Rates
 - **Job Completion:** 43% (15 of 35 jobs done)
 - **Test Data Coverage:** 100% of completed jobs have full test suite
-- **Photo Coverage:** 33% (5 of 15 completed jobs)
+- **Photo Coverage:** 100% (all 15 completed jobs have 1 photo each)
 - **QA Review Coverage:** 33% (5 of 15 completed jobs)
 
 ### Data Integrity
@@ -362,7 +362,7 @@ Organization (1)
        │    ├── Lots (50 total)
        │    └── Jobs (35 total)
        │         ├── Test Data (15 jobs)
-       │         ├── Photos (15 photos on 5 jobs)
+       │         ├── Photos (15 photos on 15 jobs, 1 per job)
        │         └── QA Scores (5 reviews)
        └── Tax Credit Projects (2)
 ```
@@ -410,31 +410,26 @@ The script will output progress indicators:
 
 ### Re-running the Seed
 
-To re-run the seed script:
-1. **Clear existing data** (truncate tables or reset database)
-2. **Run migrations** to ensure schema is current
-3. **Execute seed script** as shown above
+**The seed script is now fully idempotent and can be run multiple times safely.**
 
-### Database Cleanup (if needed)
-
-```sql
-TRUNCATE TABLE qa_inspection_scores CASCADE;
-TRUNCATE TABLE photos CASCADE;
-TRUNCATE TABLE forecasts CASCADE;
-TRUNCATE TABLE ventilation_tests CASCADE;
-TRUNCATE TABLE duct_leakage_tests CASCADE;
-TRUNCATE TABLE blower_door_tests CASCADE;
-TRUNCATE TABLE tax_credit_projects CASCADE;
-TRUNCATE TABLE jobs CASCADE;
-TRUNCATE TABLE lots CASCADE;
-TRUNCATE TABLE plans CASCADE;
-TRUNCATE TABLE developments CASCADE;
-TRUNCATE TABLE construction_managers CASCADE;
-TRUNCATE TABLE builder_contacts CASCADE;
-TRUNCATE TABLE builders CASCADE;
-TRUNCATE TABLE users CASCADE;
-TRUNCATE TABLE organizations CASCADE;
+**Option 1: Upsert Mode (Default)**
+```bash
+tsx scripts/seed-mi-homes.ts
 ```
+This mode checks for existing records and reuses them when possible, avoiding unique constraint violations.
+
+**Option 2: Clean + Seed Mode**
+```bash
+tsx scripts/seed-mi-homes.ts --cleanup
+```
+This mode deletes all existing M/I Homes seed data, then creates fresh data. Use when you want a complete reset.
+
+### Idempotency Features
+
+The script now includes:
+- **Upsert Logic**: Checks for existing organizations, users, builders, contacts, and construction managers before creating new ones
+- **Cleanup Function**: Properly deletes all seed data in correct CASCADE order when using `--cleanup` flag
+- **Smart Reuse**: When entities exist, the script reuses their IDs instead of creating duplicates
 
 ---
 

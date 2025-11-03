@@ -4,11 +4,13 @@
  * Creates realistic seed data for M/I Homes developments across Twin Cities:
  * - 5 Twin Cities communities
  * - 50 jobs (various HERS inspection types)
- * - 15 field visits with photos
+ * - 15 field visits with photos (1 photo per completed job)
  * - 5 QA items
  * - 2 45L tax credit cases
  * 
- * Usage: tsx scripts/seed-mi-homes.ts
+ * Usage: 
+ *   tsx scripts/seed-mi-homes.ts           # Run with upsert (idempotent)
+ *   tsx scripts/seed-mi-homes.ts --cleanup # Clean all data, then seed fresh
  */
 
 import { db } from '../server/db';
@@ -30,7 +32,7 @@ import {
   ventilationTests,
   forecasts,
 } from '../shared/schema';
-import { sql, eq, or } from 'drizzle-orm';
+import { sql, eq, or, and } from 'drizzle-orm';
 
 // ============================================================================
 // Helper Functions
@@ -46,6 +48,147 @@ function randomDate(start: Date, end: Date): Date {
 
 function randomElement<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ============================================================================
+// Cleanup Function
+// ============================================================================
+
+/**
+ * Cleanup function to delete all M/I Homes seed data in proper CASCADE order.
+ * This ensures idempotency by removing existing data before re-seeding.
+ */
+async function cleanup() {
+  console.log('\n🧹 Starting cleanup of M/I Homes seed data...');
+  
+  try {
+    // Step 1: Delete tax credit projects (no dependencies)
+    console.log('  🗑️  Deleting tax credit projects...');
+    const deletedTC = await db.delete(taxCreditProjects)
+      .where(sql`${taxCreditProjects.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes')`)
+      .returning();
+    console.log(`     ${deletedTC.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedTC.length} tax credit projects`);
+    
+    // Step 2: Delete QA inspection scores (depends on jobs)
+    console.log('  🗑️  Deleting QA inspection scores...');
+    const deletedQA = await db.delete(qaInspectionScores)
+      .where(sql`${qaInspectionScores.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes'))`)
+      .returning();
+    console.log(`     ${deletedQA.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedQA.length} QA inspection scores`);
+    
+    // Step 3: Delete photos (depends on jobs)
+    console.log('  🗑️  Deleting photos...');
+    const deletedPhotos = await db.delete(photos)
+      .where(sql`${photos.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes'))`)
+      .returning();
+    console.log(`     ${deletedPhotos.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedPhotos.length} photos`);
+    
+    // Step 4: Delete test data (depends on jobs)
+    console.log('  🗑️  Deleting forecasts...');
+    const deletedForecasts = await db.delete(forecasts)
+      .where(sql`${forecasts.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes'))`)
+      .returning();
+    console.log(`     ${deletedForecasts.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedForecasts.length} forecasts`);
+    
+    console.log('  🗑️  Deleting ventilation tests...');
+    const deletedVent = await db.delete(ventilationTests)
+      .where(sql`${ventilationTests.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes'))`)
+      .returning();
+    console.log(`     ${deletedVent.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedVent.length} ventilation tests`);
+    
+    console.log('  🗑️  Deleting duct leakage tests...');
+    const deletedDuct = await db.delete(ductLeakageTests)
+      .where(sql`${ductLeakageTests.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes'))`)
+      .returning();
+    console.log(`     ${deletedDuct.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedDuct.length} duct leakage tests`);
+    
+    console.log('  🗑️  Deleting blower door tests...');
+    const deletedBlower = await db.delete(blowerDoorTests)
+      .where(sql`${blowerDoorTests.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes'))`)
+      .returning();
+    console.log(`     ${deletedBlower.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedBlower.length} blower door tests`);
+    
+    // Step 5: Delete jobs (CASCADE will handle remaining dependencies)
+    console.log('  🗑️  Deleting jobs...');
+    const deletedJobs = await db.delete(jobs)
+      .where(sql`${jobs.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes')`)
+      .returning();
+    console.log(`     ${deletedJobs.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedJobs.length} jobs`);
+    
+    // Step 6: Delete lots (depends on developments)
+    console.log('  🗑️  Deleting lots...');
+    const deletedLots = await db.delete(lots)
+      .where(sql`${lots.developmentId} IN (SELECT id FROM ${developments} WHERE ${developments.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes'))`)
+      .returning();
+    console.log(`     ${deletedLots.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedLots.length} lots`);
+    
+    // Step 7: Delete plans (depends on builder)
+    console.log('  🗑️  Deleting plans...');
+    const deletedPlans = await db.delete(plans)
+      .where(sql`${plans.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes')`)
+      .returning();
+    console.log(`     ${deletedPlans.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedPlans.length} plans`);
+    
+    // Step 8: Delete developments (depends on builder)
+    console.log('  🗑️  Deleting developments...');
+    const deletedDevs = await db.delete(developments)
+      .where(sql`${developments.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes')`)
+      .returning();
+    console.log(`     ${deletedDevs.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedDevs.length} developments`);
+    
+    // Step 9: Delete construction managers (unique email constraint)
+    console.log('  🗑️  Deleting M/I Homes construction managers...');
+    const deletedCMs = await db.delete(constructionManagers)
+      .where(
+        or(
+          eq(constructionManagers.email, 'manderson@mihomes.com'),
+          eq(constructionManagers.email, 'sjohnson@mihomes.com'),
+          eq(constructionManagers.email, 'tpeterson@mihomes.com')
+        )
+      )
+      .returning();
+    console.log(`     ${deletedCMs.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedCMs.length} construction managers`);
+    
+    // Step 10: Delete builder contacts (depends on builder)
+    console.log('  🗑️  Deleting builder contacts...');
+    const deletedContacts = await db.delete(builderContacts)
+      .where(sql`${builderContacts.builderId} IN (SELECT id FROM ${builders} WHERE name = 'M/I Homes')`)
+      .returning();
+    console.log(`     ${deletedContacts.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedContacts.length} builder contacts`);
+    
+    // Step 11: Delete builder (CASCADE handles remaining)
+    console.log('  🗑️  Deleting M/I Homes builder...');
+    const deletedBuilders = await db.delete(builders)
+      .where(eq(builders.name, 'M/I Homes'))
+      .returning();
+    console.log(`     ${deletedBuilders.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedBuilders.length} builder(s)`);
+    
+    // Step 12: Delete seed users (unique email constraint)
+    console.log('  🗑️  Deleting seed users...');
+    const deletedUsers = await db.delete(users)
+      .where(
+        or(
+          eq(users.email, 'admin@ulrichenergy.com'),
+          eq(users.email, 'inspector1@ulrichenergy.com'),
+          eq(users.email, 'inspector2@ulrichenergy.com')
+        )
+      )
+      .returning();
+    console.log(`     ${deletedUsers.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedUsers.length} seed users`);
+    
+    // Step 13: Delete organization (unique primaryContactEmail constraint)
+    console.log('  🗑️  Deleting Ulrich Energy Auditing organization...');
+    const deletedOrgs = await db.delete(organizations)
+      .where(eq(organizations.name, 'Ulrich Energy Auditing'))
+      .returning();
+    console.log(`     ${deletedOrgs.length > 0 ? '✅' : 'ℹ️ '} Deleted ${deletedOrgs.length} organization(s)`);
+    
+    console.log('✅ Cleanup complete!\n');
+    
+  } catch (error) {
+    console.error('❌ Cleanup failed:', error);
+    throw error;
+  }
 }
 
 // ============================================================================
@@ -123,149 +266,176 @@ const MI_HOMES_TWIN_CITIES = {
 };
 
 // ============================================================================
-// Main Seed Function
+// Main Seed Function with Upsert Logic
 // ============================================================================
 
 async function seed() {
   console.log('🌱 Starting M/I Homes Twin Cities seed...');
   
   try {
-    // ========================================================================
-    // CLEANUP: Delete existing M/I Homes seed data for idempotency
-    // ========================================================================
-    console.log('\n🧹 Cleaning up existing M/I Homes seed data...');
-    
-    // Step 1: Delete builder (cascades to developments, lots, plans, jobs, test data, photos, QA, tax credits)
-    console.log('  🗑️  Deleting M/I Homes builder and all related data...');
-    const deletedBuilders = await db.delete(builders)
-      .where(eq(builders.name, 'M/I Homes'))
-      .returning();
-    
-    if (deletedBuilders.length > 0) {
-      console.log(`     ✅ Deleted builder: M/I Homes (cascade deleted: developments, lots, plans, jobs, test data, photos, QA, tax credits)`);
-    } else {
-      console.log(`     ℹ️  No existing M/I Homes builder found`);
-    }
-    
-    // Step 2: Delete construction managers by email (unique constraint issue)
-    console.log('  🗑️  Deleting M/I Homes construction managers...');
-    const deletedCMs = await db.delete(constructionManagers)
-      .where(
-        or(
-          eq(constructionManagers.email, 'manderson@mihomes.com'),
-          eq(constructionManagers.email, 'sjohnson@mihomes.com'),
-          eq(constructionManagers.email, 'tpeterson@mihomes.com')
-        )
-      )
-      .returning();
-    
-    if (deletedCMs.length > 0) {
-      console.log(`     ✅ Deleted ${deletedCMs.length} construction managers`);
-    } else {
-      console.log(`     ℹ️  No existing construction managers found`);
-    }
-    
-    // Step 3: Delete seed users by email
-    console.log('  🗑️  Deleting seed users...');
-    const deletedUsers = await db.delete(users)
-      .where(
-        or(
-          eq(users.email, 'admin@ulrichenergy.com'),
-          eq(users.email, 'inspector1@ulrichenergy.com'),
-          eq(users.email, 'inspector2@ulrichenergy.com')
-        )
-      )
-      .returning();
-    
-    if (deletedUsers.length > 0) {
-      console.log(`     ✅ Deleted ${deletedUsers.length} seed users`);
-    } else {
-      console.log(`     ℹ️  No existing seed users found`);
-    }
-    
-    // Step 4: Delete organization by name
-    console.log('  🗑️  Deleting Ulrich Energy Auditing organization...');
-    const deletedOrgs = await db.delete(organizations)
+    // Step 1: Upsert Organization
+    console.log('\n📦 Upserting organization...');
+    const existingOrg = await db.select().from(organizations)
       .where(eq(organizations.name, 'Ulrich Energy Auditing'))
-      .returning();
+      .limit(1);
     
-    if (deletedOrgs.length > 0) {
-      console.log(`     ✅ Deleted organization: Ulrich Energy Auditing`);
+    let org;
+    if (existingOrg.length > 0) {
+      org = existingOrg[0];
+      console.log('   ✓ Organization already exists, reusing...');
     } else {
-      console.log(`     ℹ️  No existing organization found`);
+      [org] = await db.insert(organizations).values({
+        id: generateUUID(),
+        name: 'Ulrich Energy Auditing',
+        resnetCertification: 'RESNET-123456',
+        primaryContactEmail: 'info@ulrichenergy.com',
+        phone: '(612) 555-2000',
+        address: '123 Energy St, Minneapolis, MN 55401',
+        serviceAreas: ['Twin Cities Metro', 'Greater Minnesota'],
+      }).returning();
+      console.log('   ✅ Organization created');
     }
     
-    console.log('✅ Cleanup complete! Starting fresh seed...\n');
+    // Step 2: Upsert Users (Admin + 2 Inspectors)
+    console.log('\n📦 Upserting users...');
     
-    // ========================================================================
-    // SEED: Create fresh M/I Homes data
-    // ========================================================================
+    // Admin user
+    const existingAdmin = await db.select().from(users)
+      .where(eq(users.email, 'admin@ulrichenergy.com'))
+      .limit(1);
     
-    // Step 1: Create Organization
-    console.log('Creating organization...');
-    const [org] = await db.insert(organizations).values({
-      id: generateUUID(),
-      name: 'Ulrich Energy Auditing',
-      resnetCertification: 'RESNET-123456',
-      primaryContactEmail: 'info@ulrichenergy.com',
-      phone: '(612) 555-2000',
-      address: '123 Energy St, Minneapolis, MN 55401',
-      serviceAreas: ['Twin Cities Metro', 'Greater Minnesota'],
-    }).returning();
-    
-    console.log(`✅ Organization created: ${org.name}`);
-    
-    // Step 2: Create Users (Admin + 2 Inspectors)
-    console.log('Creating users...');
-    const adminId = generateUUID();
-    const inspector1Id = generateUUID();
-    const inspector2Id = generateUUID();
-    
-    await db.insert(users).values([
-      {
+    let adminId;
+    if (existingAdmin.length > 0) {
+      adminId = existingAdmin[0].id;
+      console.log('   ✓ Admin user already exists, reusing...');
+    } else {
+      adminId = generateUUID();
+      await db.insert(users).values({
         id: adminId,
         email: 'admin@ulrichenergy.com',
         firstName: 'John',
         lastName: 'Ulrich',
         role: 'admin',
-      },
-      {
+      });
+      console.log('   ✅ Admin user created');
+    }
+    
+    // Inspector 1
+    const existingInspector1 = await db.select().from(users)
+      .where(eq(users.email, 'inspector1@ulrichenergy.com'))
+      .limit(1);
+    
+    let inspector1Id;
+    if (existingInspector1.length > 0) {
+      inspector1Id = existingInspector1[0].id;
+      console.log('   ✓ Inspector 1 already exists, reusing...');
+    } else {
+      inspector1Id = generateUUID();
+      await db.insert(users).values({
         id: inspector1Id,
         email: 'inspector1@ulrichenergy.com',
         firstName: 'David',
         lastName: 'Martinez',
         role: 'inspector',
-      },
-      {
+      });
+      console.log('   ✅ Inspector 1 created');
+    }
+    
+    // Inspector 2
+    const existingInspector2 = await db.select().from(users)
+      .where(eq(users.email, 'inspector2@ulrichenergy.com'))
+      .limit(1);
+    
+    let inspector2Id;
+    if (existingInspector2.length > 0) {
+      inspector2Id = existingInspector2[0].id;
+      console.log('   ✓ Inspector 2 already exists, reusing...');
+    } else {
+      inspector2Id = generateUUID();
+      await db.insert(users).values({
         id: inspector2Id,
         email: 'inspector2@ulrichenergy.com',
         firstName: 'Emily',
         lastName: 'Chen',
         role: 'inspector',
-      },
-    ]);
+      });
+      console.log('   ✅ Inspector 2 created');
+    }
     
-    console.log('✅ Users created: 3 (1 admin, 2 inspectors)');
+    // Step 3: Upsert M/I Homes Builder
+    console.log('\n📦 Upserting M/I Homes builder...');
+    const existingBuilder = await db.select().from(builders)
+      .where(eq(builders.name, 'M/I Homes'))
+      .limit(1);
     
-    // Step 3: Create M/I Homes Builder
-    console.log('Creating M/I Homes builder...');
-    const [builder] = await db.insert(builders).values({
-      id: generateUUID(),
-      name: MI_HOMES_TWIN_CITIES.builder.name,
-      companyName: MI_HOMES_TWIN_CITIES.builder.companyName,
-      email: MI_HOMES_TWIN_CITIES.builder.email,
-      phone: MI_HOMES_TWIN_CITIES.builder.phone,
-      address: MI_HOMES_TWIN_CITIES.builder.address,
-      status: 'active',
-      createdBy: adminId,
-    }).returning();
+    let builder;
+    if (existingBuilder.length > 0) {
+      builder = existingBuilder[0];
+      console.log('   ✓ Builder already exists, reusing...');
+      
+      // Clean up existing developments, lots, jobs, photos, test data, QA, and tax credits
+      // to prevent duplicates when re-seeding
+      console.log('   🧹 Cleaning existing builder-related data to prevent duplicates...');
+      
+      // Delete in proper CASCADE order
+      await db.delete(taxCreditProjects)
+        .where(eq(taxCreditProjects.builderId, builder.id));
+      
+      await db.delete(qaInspectionScores)
+        .where(sql`${qaInspectionScores.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} = ${builder.id})`);
+      
+      await db.delete(photos)
+        .where(sql`${photos.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} = ${builder.id})`);
+      
+      await db.delete(forecasts)
+        .where(sql`${forecasts.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} = ${builder.id})`);
+      
+      await db.delete(ventilationTests)
+        .where(sql`${ventilationTests.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} = ${builder.id})`);
+      
+      await db.delete(ductLeakageTests)
+        .where(sql`${ductLeakageTests.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} = ${builder.id})`);
+      
+      await db.delete(blowerDoorTests)
+        .where(sql`${blowerDoorTests.jobId} IN (SELECT id FROM ${jobs} WHERE ${jobs.builderId} = ${builder.id})`);
+      
+      await db.delete(jobs)
+        .where(eq(jobs.builderId, builder.id));
+      
+      await db.delete(lots)
+        .where(sql`${lots.developmentId} IN (SELECT id FROM ${developments} WHERE ${developments.builderId} = ${builder.id})`);
+      
+      await db.delete(plans)
+        .where(eq(plans.builderId, builder.id));
+      
+      await db.delete(developments)
+        .where(eq(developments.builderId, builder.id));
+      
+      console.log('   ✅ Cleaned builder-related data');
+    } else {
+      [builder] = await db.insert(builders).values({
+        id: generateUUID(),
+        name: MI_HOMES_TWIN_CITIES.builder.name,
+        companyName: MI_HOMES_TWIN_CITIES.builder.companyName,
+        email: MI_HOMES_TWIN_CITIES.builder.email,
+        phone: MI_HOMES_TWIN_CITIES.builder.phone,
+        address: MI_HOMES_TWIN_CITIES.builder.address,
+        status: 'active',
+        createdBy: adminId,
+      }).returning();
+      console.log('   ✅ Builder created');
+    }
     
-    console.log(`✅ Builder created: ${builder.name}`);
+    // Step 4: Upsert Builder Contacts
+    console.log('\n📦 Upserting builder contacts...');
     
-    // Step 4: Create Builder Contacts
-    console.log('Creating builder contacts...');
-    await db.insert(builderContacts).values([
-      {
+    // Upsert contact 1
+    const existingContact1 = await db.select().from(builderContacts)
+      .where(eq(builderContacts.email, 'jwilliams@mihomes.com'))
+      .limit(1);
+    
+    if (existingContact1.length === 0) {
+      await db.insert(builderContacts).values({
         id: generateUUID(),
         builderId: builder.id,
         name: 'Jennifer Williams',
@@ -274,8 +444,19 @@ async function seed() {
         role: 'owner',
         isPrimary: true,
         createdBy: adminId,
-      },
-      {
+      });
+      console.log('   ✅ Contact 1 created');
+    } else {
+      console.log('   ✓ Contact 1 already exists, skipping...');
+    }
+    
+    // Upsert contact 2
+    const existingContact2 = await db.select().from(builderContacts)
+      .where(eq(builderContacts.email, 'rthompson@mihomes.com'))
+      .limit(1);
+    
+    if (existingContact2.length === 0) {
+      await db.insert(builderContacts).values({
         id: generateUUID(),
         builderId: builder.id,
         name: 'Robert Thompson',
@@ -284,28 +465,40 @@ async function seed() {
         role: 'project_manager',
         isPrimary: false,
         createdBy: adminId,
-      },
-    ]);
+      });
+      console.log('   ✅ Contact 2 created');
+    } else {
+      console.log('   ✓ Contact 2 already exists, skipping...');
+    }
     
-    console.log('✅ Builder contacts created: 2');
+    // Step 5: Upsert Construction Managers
+    console.log('\n📦 Upserting construction managers...');
+    const cmIds = [];
     
-    // Step 5: Create Construction Managers
-    console.log('Creating construction managers...');
-    const cmIds = await db.insert(constructionManagers).values(
-      MI_HOMES_TWIN_CITIES.constructionManagers.map(cm => ({
-        id: generateUUID(),
-        name: cm.name,
-        email: cm.email,
-        phone: cm.phone,
-        title: cm.title,
-        createdBy: adminId,
-      }))
-    ).returning();
+    for (const cm of MI_HOMES_TWIN_CITIES.constructionManagers) {
+      const existingCM = await db.select().from(constructionManagers)
+        .where(eq(constructionManagers.email, cm.email))
+        .limit(1);
+      
+      if (existingCM.length > 0) {
+        cmIds.push(existingCM[0]);
+        console.log(`   ✓ CM ${cm.name} already exists, reusing...`);
+      } else {
+        const [newCM] = await db.insert(constructionManagers).values({
+          id: generateUUID(),
+          name: cm.name,
+          email: cm.email,
+          phone: cm.phone,
+          title: cm.title,
+          createdBy: adminId,
+        }).returning();
+        cmIds.push(newCM);
+        console.log(`   ✅ CM ${cm.name} created`);
+      }
+    }
     
-    console.log(`✅ Construction managers created: ${cmIds.length}`);
-    
-    // Step 6: Create Developments, Lots, and Plans
-    console.log('Creating developments...');
+    // Step 6: Upsert Developments, Lots, and Plans
+    console.log('\n📦 Upserting developments...');
     let totalJobs = 0;
     let totalVisits = 0;
     
@@ -455,11 +648,10 @@ async function seed() {
     console.log(`✅ Total jobs created: ${totalJobs}`);
     console.log(`✅ Total visits with test data: ${totalVisits}`);
     
-    // Step 7: Create Photos for completed jobs
-    console.log('Creating photo records...');
+    // Step 7: Create Photos for completed jobs (1 photo per completed job)
+    console.log('\n📦 Creating photo records...');
     const completedJobs = await db.query.jobs.findMany({
       where: (jobs, { eq }) => eq(jobs.status, 'done'),
-      limit: 5, // Add photos to first 5 completed jobs
     });
     
     const photoTags = [
@@ -475,20 +667,17 @@ async function seed() {
     
     let totalPhotos = 0;
     for (const job of completedJobs) {
-      const photoCount = 3; // 3 photos per job
-      
-      for (let i = 0; i < photoCount; i++) {
-        await db.insert(photos).values({
-          id: generateUUID(),
-          jobId: job.id,
-          filePath: `photos/job_${job.id}_photo_${i + 1}.jpg`,
-          thumbnailPath: `photos/thumbnails/job_${job.id}_photo_${i + 1}.jpg`,
-          fullUrl: `https://storage.googleapis.com/photos/job_${job.id}_photo_${i + 1}.jpg`,
-          tags: [randomElement(photoTags), randomElement(photoTags)],
-          caption: `Photo ${i + 1} for job ${job.id}`,
-        });
-        totalPhotos++;
-      }
+      // Create 1 photo per completed job
+      await db.insert(photos).values({
+        id: generateUUID(),
+        jobId: job.id,
+        filePath: `photos/job_${job.id}_photo_1.jpg`,
+        thumbnailPath: `photos/thumbnails/job_${job.id}_photo_1.jpg`,
+        fullUrl: `https://storage.googleapis.com/photos/job_${job.id}_photo_1.jpg`,
+        tags: [randomElement(photoTags), randomElement(photoTags)],
+        caption: `Photo for job ${job.id}`,
+      });
+      totalPhotos++;
     }
     
     console.log(`✅ Photos created: ${totalPhotos}`);
@@ -564,10 +753,34 @@ async function seed() {
   } catch (error) {
     console.error('❌ Seed failed:', error);
     throw error;
-  } finally {
-    process.exit(0);
   }
 }
 
-// Run seed
-seed();
+// ============================================================================
+// CLI Execution
+// ============================================================================
+
+async function main() {
+  try {
+    // Parse CLI arguments
+    const args = process.argv.slice(2);
+    const shouldCleanup = args.includes('--cleanup');
+    
+    if (shouldCleanup) {
+      console.log('🔧 Cleanup mode enabled');
+      await cleanup();
+    }
+    
+    // Run seed
+    await seed();
+    
+    console.log('\n✅ Script completed successfully!');
+    process.exit(0);
+  } catch (error) {
+    console.error('\n❌ Script failed:', error);
+    process.exit(1);
+  }
+}
+
+// Run main
+main();
