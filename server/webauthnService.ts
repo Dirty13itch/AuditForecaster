@@ -373,7 +373,7 @@ export async function revokeCredential(
 // Check if user has any active WebAuthn credentials
 export async function hasWebAuthnCredentials(userId: string): Promise<boolean> {
   const [result] = await db
-    .select({ count: db.count() })
+    .select({ count: sql<number>`COUNT(*)::int` })
     .from(webauthnCredentials)
     .where(
       and(

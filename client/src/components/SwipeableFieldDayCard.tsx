@@ -274,7 +274,7 @@ export function SwipeableFieldDayCard({
         <CardContent className={cn("space-y-3", isSelected && "pl-14")}>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary" data-testid={`badge-job-type-${job.id}`}>
-              {JOB_TYPE_LABELS[job.jobType] || job.jobType}
+              {JOB_TYPE_LABELS[job.inspectionType] || job.inspectionType}
             </Badge>
             {job.pricing && (
               <Badge variant="outline" data-testid={`badge-pricing-${job.id}`}>

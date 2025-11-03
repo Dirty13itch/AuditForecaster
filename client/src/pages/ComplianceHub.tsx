@@ -481,7 +481,7 @@ function ComplianceHubContent() {
                           value={job.id}
                           data-testid={`option-job-${job.id}`}
                         >
-                          {job.address} - {job.jobType}
+                          {job.address} - {job.inspectionType}
                         </SelectItem>
                       ))}
                     </SelectContent>

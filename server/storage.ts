@@ -6040,7 +6040,7 @@ export class DatabaseStorage implements IStorage {
           isNull(jobs.invoicedAt)
         )
       )
-      .orderBy(desc(jobs.completedAt));
+      .orderBy(desc(jobs.completedDate));
   }
 
   async generateInvoicePreview(params: {
@@ -6076,11 +6076,11 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(jobs.builderId, builderId),
           inArray(jobs.id, jobIds),
-          gte(jobs.completedAt, periodStart),
-          lte(jobs.completedAt, periodEnd)
+          gte(jobs.completedDate, periodStart),
+          lte(jobs.completedDate, periodEnd)
         )
       )
-      .orderBy(jobs.completedAt);
+      .orderBy(jobs.completedDate);
 
     // Generate line items with pricing
     const lineItems: Array<{
@@ -6099,7 +6099,7 @@ export class DatabaseStorage implements IStorage {
       const rateCard = await this.getActiveRateCard(
         builderId,
         job.type,
-        job.completedAt || new Date()
+        job.completedDate || new Date()
       );
 
       const baseRate = rateCard ? parseFloat(rateCard.baseRate) : 0;
@@ -8250,7 +8250,7 @@ export class DatabaseStorage implements IStorage {
     
     // Calculate average QA score
     const avgQaScore = qaScores.length > 0
-      ? qaScores.reduce((sum, score) => sum + (score.overallScore || 0), 0) / qaScores.length
+      ? qaScores.reduce((sum, score) => sum + (parseFloat(score.overallScore || '0')), 0) / qaScores.length
       : 0;
     
     // Get critical violations
@@ -8678,11 +8678,11 @@ export class DatabaseStorage implements IStorage {
       ));
     
     const avgScore = qaScores.length > 0
-      ? qaScores.reduce((sum, score) => sum + (score.overallScore || 0), 0) / qaScores.length
+      ? qaScores.reduce((sum, score) => sum + (parseFloat(score.overallScore || '0')), 0) / qaScores.length
       : 0;
     
     // Calculate first pass rate
-    const firstPassScores = qaScores.filter(s => s.overallScore && s.overallScore >= 80);
+    const firstPassScores = qaScores.filter(s => s.overallScore && parseFloat(s.overallScore) >= 80);
     const firstPassRate = qaScores.length > 0 ? (firstPassScores.length / qaScores.length) * 100 : 0;
     
     // Get customer satisfaction (mock for now - would come from reviews)
@@ -8776,7 +8776,7 @@ export class DatabaseStorage implements IStorage {
       if (!trendData[date]) {
         trendData[date] = { total: 0, count: 0 };
       }
-      trendData[date].total += score.overallScore || 0;
+      trendData[date].total += parseFloat(score.overallScore || '0');
       trendData[date].count++;
     }
     
@@ -8867,7 +8867,7 @@ export class DatabaseStorage implements IStorage {
         ));
       
       const avgScore = scores.length > 0
-        ? scores.reduce((sum, s) => sum + (s.overallScore || 0), 0) / scores.length
+        ? scores.reduce((sum, s) => sum + (parseFloat(s.overallScore || '0')), 0) / scores.length
         : 0;
       
       // Get job count
@@ -8891,7 +8891,7 @@ export class DatabaseStorage implements IStorage {
         ));
       
       const prevAvgScore = previousScores.length > 0
-        ? previousScores.reduce((sum, s) => sum + (s.overallScore || 0), 0) / previousScores.length
+        ? previousScores.reduce((sum, s) => sum + (parseFloat(s.overallScore || '0')), 0) / previousScores.length
         : avgScore;
       
       let trend: 'up' | 'down' | 'stable' = 'stable';
@@ -9554,7 +9554,7 @@ export class DatabaseStorage implements IStorage {
         .from(expenses)
         .where(and(
           eq(expenses.approvalStatus, 'approved'),
-          sql`${expenses.reimbursementStatus} IS NULL OR ${expenses.reimbursementStatus} != 'reimbursed'`
+          sql`${expenses.approvalStatus} != 'reimbursed'`
         ));
 
       const projectedCashOut = parseFloat(expensesResult[0]?.total || '0');
@@ -9600,8 +9600,8 @@ export class DatabaseStorage implements IStorage {
         .where(and(
           eq(jobs.assignedTo, userId),
           eq(jobs.status, 'completed'),
-          gte(jobs.completedAt, start),
-          lte(jobs.completedAt, end)
+          gte(jobs.completedDate, start),
+          lte(jobs.completedDate, end)
         ));
 
       const jobsCompleted = jobsResult[0]?.count || 0;
@@ -9616,8 +9616,8 @@ export class DatabaseStorage implements IStorage {
         .where(and(
           eq(jobs.assignedTo, userId),
           eq(invoices.status, 'paid'),
-          gte(jobs.completedAt, start),
-          lte(jobs.completedAt, end)
+          gte(jobs.completedDate, start),
+          lte(jobs.completedDate, end)
         ));
 
       const revenueGenerated = parseFloat(revenueResult[0]?.total || '0');

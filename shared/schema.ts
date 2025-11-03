@@ -1778,6 +1778,8 @@ export const qaInspectionScores = pgTable("qa_inspection_scores", {
   maxScore: decimal("max_score", { precision: 5, scale: 2 }).notNull().default("100"),
   percentage: decimal("percentage", { precision: 5, scale: 2 }).notNull(),
   grade: text("grade", { enum: ["A", "B", "C", "D", "F"] }).notNull(),
+  overallScore: decimal("overall_score", { precision: 5, scale: 2 }),
+  categoryScores: jsonb("category_scores"),
   completenessScore: decimal("completeness_score", { precision: 5, scale: 2 }),
   accuracyScore: decimal("accuracy_score", { precision: 5, scale: 2 }),
   complianceScore: decimal("compliance_score", { precision: 5, scale: 2 }),
@@ -1809,11 +1811,13 @@ export const qaChecklists = pgTable("qa_checklists", {
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
   requiredForJobTypes: text("required_for_job_types").array(),
+  sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_qa_checklists_category").on(table.category),
   index("idx_qa_checklists_is_active").on(table.isActive),
+  index("idx_qa_checklists_sort_order").on(table.sortOrder),
 ]);
 
 export const qaChecklistItems = pgTable("qa_checklist_items", {
@@ -2242,8 +2246,6 @@ export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, creat
   houseVolume: z.coerce.number().nullable().optional(),
   stories: z.coerce.number().nullable().optional(),
 });
-export type InsertPlan = z.infer<typeof insertPlanSchema>;
-export type Plan = typeof plans.$inferSelect;
 
 export const insertPlanOptionalFeatureSchema = createInsertSchema(planOptionalFeatures).omit({ 
   id: true, 
@@ -2798,6 +2800,7 @@ export type PendingCalendarEvent = typeof pendingCalendarEvents.$inferSelect;
 export type Development = typeof developments.$inferSelect;
 export type Lot = typeof lots.$inferSelect;
 export type Plan = typeof plans.$inferSelect;
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
 export type Job = typeof jobs.$inferSelect;
 export type ScheduleEvent = typeof scheduleEvents.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
@@ -2828,7 +2831,6 @@ export type InsertDevelopment = z.infer<typeof insertDevelopmentSchema>;
 export type UpdateDevelopment = z.infer<typeof updateDevelopmentSchema>;
 export type InsertLot = z.infer<typeof insertLotSchema>;
 export type UpdateLot = z.infer<typeof updateLotSchema>;
-export type InsertPlan = z.infer<typeof insertPlanSchema>;
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type InsertScheduleEvent = z.infer<typeof insertScheduleEventSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
