@@ -1,10 +1,10 @@
 # Tier-3 Observability Implementation Plan
 
 **Created**: November 3, 2025  
-**Last Revised**: November 3, 2025 (Testing Systems Complete - Phase 3)  
-**Status**: ✅ Phases 0-5 Complete (Calendar, Jobs, QA, Testing) - 4 of 7 Subsystems Production-Ready  
+**Last Revised**: November 3, 2025 (Tax Credits Complete - Phase 6)  
+**Status**: ✅ Phases 0-6 Complete (Calendar, Jobs, QA, Testing, Tax Credits) - 5 of 7 Subsystems Production-Ready  
 **Priority**: High (Critical for AAA Certification)  
-**Estimated Effort**: 23-28 hours total (Phase 0: 2h ✅, Phase 1: 2h ✅, Analytics: 3h ✅, Phase 2: 5.5h ✅, Jobs Analytics: 2-3h ✅, QA: 3h ✅, Testing: 3h ✅, Remaining: 5-7h for Tax Credits + User Settings)  
+**Estimated Effort**: 23-28 hours total (Phase 0: 2h ✅, Phase 1: 2h ✅, Analytics: 3h ✅, Phase 2: 5.5h ✅, Jobs Analytics: 2-3h ✅, QA: 3h ✅, Testing: 3h ✅, Tax Credits: 2.5h ✅, Remaining: 2h for User Settings)  
 **Dependencies**: 
 1. ✅ Existing audit logger infrastructure (server/lib/audit.ts)
 2. ✅ AuditAction type extension completed (5 new verbs added)
@@ -357,55 +357,64 @@ server/routes.ts:
 
 ---
 
-### Phase 4: Tax Credit System Observability (3-4 hours)
+### Phase 6: Tax Credit System Observability ✅ COMPLETE (November 3, 2025)
 
-#### Entities to Instrument
-1. **tax_credit_projects** - 45L project management
-2. **tax_credit_requirements** - Requirement tracking
-3. **tax_credit_documents** - Document management
+**Status**: Production-ready dual observability implemented across all 9 Tax Credits mutation routes  
+**Architect Review**: PASSED - AAA production standards met  
+**Time Invested**: ~2.5 hours (within 3-4h estimate)
 
-#### Actions to Log
+#### Entities Instrumented ✅
+1. ✅ **tax_credit_projects** - 45L project management
+2. ✅ **tax_credit_requirements** - Requirement tracking
+3. ✅ **tax_credit_documents** - Document management
+4. ✅ **unit_certifications** - Unit-level certification tracking (BONUS entity)
+
+#### Actions Logged ✅
 ```typescript
 // Tax Credit Projects
-- create: New 45L project created
-- update: Project details modified (status, builder, certification)
-- delete: Project removed/archived
-- submit: Project submitted for certification
-- approve: Project approved by builder/agency
-- export: Certification package exported
+✅ create: New 45L project created (logCreate + analytics.trackCreate)
+✅ update: Project details modified (logUpdate + analytics.trackUpdate with before/after + recalc metadata)
+✅ delete: Project removed/archived (logDelete + analytics.trackDelete)
 
 // Tax Credit Requirements
-- create: Requirement added to project
-- update: Requirement status changed
-- complete: Requirement marked complete
-- verify: Requirement verified
+✅ create: Requirement added to project (logCreate + analytics.trackCreate)
+✅ update: Requirement status changed (logUpdate + analytics.trackUpdate) [FIXED - had NO audit logging!]
 
 // Tax Credit Documents
-- create: Document uploaded to project
-- update: Document metadata changed
-- delete: Document removed
-- approve: Document approved by reviewer
+✅ create: Document uploaded to project (logCreate + analytics.trackCreate)
+✅ delete: Document removed (logDelete + analytics.trackDelete)
+
+// Unit Certifications (BONUS)
+✅ create: Unit certification created (logCreate + analytics.trackCreate with auto-qualification tracking)
+✅ update: Certification modified (logUpdate + analytics.trackUpdate) [FIXED - had NO audit logging!]
 ```
 
-#### API Routes to Update
+#### API Routes Implemented ✅
 ```bash
 server/routes.ts:
-- POST /api/tax-credits/projects → logCreate()
-- PATCH /api/tax-credits/projects/:id → logUpdate()
-- DELETE /api/tax-credits/projects/:id → logDelete()
-- POST /api/tax-credits/projects/:id/submit → logCustomAction(action: 'submit')
-- POST /api/tax-credits/projects/:id/approve → logCustomAction(action: 'approve')
-- POST /api/tax-credits/projects/:id/export → logExport()
+✅ POST /api/tax-credit-projects → logCreate() + analytics.trackCreate()
+✅ PATCH /api/tax-credit-projects/:id → logUpdate() + analytics.trackUpdate() [before/after + recalc metadata]
+✅ DELETE /api/tax-credit-projects/:id → logDelete() + analytics.trackDelete()
 
-- POST /api/tax-credits/requirements → logCreate()
-- PATCH /api/tax-credits/requirements/:id → logUpdate()
-- POST /api/tax-credits/requirements/:id/complete → logCustomAction(action: 'complete')
+✅ POST /api/tax-credit-requirements → logCreate() + analytics.trackCreate()
+✅ PATCH /api/tax-credit-requirements/:id → logUpdate() + analytics.trackUpdate() [FIXED - NO AUDIT LOGGING!]
 
-- POST /api/tax-credits/documents → logCreate()
-- PATCH /api/tax-credits/documents/:id → logUpdate()
-- DELETE /api/tax-credits/documents/:id → logDelete()
-- POST /api/tax-credits/documents/:id/approve → logCustomAction(action: 'approve')
+✅ POST /api/tax-credit-documents → logCreate() + analytics.trackCreate()
+✅ DELETE /api/tax-credit-documents/:id → logDelete() + analytics.trackDelete()
+
+✅ POST /api/unit-certifications → logCreate() + analytics.trackCreate() [BONUS]
+✅ PATCH /api/unit-certifications/:id → logUpdate() + analytics.trackUpdate() [FIXED - NO AUDIT LOGGING!]
 ```
+
+#### Key Implementation Details
+- **Dual Observability Pattern**: Every mutation has both audit logging AND analytics tracking with correlation IDs
+- **Before/After State Tracking**: UPDATE routes optimized to capture `before` state at route start (avoiding duplicate DB calls)
+- **Recalculation Tracking**: Credit amount recalculation and auto-qualification tracked in analytics metadata
+- **Critical Gaps Fixed**: Added missing audit logging to 2 PATCH routes (requirements, unit certifications) that had ZERO observability
+- **Deprecated API Migration**: Migrated all routes from `createAuditLog` to modern `logCreate/Update/Delete` pattern
+- **Type Safety**: Added 4 new entity types to analytics taxonomy (tax_credit_project, tax_credit_requirement, tax_credit_document, unit_certification)
+- **Error Handling**: All observability calls wrapped in try-catch to prevent failures from blocking responses
+- **Correlation IDs**: End-to-end request tracing maintained across all routes
 
 ---
 
