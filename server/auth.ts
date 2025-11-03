@@ -32,7 +32,7 @@ export interface SessionUser {
   // Core user identity
   id: string;
   email: string;
-  role: "admin" | "inspector" | "viewer";
+  role: "admin" | "inspector" | "partner_contractor";
   
   // User profile
   firstName: string;
@@ -111,7 +111,7 @@ function isValidString(value: any, fieldName: string): { valid: boolean; error?:
  * Validates user role
  */
 function isValidRole(role: any): boolean {
-  return role === 'admin' || role === 'inspector' || role === 'viewer';
+  return role === 'admin' || role === 'inspector' || role === 'partner_contractor';
 }
 
 /**
@@ -160,7 +160,7 @@ function validateSessionUser(data: any): SessionValidationResult {
   
   // Validate role
   if (!isValidRole(data.role)) {
-    errors.push(`Invalid role: ${data.role}. Must be admin, inspector, or viewer`);
+    errors.push(`Invalid role: ${data.role}. Must be admin, inspector, or partner_contractor`);
     // Role is recoverable by fetching from database
   }
   

@@ -1939,7 +1939,7 @@ export default function Schedule() {
                       });
                     }
                   }}
-                  disabled={updateJobStatusMutation.isPending || user?.role === 'viewer' || user?.role === 'manager'}
+                  disabled={updateJobStatusMutation.isPending || user?.role === 'partner_contractor'}
                 >
                   <SelectTrigger 
                     id="status-select" 
@@ -1981,7 +1981,7 @@ export default function Schedule() {
                         ...eventFormData, 
                         fieldWorkComplete: checked === true 
                       })}
-                      disabled={user?.role === 'viewer' || user?.role === 'manager'}
+                      disabled={user?.role === 'partner_contractor'}
                       data-testid="checkbox-field-work"
                     />
                     <div className="space-y-1 leading-none">
@@ -2003,7 +2003,7 @@ export default function Schedule() {
                         ...eventFormData, 
                         photoUploadComplete: checked === true 
                       })}
-                      disabled={user?.role === 'viewer' || user?.role === 'manager' || !eventFormData.fieldWorkComplete}
+                      disabled={user?.role === 'partner_contractor' || !eventFormData.fieldWorkComplete}
                       data-testid="checkbox-photo-upload"
                     />
                     <div className="space-y-1 leading-none">

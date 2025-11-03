@@ -30,16 +30,15 @@ export type Role = 'admin' | 'inspector' | 'partner_contractor';
 /**
  * User Role Type
  * 
- * Defines all valid user roles based on the roles-matrix.md documentation.
- * Used for route-level access control in navigation registry.
+ * Imported from schema - represents valid user roles from the database.
+ * Source of truth: shared/schema.ts users.role enum
  * 
  * Roles:
  * - admin: System administrator with full control
  * - inspector: Field inspector conducting energy audits
- * - lead: Senior inspector with team oversight (Inspector Lead)
- * - builderviewer: Builder/contractor partner with read-only access (Partner)
+ * - partner_contractor: Builder/contractor partner with limited access
  */
-export type UserRole = 'admin' | 'inspector' | 'lead' | 'builderviewer';
+export type { User, UserRole } from './schema';
 
 export interface FeatureStatus {
   path: string;

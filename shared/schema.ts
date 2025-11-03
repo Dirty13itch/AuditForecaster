@@ -2786,6 +2786,9 @@ export const unmatchedEventFiltersSchema = z.object({
 
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Extract UserRole type from database enum - this is the source of truth
+export type UserRole = typeof users.role.enumValues[number];
 export type Builder = typeof builders.$inferSelect;
 export type BuilderContact = typeof builderContacts.$inferSelect;
 export type BuilderAgreement = typeof builderAgreements.$inferSelect;

@@ -192,7 +192,6 @@ export function AppSidebar() {
                                   <ReadinessChip 
                                     maturity={decision.maturity} 
                                     compact 
-                                    tooltipLinkTo="/status/features"
                                   />
                                 )}
                               </Link>

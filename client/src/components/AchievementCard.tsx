@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState } from "react";
 import * as Icons from "lucide-react";
+import { type LucideIcon } from "lucide-react";
 import { type AchievementDefinition, getRarityColor, getRarityBackground } from "@/data/achievementDefinitions";
 import { type AchievementProgress } from "@/utils/achievementTracker";
 import { format } from "date-fns";
@@ -30,7 +31,7 @@ export function AchievementCard({
 }: AchievementCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   
-  const Icon = Icons[achievement.icon as keyof typeof Icons] || Icons.Trophy;
+  const Icon = (Icons[achievement.icon as keyof typeof Icons] as LucideIcon) || Icons.Trophy;
   const isUnlocked = progress?.unlocked || false;
   const progressPercentage = progress?.progress || 0;
   const isInProgress = progressPercentage > 0 && !isUnlocked;

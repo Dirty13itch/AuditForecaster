@@ -93,6 +93,7 @@ interface WebAuthnHookReturn {
   isAuthenticating: boolean;
   credentials: WebauthnCredential[] | undefined;
   credentialsLoading: boolean;
+  hasWebAuthnCredentials: boolean;
   
   // Actions
   enrollBiometric: (deviceName?: string) => Promise<void>;
@@ -425,6 +426,7 @@ export function useWebAuthn(): WebAuthnHookReturn {
     isAuthenticating,
     credentials,
     credentialsLoading,
+    hasWebAuthnCredentials: !!(credentials && credentials.length > 0),
     
     // Actions
     enrollBiometric,

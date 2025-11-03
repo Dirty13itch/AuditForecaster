@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import type { User, UserRole } from '@shared/types';
 
-export type UserRole = 'admin' | 'inspector' | 'manager' | 'viewer';
+// Re-export UserRole for backwards compatibility
+export type { UserRole };
 
 export function useAuth() {
-  const { data: user, isLoading } = useQuery({
+  const { data: user, isLoading } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     retry: false,
   });
