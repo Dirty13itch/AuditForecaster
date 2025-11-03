@@ -5966,6 +5966,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           metadata: {
             fieldsChanged: Object.keys(validated),
             isSelfUpdate: inspectorId === userId,
+            // Field-level diffs for all preference fields
+            previousPreferredTerritories: before?.preferredTerritories,
+            newPreferredTerritories: preferences.preferredTerritories,
+            previousMaxDailyJobs: before?.maxDailyJobs,
+            newMaxDailyJobs: preferences.maxDailyJobs,
+            previousMaxWeeklyJobs: before?.maxWeeklyJobs,
+            newMaxWeeklyJobs: preferences.maxWeeklyJobs,
+            previousSpecializations: before?.specializations,
+            newSpecializations: preferences.specializations,
+            previousUnavailableDates: before?.unavailableDates,
+            newUnavailableDates: preferences.unavailableDates,
+            previousWorkStartTime: before?.workStartTime,
+            newWorkStartTime: preferences.workStartTime,
+            previousWorkEndTime: before?.workEndTime,
+            newWorkEndTime: preferences.workEndTime,
           },
         });
 
@@ -5978,10 +5993,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           metadata: {
             fieldsChanged: Object.keys(validated),
             isSelfUpdate: inspectorId === userId,
+            // Field-level diffs for all preference fields
+            previousPreferredTerritories: before?.preferredTerritories,
+            newPreferredTerritories: preferences.preferredTerritories,
             previousMaxDailyJobs: before?.maxDailyJobs,
             newMaxDailyJobs: preferences.maxDailyJobs,
             previousMaxWeeklyJobs: before?.maxWeeklyJobs,
             newMaxWeeklyJobs: preferences.maxWeeklyJobs,
+            previousSpecializations: before?.specializations,
+            newSpecializations: preferences.specializations,
+            previousUnavailableDates: before?.unavailableDates,
+            newUnavailableDates: preferences.unavailableDates,
+            previousWorkStartTime: before?.workStartTime,
+            newWorkStartTime: preferences.workStartTime,
+            previousWorkEndTime: before?.workEndTime,
+            newWorkEndTime: preferences.workEndTime,
           },
         });
       } catch (obsError) {
@@ -7256,6 +7282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             metadata: {
               taxRate: settings.taxRate,
               invoicePrefix: settings.invoicePrefix,
+              nextInvoiceNumber: settings.nextInvoiceNumber,
               paymentTermsDays: settings.paymentTermsDays,
             },
           });
@@ -7269,6 +7296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             metadata: {
               taxRate: settings.taxRate,
               invoicePrefix: settings.invoicePrefix,
+              nextInvoiceNumber: settings.nextInvoiceNumber,
               paymentTermsDays: settings.paymentTermsDays,
             },
           });
@@ -7281,6 +7309,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             after: settings,
             metadata: {
               fieldsChanged: Object.keys(validated),
+              // Field-level diffs for all financial settings fields
+              previousTaxRate: before.taxRate,
+              newTaxRate: settings.taxRate,
+              previousInvoicePrefix: before.invoicePrefix,
+              newInvoicePrefix: settings.invoicePrefix,
+              previousNextInvoiceNumber: before.nextInvoiceNumber,
+              newNextInvoiceNumber: settings.nextInvoiceNumber,
+              previousPaymentTermsDays: before.paymentTermsDays,
+              newPaymentTermsDays: settings.paymentTermsDays,
             },
           });
 
@@ -7292,12 +7329,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             entityId: userId,
             metadata: {
               fieldsChanged: Object.keys(validated),
+              // Field-level diffs for all financial settings fields
               previousTaxRate: before.taxRate,
               newTaxRate: settings.taxRate,
               previousInvoicePrefix: before.invoicePrefix,
               newInvoicePrefix: settings.invoicePrefix,
-              previousPaymentTerms: before.paymentTermsDays,
-              newPaymentTerms: settings.paymentTermsDays,
+              previousNextInvoiceNumber: before.nextInvoiceNumber,
+              newNextInvoiceNumber: settings.nextInvoiceNumber,
+              previousPaymentTermsDays: before.paymentTermsDays,
+              newPaymentTermsDays: settings.paymentTermsDays,
             },
           });
         }
