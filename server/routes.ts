@@ -86,6 +86,10 @@ import {
   updateScheduledExportSchema,
   insertMultifamilyProgramSchema,
   insertComplianceArtifactSchema,
+  insertQaChecklistSchema,
+  insertQaChecklistItemSchema,
+  insertQaChecklistResponseSchema,
+  insertQaInspectionScoreSchema,
   backgroundJobExecutions,
 } from "@shared/schema";
 import { emailService } from "./email/emailService";
@@ -14476,6 +14480,714 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(settings);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'update KPI settings');
+      res.status(status).json({ message });
+    }
+  });
+
+  // ============================================================================
+  // QA Checklists CRUD API Routes
+  // ============================================================================
+
+  // Get all QA checklists (with optional category filter)
+  app.get("/api/qa/checklists", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { category } = req.query;
+      
+      let checklists;
+      if (category && typeof category === 'string') {
+        checklists = await storage.getQaChecklistsByCategory(category);
+      } else {
+        checklists = await storage.getAllQaChecklists();
+      }
+      
+      res.json(checklists);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch QA checklists');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get single QA checklist with items
+  app.get("/api/qa/checklists/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      const checklist = await storage.getQaChecklist(id);
+      if (!checklist) {
+        return res.status(404).json({ message: "Checklist not found" });
+      }
+      
+      // Get checklist items
+      const items = await storage.getQaChecklistItems(id);
+      
+      res.json({ ...checklist, items });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch QA checklist');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Create QA checklist
+  app.post("/api/qa/checklists", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const validated = insertQaChecklistSchema.parse(req.body);
+      
+      const checklist = await storage.createQaChecklist(validated);
+      
+      // Audit logging
+      await logCreate({
+        req,
+        entityType: 'qa_checklist',
+        entityId: checklist.id,
+        after: checklist,
+      });
+      
+      // Analytics tracking
+      analytics.trackCreate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: checklist.id,
+        correlationId: req.correlationId,
+        metadata: {
+          name: checklist.name,
+          category: checklist.category,
+          requiredForJobTypes: checklist.requiredForJobTypes,
+        },
+      });
+      
+      res.status(201).json(checklist);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create QA checklist');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Update QA checklist
+  app.patch("/api/qa/checklists/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      // Get before state
+      const before = await storage.getQaChecklist(id);
+      if (!before) {
+        return res.status(404).json({ message: "Checklist not found" });
+      }
+      
+      const validated = insertQaChecklistSchema.partial().parse(req.body);
+      
+      const updated = await storage.updateQaChecklist(id, validated);
+      if (!updated) {
+        return res.status(404).json({ message: "Checklist not found" });
+      }
+      
+      // Audit logging
+      await logUpdate({
+        req,
+        entityType: 'qa_checklist',
+        entityId: id,
+        before,
+        after: updated,
+      });
+      
+      // Analytics tracking
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          name: updated.name,
+          category: updated.category,
+          isActive: updated.isActive,
+        },
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update QA checklist');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Delete QA checklist
+  app.delete("/api/qa/checklists/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      // Get before state
+      const before = await storage.getQaChecklist(id);
+      if (!before) {
+        return res.status(404).json({ message: "Checklist not found" });
+      }
+      
+      const deleted = await storage.deleteQaChecklist(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Checklist not found" });
+      }
+      
+      // Audit logging
+      await logDelete({
+        req,
+        entityType: 'qa_checklist',
+        entityId: id,
+        before,
+      });
+      
+      // Analytics tracking
+      analytics.trackDelete({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+      });
+      
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'delete QA checklist');
+      res.status(status).json({ message });
+    }
+  });
+
+  // ============================================================================
+  // QA Checklist Items CRUD API Routes
+  // ============================================================================
+
+  // Get checklist items (by checklistId)
+  app.get("/api/qa/checklist-items", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { checklistId } = req.query;
+      
+      if (!checklistId || typeof checklistId !== 'string') {
+        return res.status(400).json({ message: "checklistId query parameter is required" });
+      }
+      
+      const items = await storage.getQaChecklistItems(checklistId);
+      res.json(items);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch QA checklist items');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Get single checklist item
+  app.get("/api/qa/checklist-items/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      const item = await storage.getQaChecklistItem(id);
+      if (!item) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      
+      res.json(item);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'fetch QA checklist item');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Create checklist item
+  app.post("/api/qa/checklist-items", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const validated = insertQaChecklistItemSchema.parse(req.body);
+      
+      const item = await storage.createQaChecklistItem(validated);
+      
+      // Audit logging
+      await logCreate({
+        req,
+        entityType: 'qa_checklist_item',
+        entityId: item.id,
+        after: item,
+      });
+      
+      // Analytics tracking
+      analytics.trackCreate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: item.id,
+        correlationId: req.correlationId,
+        metadata: {
+          checklistId: item.checklistId,
+          itemText: item.itemText,
+          isCritical: item.isCritical,
+          category: item.category,
+        },
+      });
+      
+      res.status(201).json(item);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create QA checklist item');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Update checklist item
+  app.patch("/api/qa/checklist-items/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      // Get before state
+      const before = await storage.getQaChecklistItem(id);
+      if (!before) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      
+      const validated = insertQaChecklistItemSchema.partial().parse(req.body);
+      
+      const updated = await storage.updateQaChecklistItem(id, validated);
+      if (!updated) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      
+      // Audit logging
+      await logUpdate({
+        req,
+        entityType: 'qa_checklist_item',
+        entityId: id,
+        before,
+        after: updated,
+      });
+      
+      // Analytics tracking
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          checklistId: updated.checklistId,
+          itemText: updated.itemText,
+          isCritical: updated.isCritical,
+        },
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update QA checklist item');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Delete checklist item
+  app.delete("/api/qa/checklist-items/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      // Get before state
+      const before = await storage.getQaChecklistItem(id);
+      if (!before) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      
+      const deleted = await storage.deleteQaChecklistItem(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Checklist item not found" });
+      }
+      
+      // Audit logging
+      await logDelete({
+        req,
+        entityType: 'qa_checklist_item',
+        entityId: id,
+        before,
+      });
+      
+      // Analytics tracking
+      analytics.trackDelete({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+      });
+      
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'delete QA checklist item');
+      res.status(status).json({ message });
+    }
+  });
+
+  // ============================================================================
+  // QA Checklist Responses API Routes
+  // ============================================================================
+
+  // Get checklist responses by job
+  app.get("/api/qa/checklist-responses", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { jobId } = req.query;
+      
+      if (!jobId || typeof jobId !== 'string') {
+        return res.status(400).json({ message: "jobId query parameter is required" });
+      }
+      
+      const responses = await storage.getQaChecklistResponsesByJob(jobId);
+      res.json(responses);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch QA checklist responses');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Create checklist response
+  app.post("/api/qa/checklist-responses", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const validated = insertQaChecklistResponseSchema.parse(req.body);
+      
+      // Set userId to current user
+      validated.userId = req.user.id;
+      
+      const response = await storage.createQaChecklistResponse(validated);
+      
+      // Audit logging
+      await logCreate({
+        req,
+        entityType: 'qa_checklist_response',
+        entityId: response.id,
+        after: response,
+      });
+      
+      // Analytics tracking
+      analytics.trackCreate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: response.id,
+        correlationId: req.correlationId,
+        metadata: {
+          jobId: response.jobId,
+          checklistId: response.checklistId,
+          itemId: response.itemId,
+          response: response.response,
+        },
+      });
+      
+      res.status(201).json(response);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create QA checklist response');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Update checklist response
+  app.patch("/api/qa/checklist-responses/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      // Get before state
+      const before = await storage.getQaChecklistResponse(id);
+      if (!before) {
+        return res.status(404).json({ message: "Checklist response not found" });
+      }
+      
+      const validated = insertQaChecklistResponseSchema.partial().parse(req.body);
+      
+      const updated = await storage.updateQaChecklistResponse(id, validated);
+      if (!updated) {
+        return res.status(404).json({ message: "Checklist response not found" });
+      }
+      
+      // Audit logging
+      await logUpdate({
+        req,
+        entityType: 'qa_checklist_response',
+        entityId: id,
+        before,
+        after: updated,
+      });
+      
+      // Analytics tracking
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          jobId: updated.jobId,
+          response: updated.response,
+        },
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update QA checklist response');
+      res.status(status).json({ message });
+    }
+  });
+
+  // ============================================================================
+  // QA Inspection Scores API Routes
+  // ============================================================================
+
+  // Get inspection scores by job
+  app.get("/api/qa/inspection-scores", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { jobId } = req.query;
+      
+      if (!jobId || typeof jobId !== 'string') {
+        return res.status(400).json({ message: "jobId query parameter is required" });
+      }
+      
+      const score = await storage.getQaInspectionScoreByJob(jobId);
+      res.json(score || null);
+    } catch (error) {
+      const { status, message } = handleDatabaseError(error, 'fetch QA inspection scores');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Create inspection score
+  app.post("/api/qa/inspection-scores", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const validated = insertQaInspectionScoreSchema.parse(req.body);
+      
+      const score = await storage.createQaInspectionScore(validated);
+      
+      // Audit logging
+      await logCreate({
+        req,
+        entityType: 'qa_inspection_score',
+        entityId: score.id,
+        after: score,
+      });
+      
+      // Analytics tracking
+      analytics.trackCreate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: score.id,
+        correlationId: req.correlationId,
+        metadata: {
+          jobId: score.jobId,
+          inspectorId: score.inspectorId,
+          totalScore: score.totalScore,
+          percentage: score.percentage,
+          grade: score.grade,
+          reviewStatus: score.reviewStatus,
+        },
+      });
+      
+      res.status(201).json(score);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'create QA inspection score');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Update inspection score
+  app.patch("/api/qa/inspection-scores/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      // Get before state
+      const before = await storage.getQaInspectionScore(id);
+      if (!before) {
+        return res.status(404).json({ message: "Inspection score not found" });
+      }
+      
+      const validated = insertQaInspectionScoreSchema.partial().parse(req.body);
+      
+      const updated = await storage.updateQaInspectionScore(id, validated);
+      if (!updated) {
+        return res.status(404).json({ message: "Inspection score not found" });
+      }
+      
+      // Audit logging
+      await logUpdate({
+        req,
+        entityType: 'qa_inspection_score',
+        entityId: id,
+        before,
+        after: updated,
+      });
+      
+      // Analytics tracking
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          jobId: updated.jobId,
+          totalScore: updated.totalScore,
+          percentage: updated.percentage,
+          grade: updated.grade,
+          reviewStatus: updated.reviewStatus,
+        },
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'update QA inspection score');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Approve inspection score
+  app.post("/api/qa/inspection-scores/:id/approve", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      const score = await storage.getQaInspectionScore(id);
+      if (!score) {
+        return res.status(404).json({ message: "Inspection score not found" });
+      }
+      
+      const updated = await storage.updateQaInspectionScore(id, {
+        reviewStatus: 'approved',
+        reviewedBy: req.user.id,
+        reviewDate: new Date(),
+        reviewNotes: req.body.reviewNotes || null,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Failed to approve inspection score" });
+      }
+      
+      // Audit logging
+      await logCustomAction({
+        req,
+        action: 'approve',
+        entityType: 'qa_inspection_score',
+        entityId: id,
+        before: score,
+        after: updated,
+      });
+      
+      // Analytics tracking (using trackUpdate for approve action)
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          action: 'approve',
+          jobId: updated.jobId,
+          reviewStatus: 'approved',
+        },
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'approve QA inspection score');
+      res.status(status).json({ message });
+    }
+  });
+
+  // Reject inspection score
+  app.post("/api/qa/inspection-scores/:id/reject", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = flexibleIdParamSchema.parse(req.params);
+      
+      const score = await storage.getQaInspectionScore(id);
+      if (!score) {
+        return res.status(404).json({ message: "Inspection score not found" });
+      }
+      
+      const updated = await storage.updateQaInspectionScore(id, {
+        reviewStatus: 'needs_improvement',
+        reviewedBy: req.user.id,
+        reviewDate: new Date(),
+        reviewNotes: req.body.reviewNotes || 'Needs improvement',
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Failed to reject inspection score" });
+      }
+      
+      // Audit logging
+      await logCustomAction({
+        req,
+        action: 'reject',
+        entityType: 'qa_inspection_score',
+        entityId: id,
+        before: score,
+        after: updated,
+      });
+      
+      // Analytics tracking (using trackUpdate for reject action)
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'qa_item',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          action: 'reject',
+          jobId: updated.jobId,
+          reviewStatus: 'needs_improvement',
+        },
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      const { status, message } = handleDatabaseError(error, 'reject QA inspection score');
       res.status(status).json({ message });
     }
   });

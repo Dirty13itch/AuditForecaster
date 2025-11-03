@@ -401,7 +401,7 @@ function QAChecklistsContent() {
     error: checklistsError
   } = useQuery<ChecklistWithItems[]>({
     queryKey: ['/api/qa/checklists'],
-    enabled: false, // Will be enabled when backend implements endpoint
+    enabled: true,
     retry: 2,
     refetchInterval: REFRESH_INTERVAL
   });
@@ -413,19 +413,19 @@ function QAChecklistsContent() {
     error: statsError
   } = useQuery<ChecklistStats>({
     queryKey: ['/api/qa/checklists/stats', selectedChecklist?.id],
-    enabled: false, // Will be enabled when backend implements endpoint
+    enabled: !!selectedChecklist?.id, // Only fetch when checklist is selected
     retry: 2
   });
 
   // Phase 3 - OPTIMIZE: useMemo for computed display values
-  // Phase 6 - DOCUMENT: Use real data when available, fallback to mock for development
+  // Phase 6 - DOCUMENT: Use real data from API
   const displayChecklists = useMemo(() => 
-    checklists || MOCK_CHECKLISTS, 
+    checklists || [], 
     [checklists]
   );
 
   const displayStats = useMemo(() => 
-    stats || MOCK_STATS, 
+    stats || { totalUses: 0, completionRate: 0, avgTimeToComplete: 0, commonlySkipped: [] }, 
     [stats]
   );
 
