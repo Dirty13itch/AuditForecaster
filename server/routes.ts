@@ -405,6 +405,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use storage layer to persist GP result
       const result = await storage.createGoldenPathResult(validated);
       
+      // Audit logging
+      try {
+        await logCreate({
+          req,
+          entityType: 'golden_path_result',
+          entityId: result.id,
+          after: result,
+          metadata: {
+            routeId: result.goldenPathId,
+            status: result.status,
+            duration: result.duration,
+            errorMessage: result.errorMessage,
+          },
+        });
+      } catch (auditError) {
+        logError('GoldenPath/AuditLog', auditError, { resultId: result.id });
+      }
+      
       // Return created result with 201 status
       res.status(201).json(result);
     } catch (error) {
@@ -5835,6 +5853,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validated = insertScheduleEventSchema.parse(req.body);
       const event = await storage.createScheduleEvent(validated);
       
+      // Audit logging
+      try {
+        await logCreate({
+          req,
+          entityType: 'schedule_event',
+          entityId: event.id,
+          after: event,
+          metadata: {
+            jobId: event.jobId,
+            calendarId: event.googleCalendarId,
+            eventType: event.eventType,
+          },
+        });
+      } catch (auditError) {
+        logError('ScheduleEvents/AuditLog', auditError, { eventId: event.id });
+      }
+      
       try {
         const job = await storage.getJob(event.jobId);
         if (job) {
@@ -5879,10 +5914,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/schedule-events/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
     try {
+      // Get before state for audit logging
+      const before = await storage.getScheduleEvent(req.params.id);
+      
       const validated = insertScheduleEventSchema.partial().parse(req.body);
       const event = await storage.updateScheduleEvent(req.params.id, validated);
       if (!event) {
         return res.status(404).json({ message: "Schedule event not found. It may have been deleted." });
+      }
+      
+      // Audit logging
+      if (before) {
+        try {
+          await logUpdate({
+            req,
+            entityType: 'schedule_event',
+            entityId: event.id,
+            before,
+            after: event,
+            metadata: {
+              jobId: event.jobId,
+              calendarId: event.googleCalendarId,
+              eventType: event.eventType,
+              fieldsChanged: Object.keys(validated),
+            },
+          });
+        } catch (auditError) {
+          logError('ScheduleEvents/AuditLog', auditError, { eventId: event.id });
+        }
       }
       
       try {
@@ -5931,6 +5990,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Schedule event not found. It may have already been deleted." });
       }
+      
+      // Audit logging
+      if (event) {
+        try {
+          await logDelete({
+            req,
+            entityType: 'schedule_event',
+            entityId: req.params.id,
+            before: event,
+            metadata: {
+              jobId: event.jobId,
+              calendarId: event.googleCalendarId,
+              eventType: event.eventType,
+            },
+          });
+        } catch (auditError) {
+          logError('ScheduleEvents/AuditLog', auditError, { eventId: req.params.id });
+        }
+      }
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete schedule event');
@@ -8365,13 +8444,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/report-templates/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.put("/api/report-templates/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Get before state for audit logging
+      const before = await storage.getReportTemplate(req.params.id);
+      
       const validated = insertReportTemplateSchema.partial().parse(req.body);
       const template = await storage.updateReportTemplate(req.params.id, validated);
       if (!template) {
         return res.status(404).json({ message: "Report template not found. It may have been deleted." });
       }
+      
+      // Audit logging
+      if (before) {
+        try {
+          await logUpdate({
+            req,
+            entityType: 'report_template',
+            entityId: template.id,
+            before,
+            after: template,
+            metadata: {
+              templateName: template.name,
+              version: template.version,
+              fieldsChanged: Object.keys(validated),
+            },
+          });
+        } catch (auditError) {
+          logError('ReportTemplate/AuditLog', auditError, { templateId: template.id });
+        }
+      }
+      
       res.json(template);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -13995,10 +14098,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/calibrations", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/calibrations", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const validated = insertEquipmentCalibrationSchema.parse(req.body);
       const calibration = await storage.createEquipmentCalibration(validated);
+      
+      // Audit logging
+      try {
+        await logCreate({
+          req,
+          entityType: 'equipment_calibration',
+          entityId: calibration.id,
+          after: calibration,
+          metadata: {
+            equipmentId: calibration.equipmentId,
+            calibrationDate: calibration.calibrationDate,
+            nextDueDate: calibration.nextDueDate,
+          },
+        });
+      } catch (auditError) {
+        logError('Calibration/AuditLog', auditError, { calibrationId: calibration.id });
+      }
+      
       res.status(201).json(calibration);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -14010,12 +14131,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/calibrations/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/calibrations/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Get calibration before deletion for audit logging
+      const calibration = await storage.getEquipmentCalibration(req.params.id);
+      
       const deleted = await storage.deleteEquipmentCalibration(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Calibration not found" });
       }
+      
+      // Audit logging
+      if (calibration) {
+        try {
+          await logDelete({
+            req,
+            entityType: 'equipment_calibration',
+            entityId: req.params.id,
+            before: calibration,
+            metadata: {
+              equipmentId: calibration.equipmentId,
+              calibrationDate: calibration.calibrationDate,
+            },
+          });
+        } catch (auditError) {
+          logError('Calibration/AuditLog', auditError, { calibrationId: req.params.id });
+        }
+      }
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete calibration');
@@ -14045,10 +14188,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/maintenance", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/maintenance", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const validated = insertEquipmentMaintenanceSchema.parse(req.body);
       const maintenance = await storage.createEquipmentMaintenance(validated);
+      
+      // Audit logging
+      try {
+        await logCreate({
+          req,
+          entityType: 'equipment_maintenance',
+          entityId: maintenance.id,
+          after: maintenance,
+          metadata: {
+            equipmentId: maintenance.equipmentId,
+            maintenanceDate: maintenance.maintenanceDate,
+            maintenanceType: maintenance.maintenanceType,
+          },
+        });
+      } catch (auditError) {
+        logError('Maintenance/AuditLog', auditError, { maintenanceId: maintenance.id });
+      }
+      
       res.status(201).json(maintenance);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -14060,12 +14221,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/maintenance/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/maintenance/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Get maintenance record before deletion for audit logging
+      const maintenance = await storage.getEquipmentMaintenance(req.params.id);
+      
       const deleted = await storage.deleteEquipmentMaintenance(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Maintenance record not found" });
       }
+      
+      // Audit logging
+      if (maintenance) {
+        try {
+          await logDelete({
+            req,
+            entityType: 'equipment_maintenance',
+            entityId: req.params.id,
+            before: maintenance,
+            metadata: {
+              equipmentId: maintenance.equipmentId,
+              maintenanceDate: maintenance.maintenanceDate,
+            },
+          });
+        } catch (auditError) {
+          logError('Maintenance/AuditLog', auditError, { maintenanceId: req.params.id });
+        }
+      }
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete maintenance');
@@ -14151,6 +14334,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const checkout = await storage.createEquipmentCheckout(validated);
+      
+      // Audit logging
+      try {
+        await logCreate({
+          req,
+          entityType: 'equipment_checkout',
+          entityId: checkout.id,
+          after: checkout,
+          metadata: {
+            equipmentId: checkout.equipmentId,
+            userId: checkout.userId,
+            jobId: checkout.jobId,
+            checkoutDate: checkout.checkoutDate,
+          },
+        });
+      } catch (auditError) {
+        logError('Checkout/AuditLog', auditError, { checkoutId: checkout.id });
+      }
+      
       res.status(201).json(checkout);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -14162,8 +14364,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/checkouts/:id/checkin", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/checkouts/:id/checkin", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Get before state for audit logging
+      const before = await storage.getEquipmentCheckout(req.params.id);
+      
       const { condition, notes } = req.body;
       const actualReturn = new Date();
       
@@ -14178,6 +14383,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Checkout not found" });
       }
       
+      // Audit logging for checkin
+      if (before) {
+        try {
+          await logUpdate({
+            req,
+            entityType: 'equipment_checkout',
+            entityId: checkout.id,
+            before,
+            after: checkout,
+            metadata: {
+              equipmentId: checkout.equipmentId,
+              userId: checkout.userId,
+              checkinDate: checkout.actualReturn,
+              condition: checkout.returnCondition,
+            },
+          });
+        } catch (auditError) {
+          logError('Checkout/Checkin/AuditLog', auditError, { checkoutId: checkout.id });
+        }
+      }
+      
       res.json(checkout);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'check in equipment');
@@ -14185,12 +14411,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/checkouts/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.delete("/api/checkouts/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // Get checkout before deletion for audit logging
+      const checkout = await storage.getEquipmentCheckout(req.params.id);
+      
       const deleted = await storage.deleteEquipmentCheckout(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Checkout not found" });
       }
+      
+      // Audit logging
+      if (checkout) {
+        try {
+          await logDelete({
+            req,
+            entityType: 'equipment_checkout',
+            entityId: req.params.id,
+            before: checkout,
+            metadata: {
+              equipmentId: checkout.equipmentId,
+              userId: checkout.userId,
+              checkoutDate: checkout.checkoutDate,
+            },
+          });
+        } catch (auditError) {
+          logError('Checkout/AuditLog', auditError, { checkoutId: req.params.id });
+        }
+      }
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete checkout');
