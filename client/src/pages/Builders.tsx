@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Building2, Plus, Search, ArrowLeft, Edit, Trash2, RefreshCw, AlertCircle } from "lucide-react";
+import { trackSearch } from '@/lib/analytics/events';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -195,6 +196,13 @@ function BuildersContent() {
       builder.tradeSpecialization?.toLowerCase().includes(query)
     );
   }, [builders, searchQuery]);
+
+  // Track search analytics when search query or results change
+  useEffect(() => {
+    if (searchQuery) {
+      trackSearch('builders', searchQuery, filteredBuilders.length);
+    }
+  }, [searchQuery, filteredBuilders.length]);
 
   // Error state with retry functionality
   if (error) {

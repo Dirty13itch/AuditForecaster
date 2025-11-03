@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { FileText, Plus, Trash2, Pencil, Building2, AlertCircle, Settings, Check, X } from "lucide-react";
+import { trackSearch } from '@/lib/analytics/events';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -413,6 +414,16 @@ function PlansContent() {
       ? Object.keys(plansByBuilder)
       : [selectedBuilderId];
   }, [selectedBuilderId, plansByBuilder]);
+
+  // Track search analytics when builder filter changes
+  useEffect(() => {
+    if (selectedBuilderId !== ALL_BUILDERS_FILTER) {
+      const totalPlans = filteredBuilderIds.reduce((count, builderId) => {
+        return count + (plansByBuilder[builderId]?.length || 0);
+      }, 0);
+      trackSearch('plans', selectedBuilderId, totalPlans, { builderId: selectedBuilderId });
+    }
+  }, [selectedBuilderId, filteredBuilderIds, plansByBuilder]);
 
   // Phase 3 - OPTIMIZE: useMemo for combined loading state
   const isLoading = useMemo(() => 

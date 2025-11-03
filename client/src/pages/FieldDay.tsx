@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { trackPageView, trackUpdate } from '@/lib/analytics/events';
 import { format } from "date-fns";
 import { Calendar, CheckCircle2, XCircle, CalendarClock, Loader2, MapPin, Building2, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,6 +55,11 @@ export default function FieldDay() {
   
   const isAdmin = user?.role === 'admin';
   const dateString = format(selectedDate, 'yyyy-MM-dd');
+
+  // Track page view analytics
+  useEffect(() => {
+    trackPageView('Field Day', user?.id);
+  }, [user?.id]);
   
   // Fetch field day data
   const { data: fieldDayData, isLoading, refetch } = useQuery<FieldDayResponse>({
@@ -64,12 +70,13 @@ export default function FieldDay() {
 
   // Status update mutation
   const statusMutation = useMutation({
-    mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
+    mutationFn: async ({ jobId, status, oldStatus }: { jobId: string; status: string; oldStatus?: string }) => {
       setUpdatingJobId(jobId);
       const response = await apiRequest('PATCH', `/api/jobs/${jobId}/status`, { status });
-      return response.json();
+      return { result: await response.json(), oldStatus };
     },
-    onSuccess: (_, { status }) => {
+    onSuccess: ({ oldStatus }, { jobId, status }) => {
+      trackUpdate('job', jobId, oldStatus ? { status: oldStatus } : undefined, { status });
       queryClient.invalidateQueries({ queryKey: ['/api/field-day'] });
       toast({
         title: "Status updated",
@@ -89,7 +96,9 @@ export default function FieldDay() {
   });
 
   const handleStatusClick = (jobId: string, status: 'done' | 'failed' | 'reschedule') => {
-    statusMutation.mutate({ jobId, status });
+    const job = fieldDayData?.myJobs.find(j => j.id === jobId) || fieldDayData?.allJobs?.find(j => j.id === jobId);
+    const oldStatus = job?.status;
+    statusMutation.mutate({ jobId, status, oldStatus });
   };
 
   const handleCardClick = (jobId: string, event: React.MouseEvent) => {

@@ -29,6 +29,7 @@ import { DynamicForm } from "@/components/DynamicForm";
 import type { FormSection } from "@shared/types";
 import { getComplianceBadgeVariant, getComplianceBadgeClassName, getComplianceBadgeText } from "@/lib/compliance";
 import { safeToFixed } from "@shared/numberUtils";
+import { trackCreate } from '@/lib/analytics/events';
 
 // Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
 // Phase 6 - DOCUMENT: Report template section types supported by the system
@@ -1127,6 +1128,9 @@ function ReportGenerationDialog({
       return await response.json();
     },
     onSuccess: (reportInstance) => {
+      // Track report instance creation
+      trackCreate('report', reportInstance.id);
+      
       queryClient.invalidateQueries({ queryKey: ["/api/report-instances"] });
       toast({ title: "Report created successfully", description: "Redirecting to report fillout page..." });
       onOpenChange(false);
@@ -1334,6 +1338,9 @@ function ReportViewerDialog({
       return await response.json() as { success: boolean; pdfUrl: string };
     },
     onSuccess: (data, reportId) => {
+      // Track PDF generation (finalized report)
+      trackCreate('report_pdf', reportId);
+      
       const downloadUrl = `/api/report-instances/${reportId}/download-pdf`;
       window.open(downloadUrl, '_blank');
       

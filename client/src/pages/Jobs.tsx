@@ -39,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { trackCreate, trackUpdate } from '@/lib/analytics/events';
 
 // Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
 // Status colors for job states
@@ -455,8 +456,12 @@ function JobsContent() {
       console.log('[Jobs] Assignment API response:', result);
       return result;
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data, variables) => {
       console.log('[Jobs] Assignment mutation success:', data);
+      
+      // Track job assignment (update operation)
+      trackUpdate('job', variables.jobId, undefined, { assignedTo: variables.inspectorId });
+      
       // Invalidate all job-related queries with improved predicate
       await Promise.all([
         queryClient.invalidateQueries({ 
@@ -513,6 +518,11 @@ function JobsContent() {
       return { isDuplicate: false, job: data };
     },
     onSuccess: async (data: { isDuplicate: boolean; existingJob?: Job; job?: Job }) => {
+      // Track job creation from calendar event (if not duplicate)
+      if (!data.isDuplicate && data.job) {
+        trackCreate('job', data.job.id);
+      }
+      
       // Invalidate cache for Google events FIRST to immediately remove the converted event
       // This ensures the UI updates to remove the event from "Planned Events"
       await Promise.all([
@@ -577,6 +587,9 @@ function JobsContent() {
       return response.json();
     },
     onSuccess: async (newJob) => {
+      // Track job creation in analytics
+      trackCreate('job', newJob.id);
+      
       // Invalidate and refetch all job-related queries immediately
       // This ensures the cache is marked stale and fetches fresh data
       

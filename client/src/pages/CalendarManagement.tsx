@@ -56,6 +56,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
+import { trackImport } from '@/lib/analytics/events';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Builder, InsertBuilder } from "@shared/schema";
@@ -219,7 +220,13 @@ function CalendarManagementContent() {
       const res = await apiRequest('POST', '/api/calendar/sync-now');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Track calendar import analytics (using response data if available, otherwise defaults)
+      const recordCount = data?.imported || 0;
+      const successCount = data?.imported || 0;
+      const errorCount = data?.errors || 0;
+      trackImport('calendar_events', recordCount, successCount, errorCount);
+      
       setLastSyncTime(new Date());
       queryClient.invalidateQueries({ queryKey: ['/api/pending-events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/weekly-workload'] });

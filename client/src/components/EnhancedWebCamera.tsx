@@ -10,6 +10,7 @@ import { clientLogger } from "@/lib/logger";
 import { generateHash } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import type { Photo } from "@shared/schema";
+import { trackCreate } from '@/lib/analytics/events';
 
 /**
  * Compress an image file using canvas API
@@ -342,6 +343,9 @@ export function EnhancedWebCamera({
         if (!photoResponse.ok) {
           throw new Error("Failed to save photo metadata");
         }
+
+        const createdPhoto = await photoResponse.json();
+        trackCreate('photo', createdPhoto.id);
 
         photoSaved = true;
       } catch (error) {

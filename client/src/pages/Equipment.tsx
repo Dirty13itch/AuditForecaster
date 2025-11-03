@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { trackSearch } from '@/lib/analytics/events';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   Card,
@@ -131,6 +132,16 @@ function EquipmentContent() {
       return matchesSearch && matchesStatus && matchesType;
     });
   }, [equipment, searchTerm, statusFilter, typeFilter]);
+
+  // Track search analytics when filters or search term changes
+  useEffect(() => {
+    if (searchTerm || statusFilter !== 'all' || typeFilter !== 'all') {
+      trackSearch('equipment', searchTerm, filteredEquipment.length, {
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        type: typeFilter !== 'all' ? typeFilter : undefined,
+      });
+    }
+  }, [searchTerm, statusFilter, typeFilter, filteredEquipment.length]);
 
   // Phase 3 - OPTIMIZE: Memoized helper function using cached STATUS_COLORS object
   const getStatusColor = useCallback((status: string) => {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { trackPageView } from '@/lib/analytics/events';
 import { 
   TrendingUp, 
   AlertTriangle, 
@@ -76,6 +77,11 @@ function AnalyticsContent() {
   const [sortColumn, setSortColumn] = useState<string>('completionRate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+
+  // Track page view analytics
+  useEffect(() => {
+    trackPageView('Analytics');
+  }, []);
   
   // Initialize date range with last 6 months (to maintain current behavior)
   const getInitialDateRange = (): DateRange => {

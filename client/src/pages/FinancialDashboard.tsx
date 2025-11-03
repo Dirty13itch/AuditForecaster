@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { trackPageView } from '@/lib/analytics/events';
 import {
   Card,
   CardContent,
@@ -77,6 +78,11 @@ function FinancialDashboardContent() {
       endDate: endOfMonth(now),
     };
   });
+
+  // Track page view analytics
+  useEffect(() => {
+    trackPageView('Financial Dashboard');
+  }, []);
 
   // Phase 5 - HARDEN: Added retry: 2 for resilience against network issues
   // Fetch financial summary with revenue, expenses, profit metrics

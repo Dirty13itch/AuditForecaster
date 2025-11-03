@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { trackExport } from '@/lib/analytics/events';
 import {
   CalendarIcon,
   Download,
@@ -138,6 +139,10 @@ export default function ExportDialog({
         throw new Error('Export failed');
       }
       
+      // Extract record count from response header before converting to blob
+      const recordCountHeader = response.headers.get('X-Record-Count');
+      const recordCount = recordCountHeader ? parseInt(recordCountHeader, 10) : 0;
+      
       // Handle file download
       const blob = await response.blob();
       const fileName = options.fileName || 
@@ -154,9 +159,12 @@ export default function ExportDialog({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       
-      return { fileName, size: blob.size };
+      return { fileName, size: blob.size, recordCount };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
+      // Track export operation with actual record count from response header
+      trackExport(variables.format, dataType, result.recordCount);
+      
       toast({
         title: "Export successful",
         description: `File "${result.fileName}" has been downloaded`,

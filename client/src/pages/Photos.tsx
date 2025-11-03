@@ -46,6 +46,7 @@ import {
   type PhotoTag,
 } from "@shared/photoTags";
 import type { Job } from "@shared/schema";
+import { trackUpdate, trackSearch } from '@/lib/analytics/events';
 
 // Phase 3 - OPTIMIZE: Module-level constants prevent recreation on every render
 // Sync check interval for pending uploads
@@ -343,7 +344,12 @@ function PhotosContent() {
       });
       return response;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
+      // Track tag updates for each photo
+      variables.ids.forEach(photoId => {
+        trackUpdate('photo', photoId, undefined, { tags: variables.tags, mode: variables.mode });
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['/api/photos-cursor'] });
       const modeLabel = data.mode === 'add' ? 'added to' : data.mode === 'remove' ? 'removed from' : 'replaced on';
       toast({

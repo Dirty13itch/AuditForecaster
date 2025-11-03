@@ -1,6 +1,7 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Redirect } from "wouter";
+import { trackPageView } from '@/lib/analytics/events';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,6 +54,11 @@ function DashboardError({ onRetry }: { onRetry: () => void }) {
 // Role-based dashboard router
 export default function Dashboard() {
   const { user, isLoading, isAuthenticated } = useAuth();
+
+  // Track page view analytics
+  useEffect(() => {
+    trackPageView('Dashboard', user?.id);
+  }, [user?.id]);
 
   // Loading state - show skeleton
   if (isLoading) {

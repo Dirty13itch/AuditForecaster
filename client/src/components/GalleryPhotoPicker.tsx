@@ -14,6 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { SmartTagSelector } from "./SmartTagSelector";
 import type { PhotoTag } from "@shared/photoTags";
 import type { Photo } from "@shared/schema";
+import { trackCreate } from '@/lib/analytics/events';
 
 /**
  * Compress an image file using canvas API
@@ -305,6 +306,9 @@ export function GalleryPhotoPicker({
           if (!photoResponse.ok) {
             throw new Error(`Failed to save photo metadata: ${file.name}`);
           }
+
+          const createdPhoto = await photoResponse.json();
+          trackCreate('photo', createdPhoto.id);
 
           uploadedCount++;
         } catch (error) {

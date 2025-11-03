@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createWorker } from "tesseract.js";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { trackUpdate } from '@/lib/analytics/events';
 import { Copy, ScanText, Loader2, X, CheckCircle, AlertCircle, Wrench, Building2, Gauge, Thermometer } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,9 @@ export function PhotoOCR({ open, photoUrl, photoId, jobId, onClose, onAutoFill, 
       });
     },
     onSuccess: () => {
+      if (photoId) {
+        trackUpdate('photo', photoId, undefined, { ocrCompleted: true });
+      }
       queryClient.invalidateQueries({ queryKey: [`/api/photos/${photoId}`] });
       toast({
         title: "OCR Results Saved",
