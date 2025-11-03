@@ -1194,6 +1194,46 @@ export const analyticsEvents = pgTable("analytics_events", {
   index("idx_analytics_events_entity").on(table.entityType, table.entityId),
   index("idx_analytics_events_timestamp").on(table.timestamp),
   index("idx_analytics_events_correlation_id").on(table.correlationId),
+  index("idx_analytics_events_route").on(table.route),
+]);
+
+export const goldenPathResults = pgTable("golden_path_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  goldenPathId: text("golden_path_id").notNull(),
+  route: text("route").notNull(),
+  status: text("status").notNull(),
+  executedAt: timestamp("executed_at").defaultNow().notNull(),
+  duration: integer("duration"),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"),
+}, (table) => [
+  index("idx_golden_path_results_golden_path_id").on(table.goldenPathId),
+  index("idx_golden_path_results_route").on(table.route),
+  index("idx_golden_path_results_executed_at").on(table.executedAt),
+]);
+
+export const accessibilityAuditResults = pgTable("accessibility_audit_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  route: text("route").notNull(),
+  status: text("status").notNull(),
+  violations: integer("violations").notNull().default(0),
+  auditedAt: timestamp("audited_at").defaultNow().notNull(),
+  metadata: jsonb("metadata"),
+}, (table) => [
+  index("idx_accessibility_audit_results_route").on(table.route),
+  index("idx_accessibility_audit_results_audited_at").on(table.auditedAt),
+]);
+
+export const performanceMetrics = pgTable("performance_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  route: text("route").notNull(),
+  lighthouseScore: integer("lighthouse_score"),
+  testCoverage: integer("test_coverage"),
+  measuredAt: timestamp("measured_at").defaultNow().notNull(),
+  metadata: jsonb("metadata"),
+}, (table) => [
+  index("idx_performance_metrics_route").on(table.route),
+  index("idx_performance_metrics_measured_at").on(table.measuredAt),
 ]);
 
 export const achievements = pgTable("achievements", {
@@ -2381,6 +2421,9 @@ export const insertPhotoUploadSessionSchema = createInsertSchema(photoUploadSess
 export const insertEmailPreferenceSchema = createInsertSchema(emailPreferences).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, timestamp: true });
 export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ id: true, timestamp: true, actorId: true }); // actorId injected server-side from req.user.id
+export const insertGoldenPathResultSchema = createInsertSchema(goldenPathResults).omit({ id: true, executedAt: true });
+export const insertAccessibilityAuditResultSchema = createInsertSchema(accessibilityAuditResults).omit({ id: true, auditedAt: true });
+export const insertPerformanceMetricSchema = createInsertSchema(performanceMetrics).omit({ id: true, measuredAt: true });
 export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
 export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true }).extend({
   earnedAt: z.coerce.date().optional(),
@@ -2825,6 +2868,12 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
+export type GoldenPathResult = typeof goldenPathResults.$inferSelect;
+export type InsertGoldenPathResult = z.infer<typeof insertGoldenPathResultSchema>;
+export type AccessibilityAuditResult = typeof accessibilityAuditResults.$inferSelect;
+export type InsertAccessibilityAuditResult = z.infer<typeof insertAccessibilityAuditResultSchema>;
+export type PerformanceMetric = typeof performanceMetrics.$inferSelect;
+export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSchema>;
 export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
 export type UserAchievement = typeof userAchievements.$inferSelect;

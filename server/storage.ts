@@ -73,6 +73,12 @@ import {
   type InsertAuditLog,
   type AnalyticsEvent,
   type InsertAnalyticsEvent,
+  type GoldenPathResult,
+  type InsertGoldenPathResult,
+  type AccessibilityAuditResult,
+  type InsertAccessibilityAuditResult,
+  type PerformanceMetric,
+  type InsertPerformanceMetric,
   type Achievement,
   type InsertAchievement,
   type UserAchievement,
@@ -209,6 +215,9 @@ import {
   emailPreferences,
   auditLogs,
   analyticsEvents,
+  goldenPathResults,
+  accessibilityAuditResults,
+  performanceMetrics,
   achievements,
   userAchievements,
   builderAbbreviations,
@@ -4383,6 +4392,87 @@ export class DatabaseStorage implements IStorage {
   async createAnalyticsEvent(data: Omit<AnalyticsEvent, 'id' | 'timestamp'>): Promise<AnalyticsEvent> {
     const [event] = await db.insert(analyticsEvents).values(data).returning();
     return event;
+  }
+
+  async getAnalyticsMetricsByRoute(): Promise<Map<string, { views: number, uniqueActors: number }>> {
+    const results = await db
+      .select({
+        route: analyticsEvents.route,
+        views: sql<number>`count(*)`,
+        uniqueActors: sql<number>`count(distinct ${analyticsEvents.actorId})`,
+      })
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.eventType, 'view_route'))
+      .groupBy(analyticsEvents.route);
+    
+    const metricsMap = new Map<string, { views: number, uniqueActors: number }>();
+    for (const row of results) {
+      metricsMap.set(row.route, {
+        views: Number(row.views),
+        uniqueActors: Number(row.uniqueActors),
+      });
+    }
+    return metricsMap;
+  }
+
+  async createGoldenPathResult(data: Omit<GoldenPathResult, 'id' | 'executedAt'>): Promise<GoldenPathResult> {
+    const [result] = await db.insert(goldenPathResults).values(data).returning();
+    return result;
+  }
+
+  async getLatestGoldenPathResultByRoute(): Promise<Map<string, GoldenPathResult>> {
+    const results = await db
+      .select()
+      .from(goldenPathResults)
+      .orderBy(desc(goldenPathResults.executedAt));
+    
+    const latestMap = new Map<string, GoldenPathResult>();
+    for (const result of results) {
+      if (!latestMap.has(result.route)) {
+        latestMap.set(result.route, result);
+      }
+    }
+    return latestMap;
+  }
+
+  async createAccessibilityAuditResult(data: Omit<AccessibilityAuditResult, 'id' | 'auditedAt'>): Promise<AccessibilityAuditResult> {
+    const [result] = await db.insert(accessibilityAuditResults).values(data).returning();
+    return result;
+  }
+
+  async getLatestAccessibilityAuditByRoute(): Promise<Map<string, AccessibilityAuditResult>> {
+    const results = await db
+      .select()
+      .from(accessibilityAuditResults)
+      .orderBy(desc(accessibilityAuditResults.auditedAt));
+    
+    const latestMap = new Map<string, AccessibilityAuditResult>();
+    for (const result of results) {
+      if (!latestMap.has(result.route)) {
+        latestMap.set(result.route, result);
+      }
+    }
+    return latestMap;
+  }
+
+  async createPerformanceMetric(data: Omit<PerformanceMetric, 'id' | 'measuredAt'>): Promise<PerformanceMetric> {
+    const [result] = await db.insert(performanceMetrics).values(data).returning();
+    return result;
+  }
+
+  async getLatestPerformanceMetricByRoute(): Promise<Map<string, PerformanceMetric>> {
+    const results = await db
+      .select()
+      .from(performanceMetrics)
+      .orderBy(desc(performanceMetrics.measuredAt));
+    
+    const latestMap = new Map<string, PerformanceMetric>();
+    for (const result of results) {
+      if (!latestMap.has(result.route)) {
+        latestMap.set(result.route, result);
+      }
+    }
+    return latestMap;
   }
 
   async getAuditLogs(params: {

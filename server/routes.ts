@@ -136,7 +136,8 @@ import { withCache, buildersCache, inspectorsCache, statsCache, invalidateCacheP
 import { monitorQuery, getSlowQueryStats, clearSlowQueryStats } from './query-monitor';
 import { safeDivide, safeParseFloat, safeParseInt, safeToFixed } from '../shared/numberUtils';
 import { ROUTE_REGISTRY } from '../client/src/lib/navigation';
-import type { FeatureStatus } from '@shared/types';
+import type { FeaturesDashboardResponse, RouteReadiness, ReadinessSummary } from '@shared/dashboardTypes';
+import { FeatureMaturity } from '@shared/featureFlags';
 
 /**
  * API Error Response Standard
@@ -294,20 +295,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/status/features', isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const routes = Object.values(ROUTE_REGISTRY);
-      const features: FeatureStatus[] = routes.map(route => ({
-        path: route.path,
-        title: route.title,
-        category: route.category,
-        maturity: route.maturity,
-        goldenPathId: route.goldenPathId,
-        allowedRoles: route.allowedRoles,
-        // TODO: Wire to actual GP test results
-        lastGPResult: route.goldenPathId ? { status: 'not_run' as const } : undefined,
-        // TODO: Wire to actual metrics
-        metrics: {},
-        todos: [], // TODO: Scan for TODOs
-      }));
-      res.json({ features });
+      
+      // Query analytics metrics, GP results, accessibility audits, and performance metrics in parallel
+      const [analyticsMetrics, gpResults, axeResults, perfMetrics] = await Promise.all([
+        storage.getAnalyticsMetricsByRoute(),
+        storage.getLatestGoldenPathResultByRoute(),
+        storage.getLatestAccessibilityAuditByRoute(),
+        storage.getLatestPerformanceMetricByRoute(),
+      ]);
+      
+      // Build route readiness info with real data
+      const routeReadiness: RouteReadiness[] = routes.map(route => {
+        const analytics = analyticsMetrics.get(route.path);
+        const gpResult = gpResults.get(route.path);
+        const axeResult = axeResults.get(route.path);
+        const perfMetric = perfMetrics.get(route.path);
+        
+        return {
+          path: route.path,
+          title: route.title,
+          description: route.description,
+          category: route.category,
+          maturity: route.maturity,
+          goldenPathId: route.goldenPathId,
+          goldenPathStatus: gpResult?.status as 'pass' | 'fail' | 'pending' | 'n/a' | undefined,
+          roles: route.roles,
+          flag: route.flag,
+          axeViolations: axeResult?.violations,
+          axeStatus: axeResult?.status as 'pass' | 'fail' | 'pending' | undefined,
+          lighthouseScore: perfMetric?.lighthouseScore ?? undefined,
+          testCoverage: perfMetric?.testCoverage ?? undefined,
+          views: analytics?.views,
+          uniqueActors: analytics?.uniqueActors,
+        };
+      });
+      
+      // Calculate summary statistics
+      const summary: ReadinessSummary = {
+        totalRoutes: routeReadiness.length,
+        ga: routeReadiness.filter(r => r.maturity === FeatureMaturity.GA).length,
+        beta: routeReadiness.filter(r => r.maturity === FeatureMaturity.BETA).length,
+        experimental: routeReadiness.filter(r => r.maturity === FeatureMaturity.EXPERIMENTAL).length,
+        gaPercentage: 0,
+        betaPercentage: 0,
+        experimentalPercentage: 0,
+      };
+      
+      if (summary.totalRoutes > 0) {
+        summary.gaPercentage = Math.round((summary.ga / summary.totalRoutes) * 100);
+        summary.betaPercentage = Math.round((summary.beta / summary.totalRoutes) * 100);
+        summary.experimentalPercentage = Math.round((summary.experimental / summary.totalRoutes) * 100);
+      }
+      
+      const response: FeaturesDashboardResponse = {
+        routes: routeReadiness,
+        summary,
+        timestamp: new Date().toISOString(),
+      };
+      
+      res.json(response);
     } catch (error) {
       logError('StatusFeatures', error);
       res.status(500).json(serverErrorResponse(req.path));

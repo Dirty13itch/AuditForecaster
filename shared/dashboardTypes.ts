@@ -130,6 +130,14 @@ export interface RouteReadiness {
   
   /** Open TODOs or blockers (detailed list - future) */
   openTodos?: string[];
+  
+  // Analytics metrics (from analytics_events table)
+  
+  /** Total view_route event count for this route */
+  views?: number;
+  
+  /** Unique actors who viewed this route */
+  uniqueActors?: number;
 }
 
 /**
