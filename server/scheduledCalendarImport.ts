@@ -115,12 +115,16 @@ export async function startScheduledCalendarImport() {
           },
         }));
         
-        // Process events using import service
+        // Generate correlation ID for end-to-end tracing
+        const correlationId = crypto.randomUUID();
+        
+        // Process events using import service (with correlation ID for audit tracing)
         const result = await processCalendarEvents(
           storage,
           calendarEvents,
           buildingKnowledgeCalendarId,
-          SYSTEM_USER_ID
+          SYSTEM_USER_ID,
+          correlationId
         );
         
         serverLogger.info('[ScheduledCalendarImport] Import completed successfully', {
@@ -129,12 +133,13 @@ export async function startScheduledCalendarImport() {
           eventsQueued: result.eventsQueued,
           errors: result.errors.length,
           importLogId: result.importLogId,
+          correlationId,
         });
         
         // Create synthetic request for system-initiated audit logging
         const systemReq = {
           user: { id: SYSTEM_USER_ID },
-          correlationId: crypto.randomUUID(),
+          correlationId,
           ip: '127.0.0.1', // localhost for system actions
           get: () => 'System/Automated Calendar Import',
         } as AuditRequest;

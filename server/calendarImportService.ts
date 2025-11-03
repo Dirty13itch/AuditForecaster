@@ -2,6 +2,7 @@ import { serverLogger } from "./logger";
 import type { IStorage } from "./storage";
 import { parseCalendarEvent, type ParsedEventResult } from "./eventParser";
 import type { InsertJob, InsertUnmatchedCalendarEvent, InsertCalendarImportLog, InsertBuilder } from "@shared/schema";
+import { logCreate, logCustomAction, type AuditRequest } from "./lib/audit";
 
 /**
  * Calendar event interface (from Google Calendar API)
@@ -40,7 +41,8 @@ export async function createJobFromCalendarEvent(
   storage: IStorage,
   event: CalendarEvent,
   parsed: ParsedEventResult,
-  createdBy: string
+  createdBy: string,
+  auditReq?: AuditRequest
 ): Promise<string> {
   // Handle missing builder by auto-creating temporary builder
   let builderId = parsed.parsedBuilderId;
@@ -67,6 +69,26 @@ export async function createJobFromCalendarEvent(
       confidence: parsed.confidenceScore,
       eventId: event.id,
     });
+    
+    // Audit log: temporary builder creation
+    if (auditReq) {
+      await logCreate({
+        req: auditReq,
+        entityType: 'builder',
+        entityId: newBuilder.id,
+        data: {
+          name: parsed.parsedBuilderName,
+          status: 'temporary',
+          autoCreated: true,
+          confidence: parsed.confidenceScore,
+          sourceEvent: event.id,
+        },
+        metadata: {
+          reason: 'auto_created_from_calendar_event',
+          eventSummary: event.summary,
+        },
+      });
+    }
   }
   
   if (!builderId || !parsed.parsedJobType) {
@@ -111,6 +133,31 @@ export async function createJobFromCalendarEvent(
     inspectionType: parsed.parsedJobType,
     confidence: parsed.confidenceScore,
   });
+  
+  // Audit log: job creation from calendar event
+  if (auditReq) {
+    await logCreate({
+      req: auditReq,
+      entityType: 'job',
+      entityId: job.id,
+      data: {
+        name: jobName,
+        builderId,
+        builderName: parsed.parsedBuilderName,
+        inspectionType: parsed.parsedJobType,
+        address: event.location || event.summary || 'TBD',
+        status: 'scheduled',
+        scheduledDate: startTime,
+      },
+      metadata: {
+        source: 'calendar_import',
+        googleEventId: event.id,
+        eventSummary: event.summary,
+        confidence: parsed.confidenceScore,
+        matchedAbbreviation: parsed.matchedAbbreviation,
+      },
+    });
+  }
 
   return job.id;
 }
@@ -127,7 +174,8 @@ export async function processCalendarEvents(
   storage: IStorage,
   events: CalendarEvent[],
   calendarId: string,
-  userId: string
+  userId: string,
+  correlationId?: string
 ): Promise<ImportResult> {
   const result: ImportResult = {
     jobsCreated: 0,
@@ -137,6 +185,14 @@ export async function processCalendarEvents(
   };
 
   serverLogger.info(`[CalendarImport] Processing ${events.length} events from calendar ${calendarId}`);
+  
+  // Create synthetic request for audit logging if correlation ID provided
+  const auditReq: AuditRequest | undefined = correlationId ? {
+    user: { id: userId },
+    correlationId,
+    ip: '127.0.0.1',
+    get: () => 'CalendarImportService',
+  } as AuditRequest : undefined;
 
   // Fetch all builders for parser
   const builders = await storage.listBuilders();
@@ -151,13 +207,47 @@ export async function processCalendarEvents(
 
       // Parse event title using new eventParser
       const parsed = parseCalendarEvent(event.summary, event.description, builders);
+      
+      // Audit log: event parsing result
+      if (auditReq) {
+        await logCustomAction({
+          req: auditReq,
+          action: 'convert',
+          entityType: 'calendar_event',
+          entityId: event.id,
+          after: {
+            builderName: parsed.parsedBuilderName,
+            builderId: parsed.parsedBuilderId,
+            inspectionType: parsed.parsedJobType,
+            confidence: parsed.confidenceScore,
+            isNewBuilder: parsed.isNewBuilder,
+            matchedAbbreviation: parsed.matchedAbbreviation,
+          },
+          metadata: {
+            eventSummary: event.summary,
+            eventDescription: event.description,
+            location: event.location,
+          },
+        });
+      }
 
       // Determine action based on confidence score
       if (parsed.confidenceScore >= 80 && (parsed.parsedBuilderId || parsed.isNewBuilder) && parsed.parsedJobType !== 'other') {
         // High confidence: Auto-create job (and temporary builder if needed)
         try {
-          await createJobFromCalendarEvent(storage, event, parsed, userId);
+          await createJobFromCalendarEvent(storage, event, parsed, userId, auditReq);
           result.jobsCreated++;
+          
+          // Audit log: decision to auto-create job
+          if (auditReq) {
+            await logCustomAction({
+              req: auditReq,
+              action: 'verify',
+              entityType: 'calendar_event',
+              entityId: event.id,
+              after: { decision: 'auto_create_job', reason: 'high_confidence', confidence: parsed.confidenceScore },
+            });
+          }
         } catch (error: any) {
           if (error.message.includes('already exists')) {
             serverLogger.info(`[CalendarImport] Skipping duplicate event ${event.id}`);
@@ -168,25 +258,51 @@ export async function processCalendarEvents(
       } else if (parsed.confidenceScore >= 60 && (parsed.parsedBuilderId || parsed.isNewBuilder) && parsed.parsedJobType !== 'other') {
         // Medium confidence: Auto-create job + queue for review
         try {
-          await createJobFromCalendarEvent(storage, event, parsed, userId);
+          await createJobFromCalendarEvent(storage, event, parsed, userId, auditReq);
           result.jobsCreated++;
           
           // Also queue for review
-          await queueEventForReview(storage, event, parsed, calendarId, 'flagged');
+          await queueEventForReview(storage, event, parsed, calendarId, 'flagged', auditReq);
           result.eventsQueued++;
+          
+          // Audit log: decision to auto-create + flag for review
+          if (auditReq) {
+            await logCustomAction({
+              req: auditReq,
+              action: 'verify',
+              entityType: 'calendar_event',
+              entityId: event.id,
+              after: { decision: 'auto_create_and_flag', reason: 'medium_confidence', confidence: parsed.confidenceScore },
+            });
+          }
         } catch (error: any) {
           if (error.message.includes('already exists')) {
             serverLogger.info(`[CalendarImport] Skipping duplicate event ${event.id}`);
           } else {
             // If job creation fails, still queue for review
-            await queueEventForReview(storage, event, parsed, calendarId, 'pending');
+            await queueEventForReview(storage, event, parsed, calendarId, 'pending', auditReq);
             result.eventsQueued++;
           }
         }
       } else {
         // Low confidence: Queue for manual review only
-        await queueEventForReview(storage, event, parsed, calendarId, 'pending');
+        await queueEventForReview(storage, event, parsed, calendarId, 'pending', auditReq);
         result.eventsQueued++;
+        
+        // Audit log: decision to queue for manual review
+        if (auditReq) {
+          await logCustomAction({
+            req: auditReq,
+            action: 'verify',
+            entityType: 'calendar_event',
+            entityId: event.id,
+            after: { 
+              decision: 'queue_for_review', 
+              reason: parsed.confidenceScore < 60 ? 'low_confidence' : 'unrecognized_type',
+              confidence: parsed.confidenceScore 
+            },
+          });
+        }
       }
     } catch (error: any) {
       serverLogger.error(`[CalendarImport] Error processing event ${event.id}:`, error);
@@ -226,7 +342,8 @@ async function queueEventForReview(
   event: CalendarEvent,
   parsed: ParsedEventResult,
   calendarId: string,
-  status: string = 'pending'
+  status: string = 'pending',
+  auditReq?: AuditRequest
 ): Promise<void> {
   const startTime = event.start.dateTime 
     ? new Date(event.start.dateTime) 
@@ -257,9 +374,31 @@ async function queueEventForReview(
     status,
   };
 
-  await storage.createUnmatchedEvent(unmatchedEvent);
+  const createdEvent = await storage.createUnmatchedEvent(unmatchedEvent);
+  
   serverLogger.info(`[CalendarImport] Queued event ${event.id} for review`, {
     confidence: parsed.confidenceScore,
     status,
   });
+  
+  // Audit log: event queued for review
+  if (auditReq) {
+    await logCreate({
+      req: auditReq,
+      entityType: 'unmatched_calendar_event',
+      entityId: createdEvent.id,
+      data: {
+        googleEventId: event.id,
+        title: event.summary,
+        confidence: parsed.confidenceScore,
+        status,
+      },
+      metadata: {
+        parsedBuilderName: parsed.parsedBuilderName,
+        parsedJobType: parsed.parsedJobType,
+        matchedAbbreviation: parsed.matchedAbbreviation,
+        isNewBuilder: parsed.isNewBuilder,
+      },
+    });
+  }
 }
