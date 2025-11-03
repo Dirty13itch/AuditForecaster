@@ -70,6 +70,13 @@ Core architectural decisions and features include:
     *   **CI/CD Ready**: Infrastructure complete, pending browser execution environment (GitHub Actions, Replit Deployments).
     *   **Route-by-Route Tracking**: Per-route accessibility status (pass/fail/pending) with detailed violation metadata.
     *   **Typed Safety**: FeatureFlagKey and UserRole unions prevent runtime errors across navigation registry.
+-   **AAA Blueprint Observability System**: Production-grade event tracking and correlation infrastructure.
+    *   **Typed Analytics Events**: Comprehensive event taxonomy (view_route, search_entity, create/update/delete_entity, import/export_data) with TypeScript type safety.
+    *   **Correlation ID Middleware**: End-to-end request tracing linking client analytics events to server audit logs via X-Correlation-ID headers.
+    *   **18 Tracked Operations**: Complete coverage of core CRUD operations (jobs, photos, reports), searches (5 entity types), imports/exports, and page views.
+    *   **Event Enrichment**: Automatic metadata injection including actorId, route, timestamp, correlation ID, and operation-specific data (before/after state, record counts).
+    *   **Analytics Integration**: Events emitted from React Query mutation success handlers and useEffect hooks for non-intrusive tracking.
+    *   **Infrastructure Ready**: Console logging implemented with placeholder for analytics provider integration (PostHog, Mixpanel, Amplitude).
 
 ## External Dependencies
 

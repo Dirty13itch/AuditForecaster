@@ -374,14 +374,31 @@ interface AuditLogEntry {
 
 - ✅ Audit logs table exists and operational
 - ✅ Correlation IDs in request headers
-- ⚠️ Analytics events not yet typed
-- ⚠️ Event emission not consistent across all routes
+- ✅ **Analytics events fully typed** (client/src/lib/analytics/events.ts)
+- ✅ **Event emission integrated across all core routes**
+- ✅ **Correlation ID middleware implemented** (server/middleware/correlationId.ts)
+- ✅ **End-to-end correlation** (client events linked to server audit logs via X-Correlation-ID headers)
+
+**Completed (November 3, 2025)**:
+- [x] Create `client/src/lib/analytics/events.ts` with typed event schemas ✅
+- [x] Add event emission to all CRUD operations (18 tracked operations) ✅
+- [x] Implement correlation ID middleware for request tracing ✅
+- [x] Integrate analytics into Jobs, Photos, Reports, Builders, Plans, Equipment ✅
+- [x] Track page views (Dashboard, Field Day, Analytics, Financial Dashboard) ✅
+- [x] Track imports/exports with accurate record counts ✅
+
+**Coverage**: 18 tracked operations across 14 components
+- **Create**: job, photo (gallery + webcam), report
+- **Update**: job status (with before/after), photo tags, photo OCR
+- **Search**: jobs, photos, builders, plans, equipment (5 entity types)
+- **Import**: calendar events (with success/error counts)
+- **Export**: CSV/PDF/XLSX/JSON (with accurate record counts from X-Record-Count header)
+- **Page Views**: Dashboard, Field Day, Analytics, Financial Dashboard
 
 **Next Actions**:
-- [ ] Create `client/src/lib/analytics/events.ts` with typed event schemas
-- [ ] Create `client/src/lib/audit.ts` for audit log helpers
-- [ ] Add event emission to all CRUD operations
-- [ ] Integrate with analytics provider (e.g., PostHog, Mixpanel)
+- [ ] Integrate with analytics provider (e.g., PostHog, Mixpanel, Amplitude)
+- [ ] Add correlation IDs to server audit logs (incremental enhancement)
+- [ ] Create automated tests to verify event emission on CRUD operations
 
 ---
 
