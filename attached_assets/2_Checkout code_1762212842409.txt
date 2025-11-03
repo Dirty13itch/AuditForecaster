@@ -1,0 +1,69 @@
+﻿2025-11-03T23:09:44.4770669Z ##[group]Run actions/checkout@v4
+2025-11-03T23:09:44.4771572Z with:
+2025-11-03T23:09:44.4772033Z   repository: Dirty13itch/AuditForecaster
+2025-11-03T23:09:44.4772780Z   token: ***
+2025-11-03T23:09:44.4773164Z   ssh-strict: true
+2025-11-03T23:09:44.4773550Z   ssh-user: git
+2025-11-03T23:09:44.4773947Z   persist-credentials: true
+2025-11-03T23:09:44.4774386Z   clean: true
+2025-11-03T23:09:44.4774773Z   sparse-checkout-cone-mode: true
+2025-11-03T23:09:44.4775306Z   fetch-depth: 1
+2025-11-03T23:09:44.4775681Z   fetch-tags: false
+2025-11-03T23:09:44.4776073Z   show-progress: true
+2025-11-03T23:09:44.4776669Z   lfs: false
+2025-11-03T23:09:44.4777031Z   submodules: false
+2025-11-03T23:09:44.4777452Z   set-safe-directory: true
+2025-11-03T23:09:44.4778137Z ##[endgroup]
+2025-11-03T23:09:44.5868815Z Syncing repository: Dirty13itch/AuditForecaster
+2025-11-03T23:09:44.5870735Z ##[group]Getting Git version info
+2025-11-03T23:09:44.5871530Z Working directory is '/home/runner/work/AuditForecaster/AuditForecaster'
+2025-11-03T23:09:44.5872629Z [command]/usr/bin/git version
+2025-11-03T23:09:44.5955935Z git version 2.51.2
+2025-11-03T23:09:44.5983193Z ##[endgroup]
+2025-11-03T23:09:44.6005395Z Temporarily overriding HOME='/home/runner/work/_temp/fed23342-d94f-4df3-9e82-609ef0d3f7c1' before making global git config changes
+2025-11-03T23:09:44.6007050Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-03T23:09:44.6010875Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AuditForecaster/AuditForecaster
+2025-11-03T23:09:44.6047552Z Deleting the contents of '/home/runner/work/AuditForecaster/AuditForecaster'
+2025-11-03T23:09:44.6051546Z ##[group]Initializing the repository
+2025-11-03T23:09:44.6055394Z [command]/usr/bin/git init /home/runner/work/AuditForecaster/AuditForecaster
+2025-11-03T23:09:44.6173166Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-11-03T23:09:44.6175049Z hint: is subject to change. To configure the initial branch name to use in all
+2025-11-03T23:09:44.6177011Z hint: of your new repositories, which will suppress this warning, call:
+2025-11-03T23:09:44.6178649Z hint:
+2025-11-03T23:09:44.6179442Z hint: 	git config --global init.defaultBranch <name>
+2025-11-03T23:09:44.6180110Z hint:
+2025-11-03T23:09:44.6180713Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-11-03T23:09:44.6181696Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-11-03T23:09:44.6182517Z hint:
+2025-11-03T23:09:44.6182931Z hint: 	git branch -m <name>
+2025-11-03T23:09:44.6183494Z hint:
+2025-11-03T23:09:44.6184492Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-11-03T23:09:44.6185695Z Initialized empty Git repository in /home/runner/work/AuditForecaster/AuditForecaster/.git/
+2025-11-03T23:09:44.6190018Z [command]/usr/bin/git remote add origin https://github.com/Dirty13itch/AuditForecaster
+2025-11-03T23:09:44.6223420Z ##[endgroup]
+2025-11-03T23:09:44.6224188Z ##[group]Disabling automatic garbage collection
+2025-11-03T23:09:44.6227530Z [command]/usr/bin/git config --local gc.auto 0
+2025-11-03T23:09:44.6255440Z ##[endgroup]
+2025-11-03T23:09:44.6256118Z ##[group]Setting up auth
+2025-11-03T23:09:44.6262488Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-03T23:09:44.6292667Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-03T23:09:44.6687845Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-03T23:09:44.6716545Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-03T23:09:44.6938128Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-11-03T23:09:44.6974665Z ##[endgroup]
+2025-11-03T23:09:44.6975424Z ##[group]Fetching the repository
+2025-11-03T23:09:44.6983471Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +616850ac355a0580de2737fd79afd78617aadea0:refs/remotes/origin/main
+2025-11-03T23:09:47.0477343Z From https://github.com/Dirty13itch/AuditForecaster
+2025-11-03T23:09:47.0478346Z  * [new ref]         616850ac355a0580de2737fd79afd78617aadea0 -> origin/main
+2025-11-03T23:09:47.0512347Z ##[endgroup]
+2025-11-03T23:09:47.0513155Z ##[group]Determining the checkout info
+2025-11-03T23:09:47.0516759Z ##[endgroup]
+2025-11-03T23:09:47.0521387Z [command]/usr/bin/git sparse-checkout disable
+2025-11-03T23:09:47.0567777Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-11-03T23:09:47.0598075Z ##[group]Checking out the ref
+2025-11-03T23:09:47.0602363Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-11-03T23:09:47.2768533Z Switched to a new branch 'main'
+2025-11-03T23:09:47.2770217Z branch 'main' set up to track 'origin/main'.
+2025-11-03T23:09:47.2790209Z ##[endgroup]
+2025-11-03T23:09:47.2830627Z [command]/usr/bin/git log -1 --format=%H
+2025-11-03T23:09:47.2854801Z 616850ac355a0580de2737fd79afd78617aadea0
