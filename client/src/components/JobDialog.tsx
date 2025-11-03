@@ -598,8 +598,12 @@ export default function JobDialog({
                       <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                         <FormControl>
                           <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
+                            checked={field.value ?? false}
+                            onCheckedChange={(checked) => {
+                              if (checked !== "indeterminate") {
+                                field.onChange(checked);
+                              }
+                            }}
                             disabled={!canEdit}
                             data-testid="checkbox-field-work"
                           />
@@ -625,8 +629,12 @@ export default function JobDialog({
                       <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                         <FormControl>
                           <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
+                            checked={field.value ?? false}
+                            onCheckedChange={(checked) => {
+                              if (checked !== "indeterminate") {
+                                field.onChange(checked);
+                              }
+                            }}
                             disabled={!canEdit || !fieldWorkComplete}
                             data-testid="checkbox-photo-upload"
                           />
@@ -729,7 +737,11 @@ export default function JobDialog({
                 <Checkbox
                   id="manual-override"
                   checked={manualOverride}
-                  onCheckedChange={setManualOverride}
+                  onCheckedChange={(checked) => {
+                    if (checked !== "indeterminate") {
+                      setManualOverride(checked);
+                    }
+                  }}
                   data-testid="toggle-manual-measurements"
                 />
                 <label

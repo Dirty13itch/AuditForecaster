@@ -52,7 +52,6 @@ export function AppSidebar() {
   // Get user roles
   const userRoles = useMemo<UserRole[]>(() => {
     if (!user) return [];
-    if (user.roles) return user.roles;
     if (user.role) return [user.role as UserRole];
     return ['inspector']; // default
   }, [user]);
@@ -241,7 +240,7 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex items-center gap-3 p-2" data-testid="user-profile">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.profileImageUrl} alt={`${getUserName()} profile picture`} />
+                <AvatarImage src={user?.profileImageUrl ?? undefined} alt={`${getUserName()} profile picture`} />
                 <AvatarFallback aria-label={getUserName()}>{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">

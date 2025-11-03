@@ -66,12 +66,8 @@ export function ProtectedRoute({ children, path }: ProtectedRouteProps) {
     
     // Get user roles
     const userRoles: UserRole[] = [];
-    if (user) {
-      if (user.roles) {
-        userRoles.push(...user.roles);
-      } else if (user.role) {
-        userRoles.push(user.role as UserRole);
-      }
+    if (user && user.role) {
+      userRoles.push(user.role as UserRole);
     }
     
     // Evaluate access

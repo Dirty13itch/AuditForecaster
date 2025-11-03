@@ -164,7 +164,7 @@ function generateBreadcrumbs(pathname: string): Array<{ path: string; label: str
   if (!match) return items;
   
   // Build breadcrumb chain
-  let currentPattern = match.pattern;
+  let currentPattern: string | null | undefined = match.pattern;
   const visitedPatterns = new Set<string>();
   
   while (currentPattern && !visitedPatterns.has(currentPattern)) {
@@ -185,7 +185,7 @@ function generateBreadcrumbs(pathname: string): Array<{ path: string; label: str
         params: match.params
       });
       
-      currentPattern = config.parent || null;
+      currentPattern = config.parent ?? null;
     } else {
       break;
     }
@@ -268,8 +268,17 @@ export function Breadcrumbs({ className, maxItems = 3 }: BreadcrumbsProps) {
       first: firstItem,
       hidden: hiddenItems,
       last: lastItems
-    };
+    } as const;
   }, [displayBreadcrumbs, isCollapsed, maxItems]);
+  
+  // Type guard to check if breadcrumbs are collapsed
+  const isCollapsedView = (breadcrumbs: typeof visibleBreadcrumbs): breadcrumbs is {
+    readonly first: { path: string; label: string; pattern: string; params: Record<string, string> };
+    readonly hidden: { path: string; label: string; pattern: string; params: Record<string, string> }[];
+    readonly last: { path: string; label: string; pattern: string; params: Record<string, string> }[];
+  } => {
+    return 'first' in breadcrumbs;
+  };
   
   // Don't show breadcrumbs on home page
   if (location === '/' || displayBreadcrumbs.length === 0) {
@@ -331,7 +340,7 @@ export function Breadcrumbs({ className, maxItems = 3 }: BreadcrumbsProps) {
               )}
             </BreadcrumbItem>
           ))
-        ) : (
+        ) : isCollapsedView(visibleBreadcrumbs) ? (
           // Mobile collapsed view
           <>
             {/* First item */}
@@ -432,7 +441,7 @@ export function Breadcrumbs({ className, maxItems = 3 }: BreadcrumbsProps) {
               </BreadcrumbItem>
             ))}
           </>
-        )}
+        ) : null}
       </BreadcrumbList>
     </Breadcrumb>
   );
