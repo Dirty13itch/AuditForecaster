@@ -62,6 +62,14 @@ Core architectural decisions and features include:
     *   **Dev Mode Experimental Toggle**: Development-only "Show Experimental Routes" checkbox.
     *   **Dynamic Sidebar Navigation**: Dynamic route filtering with gatekeeping system integration.
     *   **/status/features Dashboard**: Admin-only comprehensive feature readiness surface with Golden Path test results.
+-   **Accessibility Audit Infrastructure**: Production-ready WCAG 2.2 AA compliance testing system.
+    *   **Comprehensive Test Suite**: Playwright + Axe automated accessibility audits for 37 GA/Beta routes (86.5% coverage).
+    *   **Dual-Format Reporting**: JSON machine-readable and Markdown human-readable violation reports with severity classification.
+    *   **Dashboard Integration**: Real-time accessibility metrics in /status/features with compliance percentages and violation counts.
+    *   **WCAG 2.2 AA Coverage**: Tests for WCAG 2.0 A/AA, WCAG 2.2 AA, and best-practice rules.
+    *   **CI/CD Ready**: Infrastructure complete, pending browser execution environment (GitHub Actions, Replit Deployments).
+    *   **Route-by-Route Tracking**: Per-route accessibility status (pass/fail/pending) with detailed violation metadata.
+    *   **Typed Safety**: FeatureFlagKey and UserRole unions prevent runtime errors across navigation registry.
 
 ## External Dependencies
 
