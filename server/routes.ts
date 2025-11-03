@@ -13,6 +13,7 @@ import { healthz, readyz, status } from "./health";
 import { generateToken, csrfSynchronisedProtection } from "./csrf";
 import { createAuditLog } from "./auditLogger";
 import { logCreate, logUpdate, logDelete, logCustomAction, logExport } from './lib/audit';
+import { analytics } from './lib/analytics';
 import { requireRole, checkResourceOwnership, canEdit, canCreate, canDelete, type UserRole } from "./permissions";
 import { requirePermission, blockFinancialAccess } from "./middleware/permissions";
 import { validateContactRole, categorizeAgreementExpiration } from "./builderService";
@@ -3509,6 +3510,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         after: job,
       });
       
+      // Track analytics event for job creation
+      analytics.trackCreate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'job',
+        entityId: job.id,
+        correlationId: req.correlationId,
+        metadata: {
+          name: job.name,
+          address: job.address,
+          builderId: job.builderId,
+          status: job.status,
+          inspectionType: job.inspectionType,
+          scheduledDate: job.scheduledDate?.toISOString(),
+          priority: job.priority,
+          source: 'manual_create',
+        },
+      });
+      
       // Only return 201 if job was actually created and persisted
       res.status(201).json(job);
     } catch (error) {
@@ -3718,6 +3738,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }, storage);
       }
       
+      // New audit system: Log update action
+      const changedFields = Object.keys(validated);
+      await logUpdate({
+        req,
+        entityType: 'job',
+        entityId: id,
+        before: existingJob,
+        after: job,
+        changedFields,
+      });
+      
+      // Track analytics event for job update
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'job',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          changedFields,
+          statusChanged: validated.status && existingJob.status !== validated.status,
+          oldStatus: existingJob.status,
+          newStatus: job.status,
+          assignmentChanged: validated.assignedTo !== undefined && existingJob.assignedTo !== validated.assignedTo,
+          schedulingChanged: validated.scheduledDate !== undefined,
+          name: job.name,
+          address: job.address,
+        },
+      });
+      
       // Invalidate stats cache when job status changes (affects dashboard)
       if (validated.status || validated.scheduledDate || validated.assignedTo) {
         invalidateCachePattern(statsCache, 'inspector-summary:');
@@ -3803,6 +3853,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         changedFields: ['status'],
       });
       
+      // Track analytics event for status change
+      analytics.trackUpdate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'job',
+        entityId: req.params.id,
+        correlationId: req.correlationId,
+        metadata: {
+          changedFields: ['status'],
+          statusChanged: true,
+          oldStatus: existingJob.status,
+          newStatus: newStatus,
+          name: existingJob.name,
+          address: existingJob.address,
+          source: 'quick_status_update',
+        },
+      });
+      
       // Invalidate stats cache (affects dashboard)
       invalidateCachePattern(statsCache, 'inspector-summary:');
 
@@ -3856,6 +3924,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         before: job,
       });
       
+      // Track analytics event for job deletion
+      analytics.trackDelete({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'job',
+        entityId: id,
+        correlationId: req.correlationId,
+        metadata: {
+          name: job.name,
+          address: job.address,
+          status: job.status,
+          inspectionType: job.inspectionType,
+          wasCompleted: job.status === 'done',
+        },
+      });
+      
       res.status(204).send();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -3899,6 +3983,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             entityType: 'job',
             entityId: ids[i],
             before: job,
+          });
+          
+          // Track analytics event for each deleted job
+          analytics.trackDelete({
+            actorId: req.user.id,
+            route: req.path,
+            entityType: 'job',
+            entityId: ids[i],
+            correlationId: req.correlationId,
+            metadata: {
+              name: job.name,
+              address: job.address,
+              status: job.status,
+              inspectionType: job.inspectionType,
+              wasCompleted: job.status === 'done',
+              bulkOperation: true,
+              totalInBatch: ids.length,
+            },
           });
         }
       }
@@ -3948,6 +4050,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         exportType: 'jobs',
         recordCount: validJobs.length,
         format,
+      });
+      
+      // Track analytics event for job export
+      analytics.trackExport({
+        actorId: req.user.id,
+        route: req.path,
+        exportType: 'jobs',
+        correlationId: req.correlationId,
+        metadata: {
+          format,
+          recordCount: validJobs.length,
+          requestedCount: ids.length,
+          statusBreakdown: validJobs.reduce((acc, job) => {
+            acc[job.status] = (acc[job.status] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>),
+        },
       });
 
       if (format === 'json') {
@@ -4119,6 +4238,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: newJob.id,
         after: newJob,
         metadata: { source: 'calendar_event', eventId: googleEvent.id },
+      });
+      
+      // Track analytics event for job creation from calendar
+      analytics.trackCreate({
+        actorId: req.user.id,
+        route: req.path,
+        entityType: 'job',
+        entityId: newJob.id,
+        correlationId: req.correlationId,
+        metadata: {
+          name: newJob.name,
+          address: newJob.address,
+          status: newJob.status,
+          inspectionType: newJob.inspectionType,
+          scheduledDate: newJob.scheduledDate?.toISOString(),
+          priority: newJob.priority,
+          source: 'calendar_event',
+          sourceEventId: googleEvent.id,
+          eventTitle: googleEvent.title,
+        },
       });
 
       res.status(201).json(newJob);

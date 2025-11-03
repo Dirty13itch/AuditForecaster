@@ -16,7 +16,7 @@
  * Required fields: actorId, route, timestamp, correlationId, metadata
  */
 
-import { serverLogger } from './logger';
+import { serverLogger } from '../logger';
 
 /**
  * Entity types tracked by analytics
