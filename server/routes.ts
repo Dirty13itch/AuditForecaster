@@ -12976,12 +12976,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const project = await storage.createTaxCreditProject(validated);
       
-      await createAuditLog(req, {
-        action: 'created',
-        resourceType: 'tax_credit_project',
-        resourceId: project.id,
-        metadata: { projectName: project.projectName },
-      });
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCreate({
+          req,
+          entityType: 'tax_credit_project',
+          entityId: project.id,
+          after: project,
+          metadata: { 
+            projectName: project.projectName,
+            builderId: project.builderId,
+            certificationYear: project.certificationYear,
+          },
+        });
+
+        analytics.trackCreate({
+          actorId: userId,
+          route: '/api/tax-credit-projects',
+          correlationId: req.correlationId || '',
+          entityType: 'tax_credit_project',
+          entityId: project.id,
+          metadata: {
+            projectName: project.projectName,
+            builderId: project.builderId,
+            certificationYear: project.certificationYear,
+            qualifiedUnits: project.qualifiedUnits || 0,
+            creditAmount: project.creditAmount,
+          },
+        });
+      } catch (obsError) {
+        logError('TaxCreditProjects/Create/Observability', obsError);
+      }
       
       res.json(project);
     } catch (error) {
@@ -12996,7 +13021,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const userId = req.user.id;
       const updates = req.body;
+      
+      // Capture before state for audit trail
+      const before = await storage.getTaxCreditProject(req.params.id);
+      if (!before) {
+        return res.status(404).json({ message: "Tax credit project not found" });
+      }
       
       // Recalculate credit amount if qualified units changed
       if (updates.qualifiedUnits !== undefined) {
@@ -13004,16 +13036,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const project = await storage.updateTaxCreditProject(req.params.id, updates);
-      if (!project) {
-        return res.status(404).json({ message: "Tax credit project not found" });
-      }
       
-      await createAuditLog(req, {
-        action: 'updated',
-        resourceType: 'tax_credit_project',
-        resourceId: project.id,
-        metadata: { updates },
-      });
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logUpdate({
+          req,
+          entityType: 'tax_credit_project',
+          entityId: project.id,
+          before,
+          after: project,
+          metadata: { 
+            fieldsChanged: Object.keys(updates),
+            recalculatedCredit: updates.qualifiedUnits !== undefined,
+          },
+        });
+
+        analytics.trackUpdate({
+          actorId: userId,
+          route: '/api/tax-credit-projects/:id',
+          correlationId: req.correlationId || '',
+          entityType: 'tax_credit_project',
+          entityId: project.id,
+          metadata: {
+            fieldsChanged: Object.keys(updates),
+            recalculatedCredit: updates.qualifiedUnits !== undefined,
+            previousQualifiedUnits: before.qualifiedUnits,
+            newQualifiedUnits: project.qualifiedUnits,
+            previousCreditAmount: before.creditAmount,
+            newCreditAmount: project.creditAmount,
+          },
+        });
+      } catch (obsError) {
+        logError('TaxCreditProjects/Update/Observability', obsError);
+      }
       
       res.json(project);
     } catch (error) {
@@ -13024,16 +13079,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/tax-credit-projects/:id", isAuthenticated, csrfSynchronisedProtection, requireRole('admin', 'manager'), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const success = await storage.deleteTaxCreditProject(req.params.id);
-      if (!success) {
+      const userId = req.user.id;
+      
+      // Capture before state for audit trail
+      const before = await storage.getTaxCreditProject(req.params.id);
+      if (!before) {
         return res.status(404).json({ message: "Tax credit project not found" });
       }
       
-      await createAuditLog(req, {
-        action: 'deleted',
-        resourceType: 'tax_credit_project',
-        resourceId: req.params.id,
-      });
+      const success = await storage.deleteTaxCreditProject(req.params.id);
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logDelete({
+          req,
+          entityType: 'tax_credit_project',
+          entityId: req.params.id,
+          before,
+          metadata: {
+            projectName: before.projectName,
+            builderId: before.builderId,
+            qualifiedUnits: before.qualifiedUnits,
+            creditAmount: before.creditAmount,
+          },
+        });
+
+        analytics.trackDelete({
+          actorId: userId,
+          route: '/api/tax-credit-projects/:id',
+          correlationId: req.correlationId || '',
+          entityType: 'tax_credit_project',
+          entityId: req.params.id,
+          metadata: {
+            projectName: before.projectName,
+            builderId: before.builderId,
+            certificationYear: before.certificationYear,
+            qualifiedUnits: before.qualifiedUnits,
+          },
+        });
+      } catch (obsError) {
+        logError('TaxCreditProjects/Delete/Observability', obsError);
+      }
       
       res.json({ message: "Tax credit project deleted successfully" });
     } catch (error) {
@@ -13055,15 +13141,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tax-credit-requirements", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const userId = req.user.id;
       const validated = insertTaxCreditRequirementSchema.parse(req.body);
       const requirement = await storage.createTaxCreditRequirement(validated);
       
-      await createAuditLog(req, {
-        action: 'created',
-        resourceType: 'tax_credit_requirement',
-        resourceId: requirement.id,
-        metadata: { projectId: requirement.projectId },
-      });
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCreate({
+          req,
+          entityType: 'tax_credit_requirement',
+          entityId: requirement.id,
+          after: requirement,
+          metadata: { 
+            projectId: requirement.projectId,
+            requirementName: requirement.requirementName,
+            requirementType: requirement.requirementType,
+          },
+        });
+
+        analytics.trackCreate({
+          actorId: userId,
+          route: '/api/tax-credit-requirements',
+          correlationId: req.correlationId || '',
+          entityType: 'tax_credit_requirement',
+          entityId: requirement.id,
+          metadata: {
+            projectId: requirement.projectId,
+            requirementName: requirement.requirementName,
+            requirementType: requirement.requirementType,
+            status: requirement.status,
+          },
+        });
+      } catch (obsError) {
+        logError('TaxCreditRequirements/Create/Observability', obsError);
+      }
       
       res.json(requirement);
     } catch (error) {
@@ -13076,12 +13187,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/tax-credit-requirements/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.patch("/api/tax-credit-requirements/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const requirement = await storage.updateTaxCreditRequirement(req.params.id, req.body);
-      if (!requirement) {
+      const userId = req.user.id;
+      const updates = req.body;
+      
+      // Capture before state for audit trail
+      const before = await storage.getTaxCreditRequirement(req.params.id);
+      if (!before) {
         return res.status(404).json({ message: "Tax credit requirement not found" });
       }
+      
+      const requirement = await storage.updateTaxCreditRequirement(req.params.id, updates);
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logUpdate({
+          req,
+          entityType: 'tax_credit_requirement',
+          entityId: requirement.id,
+          before,
+          after: requirement,
+          metadata: { 
+            fieldsChanged: Object.keys(updates),
+            projectId: requirement.projectId,
+          },
+        });
+
+        analytics.trackUpdate({
+          actorId: userId,
+          route: '/api/tax-credit-requirements/:id',
+          correlationId: req.correlationId || '',
+          entityType: 'tax_credit_requirement',
+          entityId: requirement.id,
+          metadata: {
+            fieldsChanged: Object.keys(updates),
+            projectId: requirement.projectId,
+            previousStatus: before.status,
+            newStatus: requirement.status,
+          },
+        });
+      } catch (obsError) {
+        logError('TaxCreditRequirements/Update/Observability', obsError);
+      }
+      
       res.json(requirement);
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'update tax credit requirement');
@@ -13110,12 +13259,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const document = await storage.createTaxCreditDocument(validated);
       
-      await createAuditLog(req, {
-        action: 'uploaded',
-        resourceType: 'tax_credit_document',
-        resourceId: document.id,
-        metadata: { projectId: document.projectId, fileName: document.fileName },
-      });
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCreate({
+          req,
+          entityType: 'tax_credit_document',
+          entityId: document.id,
+          after: document,
+          metadata: { 
+            projectId: document.projectId,
+            fileName: document.fileName,
+            documentType: document.documentType,
+          },
+        });
+
+        analytics.trackCreate({
+          actorId: userId,
+          route: '/api/tax-credit-documents',
+          correlationId: req.correlationId || '',
+          entityType: 'tax_credit_document',
+          entityId: document.id,
+          metadata: {
+            projectId: document.projectId,
+            fileName: document.fileName,
+            documentType: document.documentType,
+            fileSize: document.fileSize,
+          },
+        });
+      } catch (obsError) {
+        logError('TaxCreditDocuments/Create/Observability', obsError);
+      }
       
       res.json(document);
     } catch (error) {
@@ -13130,16 +13303,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/tax-credit-documents/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const success = await storage.deleteTaxCreditDocument(req.params.id);
-      if (!success) {
+      const userId = req.user.id;
+      
+      // Capture before state for audit trail
+      const before = await storage.getTaxCreditDocument(req.params.id);
+      if (!before) {
         return res.status(404).json({ message: "Tax credit document not found" });
       }
       
-      await createAuditLog(req, {
-        action: 'deleted',
-        resourceType: 'tax_credit_document',
-        resourceId: req.params.id,
-      });
+      const success = await storage.deleteTaxCreditDocument(req.params.id);
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logDelete({
+          req,
+          entityType: 'tax_credit_document',
+          entityId: req.params.id,
+          before,
+          metadata: {
+            projectId: before.projectId,
+            fileName: before.fileName,
+            documentType: before.documentType,
+          },
+        });
+
+        analytics.trackDelete({
+          actorId: userId,
+          route: '/api/tax-credit-documents/:id',
+          correlationId: req.correlationId || '',
+          entityType: 'tax_credit_document',
+          entityId: req.params.id,
+          metadata: {
+            projectId: before.projectId,
+            fileName: before.fileName,
+            documentType: before.documentType,
+          },
+        });
+      } catch (obsError) {
+        logError('TaxCreditDocuments/Delete/Observability', obsError);
+      }
       
       res.json({ message: "Tax credit document deleted successfully" });
     } catch (error) {
@@ -13174,6 +13376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/unit-certifications", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const userId = req.user.id;
       const validated = insertUnitCertificationSchema.parse(req.body);
       
       // Auto-calculate qualification based on savings percentage and HERS index
@@ -13196,16 +13399,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      await createAuditLog(req, {
-        action: 'created',
-        resourceType: 'unit_certification',
-        resourceId: certification.id,
-        metadata: { 
-          projectId: certification.projectId, 
-          unitAddress: certification.unitAddress,
-          qualified: certification.qualified,
-        },
-      });
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCreate({
+          req,
+          entityType: 'unit_certification',
+          entityId: certification.id,
+          after: certification,
+          metadata: { 
+            projectId: certification.projectId,
+            unitAddress: certification.unitAddress,
+            qualified: certification.qualified,
+            percentSavings: certification.percentSavings,
+            hersIndex: certification.hersIndex,
+          },
+        });
+
+        analytics.trackCreate({
+          actorId: userId,
+          route: '/api/unit-certifications',
+          correlationId: req.correlationId || '',
+          entityType: 'unit_certification',
+          entityId: certification.id,
+          metadata: {
+            projectId: certification.projectId,
+            unitAddress: certification.unitAddress,
+            qualified: certification.qualified,
+            autoQualified: !req.body.qualified, // Track if auto-calculated
+            percentSavings: certification.percentSavings,
+            hersIndex: certification.hersIndex,
+          },
+        });
+      } catch (obsError) {
+        logError('UnitCertifications/Create/Observability', obsError);
+      }
       
       res.json(certification);
     } catch (error) {
@@ -13218,9 +13445,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/unit-certifications/:id", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.patch("/api/unit-certifications/:id", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const userId = req.user.id;
       const updates = req.body;
+      
+      // Capture before state for audit trail
+      const before = await storage.getUnitCertification(req.params.id);
+      if (!before) {
+        return res.status(404).json({ message: "Unit certification not found" });
+      }
       
       // Recalculate qualification if relevant fields changed
       if (updates.percentSavings !== undefined && updates.qualified === undefined) {
@@ -13230,8 +13464,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const certification = await storage.updateUnitCertification(req.params.id, updates);
-      if (!certification) {
-        return res.status(404).json({ message: "Unit certification not found" });
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logUpdate({
+          req,
+          entityType: 'unit_certification',
+          entityId: certification.id,
+          before,
+          after: certification,
+          metadata: { 
+            fieldsChanged: Object.keys(updates),
+            recalculatedQualification: (updates.percentSavings !== undefined || updates.hersIndex !== undefined) && updates.qualified === undefined,
+            projectId: certification.projectId,
+          },
+        });
+
+        analytics.trackUpdate({
+          actorId: userId,
+          route: '/api/unit-certifications/:id',
+          correlationId: req.correlationId || '',
+          entityType: 'unit_certification',
+          entityId: certification.id,
+          metadata: {
+            fieldsChanged: Object.keys(updates),
+            recalculatedQualification: (updates.percentSavings !== undefined || updates.hersIndex !== undefined) && updates.qualified === undefined,
+            previousQualified: before.qualified,
+            newQualified: certification.qualified,
+            previousPercentSavings: before.percentSavings,
+            newPercentSavings: certification.percentSavings,
+          },
+        });
+      } catch (obsError) {
+        logError('UnitCertifications/Update/Observability', obsError);
       }
       
       res.json(certification);
