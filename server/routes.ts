@@ -10337,6 +10337,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCreate({
+          req,
+          entityType: 'blower_door_test',
+          entityId: test.id,
+          after: test,
+        });
+
+        analytics.trackCreate({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'blower_door_test',
+          entityId: test.id,
+          correlationId: req.correlationId,
+          metadata: {
+            jobId: test.jobId,
+            cfm50: test.cfm50,
+            ach50: test.ach50,
+            meetsCode: test.meetsCode,
+            codeYear: test.codeYear,
+            source: 'manual_create',
+          },
+        });
+      } catch (error) {
+        logError('BlowerDoorTest/Observability', error, { testId: test.id });
+      }
+      
       res.status(201).json(test);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -10352,15 +10380,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validated = insertBlowerDoorTestSchema.partial().parse(req.body);
       
+      // Get before state for audit logging
+      const before = await storage.getBlowerDoorTest(req.params.id);
+      if (!before) {
+        return res.status(404).json({ message: "Blower door test not found" });
+      }
+      
       // Recalculate ACH50 if CFM50 or volume changed using service function
       if ((validated.cfm50 !== undefined || validated.houseVolume !== undefined)) {
-        const existing = await storage.getBlowerDoorTest(req.params.id);
-        if (existing) {
-          const cfm50 = validated.cfm50 ?? existing.cfm50;
-          const volume = validated.houseVolume ?? existing.houseVolume;
-          if (cfm50 && volume) {
-            validated.ach50 = calculateACH50(Number(cfm50), Number(volume));
-          }
+        const cfm50 = validated.cfm50 ?? before.cfm50;
+        const volume = validated.houseVolume ?? before.houseVolume;
+        if (cfm50 && volume) {
+          validated.ach50 = calculateACH50(Number(cfm50), Number(volume));
         }
       }
       
@@ -10385,6 +10416,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           logError('BlowerDoorTest/ComplianceUpdate', error, { testId: test.id });
         }
+      }
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logUpdate({
+          req,
+          entityType: 'blower_door_test',
+          entityId: test.id,
+          before,
+          after: test,
+        });
+
+        analytics.trackUpdate({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'blower_door_test',
+          entityId: test.id,
+          correlationId: req.correlationId,
+          metadata: {
+            jobId: test.jobId,
+            recalculated: validated.cfm50 !== undefined || validated.houseVolume !== undefined,
+            meetsCode: test.meetsCode,
+            fieldsChanged: Object.keys(validated),
+          },
+        });
+      } catch (error) {
+        logError('BlowerDoorTest/Observability', error, { testId: test.id });
       }
       
       res.json(test);
@@ -10428,6 +10486,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           logError('BlowerDoorTest/ComplianceUpdate', error, { testId: req.params.id });
         }
+      }
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logDelete({
+          req,
+          entityType: 'blower_door_test',
+          entityId: req.params.id,
+          before: test,
+        });
+
+        analytics.trackDelete({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'blower_door_test',
+          entityId: req.params.id,
+          correlationId: req.correlationId,
+        });
+      } catch (error) {
+        logError('BlowerDoorTest/Observability', error, { testId: req.params.id });
       }
       
       res.status(204).send();
@@ -10532,6 +10610,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCreate({
+          req,
+          entityType: 'duct_leakage_test',
+          entityId: test.id,
+          after: test,
+        });
+
+        analytics.trackCreate({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'duct_leakage_test',
+          entityId: test.id,
+          correlationId: req.correlationId,
+          metadata: {
+            jobId: test.jobId,
+            cfm25Total: test.cfm25Total,
+            cfm25Outside: test.cfm25Outside,
+            meetsCodeTDL: test.meetsCodeTDL,
+            meetsCodeDLO: test.meetsCodeDLO,
+            source: 'manual_create',
+          },
+        });
+      } catch (error) {
+        logError('DuctLeakageTest/Observability', error, { testId: test.id });
+      }
+      
       res.status(201).json(test);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -10547,8 +10653,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validated = insertDuctLeakageTestSchema.partial().parse(req.body);
       
+      // Get before state for audit logging
+      const before = await storage.getDuctLeakageTest(req.params.id);
+      if (!before) {
+        return res.status(404).json({ message: "Duct leakage test not found" });
+      }
+      
       // Recalculate derived values if base values changed
-      const existing = await storage.getDuctLeakageTest(req.params.id);
+      const existing = before;
       if (existing) {
         const conditionedArea = validated.conditionedArea ?? existing.conditionedArea;
         const systemAirflow = validated.systemAirflow ?? existing.systemAirflow;
@@ -10605,6 +10717,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logUpdate({
+          req,
+          entityType: 'duct_leakage_test',
+          entityId: test.id,
+          before,
+          after: test,
+        });
+
+        analytics.trackUpdate({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'duct_leakage_test',
+          entityId: test.id,
+          correlationId: req.correlationId,
+          metadata: {
+            jobId: test.jobId,
+            recalculated: validated.cfm25Total !== undefined || validated.cfm25Outside !== undefined || validated.conditionedArea !== undefined,
+            meetsCodeTDL: test.meetsCodeTDL,
+            meetsCodeDLO: test.meetsCodeDLO,
+            fieldsChanged: Object.keys(validated),
+          },
+        });
+      } catch (error) {
+        logError('DuctLeakageTest/Observability', error, { testId: test.id });
+      }
+      
       res.json(test);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -10646,6 +10786,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           logError('DuctLeakageTest/ComplianceUpdate', error, { testId: req.params.id });
         }
+      }
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logDelete({
+          req,
+          entityType: 'duct_leakage_test',
+          entityId: req.params.id,
+          before: test,
+        });
+
+        analytics.trackDelete({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'duct_leakage_test',
+          entityId: req.params.id,
+          correlationId: req.correlationId,
+        });
+      } catch (error) {
+        logError('DuctLeakageTest/Observability', error, { testId: req.params.id });
       }
       
       res.status(204).send();
@@ -10755,6 +10915,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCreate({
+          req,
+          entityType: 'ventilation_test',
+          entityId: test.id,
+          after: test,
+        });
+
+        analytics.trackCreate({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'ventilation_test',
+          entityId: test.id,
+          correlationId: req.correlationId,
+          metadata: {
+            jobId: test.jobId,
+            floorArea: test.floorArea,
+            bedrooms: test.bedrooms,
+            requiredVentilationRate: test.requiredVentilationRate,
+            totalVentilationProvided: test.totalVentilationProvided,
+            overallCompliant: test.overallCompliant,
+            source: 'manual_create',
+          },
+        });
+      } catch (error) {
+        logError('VentilationTest/Observability', error, { testId: test.id });
+      }
+      
       res.status(201).json(test);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -10770,8 +10959,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validated = insertVentilationTestSchema.partial().parse(req.body);
       
+      // Get before state for audit logging
+      const before = await storage.getVentilationTest(req.params.id);
+      if (!before) {
+        return res.status(404).json({ message: "Ventilation test not found" });
+      }
+      
       // Recalculate requirements if key values changed
-      const existing = await storage.getVentilationTest(req.params.id);
+      const existing = before;
       if (existing) {
         const floorArea = validated.floorArea !== undefined ? Number(validated.floorArea) : Number(existing.floorArea);
         const bedrooms = validated.bedrooms !== undefined ? Number(validated.bedrooms) : Number(existing.bedrooms);
@@ -10857,6 +11052,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logUpdate({
+          req,
+          entityType: 'ventilation_test',
+          entityId: test.id,
+          before,
+          after: test,
+        });
+
+        const shouldRecalculate = 
+          validated.floorArea !== undefined ||
+          validated.bedrooms !== undefined ||
+          validated.infiltrationCredit !== undefined ||
+          validated.mechanicalVentilationType !== undefined ||
+          validated.mechanicalMeasuredSupplyCFM !== undefined ||
+          validated.mechanicalMeasuredExhaustCFM !== undefined;
+
+        analytics.trackUpdate({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'ventilation_test',
+          entityId: test.id,
+          correlationId: req.correlationId,
+          metadata: {
+            jobId: test.jobId,
+            recalculated: shouldRecalculate,
+            overallCompliant: test.overallCompliant,
+            fieldsChanged: Object.keys(validated),
+          },
+        });
+      } catch (error) {
+        logError('VentilationTest/Observability', error, { testId: test.id });
+      }
+      
       res.json(test);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -10900,6 +11130,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logDelete({
+          req,
+          entityType: 'ventilation_test',
+          entityId: req.params.id,
+          before: test,
+        });
+
+        analytics.trackDelete({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'ventilation_test',
+          entityId: req.params.id,
+          correlationId: req.correlationId,
+        });
+      } catch (error) {
+        logError('VentilationTest/Observability', error, { testId: req.params.id });
+      }
+      
       res.status(204).send();
     } catch (error) {
       const { status, message } = handleDatabaseError(error, 'delete ventilation test');
@@ -10907,7 +11157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/ventilation-tests/:id/calculate", isAuthenticated, csrfSynchronisedProtection, async (req, res) => {
+  app.post("/api/ventilation-tests/:id/calculate", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const test = await storage.getVentilationTest(req.params.id);
       if (!test) {
@@ -10933,6 +11183,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mechanicalMeasuredSupplyCFM: test.mechanicalMeasuredSupplyCFM ? Number(test.mechanicalMeasuredSupplyCFM) : undefined,
         mechanicalMeasuredExhaustCFM: test.mechanicalMeasuredExhaustCFM ? Number(test.mechanicalMeasuredExhaustCFM) : undefined,
       });
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logCustomAction({
+          req,
+          entityType: 'ventilation_test',
+          entityId: req.params.id,
+          action: 'recalculate',
+          metadata: {
+            fieldsRecalculated: [
+              'requiredVentilationRate',
+              'requiredContinuousRate',
+              'adjustedRequiredRate',
+              'totalVentilationProvided',
+              'meetsVentilationRequirement',
+              'overallCompliant',
+            ],
+          },
+        });
+
+        analytics.trackUpdate({
+          actorId: req.user.id,
+          route: req.path,
+          entityType: 'ventilation_test',
+          entityId: req.params.id,
+          correlationId: req.correlationId,
+          metadata: {
+            action: 'recalculate',
+            requiredVentilationRate: requirements.requiredVentilationRate,
+            totalVentilationProvided: requirements.totalVentilationProvided,
+            overallCompliant: requirements.overallCompliant,
+          },
+        });
+      } catch (error) {
+        logError('VentilationTest/Observability', error, { testId: req.params.id });
+      }
       
       res.json(requirements);
     } catch (error) {

@@ -34,9 +34,16 @@ export type EntityType =
   | 'calendar_preference'
   | 'user'
   | 'qa_item'
+  | 'qa_checklist'
+  | 'qa_checklist_item'
+  | 'qa_checklist_response'
+  | 'qa_inspection_score'
   | 'expense'
   | 'equipment'
-  | 'test_result';
+  | 'test_result'
+  | 'blower_door_test'
+  | 'duct_leakage_test'
+  | 'ventilation_test';
 
 /**
  * Analytics event types following AAA Blueprint taxonomy
