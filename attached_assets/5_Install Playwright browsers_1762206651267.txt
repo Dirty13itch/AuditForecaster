@@ -1,0 +1,201 @@
+﻿2025-11-03T21:46:20.2503298Z ##[group]Run npx playwright install --with-deps chromium
+2025-11-03T21:46:20.2503715Z [36;1mnpx playwright install --with-deps chromium[0m
+2025-11-03T21:46:20.2538773Z shell: /usr/bin/bash -e {0}
+2025-11-03T21:46:20.2539019Z ##[endgroup]
+2025-11-03T21:46:21.1099807Z Installing dependencies...
+2025-11-03T21:46:21.1162651Z Switching to root user to install dependencies...
+2025-11-03T21:46:21.2177480Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2025-11-03T21:46:21.2488039Z Hit:6 https://packages.microsoft.com/repos/azure-cli noble InRelease
+2025-11-03T21:46:21.2492297Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2025-11-03T21:46:21.2538536Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2025-11-03T21:46:21.2554815Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2025-11-03T21:46:21.2685160Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2025-11-03T21:46:21.2746955Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2025-11-03T21:46:21.4511201Z Get:8 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [48.1 kB]
+2025-11-03T21:46:21.4652611Z Get:9 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [11.1 kB]
+2025-11-03T21:46:21.4684073Z Get:10 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [66.2 kB]
+2025-11-03T21:46:21.5781705Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1578 kB]
+2025-11-03T21:46:21.5897922Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [297 kB]
+2025-11-03T21:46:21.5905515Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [175 kB]
+2025-11-03T21:46:21.5928769Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 c-n-f Metadata [15.4 kB]
+2025-11-03T21:46:21.5940756Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1498 kB]
+2025-11-03T21:46:21.6047766Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [303 kB]
+2025-11-03T21:46:21.6056458Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [378 kB]
+2025-11-03T21:46:21.6089444Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 c-n-f Metadata [31.4 kB]
+2025-11-03T21:46:21.6113966Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [2235 kB]
+2025-11-03T21:46:21.6237318Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [506 kB]
+2025-11-03T21:46:21.6715189Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B]
+2025-11-03T21:46:21.6729829Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+2025-11-03T21:46:21.6742826Z Get:23 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7120 B]
+2025-11-03T21:46:21.6755626Z Get:24 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [11.0 kB]
+2025-11-03T21:46:21.6794372Z Get:25 http://azure.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [216 B]
+2025-11-03T21:46:21.6804864Z Get:26 http://azure.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B]
+2025-11-03T21:46:21.6953835Z Get:27 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1298 kB]
+2025-11-03T21:46:21.7023367Z Get:28 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [213 kB]
+2025-11-03T21:46:21.7044647Z Get:29 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [21.5 kB]
+2025-11-03T21:46:21.7057151Z Get:30 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 c-n-f Metadata [9012 B]
+2025-11-03T21:46:21.7067688Z Get:31 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [906 kB]
+2025-11-03T21:46:21.7118919Z Get:32 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [203 kB]
+2025-11-03T21:46:21.7139940Z Get:33 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [52.2 kB]
+2025-11-03T21:46:21.7152515Z Get:34 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 c-n-f Metadata [19.4 kB]
+2025-11-03T21:46:21.7599567Z Get:35 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2131 kB]
+2025-11-03T21:46:21.7708472Z Get:36 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [483 kB]
+2025-11-03T21:46:21.7743587Z Get:37 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B]
+2025-11-03T21:46:21.7754489Z Get:38 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [212 B]
+2025-11-03T21:46:34.1581009Z Fetched 12.9 MB in 2s (7756 kB/s)
+2025-11-03T21:46:34.9092925Z Reading package lists...
+2025-11-03T21:46:34.9344166Z Reading package lists...
+2025-11-03T21:46:35.1057477Z Building dependency tree...
+2025-11-03T21:46:35.1064863Z Reading state information...
+2025-11-03T21:46:35.2651519Z libasound2t64 is already the newest version (1.2.11-1ubuntu0.1).
+2025-11-03T21:46:35.2652510Z libasound2t64 set to manually installed.
+2025-11-03T21:46:35.2653169Z libatk-bridge2.0-0t64 is already the newest version (2.52.0-1build1).
+2025-11-03T21:46:35.2654080Z libatk-bridge2.0-0t64 set to manually installed.
+2025-11-03T21:46:35.2654961Z libatk1.0-0t64 is already the newest version (2.52.0-1build1).
+2025-11-03T21:46:35.2655794Z libatk1.0-0t64 set to manually installed.
+2025-11-03T21:46:35.2656840Z libatspi2.0-0t64 is already the newest version (2.52.0-1build1).
+2025-11-03T21:46:35.2657453Z libatspi2.0-0t64 set to manually installed.
+2025-11-03T21:46:35.2658197Z libcairo2 is already the newest version (1.18.0-3build1).
+2025-11-03T21:46:35.2658628Z libcairo2 set to manually installed.
+2025-11-03T21:46:35.2659117Z libcups2t64 is already the newest version (2.4.7-1.2ubuntu7.4).
+2025-11-03T21:46:35.2659577Z libcups2t64 set to manually installed.
+2025-11-03T21:46:35.2660051Z libdbus-1-3 is already the newest version (1.14.10-4ubuntu4.1).
+2025-11-03T21:46:35.2660481Z libdbus-1-3 set to manually installed.
+2025-11-03T21:46:35.2660952Z libdrm2 is already the newest version (2.4.122-1~ubuntu0.24.04.1).
+2025-11-03T21:46:35.2661388Z libdrm2 set to manually installed.
+2025-11-03T21:46:35.2661834Z libgbm1 is already the newest version (25.0.7-0ubuntu0.24.04.2).
+2025-11-03T21:46:35.2662263Z libgbm1 set to manually installed.
+2025-11-03T21:46:35.2662722Z libglib2.0-0t64 is already the newest version (2.80.0-6ubuntu3.4).
+2025-11-03T21:46:35.2663186Z libglib2.0-0t64 set to manually installed.
+2025-11-03T21:46:35.2663643Z libnspr4 is already the newest version (2:4.35-1.1build1).
+2025-11-03T21:46:35.2664065Z libnspr4 set to manually installed.
+2025-11-03T21:46:35.2664482Z libnss3 is already the newest version (2:3.98-1build1).
+2025-11-03T21:46:35.2664877Z libnss3 set to manually installed.
+2025-11-03T21:46:35.2665330Z libpango-1.0-0 is already the newest version (1.52.1+ds-1build1).
+2025-11-03T21:46:35.2665782Z libpango-1.0-0 set to manually installed.
+2025-11-03T21:46:35.2666435Z libx11-6 is already the newest version (2:1.8.7-1build1).
+2025-11-03T21:46:35.2666873Z libx11-6 set to manually installed.
+2025-11-03T21:46:35.2667269Z libxcb1 is already the newest version (1.15-1ubuntu2).
+2025-11-03T21:46:35.2667664Z libxcb1 set to manually installed.
+2025-11-03T21:46:35.2668122Z libxcomposite1 is already the newest version (1:0.4.5-1build3).
+2025-11-03T21:46:35.2668583Z libxcomposite1 set to manually installed.
+2025-11-03T21:46:35.2669047Z libxdamage1 is already the newest version (1:1.1.6-1build1).
+2025-11-03T21:46:35.2669473Z libxdamage1 set to manually installed.
+2025-11-03T21:46:35.2669912Z libxext6 is already the newest version (2:1.3.4-1build2).
+2025-11-03T21:46:35.2670322Z libxext6 set to manually installed.
+2025-11-03T21:46:35.2670989Z libxfixes3 is already the newest version (1:6.0.0-2build1).
+2025-11-03T21:46:35.2671408Z libxfixes3 set to manually installed.
+2025-11-03T21:46:35.2672004Z libxkbcommon0 is already the newest version (1.6.0-1build1).
+2025-11-03T21:46:35.2672435Z libxkbcommon0 set to manually installed.
+2025-11-03T21:46:35.2672883Z libxrandr2 is already the newest version (2:1.5.2-2build1).
+2025-11-03T21:46:35.2673305Z libxrandr2 set to manually installed.
+2025-11-03T21:46:35.2673853Z fonts-noto-color-emoji is already the newest version (2.047-0ubuntu0.24.04.1).
+2025-11-03T21:46:35.2674499Z libfontconfig1 is already the newest version (2.15.0-1.1ubuntu2).
+2025-11-03T21:46:35.2674938Z libfontconfig1 set to manually installed.
+2025-11-03T21:46:35.2675330Z libfreetype6 is already the newest version (2.13.2+dfsg-1build3).
+2025-11-03T21:46:35.2675693Z libfreetype6 set to manually installed.
+2025-11-03T21:46:35.2676055Z fonts-liberation is already the newest version (1:2.1.5-3).
+2025-11-03T21:46:35.2676618Z fonts-liberation set to manually installed.
+2025-11-03T21:46:35.2676973Z The following additional packages will be installed:
+2025-11-03T21:46:35.2677318Z   xfonts-encodings xfonts-utils xserver-common
+2025-11-03T21:46:35.2677591Z Recommended packages:
+2025-11-03T21:46:35.2677864Z   fonts-ipafont-mincho fonts-tlwg-loma xfonts-base
+2025-11-03T21:46:35.2842388Z The following NEW packages will be installed:
+2025-11-03T21:46:35.2843155Z   fonts-freefont-ttf fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont
+2025-11-03T21:46:35.2849040Z   fonts-wqy-zenhei xfonts-cyrillic xfonts-encodings xfonts-scalable
+2025-11-03T21:46:35.2849624Z   xfonts-utils
+2025-11-03T21:46:35.2858075Z The following packages will be upgraded:
+2025-11-03T21:46:35.2858427Z   xserver-common xvfb
+2025-11-03T21:46:35.3021036Z 2 upgraded, 9 newly installed, 0 to remove and 34 not upgraded.
+2025-11-03T21:46:35.3021722Z Need to get 22.0 MB of archives.
+2025-11-03T21:46:35.3022406Z After this operation, 79.6 MB of additional disk space will be used.
+2025-11-03T21:46:35.3023218Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2025-11-03T21:46:35.3205290Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-ipafont-gothic all 00303-21ubuntu1 [3513 kB]
+2025-11-03T21:46:35.3706720Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 fonts-freefont-ttf all 20211204+svn4273-2 [5641 kB]
+2025-11-03T21:46:35.4368249Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-tlwg-loma-otf all 1:0.7.3-1 [107 kB]
+2025-11-03T21:46:35.4402340Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-unifont all 1:15.1.01-1build1 [2993 kB]
+2025-11-03T21:46:35.4820306Z Get:6 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-wqy-zenhei all 0.9.45-8 [7472 kB]
+2025-11-03T21:46:35.6093276Z Get:7 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-encodings all 1:1.0.5-0ubuntu2 [578 kB]
+2025-11-03T21:46:35.6159297Z Get:8 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-utils amd64 1:7.7+6build3 [94.4 kB]
+2025-11-03T21:46:35.6201389Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 xfonts-cyrillic all 1:1.0.5+nmu1 [384 kB]
+2025-11-03T21:46:35.6248960Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-scalable all 1:1.0.3-1.3 [304 kB]
+2025-11-03T21:46:35.6315275Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 xserver-common all 2:21.1.12-1ubuntu1.5 [34.6 kB]
+2025-11-03T21:46:35.6358381Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 xvfb amd64 2:21.1.12-1ubuntu1.5 [877 kB]
+2025-11-03T21:46:35.8952155Z Fetched 22.0 MB in 0s (62.6 MB/s)
+2025-11-03T21:46:35.9574820Z Selecting previously unselected package fonts-ipafont-gothic.
+2025-11-03T21:46:36.0082405Z (Reading database ... 
+2025-11-03T21:46:36.0082912Z (Reading database ... 5%
+2025-11-03T21:46:36.0083296Z (Reading database ... 10%
+2025-11-03T21:46:36.0083537Z (Reading database ... 15%
+2025-11-03T21:46:36.0083771Z (Reading database ... 20%
+2025-11-03T21:46:36.0084262Z (Reading database ... 25%
+2025-11-03T21:46:36.0084483Z (Reading database ... 30%
+2025-11-03T21:46:36.0084854Z (Reading database ... 35%
+2025-11-03T21:46:36.0085066Z (Reading database ... 40%
+2025-11-03T21:46:36.0085282Z (Reading database ... 45%
+2025-11-03T21:46:36.0085637Z (Reading database ... 50%
+2025-11-03T21:46:36.1541134Z (Reading database ... 55%
+2025-11-03T21:46:36.5672945Z (Reading database ... 60%
+2025-11-03T21:46:36.8191963Z (Reading database ... 65%
+2025-11-03T21:46:36.9012198Z (Reading database ... 70%
+2025-11-03T21:46:37.3095797Z (Reading database ... 75%
+2025-11-03T21:46:37.8269178Z (Reading database ... 80%
+2025-11-03T21:46:38.4809433Z (Reading database ... 85%
+2025-11-03T21:46:39.3079907Z (Reading database ... 90%
+2025-11-03T21:46:39.8363785Z (Reading database ... 95%
+2025-11-03T21:46:39.8364376Z (Reading database ... 100%
+2025-11-03T21:46:39.8364972Z (Reading database ... 215550 files and directories currently installed.)
+2025-11-03T21:46:39.8410668Z Preparing to unpack .../00-fonts-ipafont-gothic_00303-21ubuntu1_all.deb ...
+2025-11-03T21:46:39.8501491Z Unpacking fonts-ipafont-gothic (00303-21ubuntu1) ...
+2025-11-03T21:46:40.0822590Z Selecting previously unselected package fonts-freefont-ttf.
+2025-11-03T21:46:40.0955376Z Preparing to unpack .../01-fonts-freefont-ttf_20211204+svn4273-2_all.deb ...
+2025-11-03T21:46:40.0963576Z Unpacking fonts-freefont-ttf (20211204+svn4273-2) ...
+2025-11-03T21:46:40.1822469Z Selecting previously unselected package fonts-tlwg-loma-otf.
+2025-11-03T21:46:40.1953464Z Preparing to unpack .../02-fonts-tlwg-loma-otf_1%3a0.7.3-1_all.deb ...
+2025-11-03T21:46:40.1961552Z Unpacking fonts-tlwg-loma-otf (1:0.7.3-1) ...
+2025-11-03T21:46:40.2173302Z Selecting previously unselected package fonts-unifont.
+2025-11-03T21:46:40.2306719Z Preparing to unpack .../03-fonts-unifont_1%3a15.1.01-1build1_all.deb ...
+2025-11-03T21:46:40.2315365Z Unpacking fonts-unifont (1:15.1.01-1build1) ...
+2025-11-03T21:46:40.3559325Z Selecting previously unselected package fonts-wqy-zenhei.
+2025-11-03T21:46:40.3693261Z Preparing to unpack .../04-fonts-wqy-zenhei_0.9.45-8_all.deb ...
+2025-11-03T21:46:40.3840688Z Unpacking fonts-wqy-zenhei (0.9.45-8) ...
+2025-11-03T21:46:40.8461003Z Selecting previously unselected package xfonts-encodings.
+2025-11-03T21:46:40.8593628Z Preparing to unpack .../05-xfonts-encodings_1%3a1.0.5-0ubuntu2_all.deb ...
+2025-11-03T21:46:40.8602579Z Unpacking xfonts-encodings (1:1.0.5-0ubuntu2) ...
+2025-11-03T21:46:40.8906944Z Selecting previously unselected package xfonts-utils.
+2025-11-03T21:46:40.9038288Z Preparing to unpack .../06-xfonts-utils_1%3a7.7+6build3_amd64.deb ...
+2025-11-03T21:46:40.9047805Z Unpacking xfonts-utils (1:7.7+6build3) ...
+2025-11-03T21:46:40.9811162Z Selecting previously unselected package xfonts-cyrillic.
+2025-11-03T21:46:40.9941703Z Preparing to unpack .../07-xfonts-cyrillic_1%3a1.0.5+nmu1_all.deb ...
+2025-11-03T21:46:40.9948479Z Unpacking xfonts-cyrillic (1:1.0.5+nmu1) ...
+2025-11-03T21:46:41.0285915Z Selecting previously unselected package xfonts-scalable.
+2025-11-03T21:46:41.0417478Z Preparing to unpack .../08-xfonts-scalable_1%3a1.0.3-1.3_all.deb ...
+2025-11-03T21:46:41.0425050Z Unpacking xfonts-scalable (1:1.0.3-1.3) ...
+2025-11-03T21:46:41.0814287Z Preparing to unpack .../09-xserver-common_2%3a21.1.12-1ubuntu1.5_all.deb ...
+2025-11-03T21:46:41.0839024Z Unpacking xserver-common (2:21.1.12-1ubuntu1.5) over (2:21.1.12-1ubuntu1.4) ...
+2025-11-03T21:46:41.1237469Z Preparing to unpack .../10-xvfb_2%3a21.1.12-1ubuntu1.5_amd64.deb ...
+2025-11-03T21:46:41.1261426Z Unpacking xvfb (2:21.1.12-1ubuntu1.5) over (2:21.1.12-1ubuntu1.4) ...
+2025-11-03T21:46:41.2319746Z Setting up fonts-wqy-zenhei (0.9.45-8) ...
+2025-11-03T21:46:41.2438753Z Setting up fonts-freefont-ttf (20211204+svn4273-2) ...
+2025-11-03T21:46:41.2458997Z Setting up fonts-tlwg-loma-otf (1:0.7.3-1) ...
+2025-11-03T21:46:41.2480688Z Setting up xfonts-encodings (1:1.0.5-0ubuntu2) ...
+2025-11-03T21:46:41.2502726Z Setting up fonts-ipafont-gothic (00303-21ubuntu1) ...
+2025-11-03T21:46:41.2572580Z update-alternatives: using /usr/share/fonts/opentype/ipafont-gothic/ipag.ttf to provide /usr/share/fonts/truetype/fonts-japanese-gothic.ttf (fonts-japanese-gothic.ttf) in auto mode
+2025-11-03T21:46:41.2586921Z Setting up xserver-common (2:21.1.12-1ubuntu1.5) ...
+2025-11-03T21:46:41.2608476Z Setting up fonts-unifont (1:15.1.01-1build1) ...
+2025-11-03T21:46:41.2629848Z Setting up xvfb (2:21.1.12-1ubuntu1.5) ...
+2025-11-03T21:46:41.2651603Z Setting up xfonts-utils (1:7.7+6build3) ...
+2025-11-03T21:46:41.2693023Z Setting up xfonts-cyrillic (1:1.0.5+nmu1) ...
+2025-11-03T21:46:41.3194354Z Setting up xfonts-scalable (1:1.0.3-1.3) ...
+2025-11-03T21:46:41.3558939Z Processing triggers for man-db (2.12.0-4build2) ...
+2025-11-03T21:47:32.3161357Z Processing triggers for fontconfig (2.15.0-1.1ubuntu2) ...
+2025-11-03T21:47:33.4037351Z 
+2025-11-03T21:47:33.4037928Z Running kernel seems to be up-to-date.
+2025-11-03T21:47:33.4038303Z 
+2025-11-03T21:47:33.4038521Z No services need to be restarted.
+2025-11-03T21:47:33.4038846Z 
+2025-11-03T21:47:33.4039070Z No containers need to be restarted.
+2025-11-03T21:47:33.4039357Z 
+2025-11-03T21:47:33.4039668Z No user sessions are running outdated binaries.
+2025-11-03T21:47:33.4040003Z 
+2025-11-03T21:47:33.4040486Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
