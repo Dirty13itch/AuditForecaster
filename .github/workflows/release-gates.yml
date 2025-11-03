@@ -28,12 +28,11 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       
-      - name: TypeScript type check
-        run: npm run check
-        continue-on-error: true
-        # TECH DEBT: 2,290 TypeScript errors present (pre-existing)
-        # Bypassing strict check to unblock quality gates while planning systematic cleanup
-        # See replit.md for planned TypeScript refactoring task
+      - name: TypeScript baseline check
+        run: node scripts/ts-baseline-check.mjs
+        # Enforces baseline: blocks NEW TypeScript errors while allowing documented tech debt
+        # Current baseline: 2,290 errors (see .ts-error-baseline.json)
+        # Cleanup plan documented in replit.md
       
       - name: Start application (background)
         run: |
@@ -72,6 +71,7 @@ jobs:
           name: quality-gate-results
           path: |
             public/gate-status.json
+            ts-error-report.json
             docs/ACCESSIBILITY_AUDIT_STATUS.md
             docs/ACCESSIBILITY_AUDIT_REPORT.md
             docs/audit-results/
