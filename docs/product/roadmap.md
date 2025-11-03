@@ -373,7 +373,22 @@ interface AuditLogEntry {
 
 ### Implementation Status
 
+**Server-Side Audit Logging** (November 3, 2025):
 - ✅ Audit logs table exists and operational
+- ✅ Production-grade audit infrastructure (`server/lib/audit.ts`)
+- ✅ **71 mutation endpoints with complete audit logging** across 6 entity groups:
+  - **Tier 1 (Core)**: Jobs (10), Photos (12), Reports (8) = 30 endpoints
+  - **Tier 2 (Supporting)**: Equipment (3), Builders (26), Financial (12) = 41 endpoints
+- ✅ Consistent patterns: `logCreate`, `logUpdate`, `logDelete`, `logCustomAction`, `logExport`
+- ✅ Complete before/after state tracking for all updates
+- ✅ Hierarchical metadata (sub-entities include parent IDs)
+- ✅ Financial compliance (amounts, approval chains, recipient tracking)
+- ✅ Bulk operations handled systematically
+- ⚠️ **Remaining**: Tier 3 entities (Plans, Schedule, QA, Settings, Tests) - estimated 50-100 endpoints
+- ⚠️ **Performance safeguards needed**: Retention policy (180 days), table indexes, partitioning
+- ⚠️ **Verification needed**: Integration tests, coverage metrics in dashboard
+
+**Client-Side Analytics** (November 3, 2025):
 - ✅ Correlation IDs in request headers
 - ✅ **Analytics events fully typed** (client/src/lib/analytics/events.ts)
 - ✅ **Event emission integrated across all core routes**
@@ -387,8 +402,9 @@ interface AuditLogEntry {
 - [x] Integrate analytics into Jobs, Photos, Reports, Builders, Plans, Equipment ✅
 - [x] Track page views (Dashboard, Field Day, Analytics, Financial Dashboard) ✅
 - [x] Track imports/exports with accurate record counts ✅
+- [x] **Server-side audit logging for Tier 1+2 entities (71 endpoints)** ✅
 
-**Coverage**: 18 tracked operations across 14 components
+**Client Analytics Coverage**: 18 tracked operations across 14 components
 - **Create**: job, photo (gallery + webcam), report
 - **Update**: job status (with before/after), photo tags, photo OCR
 - **Search**: jobs, photos, builders, plans, equipment (5 entity types)
@@ -396,10 +412,22 @@ interface AuditLogEntry {
 - **Export**: CSV/PDF/XLSX/JSON (with accurate record counts from X-Record-Count header)
 - **Page Views**: Dashboard, Field Day, Analytics, Financial Dashboard
 
+**Server Audit Logging Coverage**: 71 endpoints across 6 entity groups
+- **Jobs**: Create, update, delete, bulk operations, assign, export, signature, calendar import
+- **Photos**: Create, update, delete, bulk operations, tagging, annotations, OCR, cleanup
+- **Reports**: Template CRUD, instance creation, recalculation, finalization
+- **Equipment**: Create, update, delete
+- **Builders**: Main entity + 6 sub-entities (contacts, agreements, programs, interactions, developments, abbreviations)
+- **Financial**: Expenses (CRUD + approve + export), Invoices (CRUD + mark paid + send), Payments (create)
+
 **Next Actions**:
+- [ ] Complete Tier 3 entity audit logging (Plans, Schedule, QA, Settings, Tests)
+- [ ] Implement audit log retention policy (180-day default with configurable override)
+- [ ] Add database indexes on audit_logs table (actorId, entityType, createdAt, correlationId)
+- [ ] Wire audit coverage metrics into `/status/features` dashboard
+- [ ] Create verification tests (smoke tests or integration tests confirming audit entry creation)
 - [ ] Integrate with analytics provider (e.g., PostHog, Mixpanel, Amplitude)
-- [ ] Add correlation IDs to server audit logs (incremental enhancement)
-- [ ] Create automated tests to verify event emission on CRUD operations
+- [ ] Expand client-side analytics coverage to remaining 240+ mutations
 
 ---
 

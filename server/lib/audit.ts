@@ -8,7 +8,7 @@
  */
 
 import { db } from '../db';
-import { auditLogs } from '../../db/schema';
+import { auditLogs } from '@shared/schema';
 import type { Request } from 'express';
 
 /**
