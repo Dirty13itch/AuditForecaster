@@ -12,6 +12,7 @@ import { generateThumbnail } from "./thumbnailGenerator";
 import { healthz, readyz, status } from "./health";
 import { generateToken, csrfSynchronisedProtection } from "./csrf";
 import { createAuditLog } from "./auditLogger";
+import { logCreate, logUpdate, logDelete, logCustomAction, logExport } from './lib/audit';
 import { requireRole, checkResourceOwnership, canEdit, canCreate, canDelete, type UserRole } from "./permissions";
 import { requirePermission, blockFinancialAccess } from "./middleware/permissions";
 import { validateContactRole, categorizeAgreementExpiration } from "./builderService";
@@ -3560,6 +3561,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         serverLogger.error('[API] Failed to create audit log for job creation:', auditError);
       }
       
+      // New audit system: Log create action
+      await logCreate({
+        req,
+        entityType: 'job',
+        entityId: job.id,
+        after: job,
+      });
+      
       // Only return 201 if job was actually created and persisted
       res.status(201).json(job);
     } catch (error) {
@@ -3844,6 +3853,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       }, storage);
       
+      // New audit system: Log update action
+      await logUpdate({
+        req,
+        entityType: 'job',
+        entityId: req.params.id,
+        before: existingJob,
+        after: job,
+        changedFields: ['status'],
+      });
+      
       // Invalidate stats cache (affects dashboard)
       invalidateCachePattern(statsCache, 'inspector-summary:');
 
@@ -3889,6 +3908,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: { jobName: job.name, address: job.address, status: job.status },
       }, storage);
       
+      // New audit system: Log delete action
+      await logDelete({
+        req,
+        entityType: 'job',
+        entityId: id,
+        before: job,
+      });
+      
       res.status(204).send();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -3916,7 +3943,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Cannot delete more than 200 jobs at once" });
       }
 
+      // Fetch jobs before deletion for audit logging
+      const jobsToDelete = await Promise.all(
+        ids.map(id => storage.getJob(id))
+      );
+
       const deleted = await storage.bulkDeleteJobs(ids);
+      
+      // New audit system: Log delete action for each job
+      for (let i = 0; i < ids.length; i++) {
+        const job = jobsToDelete[i];
+        if (job) {
+          await logDelete({
+            req,
+            entityType: 'job',
+            entityId: ids[i],
+            before: job,
+          });
+        }
+      }
+      
       res.json({ deleted, total: ids.length });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -3955,6 +4001,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         builderIds.map(id => storage.getBuilder(id))
       );
       const builderMap = new Map(builders.filter(Boolean).map(b => [b!.id, b!]));
+
+      // New audit system: Log export action
+      await logExport({
+        req,
+        exportType: 'jobs',
+        recordCount: validJobs.length,
+        format,
+      });
 
       if (format === 'json') {
         // Return JSON directly
@@ -4116,6 +4170,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       serverLogger.info('[API] Successfully created job from event:', { 
         jobId: newJob.id, 
         eventId: googleEvent.id 
+      });
+
+      // New audit system: Log create action
+      await logCreate({
+        req,
+        entityType: 'job',
+        entityId: newJob.id,
+        after: newJob,
+        metadata: { source: 'calendar_event', eventId: googleEvent.id },
       });
 
       res.status(201).json(newJob);
@@ -5848,7 +5911,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { inspectorId, reason } = assignmentSchema.parse(req.body);
       
+      // Fetch job before assignment for audit logging
+      const existingJob = await storage.getJob(jobId);
+      const previousAssignee = existingJob?.assignedTo;
+      
       const job = await storage.assignJobToInspector(jobId, inspectorId, assignedBy, reason);
+      
+      // New audit system: Log assign action
+      await logCustomAction({
+        req,
+        action: 'assign',
+        entityType: 'job',
+        entityId: jobId,
+        after: { assignedTo: inspectorId },
+        metadata: { previousAssignee, reason },
+      });
       
       // Send notification to assigned inspector
       const { createNotification } = await import('./notificationService');
@@ -5909,6 +5986,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const results = await storage.bulkAssignJobs(assignments, assignedBy);
+      
+      // New audit system: Log assign action for each job
+      for (const assignment of assignments) {
+        const job = results.find(j => j.id === assignment.jobId);
+        if (job) {
+          await logCustomAction({
+            req,
+            action: 'assign',
+            entityType: 'job',
+            entityId: assignment.jobId,
+            after: { assignedTo: assignment.inspectorId },
+            metadata: { bulkAssignment: true },
+          });
+        }
+      }
       
       // Send notifications for successful assignments
       const { createNotification } = await import('./notificationService');
@@ -8505,6 +8597,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           templateId,
         });
 
+        // New audit system: Log custom action
+        await logCustomAction({
+          req,
+          action: 'complete',
+          entityType: 'job',
+          entityId: job.id,
+          after: { 
+            reportSent: true, 
+            sentTo: emailAddresses,
+            templateId,
+          },
+          metadata: { notes },
+        });
+
         res.json({
           success: true,
           reportId: job.id,
@@ -8619,6 +8725,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       );
 
+      // Fetch job before update for audit logging
+      const existingJob = await storage.getJob(req.params.id);
+      
       // Update the job with signature data and server-side timestamp
       const job = await storage.updateJob(req.params.id, {
         builderSignatureUrl: objectPath,
@@ -8629,6 +8738,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!job) {
         return res.status(404).json({ message: "Job not found. It may have been deleted." });
       }
+
+      // New audit system: Log update action
+      await logUpdate({
+        req,
+        entityType: 'job',
+        entityId: req.params.id,
+        before: existingJob,
+        after: job,
+        changedFields: ['builderSignatureUrl', 'builderSignerName', 'builderSignedAt'],
+      });
 
       res.json(job);
     } catch (error) {
