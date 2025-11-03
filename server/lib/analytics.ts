@@ -43,7 +43,11 @@ export type EntityType =
   | 'test_result'
   | 'blower_door_test'
   | 'duct_leakage_test'
-  | 'ventilation_test';
+  | 'ventilation_test'
+  | 'tax_credit_project'
+  | 'tax_credit_requirement'
+  | 'tax_credit_document'
+  | 'unit_certification';
 
 /**
  * Analytics event types following AAA Blueprint taxonomy
