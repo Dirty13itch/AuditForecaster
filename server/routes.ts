@@ -396,6 +396,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Golden Path Test Results - Submit test execution results
+  app.post('/api/golden-path', isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      // Validate request body using Zod schema
+      const validated = insertGoldenPathResultSchema.parse(req.body);
+      
+      // Use storage layer to persist GP result
+      const result = await storage.createGoldenPathResult(validated);
+      
+      // Return created result with 201 status
+      res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError: ValidationError = {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid Golden Path test result data',
+          errors: error.errors,
+        };
+        return res.status(400).json(validationError);
+      }
+      logError('GoldenPathResult', error);
+      res.status(500).json(serverErrorResponse(req.path));
+    }
+  });
+
+  // Golden Path Test Results - Retrieve specific test result by ID
+  app.get('/api/golden-path/:testId', isAuthenticated, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const testId = req.params.testId;
+      
+      // Query specific GP result by golden_path_id (e.g., "GP-01", "GP-02")
+      const result = await storage.getLatestGoldenPathResultById(testId);
+      
+      if (!result) {
+        return res.status(404).json({
+          code: 'NOT_FOUND',
+          message: `Golden Path test result not found for test ID: ${testId}`,
+        });
+      }
+      
+      res.json(result);
+    } catch (error) {
+      logError('GoldenPathResult', error);
+      res.status(500).json(serverErrorResponse(req.path));
+    }
+  });
+
   // Prometheus metrics endpoint (no authentication for monitoring systems)
   const { register } = await import('./metrics');
   app.get('/metrics', async (req, res) => {

@@ -77,6 +77,8 @@ Core architectural decisions and features include:
     *   **Event Enrichment**: Automatic metadata injection including actorId, route, timestamp, correlation ID, and operation-specific data (before/after state, record counts).
     *   **Analytics Integration**: Events emitted from React Query mutation success handlers and useEffect hooks for non-intrusive tracking.
     *   **Infrastructure Ready**: Console logging implemented with placeholder for analytics provider integration (PostHog, Mixpanel, Amplitude).
+    *   **Quality Metrics Database**: Three dedicated tables (golden_path_results, accessibility_audit_results, performance_metrics) for tracking GP tests, Axe audits, and Lighthouse scores per route.
+    *   **Live Analytics Dashboard**: `/api/status/features` endpoint surfaces real analytics metrics (view counts, unique actors) alongside QA data, replacing TODO placeholders with production-ready implementation.
 
 ## External Dependencies
 

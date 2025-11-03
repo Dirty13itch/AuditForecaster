@@ -1136,6 +1136,17 @@ export interface IStorage {
   getBenchmarkingDeadlines(buildingSize: number): Promise<{ class: string; deadline: Date }>;
   getEnergyStarChecklistTemplate(version: string, path: string): Promise<{ id: number; name: string; items: string[] }>;
   calculateSampleSize(unitCount: number): Promise<number>;
+  
+  // AAA Blueprint Observability Methods
+  createAnalyticsEvent(data: Omit<AnalyticsEvent, 'id' | 'timestamp'>): Promise<AnalyticsEvent>;
+  getAnalyticsMetricsByRoute(): Promise<Map<string, { views: number, uniqueActors: number }>>;
+  createGoldenPathResult(data: Omit<GoldenPathResult, 'id' | 'executedAt'>): Promise<GoldenPathResult>;
+  getLatestGoldenPathResultByRoute(): Promise<Map<string, GoldenPathResult>>;
+  getLatestGoldenPathResultById(goldenPathId: string): Promise<GoldenPathResult | null>;
+  createAccessibilityAuditResult(data: Omit<AccessibilityAuditResult, 'id' | 'auditedAt'>): Promise<AccessibilityAuditResult>;
+  getLatestAccessibilityAuditByRoute(): Promise<Map<string, AccessibilityAuditResult>>;
+  createPerformanceMetric(data: Omit<PerformanceMetric, 'id' | 'measuredAt'>): Promise<PerformanceMetric>;
+  getLatestPerformanceMetricByRoute(): Promise<Map<string, PerformanceMetric>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4433,6 +4444,17 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return latestMap;
+  }
+  
+  async getLatestGoldenPathResultById(goldenPathId: string): Promise<GoldenPathResult | null> {
+    const [result] = await db
+      .select()
+      .from(goldenPathResults)
+      .where(eq(goldenPathResults.goldenPathId, goldenPathId))
+      .orderBy(desc(goldenPathResults.executedAt))
+      .limit(1);
+    
+    return result || null;
   }
 
   async createAccessibilityAuditResult(data: Omit<AccessibilityAuditResult, 'id' | 'auditedAt'>): Promise<AccessibilityAuditResult> {
