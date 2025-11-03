@@ -5949,7 +5949,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const validated = preferencesSchema.parse(req.body);
+      
+      // Capture before state for audit trail
+      const before = await storage.getInspectorPreferences(inspectorId);
+      
       const preferences = await storage.updateInspectorPreferences(inspectorId, validated);
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        await logUpdate({
+          req,
+          entityType: 'inspector_preferences',
+          entityId: inspectorId,
+          before,
+          after: preferences,
+          metadata: {
+            fieldsChanged: Object.keys(validated),
+            isSelfUpdate: inspectorId === userId,
+          },
+        });
+
+        analytics.trackUpdate({
+          actorId: userId,
+          route: '/api/inspectors/:id/preferences',
+          correlationId: req.correlationId || '',
+          entityType: 'inspector_preferences',
+          entityId: inspectorId,
+          metadata: {
+            fieldsChanged: Object.keys(validated),
+            isSelfUpdate: inspectorId === userId,
+            previousMaxDailyJobs: before?.maxDailyJobs,
+            newMaxDailyJobs: preferences.maxDailyJobs,
+            previousMaxWeeklyJobs: before?.maxWeeklyJobs,
+            newMaxWeeklyJobs: preferences.maxWeeklyJobs,
+          },
+        });
+      } catch (obsError) {
+        logError('InspectorPreferences/Update/Observability', obsError);
+      }
       
       res.json(preferences);
     } catch (error) {
@@ -7191,15 +7228,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const validated = insertFinancialSettingsSchema.partial().parse(req.body);
       
-      let settings = await storage.getFinancialSettings(userId);
-      if (!settings) {
+      // Capture before state for audit trail
+      const before = await storage.getFinancialSettings(userId);
+      
+      let settings;
+      let isCreate = false;
+      
+      if (!before) {
         // Create if doesn't exist
         settings = await storage.createFinancialSettings({
           ...validated,
           userId,
         });
+        isCreate = true;
       } else {
         settings = await storage.updateFinancialSettings(userId, validated);
+      }
+      
+      // Dual observability: audit logging + analytics tracking
+      try {
+        if (isCreate) {
+          await logCreate({
+            req,
+            entityType: 'financial_settings',
+            entityId: userId,
+            after: settings,
+            metadata: {
+              taxRate: settings.taxRate,
+              invoicePrefix: settings.invoicePrefix,
+              paymentTermsDays: settings.paymentTermsDays,
+            },
+          });
+
+          analytics.trackCreate({
+            actorId: userId,
+            route: '/api/financial-settings',
+            correlationId: req.correlationId || '',
+            entityType: 'financial_settings',
+            entityId: userId,
+            metadata: {
+              taxRate: settings.taxRate,
+              invoicePrefix: settings.invoicePrefix,
+              paymentTermsDays: settings.paymentTermsDays,
+            },
+          });
+        } else {
+          await logUpdate({
+            req,
+            entityType: 'financial_settings',
+            entityId: userId,
+            before,
+            after: settings,
+            metadata: {
+              fieldsChanged: Object.keys(validated),
+            },
+          });
+
+          analytics.trackUpdate({
+            actorId: userId,
+            route: '/api/financial-settings',
+            correlationId: req.correlationId || '',
+            entityType: 'financial_settings',
+            entityId: userId,
+            metadata: {
+              fieldsChanged: Object.keys(validated),
+              previousTaxRate: before.taxRate,
+              newTaxRate: settings.taxRate,
+              previousInvoicePrefix: before.invoicePrefix,
+              newInvoicePrefix: settings.invoicePrefix,
+              previousPaymentTerms: before.paymentTermsDays,
+              newPaymentTerms: settings.paymentTermsDays,
+            },
+          });
+        }
+      } catch (obsError) {
+        logError('FinancialSettings/Upsert/Observability', obsError);
       }
       
       res.json(settings);

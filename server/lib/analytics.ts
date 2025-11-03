@@ -47,7 +47,9 @@ export type EntityType =
   | 'tax_credit_project'
   | 'tax_credit_requirement'
   | 'tax_credit_document'
-  | 'unit_certification';
+  | 'unit_certification'
+  | 'inspector_preferences'
+  | 'financial_settings';
 
 /**
  * Analytics event types following AAA Blueprint taxonomy
