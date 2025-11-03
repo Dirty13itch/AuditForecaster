@@ -23,14 +23,14 @@ import {
   users,
   jobs,
   photos,
-  qaItems,
+  qaInspectionScores,
   taxCreditProjects,
   blowerDoorTests,
   ductLeakageTests,
   ventilationTests,
   forecasts,
 } from '../shared/schema';
-import { sql } from 'drizzle-orm';
+import { sql, eq, or } from 'drizzle-orm';
 
 // ============================================================================
 // Helper Functions
@@ -54,87 +54,71 @@ function randomElement<T>(arr: T[]): T {
 
 const MI_HOMES_TWIN_CITIES = {
   builder: {
-    name: 'M/I Homes of Minnesota',
-    taxId: '31-0123456',
-    website: 'https://www.mihomes.com',
-    primaryContactEmail: 'minnesota@mihomes.com',
-    primaryContactPhone: '(612) 555-1000',
+    name: 'M/I Homes',
+    companyName: 'M/I Homes of Minnesota',
+    email: 'minnesota@mihomes.com',
+    phone: '(612) 555-1000',
     address: '5775 Wayzata Blvd, Suite 700, Minneapolis, MN 55416',
   },
   
   developments: [
     {
       name: 'Rush Hollow North',
-      city: 'Maple Grove',
-      state: 'MN',
-      zipCode: '55311',
-      lat: 45.0724,
-      lon: -93.4557,
+      municipality: 'Maple Grove',
+      region: 'Twin Cities Metro',
       totalLots: 120,
       plans: [
-        { name: 'Alexander', sqft: 2850, bedrooms: 4, bathrooms: 3.5, garageSize: 2, basementType: 'walkout' },
-        { name: 'Victoria', sqft: 3100, bedrooms: 5, bathrooms: 4, garageSize: 3, basementType: 'walkout' },
-        { name: 'Camden', sqft: 2450, bedrooms: 3, bathrooms: 2.5, garageSize: 2, basementType: 'standard' },
+        { planName: 'Alexander', floorArea: 2850 },
+        { planName: 'Victoria', floorArea: 3100 },
+        { planName: 'Camden', floorArea: 2450 },
       ],
     },
     {
       name: 'Valley Crest',
-      city: 'Shakopee',
-      state: 'MN',
-      zipCode: '55379',
-      lat: 44.7973,
-      lon: -93.5266,
+      municipality: 'Shakopee',
+      region: 'Twin Cities Metro',
       totalLots: 85,
       plans: [
-        { name: 'Columbia', sqft: 2650, bedrooms: 4, bathrooms: 3, garageSize: 2, basementType: 'standard' },
-        { name: 'Hudson', sqft: 3300, bedrooms: 5, bathrooms: 4.5, garageSize: 3, basementType: 'walkout' },
+        { planName: 'Columbia', floorArea: 2650 },
+        { planName: 'Hudson', floorArea: 3300 },
       ],
     },
     {
       name: 'Oneka Shores',
-      city: 'Hugo',
-      state: 'MN',
-      zipCode: '55038',
-      lat: 45.1394,
-      lon: -92.9944,
+      municipality: 'Hugo',
+      region: 'Twin Cities Metro',
       totalLots: 95,
       plans: [
-        { name: 'Birchwood II', sqft: 2750, bedrooms: 4, bathrooms: 3, garageSize: 2, basementType: 'walkout' },
-        { name: 'Cedarwood', sqft: 2950, bedrooms: 4, bathrooms: 3.5, garageSize: 3, basementType: 'walkout' },
+        { planName: 'Birchwood II', floorArea: 2750 },
+        { planName: 'Cedarwood', floorArea: 2950 },
       ],
     },
     {
       name: 'Amber Fields',
-      city: 'Rosemount',
-      state: 'MN',
-      zipCode: '55068',
-      lat: 44.7394,
-      lon: -93.1258,
+      municipality: 'Rosemount',
+      region: 'Twin Cities Metro',
       totalLots: 65,
       plans: [
-        { name: 'Grayson', sqft: 2500, bedrooms: 3, bathrooms: 2.5, garageSize: 2, basementType: 'standard' },
-        { name: 'Willow II', sqft: 2850, bedrooms: 4, bathrooms: 3.5, garageSize: 2, basementType: 'walkout' },
+        { planName: 'Grayson', floorArea: 2500 },
+        { planName: 'Willow II', floorArea: 2850 },
       ],
     },
     {
       name: 'Towns at Fox Creek',
-      city: 'Rogers',
-      state: 'MN',
-      zipCode: '55374',
-      lat: 45.1889,
-      lon: -93.5833,
+      municipality: 'Rogers',
+      region: 'Twin Cities Metro',
       totalLots: 75,
       plans: [
-        { name: 'Savanna', sqft: 2350, bedrooms: 3, bathrooms: 2.5, garageSize: 2, basementType: 'standard' },
-        { name: 'Victoria', sqft: 2650, bedrooms: 4, bathrooms: 3, garageSize: 2, basementType: 'standard' },
+        { planName: 'Savanna', floorArea: 2350 },
+        { planName: 'Victoria', floorArea: 2650 },
       ],
     },
   ],
   
   constructionManagers: [
-    { name: 'Mike Anderson', email: 'manderson@mihomes.com', phone: '(612) 555-1001', role: 'Senior Construction Manager' },
-    { name: 'Sarah Johnson', email: 'sjohnson@mihomes.com', phone: '(612) 555-1002', role: 'Construction Manager' },
-    { name: 'Tom Peterson', email: 'tpeterson@mihomes.com', phone: '(612) 555-1003', role: 'Site Superintendent' },
+    { name: 'Mike Anderson', email: 'manderson@mihomes.com', phone: '(612) 555-1001', title: 'area_construction_manager' },
+    { name: 'Sarah Johnson', email: 'sjohnson@mihomes.com', phone: '(612) 555-1002', title: 'construction_manager' },
+    { name: 'Tom Peterson', email: 'tpeterson@mihomes.com', phone: '(612) 555-1003', title: 'superintendent' },
   ],
 };
 
@@ -146,6 +130,77 @@ async function seed() {
   console.log('🌱 Starting M/I Homes Twin Cities seed...');
   
   try {
+    // ========================================================================
+    // CLEANUP: Delete existing M/I Homes seed data for idempotency
+    // ========================================================================
+    console.log('\n🧹 Cleaning up existing M/I Homes seed data...');
+    
+    // Step 1: Delete builder (cascades to developments, lots, plans, jobs, test data, photos, QA, tax credits)
+    console.log('  🗑️  Deleting M/I Homes builder and all related data...');
+    const deletedBuilders = await db.delete(builders)
+      .where(eq(builders.name, 'M/I Homes'))
+      .returning();
+    
+    if (deletedBuilders.length > 0) {
+      console.log(`     ✅ Deleted builder: M/I Homes (cascade deleted: developments, lots, plans, jobs, test data, photos, QA, tax credits)`);
+    } else {
+      console.log(`     ℹ️  No existing M/I Homes builder found`);
+    }
+    
+    // Step 2: Delete construction managers by email (unique constraint issue)
+    console.log('  🗑️  Deleting M/I Homes construction managers...');
+    const deletedCMs = await db.delete(constructionManagers)
+      .where(
+        or(
+          eq(constructionManagers.email, 'manderson@mihomes.com'),
+          eq(constructionManagers.email, 'sjohnson@mihomes.com'),
+          eq(constructionManagers.email, 'tpeterson@mihomes.com')
+        )
+      )
+      .returning();
+    
+    if (deletedCMs.length > 0) {
+      console.log(`     ✅ Deleted ${deletedCMs.length} construction managers`);
+    } else {
+      console.log(`     ℹ️  No existing construction managers found`);
+    }
+    
+    // Step 3: Delete seed users by email
+    console.log('  🗑️  Deleting seed users...');
+    const deletedUsers = await db.delete(users)
+      .where(
+        or(
+          eq(users.email, 'admin@ulrichenergy.com'),
+          eq(users.email, 'inspector1@ulrichenergy.com'),
+          eq(users.email, 'inspector2@ulrichenergy.com')
+        )
+      )
+      .returning();
+    
+    if (deletedUsers.length > 0) {
+      console.log(`     ✅ Deleted ${deletedUsers.length} seed users`);
+    } else {
+      console.log(`     ℹ️  No existing seed users found`);
+    }
+    
+    // Step 4: Delete organization by name
+    console.log('  🗑️  Deleting Ulrich Energy Auditing organization...');
+    const deletedOrgs = await db.delete(organizations)
+      .where(eq(organizations.name, 'Ulrich Energy Auditing'))
+      .returning();
+    
+    if (deletedOrgs.length > 0) {
+      console.log(`     ✅ Deleted organization: Ulrich Energy Auditing`);
+    } else {
+      console.log(`     ℹ️  No existing organization found`);
+    }
+    
+    console.log('✅ Cleanup complete! Starting fresh seed...\n');
+    
+    // ========================================================================
+    // SEED: Create fresh M/I Homes data
+    // ========================================================================
+    
     // Step 1: Create Organization
     console.log('Creating organization...');
     const [org] = await db.insert(organizations).values({
@@ -197,12 +252,12 @@ async function seed() {
     const [builder] = await db.insert(builders).values({
       id: generateUUID(),
       name: MI_HOMES_TWIN_CITIES.builder.name,
-      taxId: MI_HOMES_TWIN_CITIES.builder.taxId,
-      website: MI_HOMES_TWIN_CITIES.builder.website,
-      primaryContactEmail: MI_HOMES_TWIN_CITIES.builder.primaryContactEmail,
-      primaryContactPhone: MI_HOMES_TWIN_CITIES.builder.primaryContactPhone,
+      companyName: MI_HOMES_TWIN_CITIES.builder.companyName,
+      email: MI_HOMES_TWIN_CITIES.builder.email,
+      phone: MI_HOMES_TWIN_CITIES.builder.phone,
       address: MI_HOMES_TWIN_CITIES.builder.address,
       status: 'active',
+      createdBy: adminId,
     }).returning();
     
     console.log(`✅ Builder created: ${builder.name}`);
@@ -216,8 +271,9 @@ async function seed() {
         name: 'Jennifer Williams',
         email: 'jwilliams@mihomes.com',
         phone: '(612) 555-1010',
-        role: 'Regional Director',
+        role: 'owner',
         isPrimary: true,
+        createdBy: adminId,
       },
       {
         id: generateUUID(),
@@ -225,8 +281,9 @@ async function seed() {
         name: 'Robert Thompson',
         email: 'rthompson@mihomes.com',
         phone: '(612) 555-1011',
-        role: 'Quality Manager',
+        role: 'project_manager',
         isPrimary: false,
+        createdBy: adminId,
       },
     ]);
     
@@ -237,11 +294,11 @@ async function seed() {
     const cmIds = await db.insert(constructionManagers).values(
       MI_HOMES_TWIN_CITIES.constructionManagers.map(cm => ({
         id: generateUUID(),
-        builderId: builder.id,
         name: cm.name,
         email: cm.email,
         phone: cm.phone,
-        role: cm.role,
+        title: cm.title,
+        createdBy: adminId,
       }))
     ).returning();
     
@@ -257,28 +314,22 @@ async function seed() {
         id: generateUUID(),
         builderId: builder.id,
         name: devData.name,
-        city: devData.city,
-        state: devData.state,
-        zipCode: devData.zipCode,
-        lat: devData.lat,
-        lon: devData.lon,
+        municipality: devData.municipality,
+        region: devData.region,
+        totalLots: devData.totalLots,
         status: 'active',
+        createdBy: adminId,
       }).returning();
       
-      console.log(`  📍 Development: ${dev.name} (${dev.city}, ${dev.state})`);
+      console.log(`  📍 Development: ${dev.name} (${dev.municipality})`);
       
       // Create plans for this development
       const planIds = await db.insert(plans).values(
         devData.plans.map(planData => ({
           id: generateUUID(),
           builderId: builder.id,
-          name: planData.name,
-          sqft: planData.sqft,
-          bedrooms: planData.bedrooms,
-          bathrooms: planData.bathrooms,
-          garageSize: planData.garageSize,
-          basementType: planData.basementType,
-          status: 'active',
+          planName: planData.planName,
+          floorArea: planData.floorArea,
         }))
       ).returning();
       
@@ -293,11 +344,9 @@ async function seed() {
           id: generateUUID(),
           developmentId: dev.id,
           lotNumber: `LOT-${i.toString().padStart(3, '0')}`,
-          address: `${1000 + i} ${devData.name} Drive`,
-          city: dev.city,
-          state: dev.state,
-          zipCode: dev.zipCode,
+          streetAddress: `${1000 + i} ${devData.name} Drive`,
           status: i <= 7 ? 'sold' : 'available',
+          createdBy: adminId,
         }).returning();
         
         lotIds.push(lot);
@@ -306,13 +355,13 @@ async function seed() {
       console.log(`    🏘️ Lots created: ${lotIds.length}`);
       
       // Create jobs for sold lots (7 jobs per development)
-      const jobTypes = ['Rough', 'Final', 'Verification'];
+      const inspectionTypes = ['qa_rough', 'qa_final', 'hers_blower_door'];
       
       for (let i = 0; i < 7; i++) {
         const lot = lotIds[i];
         const plan = randomElement(planIds);
         const inspector = i % 2 === 0 ? inspector1Id : inspector2Id;
-        const jobType = randomElement(jobTypes);
+        const inspectionType = randomElement(inspectionTypes);
         const cm = randomElement(cmIds);
         
         // Calculate scheduled date (random date in next 30 days)
@@ -320,18 +369,17 @@ async function seed() {
         
         const [job] = await db.insert(jobs).values({
           id: generateUUID(),
+          name: `${dev.name} - Lot ${lot.lotNumber}`,
+          address: lot.streetAddress || `${1000 + i} ${devData.name} Drive`,
+          contractor: builder.companyName,
           builderId: builder.id,
           lotId: lot.id,
           planId: plan.id,
           inspectorId: inspector,
           constructionManagerId: cm.id,
-          jobType,
+          inspectionType,
           status: i < 3 ? 'done' : 'scheduled',
           scheduledDate,
-          address: lot.address,
-          city: lot.city,
-          state: lot.state,
-          zipCode: lot.zipCode,
         }).returning();
         
         totalJobs++;
@@ -339,16 +387,18 @@ async function seed() {
         // Create test data and visits for completed jobs
         if (job.status === 'done') {
           // Create blower door test
+          const floorArea = parseFloat(plan.floorArea?.toString() || '2500');
           await db.insert(blowerDoorTests).values({
             id: generateUUID(),
             jobId: job.id,
-            buildingVolume: plan.sqft * 8, // Assume 8ft ceilings
+            testDate: scheduledDate,
+            testTime: '10:00',
+            houseVolume: floorArea * 8, // Assume 8ft ceilings
+            conditionedArea: floorArea,
+            numberOfStories: 2,
+            basementType: 'conditioned',
             cfm50: 1200 + Math.random() * 500,
             ach50: 2.5 + Math.random() * 1.5,
-            surface6: plan.sqft * 8 * 6,
-            testDate: scheduledDate.toISOString(),
-            weatherConditions: 'Clear, 65°F',
-            equipment: 'TEC DG-1000',
             notes: 'Test completed successfully',
           });
           
@@ -356,10 +406,13 @@ async function seed() {
           await db.insert(ductLeakageTests).values({
             id: generateUUID(),
             jobId: job.id,
-            totalDuctLeakage: 80 + Math.random() * 40,
-            leakageToOutside: 40 + Math.random() * 20,
-            testDate: scheduledDate.toISOString(),
-            equipment: 'TEC DG-1000',
+            testDate: scheduledDate,
+            testTime: '11:00',
+            testType: 'both',
+            systemType: 'forced_air',
+            conditionedArea: floorArea,
+            cfm25Total: 80 + Math.random() * 40,
+            cfm25Outside: 40 + Math.random() * 20,
             notes: 'Duct testing completed',
           });
           
@@ -367,10 +420,10 @@ async function seed() {
           await db.insert(ventilationTests).values({
             id: generateUUID(),
             jobId: job.id,
-            exhaustFanFlow: 50 + Math.random() * 20,
-            supplyFanFlow: 60 + Math.random() * 20,
-            testDate: scheduledDate.toISOString(),
-            equipment: 'Dwyer 475 Mark III',
+            testDate: scheduledDate,
+            testTime: '12:00',
+            floorArea: floorArea,
+            bedrooms: 4,
             notes: 'Ventilation testing completed',
           });
           
@@ -380,8 +433,8 @@ async function seed() {
             jobId: job.id,
             planId: plan.id,
             builderId: builder.id,
-            conditionedFloorArea: plan.sqft,
-            foundationType: plan.basementType === 'walkout' ? 'walkout_basement' : 'slab',
+            conditionedFloorArea: floorArea,
+            foundationType: 'slab',
             wallInsulation: 'R-21',
             ceilingInsulation: 'R-49',
             windowsUFactor: 0.28,
@@ -428,11 +481,11 @@ async function seed() {
         await db.insert(photos).values({
           id: generateUUID(),
           jobId: job.id,
-          filename: `job_${job.id}_photo_${i + 1}.jpg`,
-          url: `https://storage.googleapis.com/photos/job_${job.id}_photo_${i + 1}.jpg`,
-          thumbnailUrl: `https://storage.googleapis.com/photos/thumbnails/job_${job.id}_photo_${i + 1}.jpg`,
+          filePath: `photos/job_${job.id}_photo_${i + 1}.jpg`,
+          thumbnailPath: `photos/thumbnails/job_${job.id}_photo_${i + 1}.jpg`,
+          fullUrl: `https://storage.googleapis.com/photos/job_${job.id}_photo_${i + 1}.jpg`,
           tags: [randomElement(photoTags), randomElement(photoTags)],
-          capturedAt: new Date(),
+          caption: `Photo ${i + 1} for job ${job.id}`,
         });
         totalPhotos++;
       }
@@ -440,27 +493,28 @@ async function seed() {
     
     console.log(`✅ Photos created: ${totalPhotos}`);
     
-    // Step 8: Create QA Items
-    console.log('Creating QA items...');
-    const qaCategories = ['Missing Photo', 'Incorrect Measurement', 'Equipment Calibration', 'Report Error', 'Documentation'];
-    const severities = ['low', 'medium', 'high'];
+    // Step 8: Create QA Inspection Scores
+    console.log('Creating QA inspection scores...');
     
     for (let i = 0; i < 5; i++) {
       const job = randomElement(completedJobs);
-      await db.insert(qaItems).values({
+      const totalScore = 85 + Math.floor(Math.random() * 15); // 85-99 score
+      const percentage = totalScore; // Since maxScore is 100
+      const grade = percentage >= 90 ? 'A' : percentage >= 80 ? 'B' : 'C';
+      
+      await db.insert(qaInspectionScores).values({
         id: generateUUID(),
         jobId: job.id,
-        builderId: builder.id,
-        category: randomElement(qaCategories),
-        severity: randomElement(severities),
-        description: `QA issue found during review of job ${job.id}`,
-        assignedTo: inspector1Id,
-        status: i < 2 ? 'resolved' : 'open',
-        createdBy: adminId,
+        inspectorId: inspector1Id,
+        totalScore: totalScore.toString(),
+        maxScore: '100',
+        percentage: percentage.toString(),
+        grade,
+        reviewNotes: `QA review completed for job ${job.id}`,
       });
     }
     
-    console.log('✅ QA items created: 5');
+    console.log('✅ QA inspection scores created: 5');
     
     // Step 9: Create 45L Tax Credit Projects
     console.log('Creating 45L tax credit projects...');
@@ -470,28 +524,23 @@ async function seed() {
         id: generateUUID(),
         builderId: builder.id,
         projectName: '2024 ENERGY STAR Certification - Rush Hollow North',
-        year: 2024,
-        programType: '45L',
+        projectType: 'single-family',
+        taxYear: 2024,
         totalUnits: 25,
-        certifiedUnits: 25,
-        status: 'docs_complete',
-        documents: JSON.stringify([
-          { name: 'HERS_Ratings.pdf', url: 'https://storage.googleapis.com/docs/hers_ratings.pdf' },
-          { name: 'Builder_Certification.pdf', url: 'https://storage.googleapis.com/docs/builder_cert.pdf' },
-        ]),
+        qualifiedUnits: 25,
+        status: 'certified',
+        createdBy: adminId,
       },
       {
         id: generateUUID(),
         builderId: builder.id,
         projectName: '2024 ENERGY STAR Certification - Valley Crest',
-        year: 2024,
-        programType: '45L',
+        projectType: 'single-family',
+        taxYear: 2024,
         totalUnits: 18,
-        certifiedUnits: 16,
-        status: 'awaiting_builder_signoff',
-        documents: JSON.stringify([
-          { name: 'HERS_Ratings.pdf', url: 'https://storage.googleapis.com/docs/hers_ratings_vc.pdf' },
-        ]),
+        qualifiedUnits: 16,
+        status: 'pending',
+        createdBy: adminId,
       },
     ]);
     
