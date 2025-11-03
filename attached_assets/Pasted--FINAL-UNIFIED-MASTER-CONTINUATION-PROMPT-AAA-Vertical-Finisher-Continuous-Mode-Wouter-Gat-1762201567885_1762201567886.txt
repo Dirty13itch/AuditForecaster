@@ -1,0 +1,123 @@
+# FINAL UNIFIED MASTER CONTINUATION PROMPT
+# “AAA Vertical Finisher – Continuous Mode (Wouter + Gatekeeper + Golden Path – M/I Homes Twin Cities Active/Coming)”
+
+# ---------------------------------------------------------------------------
+# CONTINUOUS EXECUTION LOOP
+AUTO_CONTINUE = true                 # chain multiple verticals automatically
+MAX_SLICES_PER_RUN = 3               # number of slices to finish sequentially
+MAX_MINUTES_PER_RUN = 40             # safety brake for long loops
+LOOP_BEHAVIOR:
+  - After finishing one slice, reread /docs/product/roadmap.md.
+  - If unchecked items remain and limits not reached → start next slice.
+  - Commit after each slice with summary in commit message.
+  - Between slices print:  === SLICE COMPLETE (GP-xx) ===
+  - Stop gracefully when limits hit; print RUN HALTED – SAFE TO RESUME.
+  - Never begin large refactors if time would exceed limit.
+
+# ---------------------------------------------------------------------------
+# SAFETY PREFACE
+SAFETY_MODE = "report-only"          # change to "enforce" after gates proven
+SEED_SCOPE  = "TEST_ONLY"            # seeds run only against TEST_DB
+ROUTE_DEFAULTS = "visible-dev-hidden-prod-unless-GA"
+ROLLBACK_POLICY = "one-feature-per-branch; no cross-cutting refactors"
+
+# ---------------------------------------------------------------------------
+# CONFIG
+POWER_HINT = auto                    # use High-Power automatically for wide/layered work
+
+PRODUCT CONTEXT
+- Client uses Wouter routing with lazy pages ("/", "/jobs", "/inspection/:id",
+  "/route", "/reports", "/status/features", etc.).
+- Single source of truth for navigation metadata + maturity gating.
+- Golden-Path (GP) tests gate promotion to GA.
+- Seed kit = active/coming M/I Homes Twin Cities communities:
+  Rush Hollow North (Maple Grove), Valley Crest (Shakopee),
+  Oneka Shores (Hugo), Amber Fields – Annagaire/Artaine/Alder Glen (Rosemount),
+  Towns at Fox Creek (Rogers).
+
+# ---------------------------------------------------------------------------
+# OPERATING LOOP
+1) STATE RECOGNITION
+   - Detect phase (SCAN / FINISH / POLISH / TEST / RELEASE).
+   - Identify unfinished vertical from /docs/product/roadmap.md.
+   - Print: PHASE, SLICE, NEXT 3 STEPS.
+
+2) FINISH-TO-GA EXECUTION (per slice)
+   A) Acceptance Criteria (/docs/slices/<slice>.md):
+      • Data → zod schema + reversible migration + idempotent seed rows (M/I Homes active/coming)
+      • API → idempotent handlers + 4xx/5xx envelope + correlation IDs
+      • UI → four states (loading/empty/error/data) + URL state + responsive
+      • Interaction → optimistic update + rollback + keyboard shortcuts
+      • Telemetry → typed analytics + audit logs
+      • Gates → Axe clean; Lighthouse budgets pass (LCP < 2.5s, CLS < 0.1, TBT < 200ms, JS ≤ 180KB gz; Field Visit ≤ 220KB)
+      • Tests → unit ≥80% coverage + Storybook + Playwright GP green
+      • Docs → architecture, roadmap, runbook, golden-path-report updated
+   B) TEST-FIRST → create/update Playwright GP test for slice (tests/e2e/golden-path/gp-0X-*.spec.ts)
+      Include Axe assertions and write gate status JSON on pass.
+   C) IMPLEMENT small commits (Data → API → UI → Telemetry). Keep CI green.
+   D) VERIFY & PROMOTE → run GP + Axe + Lighthouse.
+      If PASS → set maturity = "ga" + update /status/features + CHANGELOG.
+      If blocked → log /docs/blocks/<id>.md and mark slice beta.
+
+3) RELEASE GATING (enforced once SAFE_MODE = enforce)
+   - Show only GA routes in prod; dev/stage show Beta/Experimental with badges.
+   - CI fails if any GA route regresses (GP/Axe/Perf/Coverage).
+
+# ---------------------------------------------------------------------------
+# FOUNDATION TASKS
+1) Navigation metadata (app/navigation.ts)
+   export type FeatureMaturity = "experimental" | "beta" | "ga";
+   export type RouteMeta = { path:string; title:string; group:"Work"|"Data"|"Reports"|"QA"|"Admin"|"Compliance";
+     roles?:("Inspector"|"Lead"|"BuilderViewer"|"Admin")[]; flag?:string; maturity:FeatureMaturity; goldenPathId?:string };
+   export const ROUTES:RouteMeta[] = [
+     {path:"/",title:"Dashboard",group:"Work",maturity:"ga"},
+     {path:"/jobs",title:"Jobs",group:"Work",maturity:"ga",goldenPathId:"GP-01"},
+     {path:"/route",title:"Route",group:"Work",maturity:"beta",goldenPathId:"GP-01"},
+     {path:"/inspection/:id",title:"Field Visit",group:"Work",maturity:"beta",goldenPathId:"GP-01"},
+     {path:"/reports",title:"Reports",group:"Reports",maturity:"beta",goldenPathId:"GP-01"},
+     {path:"/status/features",title:"Feature Status",group:"Admin",maturity:"ga"}
+   ];
+
+2) Gatekeeper + Readiness Chip (client/src/lib/gates.ts + components/ReadinessChip.tsx)
+   - Hide non-GA routes in prod; show badges elsewhere.
+   - Expose fetchGateStatus() reading /public/gate-status.json.
+
+3) Status page (client/src/pages/StatusFeaturesPage.tsx)
+   - Table of ROUTES with maturity + a11y/perf/last pass.
+
+4) Golden Path tests (Playwright + Axe)
+   - GP-01 Calendar→Jobs→Route→Field Visit→Report.
+   - Write gate-status.json updates on pass.
+
+5) Performance budgets & Lighthouse runner (scripts/lh.mjs + lighthouse.budgets.json).
+
+6) Package scripts (package.json)
+   "test:unit": "vitest run --coverage",
+   "test:e2e": "playwright test",
+   "test:perf": "node ./scripts/lh.mjs",
+   "release:gates": "npm run test:unit && npm run test:e2e && npm run test:perf"
+
+7) CI workflow (.github/workflows/release-gates.yml)
+   - install → build → dev → unit → e2e → perf → upload gate-status.json.
+
+8) Seed kit (scripts/seed.ts)
+   - Idempotent upserts for M/I Homes active/coming communities only.
+
+9) Telemetry contracts (client/src/lib/analytics.ts + audit.ts)
+   - Typed events & immutable audit entries.
+
+# ---------------------------------------------------------------------------
+# DONE SIGNALS
+Print each run: PHASE, SLICE, DONE files, METRICS (GP/Axe/Lighthouse/coverage deltas),
+ROUTES promoted to GA, NEXT steps or BLOCKER ids.
+
+PROMOTION RULE
+GA only when GP pass + Axe 0 violations + Lighthouse budgets pass + unit ≥80% + telemetry events logged.
+
+# ---------------------------------------------------------------------------
+# BEGIN NOW
+- Read repo/docs/commits → resume last in-flight vertical; if none → start GP-01.
+- Create missing foundations first (app/navigation.ts, Gatekeeper, Status page, GP tests, Lighthouse scripts).
+- Keep seeds idempotent; exclude finished communities.
+- After each slice → update architecture.md, roadmap.md, golden-path-report.md, roles-matrix.md (if permissions changed), seed-overview.md.
+- Loop until MAX_SLICES_PER_RUN or MAX_MINUTES_PER_RUN reached → print RUN HALTED – SAFE TO RESUME.
