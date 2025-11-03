@@ -1,0 +1,48 @@
+name: Accessibility Audit (Axe)
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  accessibility-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      
+      - name: Run accessibility audits
+        run: npm run test:accessibility
+        env:
+          CI: true
+      
+      - name: Upload accessibility reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-reports
+          path: |
+            docs/ACCESSIBILITY_AUDIT_STATUS.md
+            docs/ACCESSIBILITY_AUDIT_REPORT.md
+            docs/audit-results/accessibility-audit.json
+          retention-days: 30
+      
+      - name: Check quality gates
+        run: node scripts/check-accessibility-gates.js

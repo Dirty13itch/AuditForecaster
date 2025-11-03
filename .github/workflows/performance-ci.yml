@@ -1,0 +1,61 @@
+name: Performance Audit (Lighthouse)
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  lighthouse-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Start application (dev server)
+        run: |
+          npm run dev &
+          echo $! > .server.pid
+        env:
+          NODE_ENV: development
+          PORT: 5000
+      
+      - name: Wait for application to be ready
+        run: npx wait-on http://localhost:5000 --timeout 60000
+      
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          urls: |
+            http://localhost:5000
+            http://localhost:5000/jobs
+            http://localhost:5000/schedule
+            http://localhost:5000/equipment
+            http://localhost:5000/reports
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          runs: 3
+      
+      - name: Check quality gates
+        run: node scripts/check-lighthouse-gates.js
+      
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f .server.pid ]; then
+            kill $(cat .server.pid) || true
+            rm .server.pid
+          fi

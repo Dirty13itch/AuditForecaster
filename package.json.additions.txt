@@ -1,0 +1,109 @@
+# Required Package.json Scripts - CI Workflow Support
+
+This file documents the npm scripts that need to be added to package.json
+to support the CI workflows (accessibility-ci.yml and performance-ci.yml).
+
+## DO NOT EDIT package.json DIRECTLY
+Per the project's forbidden_changes rule, package.json should not be edited
+without explicit user permission. This file serves as documentation for what
+needs to be added.
+
+## Required Scripts
+
+Add the following scripts to the "scripts" section of package.json:
+
+```json
+{
+  "scripts": {
+    "test:accessibility": "playwright test tests/e2e/accessibility/accessibility-audit.spec.ts",
+    "test:performance": "playwright test tests/e2e/qa-performance-workflow.spec.ts"
+  }
+}
+```
+
+## Script Descriptions
+
+### test:accessibility
+- **Purpose**: Run WCAG 2.2 AA accessibility audit using Axe + Playwright
+- **Used by**: `.github/workflows/accessibility-ci.yml` (line 32)
+- **Output**: 
+  - JSON: `docs/audit-results/accessibility-audit.json`
+  - Markdown: `docs/ACCESSIBILITY_AUDIT_REPORT.md`
+- **Quality Gates**: Enforced by `scripts/check-accessibility-gates.js`
+- **Test File**: `tests/e2e/accessibility/accessibility-audit.spec.ts`
+
+### test:performance
+- **Purpose**: Run Lighthouse performance audits using Playwright
+- **Used by**: Can be run locally for performance testing
+- **Note**: The CI workflow (performance-ci.yml) uses Lighthouse CI action directly,
+  but this script is useful for local development and testing
+- **Test File**: `tests/e2e/qa-performance-workflow.spec.ts`
+
+## CI Workflow Integration
+
+### Accessibility CI (.github/workflows/accessibility-ci.yml)
+```yaml
+- name: Run accessibility audits
+  run: npm run test:accessibility
+```
+
+### Performance CI (.github/workflows/performance-ci.yml)
+- Uses `npm run dev` to start the application (FIXED)
+- Uses treosh/lighthouse-ci-action for Lighthouse audits
+- Does not use test:performance script directly in CI
+
+## Prerequisites
+
+Before running these scripts, ensure:
+1. Dependencies installed: `npm ci`
+2. Playwright browsers installed: `npx playwright install --with-deps chromium`
+3. Application server is running (or playwright.config.ts webServer will start it)
+
+## Local Testing
+
+To run these tests locally:
+
+```bash
+# Install Playwright browsers (one-time setup)
+npx playwright install --with-deps chromium
+
+# Run accessibility audit
+npm run test:accessibility
+
+# Run performance tests
+npm run test:performance
+```
+
+## Quality Gates
+
+- **Accessibility**: Checks `docs/audit-results/accessibility-audit.json`
+  - Critical violations: 0 (max allowed)
+  - Serious violations: 0 (max allowed)
+  - Moderate violations: 0 (max allowed)
+  - Minor violations: 10 (max allowed)
+
+- **Performance**: Enforced by `scripts/check-lighthouse-gates.js`
+  - Performance score: >= 90
+  - Accessibility score: >= 90
+  - LCP: < 2.5s
+  - CLS: < 0.1
+  - TBT: < 200ms
+
+## Related Files
+
+- `tests/e2e/accessibility/accessibility-audit.spec.ts` - Accessibility test suite
+- `tests/e2e/qa-performance-workflow.spec.ts` - Performance test suite
+- `scripts/check-accessibility-gates.js` - Accessibility quality gate checker
+- `scripts/check-lighthouse-gates.js` - Performance quality gate checker
+- `.github/workflows/accessibility-ci.yml` - Accessibility CI workflow
+- `.github/workflows/performance-ci.yml` - Performance CI workflow
+- `playwright.config.ts` - Playwright configuration
+
+## Next Steps
+
+To implement these scripts, the user should:
+1. Open `package.json`
+2. Add the scripts listed above to the "scripts" section
+3. Run `npm install` to refresh dependencies (if needed)
+4. Test locally using the commands above
+5. Verify CI workflows pass on next commit/PR
