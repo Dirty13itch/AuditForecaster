@@ -79,6 +79,16 @@ Core architectural decisions and features include:
     *   **Infrastructure Ready**: Console logging implemented with placeholder for analytics provider integration (PostHog, Mixpanel, Amplitude).
     *   **Quality Metrics Database**: Three dedicated tables (golden_path_results, accessibility_audit_results, performance_metrics) for tracking GP tests, Axe audits, and Lighthouse scores per route.
     *   **Live Analytics Dashboard**: `/api/status/features` endpoint surfaces real analytics metrics (view counts, unique actors) alongside QA data, replacing TODO placeholders with production-ready implementation.
+    *   **Tier 3 Audit Logging**: Comprehensive audit logging across 40+ endpoints covering Plans, Schedule, QA, Settings, and Tests entities with 180-day retention policy and performance indexes.
+-   **AAA Blueprint Performance & Quality Gating**: Production-ready Lighthouse and accessibility testing infrastructure.
+    *   **Lighthouse Budget Enforcement**: Strict performance budgets (180KB JS, <2.5s LCP, <0.1 CLS, <200ms TBT) defined in `lighthouse.budgets.json`.
+    *   **Automated Performance Runner**: `scripts/lh.mjs` executes Lighthouse audits with budget validation and persists results to gate-status.json.
+    *   **Budget Tracking**: Both individual route and aggregated Golden Path test metrics include budgetsPassed flag and detailed budgetViolations array.
+    *   **Golden Path Aggregation**: Smart worst-case metric aggregation across multi-route GP tests (minimum score, maximum LCP/CLS/TBT, union of violations).
+    *   **Type-Safe Gatekeeper**: `client/src/lib/gates.ts` enforces maturity-based route access with environment-aware visibility rules (prod: GA only, staging: GA+Beta, dev: all).
+    *   **Safety Mode**: Report-only mode for non-disruptive gate monitoring with flip-to-enforce capability for production gating.
+    *   **Gate Status API**: `public/gate-status.json` serves real-time quality metrics to /status/features dashboard with complete budget outcome visibility.
+    *   **CI/CD Ready**: All foundation artifacts production-grade; test execution requires GitHub Actions or environment with browser dependencies (libglib2.0, libnss3, Chromium).
 
 ## External Dependencies
 
