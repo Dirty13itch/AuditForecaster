@@ -1,0 +1,97 @@
+Your build is failing due to TypeScript errors, mainly from type mismatches or properties not existing on certain types. Here is how to resolve the main issues, with code suggestions as needed:
+
+1. Property Does Not Exist Issues
+Example:
+
+Code
+error TS2339: Property 'categoryScores' does not exist on type '{ id: string; jobId: string; ... }'
+error TS2339: Property 'overallScore' does not exist on type '{ id: string; jobId: string; ... }'
+Solution:
+
+Make sure the interface/type you use where you access categoryScores, overallScore, etc., includes those properties.
+Update your type definition (e.g., in server/types.ts or the relevant file) to include these fields:
+ts
+interface QaInspectionScore {
+  id: string;
+  jobId: string;
+  inspectorId: string;
+  reportInstanceId: string | null;
+  totalScore: string;
+  maxScore: string;
+  percentage: string;
+  grade: "A" | "B" | "C" | "D";
+  categoryScores?: number;  // Add as necessary
+  overallScore?: number;    // Ditto
+  // ...any other fields being used
+}
+2. Type Mismatch (e.g., number vs. string)
+Example:
+
+Code
+Type 'number' is not assignable to type 'string | SQL<unknown> | Placeholder<string, any>'
+Solution:
+
+You are passing a number where a string is expected. Convert numbers to strings for those parameters:
+ts
+const payload = {
+  totalScore: String(totalScore), // ensure correct type
+  maxScore: String(maxScore),
+  percentage: String(percentage),
+  // ...
+};
+3. Missing or Unknown Properties on Table Types
+Example:
+
+Code
+Property 'jobType' does not exist on type 'PgTableWithColumns<{ name: ... }>'
+Property 'sortOrder' does not exist on type 'PgTableWithColumns<{ name: ... }>'
+Property 'reimbursementStatus' does not exist on type 'PgTableWithColumns<{ name: ... }>'
+Solution:
+
+Update the schema definition for your tables to ensure all accessed properties are actually part of the table's type.
+Check the code where these fields are accessed and the table schema definitions, e.g.:
+ts
+const jobsTable = pgTable(/* ... */, {
+  // Add missing columns if needed:
+  jobType: ...,
+  completedAt: ...,
+});
+If the DB schema doesn’t have those columns, either add them to the schema or stop referencing them in code.
+
+4. Expected More Arguments
+Example:
+
+Code
+Expected 3-4 arguments, but got 1.
+Solution:
+
+Review the function definition being called (see e.g. webauthnService.ts lines 150/239/289/308/355) and ensure you pass the required number of arguments.
+5. Implicit Any/No Declaration File Issues
+Example:
+
+Code
+Could not find a declaration file for module 'cookie-signature'
+Solution:
+
+Install missing types for this package:
+bash
+npm install --save-dev @types/cookie-signature
+If types do not exist, add this to a .d.ts:
+
+ts
+declare module 'cookie-signature';
+6. Duplicate Identifiers in Schema
+Example:
+
+Code
+Duplicate identifier 'InsertPlan'
+Duplicate identifier 'Plan'
+Solution:
+
+Make sure you do not redeclare types/interfaces. Check your exports/imports and merge or remove any redundant/duplicate declarations.
+7. Miscellaneous: Type/Interface Fixes
+For Object is possibly 'null' use null checks.
+For [TS2551] Property 'count' does not exist on type ... Did you mean '$count'?, change .count to .$count as suggested.
+These problems are widespread and likely stem from a recent refactor or update. Focus first on correcting data models/types to include all used fields and align with your DB schema, then address the other issues as above. Fixing the type issues in your models and passing the correct types (especially string vs. number) should resolve most errors.
+
+Let me know if you’d like step-by-step guidance on a specific file or error.
