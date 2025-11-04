@@ -11,6 +11,14 @@ The application uses a **React** and **TypeScript** frontend with **Vite**, **Wo
 
 The backend is developed with **Express.js** and **Node.js** in **TypeScript**, using **PostgreSQL** (Neon serverless) via **Drizzle ORM**. The API is RESTful, with **Zod** for schema validation. **Replit Auth** handles authentication, with sessions stored in PostgreSQL.
 
+### Database Driver Strategy
+The application implements a **dual-driver PostgreSQL setup** to support both production (Neon) and CI/testing (standard PostgreSQL) environments:
+- **Production**: Uses `@neondatabase/serverless` driver for Neon's WebSocket protocol
+- **CI/Testing**: Uses standard `pg` driver for localhost PostgreSQL connections
+- **Detection Logic**: Automatically detects Neon URLs by checking for 'neon.tech', '.pooler.neon', or 'neon.database.windows.net' in DATABASE_URL
+- **Compatibility**: Both drivers expose the same Drizzle ORM interface, ensuring seamless operation across environments
+- **CI Infrastructure**: GitHub Actions workflow provisions PostgreSQL 15 service container with health checks for automated testing
+
 Core architectural decisions and features include:
 -   **Error Prevention**: Centralized logging, type safety, and a two-layer Error Boundary system.
 -   **Authentication System**: Robust session management and triple-layer admin protection.
