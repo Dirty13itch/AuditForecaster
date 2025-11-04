@@ -1,0 +1,24 @@
+﻿2025-11-04T00:02:54.6580244Z ##[group]Run npm run dev &
+2025-11-04T00:02:54.6580525Z [36;1mnpm run dev &[0m
+2025-11-04T00:02:54.6580731Z [36;1mecho $! > .server.pid[0m
+2025-11-04T00:02:54.6615071Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:02:54.6615295Z env:
+2025-11-04T00:02:54.6615457Z   NODE_ENV: development
+2025-11-04T00:02:54.6615659Z   PORT: 5000
+2025-11-04T00:02:54.6615828Z ##[endgroup]
+2025-11-04T00:02:54.7808556Z 
+2025-11-04T00:02:54.7809067Z > rest-express@1.0.0 dev
+2025-11-04T00:02:54.7809574Z > NODE_ENV=development tsx server/index.ts
+2025-11-04T00:02:54.7809784Z 
+2025-11-04T00:02:57.2911338Z /home/runner/work/AuditForecaster/AuditForecaster/server/db.ts:9
+2025-11-04T00:02:57.2912087Z   throw new Error(
+2025-11-04T00:02:57.2912698Z         ^
+2025-11-04T00:02:57.2912976Z 
+2025-11-04T00:02:57.2912986Z 
+2025-11-04T00:02:57.2913467Z Error: DATABASE_URL must be set. Did you forget to provision a database?
+2025-11-04T00:02:57.2978484Z     at <anonymous> (/home/runner/work/AuditForecaster/AuditForecaster/server/db.ts:9:9)
+2025-11-04T00:02:57.2979435Z     at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+2025-11-04T00:02:57.2980195Z     at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+2025-11-04T00:02:57.2981082Z     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+2025-11-04T00:02:57.2981607Z 
+2025-11-04T00:02:57.2981733Z Node.js v20.19.5

@@ -1,0 +1,17 @@
+﻿2025-11-04T00:02:57.3428169Z ##[group]Run npx wait-on http://localhost:5000 --timeout 60000
+2025-11-04T00:02:57.3428642Z [36;1mnpx wait-on http://localhost:5000 --timeout 60000[0m
+2025-11-04T00:02:57.3460927Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:02:57.3461153Z ##[endgroup]
+2025-11-04T00:02:59.7842948Z npm warn exec The following package was not found and will be installed: wait-on@9.0.1
+2025-11-04T00:04:01.8291763Z Error: Timed out waiting for: http://localhost:5000
+2025-11-04T00:04:01.8292649Z     at /home/runner/.npm/_npx/04d57496964ca6d1/node_modules/wait-on/lib/wait-on.js:131:31
+2025-11-04T00:04:01.8293845Z     at doInnerSub (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/operators/mergeInternals.js:22:31)
+2025-11-04T00:04:01.8295485Z     at outerNext (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/operators/mergeInternals.js:17:70)
+2025-11-04T00:04:01.8296471Z     at OperatorSubscriber._this._next (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/operators/OperatorSubscriber.js:33:21)
+2025-11-04T00:04:01.8297442Z     at Subscriber.next (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/Subscriber.js:51:18)
+2025-11-04T00:04:01.8298242Z     at AsyncAction.work (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/observable/timer.js:28:28)
+2025-11-04T00:04:01.8299103Z     at AsyncAction._execute (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/scheduler/AsyncAction.js:79:18)
+2025-11-04T00:04:01.8299979Z     at AsyncAction.execute (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/scheduler/AsyncAction.js:67:26)
+2025-11-04T00:04:01.8300877Z     at AsyncScheduler.flush (/home/runner/.npm/_npx/04d57496964ca6d1/node_modules/rxjs/dist/cjs/internal/scheduler/AsyncScheduler.js:38:33)
+2025-11-04T00:04:01.8301485Z     at listOnTimeout (node:internal/timers:581:17)
+2025-11-04T00:04:01.8459672Z ##[error]Process completed with exit code 1.

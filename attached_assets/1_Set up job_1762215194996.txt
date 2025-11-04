@@ -1,0 +1,31 @@
+﻿2025-11-04T00:00:30.2740393Z Current runner version: '2.329.0'
+2025-11-04T00:00:30.2778670Z ##[group]Runner Image Provisioner
+2025-11-04T00:00:30.2779956Z Hosted Compute Agent
+2025-11-04T00:00:30.2780887Z Version: 20251016.436
+2025-11-04T00:00:30.2782008Z Commit: 8ab8ac8bfd662a3739dab9fe09456aba92132568
+2025-11-04T00:00:30.2783086Z Build Date: 2025-10-15T20:44:12Z
+2025-11-04T00:00:30.2784148Z ##[endgroup]
+2025-11-04T00:00:30.2785293Z ##[group]Operating System
+2025-11-04T00:00:30.2786239Z Ubuntu
+2025-11-04T00:00:30.2787137Z 24.04.3
+2025-11-04T00:00:30.2787854Z LTS
+2025-11-04T00:00:30.2788598Z ##[endgroup]
+2025-11-04T00:00:30.2789387Z ##[group]Runner Image
+2025-11-04T00:00:30.2790390Z Image: ubuntu-24.04
+2025-11-04T00:00:30.2791188Z Version: 20251030.96.2
+2025-11-04T00:00:30.2792920Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20251030.96/images/ubuntu/Ubuntu2404-Readme.md
+2025-11-04T00:00:30.2795628Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20251030.96
+2025-11-04T00:00:30.2797807Z ##[endgroup]
+2025-11-04T00:00:30.2799817Z ##[group]GITHUB_TOKEN Permissions
+2025-11-04T00:00:30.2802451Z Contents: read
+2025-11-04T00:00:30.2803332Z Metadata: read
+2025-11-04T00:00:30.2804255Z Packages: read
+2025-11-04T00:00:30.2805393Z ##[endgroup]
+2025-11-04T00:00:30.2808486Z Secret source: Actions
+2025-11-04T00:00:30.2809737Z Prepare workflow directory
+2025-11-04T00:00:30.3297122Z Prepare all required actions
+2025-11-04T00:00:30.3357718Z Getting action download info
+2025-11-04T00:00:30.5964052Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
+2025-11-04T00:00:30.7875815Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2025-11-04T00:00:30.8753849Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2025-11-04T00:00:31.0725336Z Complete job name: quality-gates

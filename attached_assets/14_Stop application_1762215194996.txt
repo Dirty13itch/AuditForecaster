@@ -1,0 +1,8 @@
+﻿2025-11-04T00:04:02.5377094Z ##[group]Run if [ -f .server.pid ]; then
+2025-11-04T00:04:02.5377425Z [36;1mif [ -f .server.pid ]; then[0m
+2025-11-04T00:04:02.5377681Z [36;1m  kill $(cat .server.pid) || true[0m
+2025-11-04T00:04:02.5377927Z [36;1m  rm .server.pid[0m
+2025-11-04T00:04:02.5378124Z [36;1mfi[0m
+2025-11-04T00:04:02.5411311Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:04:02.5411550Z ##[endgroup]
+2025-11-04T00:04:02.5479114Z /home/runner/work/_temp/da4bfc39-4a47-4311-86ca-7958b5bf9cdd.sh: line 2: kill: (3795) - No such process
