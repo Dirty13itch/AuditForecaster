@@ -1651,8 +1651,17 @@ export async function setupForceAdminEndpoint(app: Express) {
             return res.status(500).json({ message: "Login failed" });
           }
           
-          serverLogger.warn(`[Auth] DEV LOGIN: ${user.email} (${user.role})`);
-          res.redirect("/");
+          // Explicitly save session before redirect to ensure cookie is set
+          // Critical for CI/headless environments where race conditions can occur
+          req.session.save((saveErr) => {
+            if (saveErr) {
+              serverLogger.error('[Auth] Session save error after dev login:', saveErr);
+              return res.status(500).json({ message: "Session save failed" });
+            }
+            
+            serverLogger.warn(`[Auth] DEV LOGIN SUCCESS: ${user.email} (${user.role}) - Session saved`);
+            res.redirect("/");
+          });
         });
       } catch (error) {
         serverLogger.error('[Auth] Dev login error:', error);
