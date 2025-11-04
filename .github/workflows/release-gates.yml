@@ -49,6 +49,11 @@ jobs:
         # Current baseline: 2,290 errors (see .ts-error-baseline.json)
         # Cleanup plan documented in replit.md
       
+      - name: Run database migrations
+        run: npm run db:push --force
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+      
       - name: Start application (background)
         run: |
           npm run dev &
