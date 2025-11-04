@@ -1,0 +1,30 @@
+﻿2025-11-04T03:13:04.0529252Z ##[group]Run actions/upload-artifact@v4
+2025-11-04T03:13:04.0529630Z with:
+2025-11-04T03:13:04.0529958Z   name: quality-gate-results
+2025-11-04T03:13:04.0530698Z   path: public/gate-status.json
+ts-error-report.json
+docs/ACCESSIBILITY_AUDIT_STATUS.md
+docs/ACCESSIBILITY_AUDIT_REPORT.md
+docs/audit-results/
+playwright-report/
+coverage/
+
+2025-11-04T03:13:04.0531413Z   retention-days: 30
+2025-11-04T03:13:04.0531784Z   if-no-files-found: warn
+2025-11-04T03:13:04.0532083Z   compression-level: 6
+2025-11-04T03:13:04.0532325Z   overwrite: false
+2025-11-04T03:13:04.0532866Z   include-hidden-files: false
+2025-11-04T03:13:04.0533142Z ##[endgroup]
+2025-11-04T03:13:05.0448162Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2025-11-04T03:13:05.0452002Z The least common ancestor is /home/runner/work/AuditForecaster/AuditForecaster. This will be the root directory of the artifact
+2025-11-04T03:13:05.0453253Z With the provided path, there will be 6 files uploaded
+2025-11-04T03:13:05.0454220Z Artifact name is valid!
+2025-11-04T03:13:05.0455188Z Root directory input is valid!
+2025-11-04T03:13:05.0462317Z Beginning upload of artifact content to blob storage
+2025-11-04T03:13:05.0463970Z Uploaded bytes 202523
+2025-11-04T03:13:06.0379550Z Finished uploading artifact content to blob storage!
+2025-11-04T03:13:06.0387657Z SHA256 digest of uploaded artifact zip is a25029c827dbc37b16180f30c42ed9184acb1553ace4256e7317cf155341c77c
+2025-11-04T03:13:06.0388840Z Finalizing artifact upload
+2025-11-04T03:13:06.0391472Z Artifact quality-gate-results.zip successfully finalized. Artifact ID 4457004198
+2025-11-04T03:13:06.0392877Z Artifact quality-gate-results has been successfully uploaded! Final size is 202523 bytes. Artifact ID is 4457004198
+2025-11-04T03:13:06.0394385Z Artifact download URL: https://github.com/Dirty13itch/AuditForecaster/actions/runs/19056058063/artifacts/4457004198

@@ -1,0 +1,5 @@
+﻿2025-11-04T02:48:38.5738980Z ##[group]Run npx wait-on http://localhost:5000 --timeout 60000
+2025-11-04T02:48:38.5739426Z [36;1mnpx wait-on http://localhost:5000 --timeout 60000[0m
+2025-11-04T02:48:38.5771054Z shell: /usr/bin/bash -e {0}
+2025-11-04T02:48:38.5771279Z ##[endgroup]
+2025-11-04T02:48:42.3964847Z npm warn exec The following package was not found and will be installed: wait-on@9.0.1

@@ -1,0 +1,11 @@
+﻿2025-11-04T03:13:07.3171882Z Cleaning up orphan processes
+2025-11-04T03:13:07.3398047Z Terminate orphan process: pid (4941) (node)
+2025-11-04T03:13:07.3432397Z Terminate orphan process: pid (4952) (node)
+2025-11-04T03:13:07.3469866Z Terminate orphan process: pid (4964) (esbuild)
+2025-11-04T03:13:07.3492230Z Terminate orphan process: pid (4995) (esbuild)
+2025-11-04T03:13:07.3514648Z Terminate orphan process: pid (5017) (esbuild)
+2025-11-04T03:13:07.3531136Z Terminate orphan process: pid (5092) (npm run test:e2e)
+2025-11-04T03:13:07.3566334Z Terminate orphan process: pid (5103) (sh)
+2025-11-04T03:13:07.3589759Z Terminate orphan process: pid (5104) (node)
+2025-11-04T03:13:07.3661233Z Terminate orphan process: pid (13690) (node)
+2025-11-04T03:13:07.3696778Z Terminate orphan process: pid (13703) (headless_shell)

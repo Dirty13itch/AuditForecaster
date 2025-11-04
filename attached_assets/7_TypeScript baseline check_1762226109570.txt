@@ -1,0 +1,18 @@
+﻿2025-11-04T02:47:39.6664776Z ##[group]Run node scripts/ts-baseline-check.mjs
+2025-11-04T02:47:39.6665137Z [36;1mnode scripts/ts-baseline-check.mjs[0m
+2025-11-04T02:47:39.6696954Z shell: /usr/bin/bash -e {0}
+2025-11-04T02:47:39.6697188Z ##[endgroup]
+2025-11-04T02:47:39.7012228Z 🔍 TypeScript Baseline Quality Gate
+2025-11-04T02:47:39.7014336Z ====================================
+2025-11-04T02:47:39.7015938Z 
+2025-11-04T02:47:39.7018221Z 📊 Current baseline: 2290 errors
+2025-11-04T02:47:39.7018821Z 🔧 Running TypeScript check...
+2025-11-04T02:47:39.7019110Z 
+2025-11-04T02:48:32.0128131Z 
+2025-11-04T02:48:32.0131090Z 📈 Results:
+2025-11-04T02:48:32.0131505Z    Errors found: 2290
+2025-11-04T02:48:32.0131848Z    Baseline:     2290
+2025-11-04T02:48:32.0132052Z    Delta:        +0
+2025-11-04T02:48:32.0132297Z    Status:       PASS
+2025-11-04T02:48:32.0132422Z 
+2025-11-04T02:48:32.0133436Z ✅ PASS: Error count within baseline
