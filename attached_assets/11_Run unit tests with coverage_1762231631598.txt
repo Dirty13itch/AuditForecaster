@@ -1,0 +1,12 @@
+﻿2025-11-04T04:22:57.1137449Z ##[group]Run npm run test:unit || echo "Unit tests not configured"
+2025-11-04T04:22:57.1138216Z [36;1mnpm run test:unit || echo "Unit tests not configured"[0m
+2025-11-04T04:22:57.1184776Z shell: /usr/bin/bash -e {0}
+2025-11-04T04:22:57.1185174Z ##[endgroup]
+2025-11-04T04:22:57.2425461Z 
+2025-11-04T04:22:57.2426102Z > rest-express@1.0.0 test:unit
+2025-11-04T04:22:57.2426656Z > vitest run --coverage
+2025-11-04T04:22:57.2426909Z 
+2025-11-04T04:22:57.7523897Z [31m[7m[31m MISSING DEPENDENCY [31m[27m Cannot find dependency '@vitest/coverage-v8'
+2025-11-04T04:22:57.7528558Z 
+2025-11-04T04:22:58.0101005Z Unit tests not configured
+2025-11-04T04:22:58.0103071Z [39m
