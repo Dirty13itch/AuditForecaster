@@ -1,0 +1,220 @@
+﻿2025-11-04T05:53:49.6249408Z Print service container logs: cdc84d5caa364448a99b85c61d5ec093_postgres15_807933
+2025-11-04T05:53:49.6255511Z ##[command]/usr/bin/docker logs --details 0c34b46989397914278a116bf344053e9517d74cc9dbf3926d0d7a9d3c5cab35
+2025-11-04T05:53:49.6390949Z  initdb: warning: enabling "trust" authentication for local connections
+2025-11-04T05:53:49.6391894Z  The files belonging to this database system will be owned by user "postgres".
+2025-11-04T05:53:49.6392974Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2025-11-04T05:53:49.6394558Z  2025-11-04 05:28:35.556 UTC [1] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2025-11-04T05:53:49.6395717Z  2025-11-04 05:28:35.556 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2025-11-04T05:53:49.6396423Z  2025-11-04 05:28:35.556 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2025-11-04T05:53:49.6397344Z  2025-11-04 05:28:35.557 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2025-11-04T05:53:49.6398146Z  2025-11-04 05:28:35.560 UTC [64] LOG:  database system was shut down at 2025-11-04 05:28:35 UTC
+2025-11-04T05:53:49.6398875Z  2025-11-04 05:28:35.565 UTC [1] LOG:  database system is ready to accept connections
+2025-11-04T05:53:49.6399528Z  2025-11-04 05:28:44.625 UTC [75] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6400107Z  2025-11-04 05:28:54.692 UTC [83] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6401019Z  2025-11-04 05:29:04.776 UTC [90] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6401581Z  2025-11-04 05:29:14.873 UTC [99] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6402160Z  2025-11-04 05:29:24.952 UTC [107] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6402715Z  2025-11-04 05:29:35.042 UTC [115] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6403243Z  2025-11-04 05:29:45.120 UTC [124] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6403757Z  2025-11-04 05:29:55.193 UTC [132] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6404507Z  2025-11-04 05:30:05.261 UTC [140] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6405096Z  2025-11-04 05:30:15.332 UTC [149] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6405652Z  2025-11-04 05:30:25.400 UTC [157] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6406206Z  2025-11-04 05:30:35.467 UTC [165] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6406752Z  2025-11-04 05:30:45.533 UTC [174] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6407328Z  2025-11-04 05:30:55.599 UTC [182] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6407880Z  2025-11-04 05:31:05.663 UTC [191] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6408460Z  2025-11-04 05:31:15.729 UTC [199] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6409046Z  2025-11-04 05:31:25.792 UTC [207] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6409633Z  2025-11-04 05:31:35.857 UTC [216] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6410217Z  2025-11-04 05:31:45.946 UTC [224] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6410807Z  2025-11-04 05:31:56.017 UTC [232] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6411379Z  2025-11-04 05:32:06.097 UTC [241] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6411943Z  2025-11-04 05:32:16.163 UTC [249] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6413137Z  2025-11-04 05:32:26.233 UTC [257] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6413559Z  2025-11-04 05:32:36.302 UTC [266] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6414100Z  2025-11-04 05:32:46.378 UTC [274] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6414453Z  2025-11-04 05:32:56.501 UTC [284] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6414798Z  2025-11-04 05:33:06.584 UTC [293] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6415133Z  2025-11-04 05:33:16.649 UTC [313] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6415757Z  2025-11-04 05:33:26.721 UTC [322] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6416101Z  2025-11-04 05:33:35.613 UTC [62] LOG:  checkpoint starting: time
+2025-11-04T05:53:49.6416446Z  2025-11-04 05:33:36.792 UTC [330] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6416790Z  2025-11-04 05:33:46.870 UTC [351] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6417117Z  2025-11-04 05:33:56.940 UTC [359] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6417451Z  2025-11-04 05:34:07.024 UTC [368] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6417774Z  2025-11-04 05:34:17.133 UTC [388] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6418584Z  2025-11-04 05:34:19.226 UTC [62] LOG:  checkpoint complete: wrote 439 buffers (2.7%); 1 WAL file(s) added, 0 removed, 0 recycled; write=43.584 s, sync=0.006 s, total=43.614 s; sync files=767, longest=0.001 s, average=0.001 s; distance=4075 kB, estimate=4075 kB
+2025-11-04T05:53:49.6419417Z  2025-11-04 05:34:27.203 UTC [397] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6419771Z  2025-11-04 05:34:37.273 UTC [405] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6420113Z  2025-11-04 05:34:47.351 UTC [414] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6420439Z  2025-11-04 05:34:57.417 UTC [434] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6420768Z  2025-11-04 05:35:07.484 UTC [443] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6421098Z  2025-11-04 05:35:17.550 UTC [451] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6421557Z  2025-11-04 05:35:27.620 UTC [472] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6421886Z  2025-11-04 05:35:37.690 UTC [480] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6422208Z  2025-11-04 05:35:47.757 UTC [489] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6422538Z  2025-11-04 05:35:57.865 UTC [508] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6422867Z  2025-11-04 05:36:07.937 UTC [517] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6423191Z  2025-11-04 05:36:18.004 UTC [525] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6423514Z  2025-11-04 05:36:28.077 UTC [534] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6424031Z  2025-11-04 05:36:38.151 UTC [556] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6424380Z  2025-11-04 05:36:48.219 UTC [565] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6424709Z  2025-11-04 05:36:58.288 UTC [574] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6425048Z  2025-11-04 05:37:08.357 UTC [594] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6425383Z  2025-11-04 05:37:18.430 UTC [602] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6425733Z  2025-11-04 05:37:28.496 UTC [611] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6426065Z  2025-11-04 05:37:38.562 UTC [631] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6426404Z  2025-11-04 05:37:48.631 UTC [640] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6426729Z  2025-11-04 05:37:58.697 UTC [649] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6427055Z  2025-11-04 05:38:08.790 UTC [658] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6427390Z  2025-11-04 05:38:18.859 UTC [678] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6427721Z  2025-11-04 05:38:28.928 UTC [687] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6428058Z  2025-11-04 05:38:35.327 UTC [62] LOG:  checkpoint starting: time
+2025-11-04T05:53:49.6428398Z  2025-11-04 05:38:38.997 UTC [695] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6429168Z  2025-11-04 05:38:41.045 UTC [62] LOG:  checkpoint complete: wrote 61 buffers (0.4%); 0 WAL file(s) added, 0 removed, 0 recycled; write=5.713 s, sync=0.004 s, total=5.719 s; sync files=20, longest=0.003 s, average=0.001 s; distance=485 kB, estimate=3716 kB
+2025-11-04T05:53:49.6429940Z  2025-11-04 05:38:49.069 UTC [716] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6430422Z  2025-11-04 05:38:59.148 UTC [725] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6430751Z  2025-11-04 05:39:09.218 UTC [734] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6431074Z  2025-11-04 05:39:19.284 UTC [754] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6431402Z  2025-11-04 05:39:29.357 UTC [763] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6431730Z  2025-11-04 05:39:39.425 UTC [771] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6432055Z  2025-11-04 05:39:49.550 UTC [792] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6432381Z  2025-11-04 05:39:59.649 UTC [802] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6432708Z  2025-11-04 05:40:09.754 UTC [811] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6433036Z  2025-11-04 05:40:19.832 UTC [819] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6433361Z  2025-11-04 05:40:29.906 UTC [829] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6433689Z  2025-11-04 05:40:39.977 UTC [837] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6434188Z  2025-11-04 05:40:50.077 UTC [846] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6434517Z  2025-11-04 05:41:00.150 UTC [854] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6434841Z  2025-11-04 05:41:10.223 UTC [863] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6435177Z  2025-11-04 05:41:20.329 UTC [870] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6435499Z  2025-11-04 05:41:30.409 UTC [880] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6435978Z  2025-11-04 05:41:40.481 UTC [889] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6436295Z  This user must also own the server process.
+2025-11-04T05:53:49.6436549Z  
+2025-11-04T05:53:49.6436794Z  The database cluster will be initialized with locale "en_US.utf8".
+2025-11-04T05:53:49.6437195Z  The default database encoding has accordingly been set to "UTF8".
+2025-11-04T05:53:49.6437579Z  The default text search configuration will be set to "english".
+2025-11-04T05:53:49.6437877Z  
+2025-11-04T05:53:49.6438038Z  Data page checksums are disabled.
+2025-11-04T05:53:49.6438252Z  
+2025-11-04T05:53:49.6438511Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2025-11-04T05:53:49.6438867Z  creating subdirectories ... ok
+2025-11-04T05:53:49.6439164Z  selecting dynamic shared memory implementation ... posix
+2025-11-04T05:53:49.6439480Z  selecting default max_connections ... 100
+2025-11-04T05:53:49.6439744Z  selecting default shared_buffers ... 128MB
+2025-11-04T05:53:49.6440005Z  selecting default time zone ... Etc/UTC
+2025-11-04T05:53:49.6440257Z  creating configuration files ... ok
+2025-11-04T05:53:49.6440494Z  running bootstrap script ... ok
+2025-11-04T05:53:49.6440763Z  performing post-bootstrap initialization ... ok
+2025-11-04T05:53:49.6441034Z  syncing data to disk ... ok
+2025-11-04T05:53:49.6441232Z  
+2025-11-04T05:53:49.6441370Z  
+2025-11-04T05:53:49.6441567Z  Success. You can now start the database server using:
+2025-11-04T05:53:49.6441835Z  
+2025-11-04T05:53:49.6442033Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+2025-11-04T05:53:49.6442295Z  
+2025-11-04T05:53:49.6442838Z  waiting for server to start....2025-11-04 05:28:35.247 UTC [48] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2025-11-04T05:53:49.6443584Z  2025-11-04 05:28:35.248 UTC [48] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2025-11-04T05:53:49.6444385Z  2025-11-04 05:28:35.251 UTC [51] LOG:  database system was shut down at 2025-11-04 05:28:35 UTC
+2025-11-04T05:53:49.6444845Z  2025-11-04 05:28:35.255 UTC [48] LOG:  database system is ready to accept connections
+2025-11-04T05:53:49.6445163Z   done
+2025-11-04T05:53:49.6445321Z  server started
+2025-11-04T05:53:49.6445495Z  CREATE DATABASE
+2025-11-04T05:53:49.6445654Z  
+2025-11-04T05:53:49.6445793Z  
+2025-11-04T05:53:49.6446081Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2025-11-04T05:53:49.6446570Z  
+2025-11-04T05:53:49.6446865Z  waiting for server to shut down...2025-11-04 05:28:35.436 UTC [48] LOG:  received fast shutdown request
+2025-11-04T05:53:49.6447324Z  .2025-11-04 05:28:35.437 UTC [48] LOG:  aborting any active transactions
+2025-11-04T05:53:49.6447819Z  2025-11-04 05:28:35.439 UTC [48] LOG:  background worker "logical replication launcher" (PID 54) exited with exit code 1
+2025-11-04T05:53:49.6448278Z  2025-11-04 05:28:35.439 UTC [49] LOG:  shutting down
+2025-11-04T05:53:49.6448613Z  2025-11-04 05:28:35.439 UTC [49] LOG:  checkpoint starting: shutdown immediate
+2025-11-04T05:53:49.6449422Z  2025-11-04 05:28:35.457 UTC [49] LOG:  checkpoint complete: wrote 922 buffers (5.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.015 s, sync=0.003 s, total=0.019 s; sync files=301, longest=0.001 s, average=0.001 s; distance=4239 kB, estimate=4239 kB
+2025-11-04T05:53:49.6450206Z  2025-11-04 05:28:35.464 UTC [48] LOG:  database system is shut down
+2025-11-04T05:53:49.6450490Z   done
+2025-11-04T05:53:49.6450645Z  server stopped
+2025-11-04T05:53:49.6450805Z  
+2025-11-04T05:53:49.6451010Z  PostgreSQL init process complete; ready for start up.
+2025-11-04T05:53:49.6451275Z  
+2025-11-04T05:53:49.6451515Z  2025-11-04 05:41:50.544 UTC [898] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6451859Z  2025-11-04 05:42:00.611 UTC [907] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6452193Z  2025-11-04 05:42:10.676 UTC [916] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6452518Z  2025-11-04 05:42:20.741 UTC [924] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6452962Z  2025-11-04 05:42:30.807 UTC [933] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6453290Z  2025-11-04 05:42:40.872 UTC [941] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6453617Z  2025-11-04 05:42:50.936 UTC [950] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6454155Z  2025-11-04 05:43:01.003 UTC [959] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6454505Z  2025-11-04 05:43:11.067 UTC [968] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6454842Z  2025-11-04 05:43:21.131 UTC [976] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6455171Z  2025-11-04 05:43:31.195 UTC [985] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6455509Z  2025-11-04 05:43:35.053 UTC [62] LOG:  checkpoint starting: time
+2025-11-04T05:53:49.6456280Z  2025-11-04 05:43:39.167 UTC [62] LOG:  checkpoint complete: wrote 46 buffers (0.3%); 0 WAL file(s) added, 0 removed, 0 recycled; write=4.111 s, sync=0.001 s, total=4.114 s; sync files=11, longest=0.001 s, average=0.001 s; distance=1400 kB, estimate=3484 kB
+2025-11-04T05:53:49.6457057Z  2025-11-04 05:43:41.257 UTC [993] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6457396Z  2025-11-04 05:43:51.324 UTC [1002] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6457737Z  2025-11-04 05:44:01.392 UTC [1011] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6458070Z  2025-11-04 05:44:11.458 UTC [1020] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6458398Z  2025-11-04 05:44:21.523 UTC [1028] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6458729Z  2025-11-04 05:44:31.590 UTC [1037] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6459289Z  2025-11-04 05:44:41.662 UTC [1045] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6459702Z  2025-11-04 05:44:51.730 UTC [1054] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6460132Z  2025-11-04 05:45:01.796 UTC [1063] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6460638Z  2025-11-04 05:45:11.862 UTC [1072] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6461083Z  2025-11-04 05:45:21.928 UTC [1080] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6461508Z  2025-11-04 05:45:31.993 UTC [1089] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6461924Z  2025-11-04 05:45:42.060 UTC [1097] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6462366Z  2025-11-04 05:45:52.129 UTC [1106] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6472685Z  2025-11-04 05:46:02.194 UTC [1115] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6473102Z  2025-11-04 05:46:12.257 UTC [1124] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6473469Z  2025-11-04 05:46:22.320 UTC [1132] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6474014Z  2025-11-04 05:46:32.385 UTC [1141] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6474425Z  2025-11-04 05:46:42.450 UTC [1149] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6474771Z  2025-11-04 05:46:52.518 UTC [1158] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6475126Z  2025-11-04 05:47:02.584 UTC [1167] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6475455Z  2025-11-04 05:47:12.649 UTC [1176] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6475787Z  2025-11-04 05:47:22.713 UTC [1184] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6476115Z  2025-11-04 05:47:32.781 UTC [1193] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6476447Z  2025-11-04 05:47:42.846 UTC [1201] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6476773Z  2025-11-04 05:47:52.913 UTC [1210] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6477095Z  2025-11-04 05:48:02.978 UTC [1219] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6477422Z  2025-11-04 05:48:13.043 UTC [1228] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6477751Z  2025-11-04 05:48:23.106 UTC [1236] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6478076Z  2025-11-04 05:48:33.169 UTC [1245] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6478591Z  2025-11-04 05:48:43.233 UTC [1253] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6478920Z  2025-11-04 05:48:53.298 UTC [1262] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6479246Z  2025-11-04 05:49:03.362 UTC [1271] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6479569Z  2025-11-04 05:49:13.426 UTC [1280] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6479902Z  2025-11-04 05:49:23.493 UTC [1288] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6480221Z  2025-11-04 05:49:33.558 UTC [1297] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6480547Z  2025-11-04 05:49:43.621 UTC [1305] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6480872Z  2025-11-04 05:49:53.685 UTC [1314] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6481199Z  2025-11-04 05:50:03.750 UTC [1323] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6481517Z  2025-11-04 05:50:13.813 UTC [1332] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6481847Z  2025-11-04 05:50:23.879 UTC [1340] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6482175Z  2025-11-04 05:50:33.945 UTC [1349] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6482500Z  2025-11-04 05:50:44.011 UTC [1357] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6482828Z  2025-11-04 05:50:54.073 UTC [1366] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6483148Z  2025-11-04 05:51:04.137 UTC [1375] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6483478Z  2025-11-04 05:51:14.202 UTC [1384] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6483803Z  2025-11-04 05:51:24.265 UTC [1392] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6484267Z  2025-11-04 05:51:34.330 UTC [1401] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6484586Z  2025-11-04 05:51:44.396 UTC [1409] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6484913Z  2025-11-04 05:51:54.461 UTC [1418] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6485242Z  2025-11-04 05:52:04.524 UTC [1427] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6485650Z  2025-11-04 05:52:14.589 UTC [1436] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6485981Z  2025-11-04 05:52:24.656 UTC [1444] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6486299Z  2025-11-04 05:52:34.722 UTC [1453] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6486629Z  2025-11-04 05:52:44.788 UTC [1461] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6487089Z  2025-11-04 05:52:54.852 UTC [1470] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6487415Z  2025-11-04 05:53:04.916 UTC [1479] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6487737Z  2025-11-04 05:53:14.981 UTC [1488] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6488062Z  2025-11-04 05:53:25.042 UTC [1496] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6488384Z  2025-11-04 05:53:35.106 UTC [1505] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6488710Z  2025-11-04 05:53:45.171 UTC [1513] FATAL:  role "root" does not exist
+2025-11-04T05:53:49.6494971Z Stop and remove container: cdc84d5caa364448a99b85c61d5ec093_postgres15_807933
+2025-11-04T05:53:49.6500078Z ##[command]/usr/bin/docker rm --force 0c34b46989397914278a116bf344053e9517d74cc9dbf3926d0d7a9d3c5cab35
+2025-11-04T05:53:49.7943096Z 0c34b46989397914278a116bf344053e9517d74cc9dbf3926d0d7a9d3c5cab35
+2025-11-04T05:53:49.7972919Z Remove container network: github_network_8a898e9983f24a0a9170cf1a47288168
+2025-11-04T05:53:49.7977410Z ##[command]/usr/bin/docker network rm github_network_8a898e9983f24a0a9170cf1a47288168
+2025-11-04T05:53:49.9149793Z github_network_8a898e9983f24a0a9170cf1a47288168

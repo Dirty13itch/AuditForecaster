@@ -1,0 +1,19 @@
+﻿2025-11-04T05:32:49.2808537Z ##[group]Run npm run dev &
+2025-11-04T05:32:49.2808820Z [36;1mnpm run dev &[0m
+2025-11-04T05:32:49.2809021Z [36;1mecho $! > .server.pid[0m
+2025-11-04T05:32:49.2842180Z shell: /usr/bin/bash -e {0}
+2025-11-04T05:32:49.2842421Z env:
+2025-11-04T05:32:49.2842583Z   NODE_ENV: development
+2025-11-04T05:32:49.2842776Z   PORT: 5000
+2025-11-04T05:32:49.2843318Z   DATABASE_URL: ***localhost:5432/test_db
+2025-11-04T05:32:49.2843666Z   SESSION_SECRET: test-session-secret-for-ci-only-not-production
+2025-11-04T05:32:49.2844373Z   REPL_ID: ci-test-repl
+2025-11-04T05:32:49.2844622Z   REPLIT_DOMAINS: localhost,127.0.0.1
+2025-11-04T05:32:49.2844875Z   ISSUER_URL: https://replit.com/oidc
+2025-11-04T05:32:49.2845106Z ##[endgroup]
+2025-11-04T05:32:49.3977508Z 
+2025-11-04T05:32:49.3978113Z > rest-express@1.0.0 dev
+2025-11-04T05:32:49.3979304Z > NODE_ENV=development tsx server/index.ts
+2025-11-04T05:32:49.3979682Z 
+2025-11-04T05:32:53.2765902Z 2025-11-04 05:32:53 [info]: [CSRF] Protection initialized {"context":"Server","service":"energy-audit-api","args":[]}
+2025-11-04T05:32:53.3065878Z 2025-11-04 05:32:53 [warn]: [Email] SENDGRID_API_KEY not configured - emails will be logged to console {"context":"Server","service":"energy-audit-api","args":[]}

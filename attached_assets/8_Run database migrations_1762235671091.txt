@@ -1,0 +1,17 @@
+﻿2025-11-04T05:32:47.7707745Z ##[group]Run npm run db:push --force
+2025-11-04T05:32:47.7708078Z [36;1mnpm run db:push --force[0m
+2025-11-04T05:32:47.7740999Z shell: /usr/bin/bash -e {0}
+2025-11-04T05:32:47.7741245Z env:
+2025-11-04T05:32:47.7742005Z   DATABASE_URL: ***localhost:5432/test_db
+2025-11-04T05:32:47.7742263Z ##[endgroup]
+2025-11-04T05:32:47.8724982Z npm warn using --force Recommended protections disabled.
+2025-11-04T05:32:47.8914612Z 
+2025-11-04T05:32:47.8915322Z > rest-express@1.0.0 db:push
+2025-11-04T05:32:47.8915737Z > drizzle-kit push
+2025-11-04T05:32:47.8915900Z 
+2025-11-04T05:32:48.0427396Z No config path provided, using default 'drizzle.config.ts'
+2025-11-04T05:32:48.0431709Z Reading config file '/home/runner/work/AuditForecaster/AuditForecaster/drizzle.config.ts'
+2025-11-04T05:32:48.2681160Z Using 'pg' driver for database querying
+2025-11-04T05:32:48.4301071Z [⣷] Pulling schema from database...
+2025-11-04T05:32:48.4734729Z [2K[1G[✓] Pulling schema from database...
+2025-11-04T05:32:49.2586702Z [✓] Changes applied
