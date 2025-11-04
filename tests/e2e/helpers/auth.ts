@@ -47,31 +47,27 @@ export async function login(page: Page, userKey: string): Promise<void> {
     throw new Error(`Unknown test user: ${userKey}`);
   }
 
-  // Use dev login endpoint for faster test execution
-  // This bypasses the full OAuth flow for testing
-  const devLoginUrl = `/api/dev-login/${userKey}`;
+  // Map userKey to actual test user ID in database
+  // Only test-admin, test-inspector1, test-inspector2 are seeded in dev mode
+  const userIdMap: Record<string, string> = {
+    'admin': 'test-admin',
+    'inspector1': 'test-inspector1',
+    'inspector2': 'test-inspector2',
+  };
   
-  try {
-    // Make a direct API call to dev login
-    const response = await page.request.post(`${BASE_URL}${devLoginUrl}`);
-    
-    if (!response.ok()) {
-      // Fallback to regular login flow
-      await regularLogin(page, user);
-      return;
-    }
-
-    // Navigate to base URL to establish session
-    await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
-    
-    // Verify login was successful
-    await page.waitForSelector('[data-testid="user-menu"]', { timeout: 10000 });
-    
-  } catch (error) {
-    console.warn(`Dev login failed, using regular login: ${error}`);
-    await regularLogin(page, user);
+  const userId = userIdMap[userKey];
+  if (!userId) {
+    throw new Error(`No dev login mapping for user key "${userKey}". Available: admin, inspector1, inspector2`);
   }
+  
+  const devLoginUrl = `${BASE_URL}/api/dev-login/${userId}`;
+  
+  // Navigate to dev login endpoint (GET request that redirects to /)
+  // Use 'domcontentloaded' instead of 'networkidle' for more reliable timing
+  await page.goto(devLoginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  
+  // Poll for user menu with generous timeout to handle slow dashboard hydration
+  await page.waitForSelector('[data-testid="user-menu"]', { timeout: 30000 });
 }
 
 /**
