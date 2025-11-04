@@ -1,0 +1,19 @@
+﻿2025-11-04T00:58:54.1951917Z ##[group]Run npm run test:e2e
+2025-11-04T00:58:54.1952393Z [36;1mnpm run test:e2e[0m
+2025-11-04T00:58:54.2001708Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:58:54.2002092Z env:
+2025-11-04T00:58:54.2002340Z   CI: true
+2025-11-04T00:58:54.2003465Z   DATABASE_URL: ***localhost:5432/test_db
+2025-11-04T00:58:54.2004132Z   SESSION_SECRET: test-session-secret-for-ci-only-not-production
+2025-11-04T00:58:54.2004711Z   REPL_ID: ci-test-repl
+2025-11-04T00:58:54.2005087Z   REPLIT_DOMAINS: localhost,127.0.0.1
+2025-11-04T00:58:54.2005477Z ##[endgroup]
+2025-11-04T00:58:54.3541704Z 
+2025-11-04T00:58:54.3542482Z > rest-express@1.0.0 test:e2e
+2025-11-04T00:58:54.3543044Z > playwright test tests/e2e/golden-path
+2025-11-04T00:58:54.3543366Z 
+2025-11-04T00:58:57.1148535Z 
+2025-11-04T00:58:57.1150228Z Error: http://localhost:5000 is already used, make sure that nothing is running on the port/url or set reuseExistingServer:true in config.webServer.
+2025-11-04T00:58:57.1163413Z 
+2025-11-04T00:58:57.1171072Z 
+2025-11-04T00:58:57.1576499Z ##[error]Process completed with exit code 1.

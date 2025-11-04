@@ -1,0 +1,1625 @@
+﻿2025-11-04T00:55:58.3731938Z Current runner version: '2.329.0'
+2025-11-04T00:55:58.3755445Z ##[group]Runner Image Provisioner
+2025-11-04T00:55:58.3756229Z Hosted Compute Agent
+2025-11-04T00:55:58.3756918Z Version: 20251016.436
+2025-11-04T00:55:58.3758030Z Commit: 8ab8ac8bfd662a3739dab9fe09456aba92132568
+2025-11-04T00:55:58.3758772Z Build Date: 2025-10-15T20:44:12Z
+2025-11-04T00:55:58.3759352Z ##[endgroup]
+2025-11-04T00:55:58.3759943Z ##[group]Operating System
+2025-11-04T00:55:58.3760527Z Ubuntu
+2025-11-04T00:55:58.3761013Z 24.04.3
+2025-11-04T00:55:58.3761535Z LTS
+2025-11-04T00:55:58.3761965Z ##[endgroup]
+2025-11-04T00:55:58.3762462Z ##[group]Runner Image
+2025-11-04T00:55:58.3763004Z Image: ubuntu-24.04
+2025-11-04T00:55:58.3763533Z Version: 20251030.96.2
+2025-11-04T00:55:58.3764598Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20251030.96/images/ubuntu/Ubuntu2404-Readme.md
+2025-11-04T00:55:58.3766322Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20251030.96
+2025-11-04T00:55:58.3767467Z ##[endgroup]
+2025-11-04T00:55:58.3768623Z ##[group]GITHUB_TOKEN Permissions
+2025-11-04T00:55:58.3770444Z Contents: read
+2025-11-04T00:55:58.3770942Z Metadata: read
+2025-11-04T00:55:58.3771565Z Packages: read
+2025-11-04T00:55:58.3772057Z ##[endgroup]
+2025-11-04T00:55:58.3773993Z Secret source: Actions
+2025-11-04T00:55:58.3774794Z Prepare workflow directory
+2025-11-04T00:55:58.4205675Z Prepare all required actions
+2025-11-04T00:55:58.4261220Z Getting action download info
+2025-11-04T00:55:58.8639900Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
+2025-11-04T00:55:59.0317470Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2025-11-04T00:55:59.1273021Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2025-11-04T00:55:59.3300472Z Complete job name: quality-gates
+2025-11-04T00:55:59.3823122Z ##[group]Checking docker version
+2025-11-04T00:55:59.3836159Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+2025-11-04T00:55:59.4814988Z '1.48'
+2025-11-04T00:55:59.4830210Z Docker daemon API version: '1.48'
+2025-11-04T00:55:59.4831133Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+2025-11-04T00:55:59.5002504Z '1.48'
+2025-11-04T00:55:59.5016283Z Docker client API version: '1.48'
+2025-11-04T00:55:59.5022560Z ##[endgroup]
+2025-11-04T00:55:59.5025976Z ##[group]Clean up resources from previous jobs
+2025-11-04T00:55:59.5031998Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=d5e7c9"
+2025-11-04T00:55:59.5182622Z ##[command]/usr/bin/docker network prune --force --filter "label=d5e7c9"
+2025-11-04T00:55:59.5321199Z ##[endgroup]
+2025-11-04T00:55:59.5321855Z ##[group]Create local container network
+2025-11-04T00:55:59.5332715Z ##[command]/usr/bin/docker network create --label d5e7c9 github_network_9d55782ff15e4abb9ef4b65e2c5f5885
+2025-11-04T00:55:59.5832114Z f7c01a96b008969dfe756d0cf1251c66e86d167a6fb04a3c19223550be73f331
+2025-11-04T00:55:59.5852066Z ##[endgroup]
+2025-11-04T00:55:59.5880884Z ##[group]Starting postgres service container
+2025-11-04T00:55:59.5908476Z ##[command]/usr/bin/docker pull postgres:15
+2025-11-04T00:56:00.5474154Z 15: Pulling from library/postgres
+2025-11-04T00:56:00.7898050Z 38513bd72563: Pulling fs layer
+2025-11-04T00:56:00.7899885Z 7cf8703a60ae: Pulling fs layer
+2025-11-04T00:56:00.7901532Z 1c3c3432cfaa: Pulling fs layer
+2025-11-04T00:56:00.7903132Z d5997a3d3e9c: Pulling fs layer
+2025-11-04T00:56:00.7904747Z 4b34d7a7ab2a: Pulling fs layer
+2025-11-04T00:56:00.7905938Z 0cdc9eb2a585: Pulling fs layer
+2025-11-04T00:56:00.7907167Z f0e812253d9a: Pulling fs layer
+2025-11-04T00:56:00.7908090Z 70a82bc39e86: Pulling fs layer
+2025-11-04T00:56:00.7909003Z b12e04c2e850: Pulling fs layer
+2025-11-04T00:56:00.7909938Z bb86ed266eaf: Pulling fs layer
+2025-11-04T00:56:00.7910866Z 9be150812fa2: Pulling fs layer
+2025-11-04T00:56:00.7911845Z 9d368c9c6ba6: Pulling fs layer
+2025-11-04T00:56:00.7912743Z 5a1b3bfd0b0b: Pulling fs layer
+2025-11-04T00:56:00.7914074Z 8bbe1487ab04: Pulling fs layer
+2025-11-04T00:56:00.7914988Z d5997a3d3e9c: Waiting
+2025-11-04T00:56:00.7915793Z 4b34d7a7ab2a: Waiting
+2025-11-04T00:56:00.7916778Z 0cdc9eb2a585: Waiting
+2025-11-04T00:56:00.7917616Z f0e812253d9a: Waiting
+2025-11-04T00:56:00.7918386Z 70a82bc39e86: Waiting
+2025-11-04T00:56:00.7919206Z b12e04c2e850: Waiting
+2025-11-04T00:56:00.7920053Z bb86ed266eaf: Waiting
+2025-11-04T00:56:00.7920921Z 9be150812fa2: Waiting
+2025-11-04T00:56:00.7921739Z 9d368c9c6ba6: Waiting
+2025-11-04T00:56:00.7922620Z 5a1b3bfd0b0b: Waiting
+2025-11-04T00:56:00.7923442Z 8bbe1487ab04: Waiting
+2025-11-04T00:56:01.0437169Z 7cf8703a60ae: Verifying Checksum
+2025-11-04T00:56:01.0440417Z 7cf8703a60ae: Download complete
+2025-11-04T00:56:01.1135541Z 1c3c3432cfaa: Verifying Checksum
+2025-11-04T00:56:01.1138151Z 1c3c3432cfaa: Download complete
+2025-11-04T00:56:01.3547255Z d5997a3d3e9c: Verifying Checksum
+2025-11-04T00:56:01.3550151Z d5997a3d3e9c: Download complete
+2025-11-04T00:56:01.5135042Z 38513bd72563: Verifying Checksum
+2025-11-04T00:56:01.5137593Z 38513bd72563: Download complete
+2025-11-04T00:56:01.6455767Z 0cdc9eb2a585: Verifying Checksum
+2025-11-04T00:56:01.6457454Z 0cdc9eb2a585: Download complete
+2025-11-04T00:56:01.7693967Z f0e812253d9a: Verifying Checksum
+2025-11-04T00:56:01.7694733Z f0e812253d9a: Download complete
+2025-11-04T00:56:01.8142896Z 4b34d7a7ab2a: Verifying Checksum
+2025-11-04T00:56:01.8143679Z 4b34d7a7ab2a: Download complete
+2025-11-04T00:56:01.9241696Z 70a82bc39e86: Verifying Checksum
+2025-11-04T00:56:02.0578080Z 70a82bc39e86: Download complete
+2025-11-04T00:56:02.0578764Z bb86ed266eaf: Verifying Checksum
+2025-11-04T00:56:02.0579378Z bb86ed266eaf: Download complete
+2025-11-04T00:56:02.2078914Z 9be150812fa2: Verifying Checksum
+2025-11-04T00:56:02.2079983Z 9be150812fa2: Download complete
+2025-11-04T00:56:02.3539359Z 9d368c9c6ba6: Verifying Checksum
+2025-11-04T00:56:02.5083221Z 9d368c9c6ba6: Download complete
+2025-11-04T00:56:02.5083842Z 5a1b3bfd0b0b: Download complete
+2025-11-04T00:56:02.5341654Z 38513bd72563: Pull complete
+2025-11-04T00:56:02.7349448Z 8bbe1487ab04: Verifying Checksum
+2025-11-04T00:56:02.7350848Z 8bbe1487ab04: Download complete
+2025-11-04T00:56:03.0996003Z b12e04c2e850: Verifying Checksum
+2025-11-04T00:56:03.0996853Z b12e04c2e850: Download complete
+2025-11-04T00:56:03.5034960Z 7cf8703a60ae: Pull complete
+2025-11-04T00:56:03.6882778Z 1c3c3432cfaa: Pull complete
+2025-11-04T00:56:03.7440060Z d5997a3d3e9c: Pull complete
+2025-11-04T00:56:04.0540884Z 4b34d7a7ab2a: Pull complete
+2025-11-04T00:56:04.1462748Z 0cdc9eb2a585: Pull complete
+2025-11-04T00:56:04.1557648Z f0e812253d9a: Pull complete
+2025-11-04T00:56:04.1692415Z 70a82bc39e86: Pull complete
+2025-11-04T00:56:07.0881060Z b12e04c2e850: Pull complete
+2025-11-04T00:56:07.1043000Z bb86ed266eaf: Pull complete
+2025-11-04T00:56:07.1160654Z 9be150812fa2: Pull complete
+2025-11-04T00:56:07.1276930Z 9d368c9c6ba6: Pull complete
+2025-11-04T00:56:07.1401046Z 5a1b3bfd0b0b: Pull complete
+2025-11-04T00:56:07.1525147Z 8bbe1487ab04: Pull complete
+2025-11-04T00:56:07.1572520Z Digest: sha256:424e79b81868f5fc5cf515eaeac69d288692ebcca7db86d98f91b50d4bce64bb
+2025-11-04T00:56:07.1588061Z Status: Downloaded newer image for postgres:15
+2025-11-04T00:56:07.1601847Z docker.io/library/postgres:15
+2025-11-04T00:56:07.1665535Z ##[command]/usr/bin/docker create --name 28ac28a2c09d4c6a80beba4f8051917b_postgres15_ae0233 --label d5e7c9 --network github_network_9d55782ff15e4abb9ef4b65e2c5f5885 --network-alias postgres -p 5432:5432 --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5 -e "POSTGRES_USER=test_user" -e "POSTGRES_PASSWORD=test_password" -e "POSTGRES_DB=test_db" -e GITHUB_ACTIONS=true -e CI=true postgres:15
+2025-11-04T00:56:07.1970134Z 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:07.2001575Z ##[command]/usr/bin/docker start 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:07.4249731Z 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:07.4271063Z ##[command]/usr/bin/docker ps --all --filter id=6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+2025-11-04T00:56:07.4406156Z 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c Up Less than a second (health: starting)
+2025-11-04T00:56:07.4428029Z ##[command]/usr/bin/docker port 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:07.4556555Z 5432/tcp -> 0.0.0.0:5432
+2025-11-04T00:56:07.4558144Z 5432/tcp -> [::]:5432
+2025-11-04T00:56:07.4605413Z ##[endgroup]
+2025-11-04T00:56:07.4614895Z ##[group]Waiting for all services to be ready
+2025-11-04T00:56:07.4629320Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:07.4770884Z starting
+2025-11-04T00:56:07.4794732Z postgres service is starting, waiting 2 seconds before checking again.
+2025-11-04T00:56:09.4787340Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:09.4918695Z starting
+2025-11-04T00:56:09.4935976Z postgres service is starting, waiting 3 seconds before checking again.
+2025-11-04T00:56:13.3720978Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:13.3855543Z starting
+2025-11-04T00:56:13.3870916Z postgres service is starting, waiting 7 seconds before checking again.
+2025-11-04T00:56:21.3804558Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:56:21.3941370Z healthy
+2025-11-04T00:56:21.3960063Z postgres service is healthy.
+2025-11-04T00:56:21.3960953Z ##[endgroup]
+2025-11-04T00:56:21.4213965Z ##[group]Run actions/checkout@v4
+2025-11-04T00:56:21.4214492Z with:
+2025-11-04T00:56:21.4214714Z   repository: Dirty13itch/AuditForecaster
+2025-11-04T00:56:21.4215134Z   token: ***
+2025-11-04T00:56:21.4215335Z   ssh-strict: true
+2025-11-04T00:56:21.4215524Z   ssh-user: git
+2025-11-04T00:56:21.4215733Z   persist-credentials: true
+2025-11-04T00:56:21.4215955Z   clean: true
+2025-11-04T00:56:21.4216164Z   sparse-checkout-cone-mode: true
+2025-11-04T00:56:21.4216412Z   fetch-depth: 1
+2025-11-04T00:56:21.4216819Z   fetch-tags: false
+2025-11-04T00:56:21.4217025Z   show-progress: true
+2025-11-04T00:56:21.4217216Z   lfs: false
+2025-11-04T00:56:21.4217393Z   submodules: false
+2025-11-04T00:56:21.4217584Z   set-safe-directory: true
+2025-11-04T00:56:21.4218033Z ##[endgroup]
+2025-11-04T00:56:21.5393935Z Syncing repository: Dirty13itch/AuditForecaster
+2025-11-04T00:56:21.5395315Z ##[group]Getting Git version info
+2025-11-04T00:56:21.5395886Z Working directory is '/home/runner/work/AuditForecaster/AuditForecaster'
+2025-11-04T00:56:21.5396750Z [command]/usr/bin/git version
+2025-11-04T00:56:21.5478148Z git version 2.51.2
+2025-11-04T00:56:21.5504953Z ##[endgroup]
+2025-11-04T00:56:21.5519893Z Temporarily overriding HOME='/home/runner/work/_temp/dddfd26d-842c-4ea5-a359-e12158a6f8ca' before making global git config changes
+2025-11-04T00:56:21.5521279Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-04T00:56:21.5536331Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AuditForecaster/AuditForecaster
+2025-11-04T00:56:21.5575829Z Deleting the contents of '/home/runner/work/AuditForecaster/AuditForecaster'
+2025-11-04T00:56:21.5579480Z ##[group]Initializing the repository
+2025-11-04T00:56:21.5583894Z [command]/usr/bin/git init /home/runner/work/AuditForecaster/AuditForecaster
+2025-11-04T00:56:21.5710430Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-11-04T00:56:21.5711313Z hint: is subject to change. To configure the initial branch name to use in all
+2025-11-04T00:56:21.5712733Z hint: of your new repositories, which will suppress this warning, call:
+2025-11-04T00:56:21.5713660Z hint:
+2025-11-04T00:56:21.5714392Z hint: 	git config --global init.defaultBranch <name>
+2025-11-04T00:56:21.5715234Z hint:
+2025-11-04T00:56:21.5716071Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-11-04T00:56:21.5717720Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-11-04T00:56:21.5718922Z hint:
+2025-11-04T00:56:21.5719490Z hint: 	git branch -m <name>
+2025-11-04T00:56:21.5720168Z hint:
+2025-11-04T00:56:21.5721131Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-11-04T00:56:21.5722463Z Initialized empty Git repository in /home/runner/work/AuditForecaster/AuditForecaster/.git/
+2025-11-04T00:56:21.5732770Z [command]/usr/bin/git remote add origin https://github.com/Dirty13itch/AuditForecaster
+2025-11-04T00:56:21.5766549Z ##[endgroup]
+2025-11-04T00:56:21.5767229Z ##[group]Disabling automatic garbage collection
+2025-11-04T00:56:21.5771115Z [command]/usr/bin/git config --local gc.auto 0
+2025-11-04T00:56:21.5799020Z ##[endgroup]
+2025-11-04T00:56:21.5799447Z ##[group]Setting up auth
+2025-11-04T00:56:21.5806378Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-04T00:56:21.5836027Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-04T00:56:21.6211377Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-04T00:56:21.6247351Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-04T00:56:21.6488821Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-11-04T00:56:21.6526327Z ##[endgroup]
+2025-11-04T00:56:21.6527428Z ##[group]Fetching the repository
+2025-11-04T00:56:21.6545525Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +f09c4f43a88419ae0415ff92aaa691f56f14225c:refs/remotes/origin/main
+2025-11-04T00:56:24.1959278Z From https://github.com/Dirty13itch/AuditForecaster
+2025-11-04T00:56:24.1959983Z  * [new ref]         f09c4f43a88419ae0415ff92aaa691f56f14225c -> origin/main
+2025-11-04T00:56:24.1997701Z ##[endgroup]
+2025-11-04T00:56:24.1998566Z ##[group]Determining the checkout info
+2025-11-04T00:56:24.2000534Z ##[endgroup]
+2025-11-04T00:56:24.2006427Z [command]/usr/bin/git sparse-checkout disable
+2025-11-04T00:56:24.2051633Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-11-04T00:56:24.2081337Z ##[group]Checking out the ref
+2025-11-04T00:56:24.2086197Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-11-04T00:56:24.4316852Z Switched to a new branch 'main'
+2025-11-04T00:56:24.4317851Z branch 'main' set up to track 'origin/main'.
+2025-11-04T00:56:24.4336918Z ##[endgroup]
+2025-11-04T00:56:24.4379196Z [command]/usr/bin/git log -1 --format=%H
+2025-11-04T00:56:24.4404232Z f09c4f43a88419ae0415ff92aaa691f56f14225c
+2025-11-04T00:56:24.4625691Z ##[group]Run actions/setup-node@v4
+2025-11-04T00:56:24.4625966Z with:
+2025-11-04T00:56:24.4626139Z   node-version: 20
+2025-11-04T00:56:24.4626331Z   cache: npm
+2025-11-04T00:56:24.4626509Z   always-auth: false
+2025-11-04T00:56:24.4626927Z   check-latest: false
+2025-11-04T00:56:24.4627253Z   token: ***
+2025-11-04T00:56:24.4627442Z ##[endgroup]
+2025-11-04T00:56:24.6400016Z Found in cache @ /opt/hostedtoolcache/node/20.19.5/x64
+2025-11-04T00:56:24.6406221Z ##[group]Environment details
+2025-11-04T00:56:25.0351734Z node: v20.19.5
+2025-11-04T00:56:25.0353413Z npm: 10.8.2
+2025-11-04T00:56:25.0353790Z yarn: 1.22.22
+2025-11-04T00:56:25.0355696Z ##[endgroup]
+2025-11-04T00:56:25.0379535Z [command]/opt/hostedtoolcache/node/20.19.5/x64/bin/npm config get cache
+2025-11-04T00:56:25.1593768Z /home/runner/.npm
+2025-11-04T00:56:25.4655808Z npm cache is not found
+2025-11-04T00:56:25.4768453Z ##[group]Run npm ci
+2025-11-04T00:56:25.4768737Z [36;1mnpm ci[0m
+2025-11-04T00:56:25.4812114Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:56:25.4812400Z ##[endgroup]
+2025-11-04T00:56:28.2065157Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.2065973Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.2066916Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.2067570Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.2068379Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.2069081Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.2069747Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.2070431Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.2070980Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.2071360Z npm warn
+2025-11-04T00:56:28.2071719Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.2072318Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.2073197Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/core
+2025-11-04T00:56:28.2074095Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.2074976Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.2075581Z npm warn   5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.2076045Z npm warn
+2025-11-04T00:56:28.2076514Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.2077225Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.2078006Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.2079038Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/core
+2025-11-04T00:56:28.2079946Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.2080664Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.2081234Z npm warn     5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.3021137Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.3022375Z npm warn While resolving: @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.3023481Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.3024390Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.3025630Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.3027022Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.3028510Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.3029934Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.3031071Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.3031831Z npm warn
+2025-11-04T00:56:28.3032360Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.3033590Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.3035354Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:28.3037356Z npm warn   @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.3038712Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.3039458Z npm warn
+2025-11-04T00:56:28.3040118Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.3041179Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.3042194Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.3044007Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:28.3045769Z npm warn     @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.3047216Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.3795173Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.3796232Z npm warn While resolving: @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.3797320Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.3797857Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.3798511Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.3799201Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.3799981Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.3800757Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.3801571Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.3802133Z npm warn
+2025-11-04T00:56:28.3802554Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.3803411Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.3804659Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/resources
+2025-11-04T00:56:28.3805987Z npm warn   @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.3807256Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.3808034Z npm warn   4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.3808558Z npm warn
+2025-11-04T00:56:28.3809125Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.3809824Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.3810703Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.3811979Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/resources
+2025-11-04T00:56:28.3813045Z npm warn     @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.3813872Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.3814491Z npm warn     4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.4577935Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.4578792Z npm warn While resolving: @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:28.4579501Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.4580129Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.4581110Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.4582012Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.4582990Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.4584152Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.4584969Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.4585710Z npm warn
+2025-11-04T00:56:28.4586111Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.4587172Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:28.4588645Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:28.4590269Z npm warn   @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.4591843Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.4592736Z npm warn   1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:28.4593297Z npm warn
+2025-11-04T00:56:28.4594215Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.4595013Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.4596097Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:28.4597715Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:28.4599238Z npm warn     @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/exporter-metrics-otlp-grpc@0.41.2
+2025-11-04T00:56:28.4600371Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-grpc
+2025-11-04T00:56:28.4601217Z npm warn     1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:28.5314828Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.5316006Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.5317261Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.5318219Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.5319594Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.5320799Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.5322658Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.5324586Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.5326169Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.5327535Z npm warn
+2025-11-04T00:56:28.5328409Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.5330197Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.5332733Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/core
+2025-11-04T00:56:28.5335486Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.5337049Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.5338027Z npm warn   5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.5338677Z npm warn
+2025-11-04T00:56:28.5339467Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.5340348Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.5341427Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.5343203Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/core
+2025-11-04T00:56:28.5345041Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.5346252Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.5347401Z npm warn     5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.6033717Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.6034723Z npm warn While resolving: @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.6035688Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.6036333Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.6037429Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.6038332Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.6039374Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.6040403Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.6041259Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.6041856Z npm warn
+2025-11-04T00:56:28.6042323Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.6043330Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.6045149Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:28.6046984Z npm warn   @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.6048072Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.6048628Z npm warn
+2025-11-04T00:56:28.6049186Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.6049848Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.6051278Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.6052960Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:28.6054760Z npm warn     @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.6056780Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.6747418Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.6748319Z npm warn While resolving: @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.6749104Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.6749754Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.6750651Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.6751552Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.6752587Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.6753613Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.6754467Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.6755064Z npm warn
+2025-11-04T00:56:28.6755528Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.6756498Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.6758192Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/resources
+2025-11-04T00:56:28.6759726Z npm warn   @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.6760900Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.6761953Z npm warn   4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.6762911Z npm warn
+2025-11-04T00:56:28.6764054Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.6764896Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.6765897Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.6767536Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/resources
+2025-11-04T00:56:28.6768709Z npm warn     @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.6769624Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.6770302Z npm warn     4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.7588326Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.7590213Z npm warn While resolving: @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:28.7591853Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.7593255Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.7594829Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.7595968Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.7597544Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.7598797Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.7599654Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.7600259Z npm warn
+2025-11-04T00:56:28.7600982Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.7601970Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:28.7603576Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:28.7605138Z npm warn   @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.7606331Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.7607425Z npm warn   1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:28.7607968Z npm warn
+2025-11-04T00:56:28.7608616Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.7609364Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.7610236Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:28.7611502Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:28.7612838Z npm warn     @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/exporter-metrics-otlp-http@0.41.2
+2025-11-04T00:56:28.7613866Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-http
+2025-11-04T00:56:28.7614615Z npm warn     1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:28.8348028Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.8349727Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.8350865Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.8351450Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.8352238Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.8353003Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.8353904Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.8354788Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.8355548Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.8356067Z npm warn
+2025-11-04T00:56:28.8356483Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.8357766Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.8358966Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/core
+2025-11-04T00:56:28.8360224Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:28.8361124Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:28.8361809Z npm warn   5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.8362235Z npm warn
+2025-11-04T00:56:28.8362745Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.8363343Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.8364072Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:28.8365143Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/core
+2025-11-04T00:56:28.8366262Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:28.8367255Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:28.8367955Z npm warn     5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.9091879Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.9092945Z npm warn While resolving: @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.9093810Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.9094508Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.9095482Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.9096442Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.9098222Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.9099325Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.9100439Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.9101100Z npm warn
+2025-11-04T00:56:28.9101577Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.9102460Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.9103805Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:28.9105262Z npm warn   @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:28.9106342Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:28.9107018Z npm warn
+2025-11-04T00:56:28.9107583Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.9108261Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.9109146Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:28.9110495Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:28.9111935Z npm warn     @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:28.9112790Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:28.9841429Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:28.9842242Z npm warn While resolving: @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.9842904Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:28.9843593Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.9844433Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:28.9845278Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:28.9846367Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:28.9847658Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:28.9848542Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:28.9849149Z npm warn
+2025-11-04T00:56:28.9849667Z npm warn Could not resolve dependency:
+2025-11-04T00:56:28.9850610Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.9852106Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/resources
+2025-11-04T00:56:28.9853801Z npm warn   @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:28.9855061Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:28.9855999Z npm warn   4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:28.9856787Z npm warn
+2025-11-04T00:56:28.9857470Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:28.9858280Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:28.9859310Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:28.9860820Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/resources
+2025-11-04T00:56:28.9862431Z npm warn     @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:28.9863640Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:28.9864482Z npm warn     4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.0627723Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.0628694Z npm warn While resolving: @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:29.0629380Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.0629964Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.0631521Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.0632381Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.0633537Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.0634546Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.0635391Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.0635989Z npm warn
+2025-11-04T00:56:29.0636425Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.0637671Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:29.0639225Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:29.0640807Z npm warn   @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:29.0642048Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:29.0642821Z npm warn   1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.0643321Z npm warn
+2025-11-04T00:56:29.0643939Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.0644673Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.0645607Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:29.0647178Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:29.0648477Z npm warn     @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/exporter-metrics-otlp-proto@0.41.2
+2025-11-04T00:56:29.0649568Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-proto
+2025-11-04T00:56:29.0650395Z npm warn     1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.0803160Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.0803913Z npm warn While resolving: @opentelemetry/core@1.17.0
+2025-11-04T00:56:29.0804608Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.0805234Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.0806136Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.0807248Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.0808193Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.0809145Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.0809984Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.0810597Z npm warn
+2025-11-04T00:56:29.0811094Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.0812087Z npm warn peer @opentelemetry/api@">=1.0.0 <1.7.0" from @opentelemetry/core@1.17.0
+2025-11-04T00:56:29.0813512Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.0814884Z npm warn   @opentelemetry/core@"1.17.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.0815961Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.0817011Z npm warn   7 more (@opentelemetry/otlp-exporter-base, ...)
+2025-11-04T00:56:29.0817572Z npm warn
+2025-11-04T00:56:29.0818191Z npm warn Conflicting peer dependency: @opentelemetry/api@1.6.0
+2025-11-04T00:56:29.0818833Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.0819658Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.7.0" from @opentelemetry/core@1.17.0
+2025-11-04T00:56:29.0821013Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.0822387Z npm warn     @opentelemetry/core@"1.17.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.0823472Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.0824365Z npm warn     7 more (@opentelemetry/otlp-exporter-base, ...)
+2025-11-04T00:56:29.0971497Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.0972353Z npm warn While resolving: @opentelemetry/otlp-transformer@0.43.0
+2025-11-04T00:56:29.0973139Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.0974022Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.0974973Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.0975765Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.0976978Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.0977987Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.0978820Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.0979414Z npm warn
+2025-11-04T00:56:29.0979805Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.0980750Z npm warn peer @opentelemetry/api@">=1.3.0 <1.7.0" from @opentelemetry/otlp-transformer@0.43.0
+2025-11-04T00:56:29.0982317Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:29.0983994Z npm warn   @opentelemetry/otlp-transformer@"0.43.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.0985203Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.0985828Z npm warn
+2025-11-04T00:56:29.0986417Z npm warn Conflicting peer dependency: @opentelemetry/api@1.6.0
+2025-11-04T00:56:29.0987383Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.0988257Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.7.0" from @opentelemetry/otlp-transformer@0.43.0
+2025-11-04T00:56:29.0989567Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:29.0991045Z npm warn     @opentelemetry/otlp-transformer@"0.43.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.0992104Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.1131910Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.1133175Z npm warn While resolving: @opentelemetry/resources@1.17.0
+2025-11-04T00:56:29.1133919Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.1134573Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.1135471Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.1136351Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.1137573Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.1138545Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.1139347Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.1139915Z npm warn
+2025-11-04T00:56:29.1140291Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.1141138Z npm warn peer @opentelemetry/api@">=1.0.0 <1.7.0" from @opentelemetry/resources@1.17.0
+2025-11-04T00:56:29.1142526Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/resources
+2025-11-04T00:56:29.1143936Z npm warn   @opentelemetry/resources@"1.17.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.1145067Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.1145932Z npm warn   4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.1146463Z npm warn
+2025-11-04T00:56:29.1147266Z npm warn Conflicting peer dependency: @opentelemetry/api@1.6.0
+2025-11-04T00:56:29.1147953Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.1148780Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.7.0" from @opentelemetry/resources@1.17.0
+2025-11-04T00:56:29.1150054Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/resources
+2025-11-04T00:56:29.1151408Z npm warn     @opentelemetry/resources@"1.17.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.1152427Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.1153570Z npm warn     4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.1290374Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.1291482Z npm warn While resolving: @opentelemetry/sdk-trace-base@1.17.0
+2025-11-04T00:56:29.1292265Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.1292926Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.1293790Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.1294689Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.1295691Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.1296965Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.1297780Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.1298406Z npm warn
+2025-11-04T00:56:29.1298856Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.1299884Z npm warn peer @opentelemetry/api@">=1.0.0 <1.7.0" from @opentelemetry/sdk-trace-base@1.17.0
+2025-11-04T00:56:29.1301451Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:29.1303069Z npm warn   @opentelemetry/sdk-trace-base@"1.17.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.1304285Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.1305163Z npm warn   1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.1305702Z npm warn
+2025-11-04T00:56:29.1306352Z npm warn Conflicting peer dependency: @opentelemetry/api@1.6.0
+2025-11-04T00:56:29.1307290Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.1308229Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.7.0" from @opentelemetry/sdk-trace-base@1.17.0
+2025-11-04T00:56:29.1309569Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:29.1311042Z npm warn     @opentelemetry/sdk-trace-base@"1.17.0" from @opentelemetry/exporter-trace-otlp-grpc@0.43.0
+2025-11-04T00:56:29.1312138Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-grpc
+2025-11-04T00:56:29.1312915Z npm warn     1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.2046561Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.2047622Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.2048301Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.2048862Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.2049724Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.2050538Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.2051511Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.2052360Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.2053076Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.2053629Z npm warn
+2025-11-04T00:56:29.2054076Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.2086240Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.2087748Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.2089047Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.2090084Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.2090924Z npm warn   5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.2091463Z npm warn
+2025-11-04T00:56:29.2092079Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.2092808Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.2093697Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.2095326Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.2097070Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.2098151Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.2098941Z npm warn     5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.2815634Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.2816476Z npm warn While resolving: @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:29.2817381Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.2817932Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.2818810Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.2819602Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.2820526Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.2821560Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.2822326Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.2822931Z npm warn
+2025-11-04T00:56:29.2823388Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.2824167Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:29.2825493Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:29.2827287Z npm warn   @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.2828534Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.2829166Z npm warn
+2025-11-04T00:56:29.2829776Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.2830547Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.2831540Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:29.2833051Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:29.2834630Z npm warn     @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.2835839Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.3576392Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.3577703Z npm warn While resolving: @opentelemetry/resources@1.15.2
+2025-11-04T00:56:29.3578668Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.3579603Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.3580735Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.3581631Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.3582653Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.3583751Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.3584583Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.3585214Z npm warn
+2025-11-04T00:56:29.3585697Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.3586945Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:29.3588286Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/resources
+2025-11-04T00:56:29.3589769Z npm warn   @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.3590951Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.3591764Z npm warn   4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.3592253Z npm warn
+2025-11-04T00:56:29.3592790Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.3593618Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.3594129Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:29.3594999Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/resources
+2025-11-04T00:56:29.3595767Z npm warn     @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.3596355Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.3597096Z npm warn     4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.4325565Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.4327442Z npm warn While resolving: @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:29.4328337Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.4329032Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.4330004Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.4331001Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.4332036Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.4332937Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.4333674Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.4334193Z npm warn
+2025-11-04T00:56:29.4334599Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.4335473Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:29.4336954Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:29.4338317Z npm warn   @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.4339321Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.4340053Z npm warn   1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.4340537Z npm warn
+2025-11-04T00:56:29.4341088Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.4341755Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.4342567Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:29.4343698Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:29.4344880Z npm warn     @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/exporter-trace-otlp-http@0.41.2
+2025-11-04T00:56:29.4345769Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-http
+2025-11-04T00:56:29.4346418Z npm warn     1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.5076065Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.5077659Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.5078475Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.5079255Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.5080223Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.5081194Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.5082337Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.5083341Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.5084081Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.5084603Z npm warn
+2025-11-04T00:56:29.5085001Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.5085823Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.5087174Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.5088423Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.5089410Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.5090464Z npm warn   5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.5090963Z npm warn
+2025-11-04T00:56:29.5091661Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.5092334Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.5093165Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.5094255Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.5095337Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.5096199Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.5096990Z npm warn     5 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.5833403Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.5835112Z npm warn While resolving: @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:29.5836851Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.5838052Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.5839724Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.5841362Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.5842635Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.5843748Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.5844588Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.5845124Z npm warn
+2025-11-04T00:56:29.5845532Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.5846427Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:29.5847962Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:29.5849391Z npm warn   @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.5850492Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.5851064Z npm warn
+2025-11-04T00:56:29.5851633Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.5852311Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.5853201Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:29.5854537Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:29.5855831Z npm warn     @opentelemetry/otlp-transformer@"0.41.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.5856968Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.6582638Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.6584493Z npm warn While resolving: @opentelemetry/resources@1.15.2
+2025-11-04T00:56:29.6585991Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.6587059Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.6587892Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.6588737Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.6589703Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.6590574Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.6591359Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.6591916Z npm warn
+2025-11-04T00:56:29.6592346Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.6593192Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:29.6594540Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/resources
+2025-11-04T00:56:29.6596299Z npm warn   @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.6597605Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.6598584Z npm warn   4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.6599121Z npm warn
+2025-11-04T00:56:29.6599717Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.6600464Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.6601418Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/resources@1.15.2
+2025-11-04T00:56:29.6602617Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/resources
+2025-11-04T00:56:29.6603667Z npm warn     @opentelemetry/resources@"1.15.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.6604325Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.6604793Z npm warn     4 more (@opentelemetry/otlp-transformer, ...)
+2025-11-04T00:56:29.7338487Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.7339658Z npm warn While resolving: @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:29.7340709Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.7341526Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.7342657Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.7343775Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.7345083Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.7346360Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.7347727Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.7348258Z npm warn
+2025-11-04T00:56:29.7348658Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.7349528Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:29.7350842Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:29.7352214Z npm warn   @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.7353248Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.7353990Z npm warn   1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.7354466Z npm warn
+2025-11-04T00:56:29.7355032Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.7355698Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.7356682Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:29.7357950Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:29.7359147Z npm warn     @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/exporter-trace-otlp-proto@0.41.2
+2025-11-04T00:56:29.7360062Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-proto
+2025-11-04T00:56:29.7360718Z npm warn     1 more (@opentelemetry/otlp-transformer)
+2025-11-04T00:56:29.8092410Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.8094018Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.8095603Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.8097297Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.8099169Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.8100717Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.8102380Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.8104171Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.8105633Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.8107436Z npm warn
+2025-11-04T00:56:29.8108258Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.8109769Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.8111774Z npm warn node_modules/@opentelemetry/otlp-exporter-base/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.8113463Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/otlp-exporter-base@0.41.2
+2025-11-04T00:56:29.8114792Z npm warn   node_modules/@opentelemetry/otlp-exporter-base
+2025-11-04T00:56:29.8115583Z npm warn
+2025-11-04T00:56:29.8116519Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.8117788Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.8118879Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.8119967Z npm warn   node_modules/@opentelemetry/otlp-exporter-base/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.8120734Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/otlp-exporter-base@0.41.2
+2025-11-04T00:56:29.8121340Z npm warn     node_modules/@opentelemetry/otlp-exporter-base
+2025-11-04T00:56:29.8847287Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.8848912Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.8850308Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.8851437Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.8852820Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.8854116Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.8855079Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.8855971Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.8856999Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.8857535Z npm warn
+2025-11-04T00:56:29.8857938Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.8858780Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.8859935Z npm warn node_modules/@opentelemetry/otlp-grpc-exporter-base/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.8860960Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/otlp-grpc-exporter-base@0.41.2
+2025-11-04T00:56:29.8861634Z npm warn   node_modules/@opentelemetry/otlp-grpc-exporter-base
+2025-11-04T00:56:29.8862013Z npm warn
+2025-11-04T00:56:29.8862423Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.8862906Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.8863498Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.8864363Z npm warn   node_modules/@opentelemetry/otlp-grpc-exporter-base/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.8865213Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/otlp-grpc-exporter-base@0.41.2
+2025-11-04T00:56:29.8865882Z npm warn     node_modules/@opentelemetry/otlp-grpc-exporter-base
+2025-11-04T00:56:29.9592946Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:29.9593956Z npm warn While resolving: @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.9594761Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:29.9595470Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.9596441Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:29.9597732Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:29.9598893Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:29.9600010Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:29.9600927Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:29.9601503Z npm warn
+2025-11-04T00:56:29.9601900Z npm warn Could not resolve dependency:
+2025-11-04T00:56:29.9602955Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.9604378Z npm warn node_modules/@opentelemetry/otlp-proto-exporter-base/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.9605743Z npm warn   @opentelemetry/core@"1.15.2" from @opentelemetry/otlp-proto-exporter-base@0.41.2
+2025-11-04T00:56:29.9606822Z npm warn   node_modules/@opentelemetry/otlp-proto-exporter-base
+2025-11-04T00:56:29.9607369Z npm warn
+2025-11-04T00:56:29.9607923Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:29.9608602Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:29.9609425Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/core@1.15.2
+2025-11-04T00:56:29.9610594Z npm warn   node_modules/@opentelemetry/otlp-proto-exporter-base/node_modules/@opentelemetry/core
+2025-11-04T00:56:29.9611810Z npm warn     @opentelemetry/core@"1.15.2" from @opentelemetry/otlp-proto-exporter-base@0.41.2
+2025-11-04T00:56:29.9612678Z npm warn     node_modules/@opentelemetry/otlp-proto-exporter-base
+2025-11-04T00:56:30.4629608Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.4630272Z npm warn While resolving: vite@7.1.11
+2025-11-04T00:56:30.4631063Z npm warn Found: @types/node@20.16.11
+2025-11-04T00:56:30.4631813Z npm warn node_modules/@types/node
+2025-11-04T00:56:30.4632580Z npm warn   dev @types/node@"20.16.11" from the root project
+2025-11-04T00:56:30.4633647Z npm warn   44 more (@inquirer/checkbox, @inquirer/confirm, @inquirer/core, ...)
+2025-11-04T00:56:30.4634436Z npm warn
+2025-11-04T00:56:30.4634962Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.4636000Z npm warn peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.1.11
+2025-11-04T00:56:30.4637003Z npm warn node_modules/vitest/node_modules/vite
+2025-11-04T00:56:30.4637674Z npm warn   vite@"^6.0.0 || ^7.0.0" from vitest@4.0.1
+2025-11-04T00:56:30.4638257Z npm warn   node_modules/vitest
+2025-11-04T00:56:30.4638735Z npm warn   1 more (@vitest/mocker)
+2025-11-04T00:56:30.4639108Z npm warn
+2025-11-04T00:56:30.4639619Z npm warn Conflicting peer dependency: @types/node@24.10.0
+2025-11-04T00:56:30.4640222Z npm warn node_modules/@types/node
+2025-11-04T00:56:30.4640922Z npm warn   peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.1.11
+2025-11-04T00:56:30.4641634Z npm warn   node_modules/vitest/node_modules/vite
+2025-11-04T00:56:30.4642228Z npm warn     vite@"^6.0.0 || ^7.0.0" from vitest@4.0.1
+2025-11-04T00:56:30.4642728Z npm warn     node_modules/vitest
+2025-11-04T00:56:30.4643093Z npm warn     1 more (@vitest/mocker)
+2025-11-04T00:56:30.5358618Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.5359350Z npm warn While resolving: @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.5360034Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.5360586Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.5361319Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.5362104Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.5363051Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.5363983Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.5364786Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.5365319Z npm warn
+2025-11-04T00:56:30.5365762Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.5366821Z npm warn peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.5368244Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.5369517Z npm warn   @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.5370930Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.5371708Z npm warn
+2025-11-04T00:56:30.5372242Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:30.5373303Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.5374184Z npm warn   peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.5376124Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.5377969Z npm warn     @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.5379372Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.6069230Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.6070030Z npm warn While resolving: @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.6070776Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.6071383Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.6072192Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.6073049Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.6074014Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.6074915Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.6075613Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.6076162Z npm warn
+2025-11-04T00:56:30.6076891Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.6077877Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.6079750Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:30.6081526Z npm warn   @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.6083074Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.6084057Z npm warn
+2025-11-04T00:56:30.6084646Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:30.6085373Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.6086290Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.6088218Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:30.6089887Z npm warn     @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.6091279Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.6771308Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.6772071Z npm warn While resolving: @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.6772758Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.6773312Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.6774141Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.6774945Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.6775944Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.6777141Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.6777960Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.6778453Z npm warn
+2025-11-04T00:56:30.6778827Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.6779727Z npm warn peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.6781494Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.6783503Z npm warn   @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.6784963Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.6786105Z npm warn
+2025-11-04T00:56:30.6786930Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:30.6787644Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.6788503Z npm warn   peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.6790153Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.6791721Z npm warn     @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.6793066Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.7564660Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.7565595Z npm warn While resolving: @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.7566757Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.7568060Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.7569900Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.7571730Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.7573974Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.7576148Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.7577731Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.7578441Z npm warn
+2025-11-04T00:56:30.7578978Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.7580203Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.7582629Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:30.7584922Z npm warn   @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.7587065Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.7588169Z npm warn
+2025-11-04T00:56:30.7588906Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:30.7589857Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.7590991Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.7593176Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:30.7595364Z npm warn     @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.7597311Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.8271835Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.8272671Z npm warn While resolving: @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.8273316Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.8273888Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.8274795Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.8275570Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.8277006Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.8278004Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.8278820Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.8279335Z npm warn
+2025-11-04T00:56:30.8279756Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.8281050Z npm warn peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.8283196Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.8285028Z npm warn   @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.8286828Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.8287839Z npm warn
+2025-11-04T00:56:30.8288470Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:30.8289200Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.8290103Z npm warn   peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:30.8291821Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.8293440Z npm warn     @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.8294869Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.8982053Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.8982939Z npm warn While resolving: @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.8983687Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.8984312Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.8985089Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.8985844Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.8986977Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.8987999Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.8988771Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.8989394Z npm warn
+2025-11-04T00:56:30.8989842Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.8990808Z npm warn peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.8992655Z npm warn node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:30.8994268Z npm warn   @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.8995741Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.8996838Z npm warn
+2025-11-04T00:56:30.8997468Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:30.8998084Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.8998956Z npm warn   peer @opentelemetry/api@">=1.0.0 <1.5.0" from @opentelemetry/sdk-trace-base@1.15.2
+2025-11-04T00:56:30.9000738Z npm warn   node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base
+2025-11-04T00:56:30.9002400Z npm warn     @opentelemetry/sdk-trace-base@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:30.9003808Z npm warn     node_modules/@opentelemetry/exporter-metrics-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.9145447Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.9146230Z npm warn While resolving: @opentelemetry/sdk-logs@0.43.0
+2025-11-04T00:56:30.9147129Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.9147796Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.9148720Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.9149617Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.9150624Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.9151964Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.9152764Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.9153625Z npm warn
+2025-11-04T00:56:30.9154136Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.9155109Z npm warn peer @opentelemetry/api@">=1.4.0 <1.7.0" from @opentelemetry/sdk-logs@0.43.0
+2025-11-04T00:56:30.9157215Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.9158960Z npm warn   @opentelemetry/sdk-logs@"0.43.0" from @opentelemetry/otlp-transformer@0.43.0
+2025-11-04T00:56:30.9160416Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.9161246Z npm warn
+2025-11-04T00:56:30.9161824Z npm warn Conflicting peer dependency: @opentelemetry/api@1.6.0
+2025-11-04T00:56:30.9162537Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.9163400Z npm warn   peer @opentelemetry/api@">=1.4.0 <1.7.0" from @opentelemetry/sdk-logs@0.43.0
+2025-11-04T00:56:30.9165039Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:30.9166797Z npm warn     @opentelemetry/sdk-logs@"0.43.0" from @opentelemetry/otlp-transformer@0.43.0
+2025-11-04T00:56:30.9168195Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.9305285Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:30.9307013Z npm warn While resolving: @opentelemetry/sdk-metrics@1.17.0
+2025-11-04T00:56:30.9308478Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:30.9309809Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.9311454Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:30.9313020Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:30.9314796Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:30.9316761Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:30.9318272Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:30.9319318Z npm warn
+2025-11-04T00:56:30.9320115Z npm warn Could not resolve dependency:
+2025-11-04T00:56:30.9321450Z npm warn peer @opentelemetry/api@">=1.3.0 <1.7.0" from @opentelemetry/sdk-metrics@1.17.0
+2025-11-04T00:56:30.9323928Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:30.9326228Z npm warn   @opentelemetry/sdk-metrics@"1.17.0" from @opentelemetry/otlp-transformer@0.43.0
+2025-11-04T00:56:30.9328478Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:30.9329822Z npm warn
+2025-11-04T00:56:30.9330643Z npm warn Conflicting peer dependency: @opentelemetry/api@1.6.0
+2025-11-04T00:56:30.9331521Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:30.9332668Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.7.0" from @opentelemetry/sdk-metrics@1.17.0
+2025-11-04T00:56:30.9334782Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:30.9336962Z npm warn     @opentelemetry/sdk-metrics@"1.17.0" from @opentelemetry/otlp-transformer@0.43.0
+2025-11-04T00:56:30.9338693Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.0009017Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:31.0009780Z npm warn While resolving: @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:31.0010430Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:31.0010976Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.0012096Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:31.0012879Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:31.0013931Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:31.0014807Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:31.0015532Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:31.0016041Z npm warn
+2025-11-04T00:56:31.0016434Z npm warn Could not resolve dependency:
+2025-11-04T00:56:31.0017592Z npm warn peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:31.0019193Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:31.0020676Z npm warn   @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.0021701Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.0022218Z npm warn
+2025-11-04T00:56:31.0022574Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:31.0022981Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.0023498Z npm warn   peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:31.0024467Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:31.0025371Z npm warn     @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.0026165Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.0810444Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:31.0811264Z npm warn While resolving: @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:31.0812029Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:31.0812599Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.0813417Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:31.0814241Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:31.0815190Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:31.0816047Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:31.0817015Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:31.0817558Z npm warn
+2025-11-04T00:56:31.0817995Z npm warn Could not resolve dependency:
+2025-11-04T00:56:31.0818919Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:31.0820741Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:31.0822492Z npm warn   @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.0823925Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.0824823Z npm warn
+2025-11-04T00:56:31.0825433Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:31.0826141Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.0827249Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:31.0828976Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:31.0830622Z npm warn     @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.0832027Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-http/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.1569598Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:31.1571673Z npm warn While resolving: @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:31.1572668Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:31.1573298Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.1574087Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:31.1574920Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:31.1575846Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:31.1576978Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:31.1577676Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:31.1578211Z npm warn
+2025-11-04T00:56:31.1578671Z npm warn Could not resolve dependency:
+2025-11-04T00:56:31.1579599Z npm warn peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:31.1581393Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:31.1583102Z npm warn   @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.1584545Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.1585412Z npm warn
+2025-11-04T00:56:31.1586038Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:31.1587008Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.1587873Z npm warn   peer @opentelemetry/api@">=1.4.0 <1.5.0" from @opentelemetry/sdk-logs@0.41.2
+2025-11-04T00:56:31.1589518Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-logs
+2025-11-04T00:56:31.1591070Z npm warn     @opentelemetry/sdk-logs@"0.41.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.1592420Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.2328666Z npm warn ERESOLVE overriding peer dependency
+2025-11-04T00:56:31.2330263Z npm warn While resolving: @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:31.2331643Z npm warn Found: @opentelemetry/api@1.9.0
+2025-11-04T00:56:31.2332819Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.2334053Z npm warn   @opentelemetry/api@"^1.3.0" from @opentelemetry/api-logs@0.204.0
+2025-11-04T00:56:31.2335047Z npm warn   node_modules/@opentelemetry/api-logs
+2025-11-04T00:56:31.2336054Z npm warn     @opentelemetry/api-logs@"0.204.0" from @opentelemetry/instrumentation@0.204.0
+2025-11-04T00:56:31.2337168Z npm warn     node_modules/@opentelemetry/instrumentation
+2025-11-04T00:56:31.2337916Z npm warn   101 more (@opentelemetry/context-async-hooks, ...)
+2025-11-04T00:56:31.2338437Z npm warn
+2025-11-04T00:56:31.2338829Z npm warn Could not resolve dependency:
+2025-11-04T00:56:31.2339690Z npm warn peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:31.2341340Z npm warn node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:31.2342889Z npm warn   @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.2344216Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:31.2345046Z npm warn
+2025-11-04T00:56:31.2345596Z npm warn Conflicting peer dependency: @opentelemetry/api@1.4.1
+2025-11-04T00:56:31.2346182Z npm warn node_modules/@opentelemetry/api
+2025-11-04T00:56:31.2347062Z npm warn   peer @opentelemetry/api@">=1.3.0 <1.5.0" from @opentelemetry/sdk-metrics@1.15.2
+2025-11-04T00:56:31.2348346Z npm warn   node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-metrics
+2025-11-04T00:56:31.2349871Z npm warn     @opentelemetry/sdk-metrics@"1.15.2" from @opentelemetry/otlp-transformer@0.41.2
+2025-11-04T00:56:31.2351058Z npm warn     node_modules/@opentelemetry/exporter-trace-otlp-proto/node_modules/@opentelemetry/otlp-transformer
+2025-11-04T00:56:36.3163377Z npm warn deprecated read-package-json@7.0.1: This package is no longer supported. Please use @npmcli/package-json instead.
+2025-11-04T00:56:36.5544365Z npm warn deprecated q@1.5.1: You or someone you depend on is using Q, the JavaScript Promise library that gave JavaScript developers strong feelings about promises. They can almost certainly migrate to the native JavaScript promise now. Thank you literally everyone for joining me in this bet against the odds. Be excellent to each other.
+2025-11-04T00:56:36.5546505Z npm warn deprecated
+2025-11-04T00:56:36.5547546Z npm warn deprecated (For a CapTP with native promises, see @endo/eventual-send and @endo/captp)
+2025-11-04T00:56:36.7595644Z npm warn deprecated querystring@0.2.0: The querystring API is considered Legacy. new code should use the URLSearchParams API instead.
+2025-11-04T00:56:37.6968437Z npm warn deprecated lodash.isequal@4.5.0: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
+2025-11-04T00:56:38.1169771Z npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+2025-11-04T00:56:38.4715559Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2025-11-04T00:56:39.5744216Z npm warn deprecated fstream@1.0.12: This package is no longer supported.
+2025-11-04T00:56:45.1311084Z npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+2025-11-04T00:56:45.1792337Z npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+2025-11-04T00:56:46.2199969Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-04T00:56:46.4290595Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-04T00:56:46.4555672Z npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+2025-11-04T00:56:46.4563564Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-04T00:56:46.4933067Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-04T00:56:46.4937913Z npm warn deprecated rimraf@2.6.3: Rimraf versions prior to v4 are no longer supported
+2025-11-04T00:56:46.9057486Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-04T00:56:47.7632455Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-04T00:56:47.7640951Z npm warn deprecated rimraf@2.7.1: Rimraf versions prior to v4 are no longer supported
+2025-11-04T00:56:48.6555020Z npm warn deprecated eslint-define-config@2.1.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+2025-11-04T00:56:48.7116271Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-04T00:56:55.6215132Z npm warn deprecated @opentelemetry/otlp-proto-exporter-base@0.41.2: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+2025-11-04T00:57:15.3212484Z 
+2025-11-04T00:57:15.3213112Z added 2246 packages, and audited 2247 packages in 50s
+2025-11-04T00:57:15.3213525Z 
+2025-11-04T00:57:15.3213691Z 327 packages are looking for funding
+2025-11-04T00:57:15.3214014Z   run `npm fund` for details
+2025-11-04T00:57:15.3544872Z 
+2025-11-04T00:57:15.3545454Z 10 vulnerabilities (2 low, 5 moderate, 3 high)
+2025-11-04T00:57:15.3545836Z 
+2025-11-04T00:57:15.3546179Z To address issues that do not require attention, run:
+2025-11-04T00:57:15.3546965Z   npm audit fix
+2025-11-04T00:57:15.3547169Z 
+2025-11-04T00:57:15.3547930Z To address all issues (including breaking changes), run:
+2025-11-04T00:57:15.3548459Z   npm audit fix --force
+2025-11-04T00:57:15.3548694Z 
+2025-11-04T00:57:15.3548880Z Run `npm audit` for details.
+2025-11-04T00:57:15.4122076Z ##[group]Run npx playwright install --with-deps chromium
+2025-11-04T00:57:15.4122622Z [36;1mnpx playwright install --with-deps chromium[0m
+2025-11-04T00:57:15.4156849Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:57:15.4157231Z ##[endgroup]
+2025-11-04T00:57:16.2735221Z Installing dependencies...
+2025-11-04T00:57:16.2804144Z Switching to root user to install dependencies...
+2025-11-04T00:57:16.3707889Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2025-11-04T00:57:16.4001653Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2025-11-04T00:57:16.4007748Z Hit:6 https://packages.microsoft.com/repos/azure-cli noble InRelease
+2025-11-04T00:57:16.4008866Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2025-11-04T00:57:16.4024162Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2025-11-04T00:57:16.4070861Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2025-11-04T00:57:16.4090934Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2025-11-04T00:57:16.5754477Z Get:8 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [11.1 kB]
+2025-11-04T00:57:16.5855989Z Get:9 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [49.0 kB]
+2025-11-04T00:57:16.5898916Z Get:10 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [66.4 kB]
+2025-11-04T00:57:16.6210602Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1578 kB]
+2025-11-04T00:57:16.6301557Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [297 kB]
+2025-11-04T00:57:16.6321008Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [175 kB]
+2025-11-04T00:57:16.6339709Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 c-n-f Metadata [15.4 kB]
+2025-11-04T00:57:16.6352662Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1498 kB]
+2025-11-04T00:57:16.6435532Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [303 kB]
+2025-11-04T00:57:16.6460335Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [378 kB]
+2025-11-04T00:57:16.6493909Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 c-n-f Metadata [31.4 kB]
+2025-11-04T00:57:16.6505638Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [2235 kB]
+2025-11-04T00:57:16.6620234Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [506 kB]
+2025-11-04T00:57:16.7065747Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B]
+2025-11-04T00:57:16.7070847Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+2025-11-04T00:57:16.7081814Z Get:23 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7140 B]
+2025-11-04T00:57:16.7104873Z Get:24 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [11.0 kB]
+2025-11-04T00:57:16.7119105Z Get:25 http://azure.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [216 B]
+2025-11-04T00:57:16.7123840Z Get:26 http://azure.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B]
+2025-11-04T00:57:16.7332882Z Get:27 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1298 kB]
+2025-11-04T00:57:16.7407511Z Get:28 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [213 kB]
+2025-11-04T00:57:16.7426811Z Get:29 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [21.5 kB]
+2025-11-04T00:57:16.7437105Z Get:30 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 c-n-f Metadata [9012 B]
+2025-11-04T00:57:16.7449225Z Get:31 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [906 kB]
+2025-11-04T00:57:16.7500120Z Get:32 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [203 kB]
+2025-11-04T00:57:16.7520737Z Get:33 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [52.2 kB]
+2025-11-04T00:57:16.7531434Z Get:34 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 c-n-f Metadata [19.4 kB]
+2025-11-04T00:57:16.8041174Z Get:35 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2131 kB]
+2025-11-04T00:57:16.8157311Z Get:36 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [483 kB]
+2025-11-04T00:57:16.8192823Z Get:37 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B]
+2025-11-04T00:57:16.8200944Z Get:38 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [208 B]
+2025-11-04T00:57:25.4717671Z Fetched 12.9 MB in 2s (8346 kB/s)
+2025-11-04T00:57:26.2552979Z Reading package lists...
+2025-11-04T00:57:26.2821874Z Reading package lists...
+2025-11-04T00:57:26.4745231Z Building dependency tree...
+2025-11-04T00:57:26.4752722Z Reading state information...
+2025-11-04T00:57:26.6389555Z libasound2t64 is already the newest version (1.2.11-1ubuntu0.1).
+2025-11-04T00:57:26.6390777Z libasound2t64 set to manually installed.
+2025-11-04T00:57:26.6392383Z libatk-bridge2.0-0t64 is already the newest version (2.52.0-1build1).
+2025-11-04T00:57:26.6393752Z libatk-bridge2.0-0t64 set to manually installed.
+2025-11-04T00:57:26.6394881Z libatk1.0-0t64 is already the newest version (2.52.0-1build1).
+2025-11-04T00:57:26.6395743Z libatk1.0-0t64 set to manually installed.
+2025-11-04T00:57:26.6396509Z libatspi2.0-0t64 is already the newest version (2.52.0-1build1).
+2025-11-04T00:57:26.6397305Z libatspi2.0-0t64 set to manually installed.
+2025-11-04T00:57:26.6397969Z libcairo2 is already the newest version (1.18.0-3build1).
+2025-11-04T00:57:26.6398457Z libcairo2 set to manually installed.
+2025-11-04T00:57:26.6398927Z libcups2t64 is already the newest version (2.4.7-1.2ubuntu7.4).
+2025-11-04T00:57:26.6399861Z libcups2t64 set to manually installed.
+2025-11-04T00:57:26.6400330Z libdbus-1-3 is already the newest version (1.14.10-4ubuntu4.1).
+2025-11-04T00:57:26.6400843Z libdbus-1-3 set to manually installed.
+2025-11-04T00:57:26.6401395Z libdrm2 is already the newest version (2.4.122-1~ubuntu0.24.04.1).
+2025-11-04T00:57:26.6401832Z libdrm2 set to manually installed.
+2025-11-04T00:57:26.6402465Z libgbm1 is already the newest version (25.0.7-0ubuntu0.24.04.2).
+2025-11-04T00:57:26.6403101Z libgbm1 set to manually installed.
+2025-11-04T00:57:26.6403558Z libglib2.0-0t64 is already the newest version (2.80.0-6ubuntu3.4).
+2025-11-04T00:57:26.6404080Z libglib2.0-0t64 set to manually installed.
+2025-11-04T00:57:26.6404627Z libnspr4 is already the newest version (2:4.35-1.1build1).
+2025-11-04T00:57:26.6419215Z libnspr4 set to manually installed.
+2025-11-04T00:57:26.6419909Z libnss3 is already the newest version (2:3.98-1build1).
+2025-11-04T00:57:26.6420565Z libnss3 set to manually installed.
+2025-11-04T00:57:26.6421254Z libpango-1.0-0 is already the newest version (1.52.1+ds-1build1).
+2025-11-04T00:57:26.6421957Z libpango-1.0-0 set to manually installed.
+2025-11-04T00:57:26.6422619Z libx11-6 is already the newest version (2:1.8.7-1build1).
+2025-11-04T00:57:26.6423210Z libx11-6 set to manually installed.
+2025-11-04T00:57:26.6423778Z libxcb1 is already the newest version (1.15-1ubuntu2).
+2025-11-04T00:57:26.6424358Z libxcb1 set to manually installed.
+2025-11-04T00:57:26.6425014Z libxcomposite1 is already the newest version (1:0.4.5-1build3).
+2025-11-04T00:57:26.6425689Z libxcomposite1 set to manually installed.
+2025-11-04T00:57:26.6426351Z libxdamage1 is already the newest version (1:1.1.6-1build1).
+2025-11-04T00:57:26.6427186Z libxdamage1 set to manually installed.
+2025-11-04T00:57:26.6427813Z libxext6 is already the newest version (2:1.3.4-1build2).
+2025-11-04T00:57:26.6428717Z libxext6 set to manually installed.
+2025-11-04T00:57:26.6429335Z libxfixes3 is already the newest version (1:6.0.0-2build1).
+2025-11-04T00:57:26.6430153Z libxfixes3 set to manually installed.
+2025-11-04T00:57:26.6430811Z libxkbcommon0 is already the newest version (1.6.0-1build1).
+2025-11-04T00:57:26.6431454Z libxkbcommon0 set to manually installed.
+2025-11-04T00:57:26.6432104Z libxrandr2 is already the newest version (2:1.5.2-2build1).
+2025-11-04T00:57:26.6432699Z libxrandr2 set to manually installed.
+2025-11-04T00:57:26.6433464Z fonts-noto-color-emoji is already the newest version (2.047-0ubuntu0.24.04.1).
+2025-11-04T00:57:26.6434348Z libfontconfig1 is already the newest version (2.15.0-1.1ubuntu2).
+2025-11-04T00:57:26.6434997Z libfontconfig1 set to manually installed.
+2025-11-04T00:57:26.6435689Z libfreetype6 is already the newest version (2.13.2+dfsg-1build3).
+2025-11-04T00:57:26.6436332Z libfreetype6 set to manually installed.
+2025-11-04T00:57:26.6437176Z fonts-liberation is already the newest version (1:2.1.5-3).
+2025-11-04T00:57:26.6437805Z fonts-liberation set to manually installed.
+2025-11-04T00:57:26.6438440Z The following additional packages will be installed:
+2025-11-04T00:57:26.6439073Z   xfonts-encodings xfonts-utils xserver-common
+2025-11-04T00:57:26.6439592Z Recommended packages:
+2025-11-04T00:57:26.6440122Z   fonts-ipafont-mincho fonts-tlwg-loma xfonts-base
+2025-11-04T00:57:26.6615351Z The following NEW packages will be installed:
+2025-11-04T00:57:26.6616870Z   fonts-freefont-ttf fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont
+2025-11-04T00:57:26.6623995Z   fonts-wqy-zenhei xfonts-cyrillic xfonts-encodings xfonts-scalable
+2025-11-04T00:57:26.6625561Z   xfonts-utils
+2025-11-04T00:57:26.6635260Z The following packages will be upgraded:
+2025-11-04T00:57:26.6635999Z   xserver-common xvfb
+2025-11-04T00:57:26.6834907Z 2 upgraded, 9 newly installed, 0 to remove and 34 not upgraded.
+2025-11-04T00:57:26.6835629Z Need to get 22.0 MB of archives.
+2025-11-04T00:57:26.6836440Z After this operation, 79.6 MB of additional disk space will be used.
+2025-11-04T00:57:26.6837693Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2025-11-04T00:57:26.7717485Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-ipafont-gothic all 00303-21ubuntu1 [3513 kB]
+2025-11-04T00:57:26.9645714Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 fonts-freefont-ttf all 20211204+svn4273-2 [5641 kB]
+2025-11-04T00:57:27.1379777Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-tlwg-loma-otf all 1:0.7.3-1 [107 kB]
+2025-11-04T00:57:27.2086910Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-unifont all 1:15.1.01-1build1 [2993 kB]
+2025-11-04T00:57:27.3056171Z Get:6 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-wqy-zenhei all 0.9.45-8 [7472 kB]
+2025-11-04T00:57:27.5232614Z Get:7 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-encodings all 1:1.0.5-0ubuntu2 [578 kB]
+2025-11-04T00:57:27.5967819Z Get:8 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-utils amd64 1:7.7+6build3 [94.4 kB]
+2025-11-04T00:57:27.6664459Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 xfonts-cyrillic all 1:1.0.5+nmu1 [384 kB]
+2025-11-04T00:57:27.7381328Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-scalable all 1:1.0.3-1.3 [304 kB]
+2025-11-04T00:57:27.8102447Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 xserver-common all 2:21.1.12-1ubuntu1.5 [34.6 kB]
+2025-11-04T00:57:27.8796205Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 xvfb amd64 2:21.1.12-1ubuntu1.5 [877 kB]
+2025-11-04T00:57:28.1730861Z Fetched 22.0 MB in 1s (18.1 MB/s)
+2025-11-04T00:57:28.2008150Z Selecting previously unselected package fonts-ipafont-gothic.
+2025-11-04T00:57:28.2374168Z (Reading database ... 
+2025-11-04T00:57:28.2375120Z (Reading database ... 5%
+2025-11-04T00:57:28.2375910Z (Reading database ... 10%
+2025-11-04T00:57:28.2377339Z (Reading database ... 15%
+2025-11-04T00:57:28.2378000Z (Reading database ... 20%
+2025-11-04T00:57:28.2378655Z (Reading database ... 25%
+2025-11-04T00:57:28.2379527Z (Reading database ... 30%
+2025-11-04T00:57:28.2380173Z (Reading database ... 35%
+2025-11-04T00:57:28.2380577Z (Reading database ... 40%
+2025-11-04T00:57:28.2380954Z (Reading database ... 45%
+2025-11-04T00:57:28.2381335Z (Reading database ... 50%
+2025-11-04T00:57:28.2468612Z (Reading database ... 55%
+2025-11-04T00:57:28.5304552Z (Reading database ... 60%
+2025-11-04T00:57:28.7230562Z (Reading database ... 65%
+2025-11-04T00:57:28.9358990Z (Reading database ... 70%
+2025-11-04T00:57:29.0998747Z (Reading database ... 75%
+2025-11-04T00:57:29.3422034Z (Reading database ... 80%
+2025-11-04T00:57:29.5798082Z (Reading database ... 85%
+2025-11-04T00:57:29.8350608Z (Reading database ... 90%
+2025-11-04T00:57:30.0308288Z (Reading database ... 95%
+2025-11-04T00:57:30.0308966Z (Reading database ... 100%
+2025-11-04T00:57:30.0310009Z (Reading database ... 215550 files and directories currently installed.)
+2025-11-04T00:57:30.0359525Z Preparing to unpack .../00-fonts-ipafont-gothic_00303-21ubuntu1_all.deb ...
+2025-11-04T00:57:30.0453655Z Unpacking fonts-ipafont-gothic (00303-21ubuntu1) ...
+2025-11-04T00:57:30.2800171Z Selecting previously unselected package fonts-freefont-ttf.
+2025-11-04T00:57:30.2942733Z Preparing to unpack .../01-fonts-freefont-ttf_20211204+svn4273-2_all.deb ...
+2025-11-04T00:57:30.2951787Z Unpacking fonts-freefont-ttf (20211204+svn4273-2) ...
+2025-11-04T00:57:30.3882719Z Selecting previously unselected package fonts-tlwg-loma-otf.
+2025-11-04T00:57:30.4023900Z Preparing to unpack .../02-fonts-tlwg-loma-otf_1%3a0.7.3-1_all.deb ...
+2025-11-04T00:57:30.4032025Z Unpacking fonts-tlwg-loma-otf (1:0.7.3-1) ...
+2025-11-04T00:57:30.4276550Z Selecting previously unselected package fonts-unifont.
+2025-11-04T00:57:30.4416991Z Preparing to unpack .../03-fonts-unifont_1%3a15.1.01-1build1_all.deb ...
+2025-11-04T00:57:30.4428412Z Unpacking fonts-unifont (1:15.1.01-1build1) ...
+2025-11-04T00:57:30.5703223Z Selecting previously unselected package fonts-wqy-zenhei.
+2025-11-04T00:57:30.5848986Z Preparing to unpack .../04-fonts-wqy-zenhei_0.9.45-8_all.deb ...
+2025-11-04T00:57:30.5954477Z Unpacking fonts-wqy-zenhei (0.9.45-8) ...
+2025-11-04T00:57:31.0650700Z Selecting previously unselected package xfonts-encodings.
+2025-11-04T00:57:31.0791777Z Preparing to unpack .../05-xfonts-encodings_1%3a1.0.5-0ubuntu2_all.deb ...
+2025-11-04T00:57:31.0800842Z Unpacking xfonts-encodings (1:1.0.5-0ubuntu2) ...
+2025-11-04T00:57:31.1129590Z Selecting previously unselected package xfonts-utils.
+2025-11-04T00:57:31.1269699Z Preparing to unpack .../06-xfonts-utils_1%3a7.7+6build3_amd64.deb ...
+2025-11-04T00:57:31.1280099Z Unpacking xfonts-utils (1:7.7+6build3) ...
+2025-11-04T00:57:31.1711393Z Selecting previously unselected package xfonts-cyrillic.
+2025-11-04T00:57:31.1851397Z Preparing to unpack .../07-xfonts-cyrillic_1%3a1.0.5+nmu1_all.deb ...
+2025-11-04T00:57:31.1859560Z Unpacking xfonts-cyrillic (1:1.0.5+nmu1) ...
+2025-11-04T00:57:31.2254095Z Selecting previously unselected package xfonts-scalable.
+2025-11-04T00:57:31.2396438Z Preparing to unpack .../08-xfonts-scalable_1%3a1.0.3-1.3_all.deb ...
+2025-11-04T00:57:31.2405325Z Unpacking xfonts-scalable (1:1.0.3-1.3) ...
+2025-11-04T00:57:31.2815058Z Preparing to unpack .../09-xserver-common_2%3a21.1.12-1ubuntu1.5_all.deb ...
+2025-11-04T00:57:31.2838332Z Unpacking xserver-common (2:21.1.12-1ubuntu1.5) over (2:21.1.12-1ubuntu1.4) ...
+2025-11-04T00:57:31.3240353Z Preparing to unpack .../10-xvfb_2%3a21.1.12-1ubuntu1.5_amd64.deb ...
+2025-11-04T00:57:31.3264690Z Unpacking xvfb (2:21.1.12-1ubuntu1.5) over (2:21.1.12-1ubuntu1.4) ...
+2025-11-04T00:57:31.3830356Z Setting up fonts-wqy-zenhei (0.9.45-8) ...
+2025-11-04T00:57:31.3966097Z Setting up fonts-freefont-ttf (20211204+svn4273-2) ...
+2025-11-04T00:57:31.3993104Z Setting up fonts-tlwg-loma-otf (1:0.7.3-1) ...
+2025-11-04T00:57:31.4016101Z Setting up xfonts-encodings (1:1.0.5-0ubuntu2) ...
+2025-11-04T00:57:31.4040179Z Setting up fonts-ipafont-gothic (00303-21ubuntu1) ...
+2025-11-04T00:57:31.4118275Z update-alternatives: using /usr/share/fonts/opentype/ipafont-gothic/ipag.ttf to provide /usr/share/fonts/truetype/fonts-japanese-gothic.ttf (fonts-japanese-gothic.ttf) in auto mode
+2025-11-04T00:57:31.4133986Z Setting up xserver-common (2:21.1.12-1ubuntu1.5) ...
+2025-11-04T00:57:31.4156275Z Setting up fonts-unifont (1:15.1.01-1build1) ...
+2025-11-04T00:57:31.4179049Z Setting up xvfb (2:21.1.12-1ubuntu1.5) ...
+2025-11-04T00:57:31.4212407Z Setting up xfonts-utils (1:7.7+6build3) ...
+2025-11-04T00:57:31.4260319Z Setting up xfonts-cyrillic (1:1.0.5+nmu1) ...
+2025-11-04T00:57:31.4579316Z Setting up xfonts-scalable (1:1.0.3-1.3) ...
+2025-11-04T00:57:31.4864193Z Processing triggers for man-db (2.12.0-4build2) ...
+2025-11-04T00:57:43.4172970Z Processing triggers for fontconfig (2.15.0-1.1ubuntu2) ...
+2025-11-04T00:57:44.3285959Z 
+2025-11-04T00:57:44.3287012Z Running kernel seems to be up-to-date.
+2025-11-04T00:57:44.3287710Z 
+2025-11-04T00:57:44.3288000Z No services need to be restarted.
+2025-11-04T00:57:44.3288336Z 
+2025-11-04T00:57:44.3288601Z No containers need to be restarted.
+2025-11-04T00:57:44.3288953Z 
+2025-11-04T00:57:44.3289290Z No user sessions are running outdated binaries.
+2025-11-04T00:57:44.3289687Z 
+2025-11-04T00:57:44.3290238Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2025-11-04T00:57:45.5255272Z ##[group]Run node scripts/ts-baseline-check.mjs
+2025-11-04T00:57:45.5255643Z [36;1mnode scripts/ts-baseline-check.mjs[0m
+2025-11-04T00:57:45.5289360Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:57:45.5289623Z ##[endgroup]
+2025-11-04T00:57:45.5629797Z 🔍 TypeScript Baseline Quality Gate
+2025-11-04T00:57:45.5633248Z ====================================
+2025-11-04T00:57:45.5633758Z 
+2025-11-04T00:57:45.5636300Z 📊 Current baseline: 2290 errors
+2025-11-04T00:57:45.5637524Z 🔧 Running TypeScript check...
+2025-11-04T00:57:45.5637921Z 
+2025-11-04T00:58:42.2898125Z 
+2025-11-04T00:58:42.2900465Z 📈 Results:
+2025-11-04T00:58:42.2900925Z    Errors found: 2290
+2025-11-04T00:58:42.2901331Z    Baseline:     2290
+2025-11-04T00:58:42.2901708Z    Delta:        +0
+2025-11-04T00:58:42.2902102Z    Status:       PASS
+2025-11-04T00:58:42.2902328Z 
+2025-11-04T00:58:42.2902732Z ✅ PASS: Error count within baseline
+2025-11-04T00:58:42.2970910Z ##[group]Run npm run dev &
+2025-11-04T00:58:42.2971190Z [36;1mnpm run dev &[0m
+2025-11-04T00:58:42.2971407Z [36;1mecho $! > .server.pid[0m
+2025-11-04T00:58:42.3004809Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:58:42.3005080Z env:
+2025-11-04T00:58:42.3005284Z   NODE_ENV: development
+2025-11-04T00:58:42.3005525Z   PORT: 5000
+2025-11-04T00:58:42.3006071Z   DATABASE_URL: ***localhost:5432/test_db
+2025-11-04T00:58:42.3006505Z   SESSION_SECRET: test-session-secret-for-ci-only-not-production
+2025-11-04T00:58:42.3007197Z   REPL_ID: ci-test-repl
+2025-11-04T00:58:42.3007458Z   REPLIT_DOMAINS: localhost,127.0.0.1
+2025-11-04T00:58:42.3007796Z   ISSUER_URL: https://replit.com/oidc
+2025-11-04T00:58:42.3008085Z ##[endgroup]
+2025-11-04T00:58:42.4155476Z 
+2025-11-04T00:58:42.4156032Z > rest-express@1.0.0 dev
+2025-11-04T00:58:42.4157120Z > NODE_ENV=development tsx server/index.ts
+2025-11-04T00:58:42.4157515Z 
+2025-11-04T00:58:46.1821847Z 2025-11-04 00:58:46 [info]: [CSRF] Protection initialized {"context":"Server","service":"energy-audit-api","args":[]}
+2025-11-04T00:58:46.2111059Z 2025-11-04 00:58:46 [warn]: [Email] SENDGRID_API_KEY not configured - emails will be logged to console {"context":"Server","service":"energy-audit-api","args":[]}
+2025-11-04T00:58:47.3107394Z ##[group]Run npx wait-on http://localhost:5000 --timeout 60000
+2025-11-04T00:58:47.3108425Z [36;1mnpx wait-on http://localhost:5000 --timeout 60000[0m
+2025-11-04T00:58:47.3143605Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:58:47.3143857Z ##[endgroup]
+2025-11-04T00:58:51.2619277Z npm warn exec The following package was not found and will be installed: wait-on@9.0.1
+2025-11-04T00:58:53.2991924Z ##[group]Run npm run test:unit || echo "Unit tests not configured"
+2025-11-04T00:58:53.2992369Z [36;1mnpm run test:unit || echo "Unit tests not configured"[0m
+2025-11-04T00:58:53.3025655Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:58:53.3025916Z ##[endgroup]
+2025-11-04T00:58:53.4391164Z 
+2025-11-04T00:58:53.4391702Z > rest-express@1.0.0 test:unit
+2025-11-04T00:58:53.4392247Z > vitest run --coverage
+2025-11-04T00:58:53.4392490Z 
+2025-11-04T00:58:53.9072123Z [31m[7m[31m MISSING DEPENDENCY [31m[27m Cannot find dependency '@vitest/coverage-v8'
+2025-11-04T00:58:53.9072599Z 
+2025-11-04T00:58:54.1916241Z [39m
+2025-11-04T00:58:54.1917327Z Unit tests not configured
+2025-11-04T00:58:54.1951930Z ##[group]Run npm run test:e2e
+2025-11-04T00:58:54.1952398Z [36;1mnpm run test:e2e[0m
+2025-11-04T00:58:54.2001720Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:58:54.2002097Z env:
+2025-11-04T00:58:54.2002344Z   CI: true
+2025-11-04T00:58:54.2003474Z   DATABASE_URL: ***localhost:5432/test_db
+2025-11-04T00:58:54.2004138Z   SESSION_SECRET: test-session-secret-for-ci-only-not-production
+2025-11-04T00:58:54.2004715Z   REPL_ID: ci-test-repl
+2025-11-04T00:58:54.2005091Z   REPLIT_DOMAINS: localhost,127.0.0.1
+2025-11-04T00:58:54.2005481Z ##[endgroup]
+2025-11-04T00:58:54.3541731Z 
+2025-11-04T00:58:54.3542499Z > rest-express@1.0.0 test:e2e
+2025-11-04T00:58:54.3543049Z > playwright test tests/e2e/golden-path
+2025-11-04T00:58:54.3543370Z 
+2025-11-04T00:58:57.1148581Z 
+2025-11-04T00:58:57.1150235Z Error: http://localhost:5000 is already used, make sure that nothing is running on the port/url or set reuseExistingServer:true in config.webServer.
+2025-11-04T00:58:57.1163427Z 
+2025-11-04T00:58:57.1171177Z 
+2025-11-04T00:58:57.1576525Z ##[error]Process completed with exit code 1.
+2025-11-04T00:58:57.1655588Z ##[group]Run actions/upload-artifact@v4
+2025-11-04T00:58:57.1656011Z with:
+2025-11-04T00:58:57.1656288Z   name: quality-gate-results
+2025-11-04T00:58:57.1657551Z   path: public/gate-status.json
+ts-error-report.json
+docs/ACCESSIBILITY_AUDIT_STATUS.md
+docs/ACCESSIBILITY_AUDIT_REPORT.md
+docs/audit-results/
+playwright-report/
+coverage/
+
+2025-11-04T00:58:57.1658716Z   retention-days: 30
+2025-11-04T00:58:57.1659048Z   if-no-files-found: warn
+2025-11-04T00:58:57.1659385Z   compression-level: 6
+2025-11-04T00:58:57.1659691Z   overwrite: false
+2025-11-04T00:58:57.1659996Z   include-hidden-files: false
+2025-11-04T00:58:57.1660328Z ##[endgroup]
+2025-11-04T00:58:57.4596476Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2025-11-04T00:58:57.4601058Z The least common ancestor is /home/runner/work/AuditForecaster/AuditForecaster. This will be the root directory of the artifact
+2025-11-04T00:58:57.4602304Z With the provided path, there will be 6 files uploaded
+2025-11-04T00:58:57.4607562Z Artifact name is valid!
+2025-11-04T00:58:57.4608382Z Root directory input is valid!
+2025-11-04T00:58:57.7737430Z Beginning upload of artifact content to blob storage
+2025-11-04T00:58:58.3091370Z Uploaded bytes 201573
+2025-11-04T00:58:58.3885716Z Finished uploading artifact content to blob storage!
+2025-11-04T00:58:58.3888914Z SHA256 digest of uploaded artifact zip is 97262e899fc90023c9869b5d861a21b9cc3da7870c01d7b692c420bddf2cba74
+2025-11-04T00:58:58.3890582Z Finalizing artifact upload
+2025-11-04T00:58:58.5367098Z Artifact quality-gate-results.zip successfully finalized. Artifact ID 4456245207
+2025-11-04T00:58:58.5368833Z Artifact quality-gate-results has been successfully uploaded! Final size is 201573 bytes. Artifact ID is 4456245207
+2025-11-04T00:58:58.5375310Z Artifact download URL: https://github.com/Dirty13itch/AuditForecaster/actions/runs/19054192141/artifacts/4456245207
+2025-11-04T00:58:58.5490747Z ##[group]Run if [ -f .server.pid ]; then
+2025-11-04T00:58:58.5491095Z [36;1mif [ -f .server.pid ]; then[0m
+2025-11-04T00:58:58.5491386Z [36;1m  kill $(cat .server.pid) || true[0m
+2025-11-04T00:58:58.5491659Z [36;1m  rm .server.pid[0m
+2025-11-04T00:58:58.5491879Z [36;1mfi[0m
+2025-11-04T00:58:58.5524630Z shell: /usr/bin/bash -e {0}
+2025-11-04T00:58:58.5525056Z ##[endgroup]
+2025-11-04T00:58:58.5664747Z Post job cleanup.
+2025-11-04T00:58:58.6628610Z [command]/usr/bin/git version
+2025-11-04T00:58:58.6665927Z git version 2.51.2
+2025-11-04T00:58:58.6710110Z Temporarily overriding HOME='/home/runner/work/_temp/d919c0ab-65ab-4e80-baed-d6fad36f19ed' before making global git config changes
+2025-11-04T00:58:58.6712583Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-04T00:58:58.6723185Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AuditForecaster/AuditForecaster
+2025-11-04T00:58:58.6758634Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-04T00:58:58.6791660Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-04T00:58:58.7043223Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-04T00:58:58.7065696Z http.https://github.com/.extraheader
+2025-11-04T00:58:58.7082797Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2025-11-04T00:58:58.7123038Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-04T00:58:58.7486249Z Print service container logs: 28ac28a2c09d4c6a80beba4f8051917b_postgres15_ae0233
+2025-11-04T00:58:58.7493357Z ##[command]/usr/bin/docker logs --details 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:58:58.7647563Z  The files belonging to this database system will be owned by user "postgres".
+2025-11-04T00:58:58.7648469Z  This user must also own the server process.
+2025-11-04T00:58:58.7652762Z  initdb: warning: enabling "trust" authentication for local connections
+2025-11-04T00:58:58.7657501Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2025-11-04T00:58:58.7658959Z  2025-11-04 00:56:08.391 UTC [1] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2025-11-04T00:58:58.7659747Z  2025-11-04 00:56:08.391 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2025-11-04T00:58:58.7660319Z  2025-11-04 00:56:08.391 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2025-11-04T00:58:58.7660895Z  2025-11-04 00:56:08.392 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2025-11-04T00:58:58.7661481Z  2025-11-04 00:56:08.396 UTC [64] LOG:  database system was shut down at 2025-11-04 00:56:08 UTC
+2025-11-04T00:58:58.7662016Z  2025-11-04 00:56:08.400 UTC [1] LOG:  database system is ready to accept connections
+2025-11-04T00:58:58.7662482Z  2025-11-04 00:56:17.487 UTC [75] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7662876Z  2025-11-04 00:56:27.552 UTC [83] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7663248Z  2025-11-04 00:56:37.634 UTC [91] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7663636Z  2025-11-04 00:56:47.728 UTC [100] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7664024Z  2025-11-04 00:56:57.816 UTC [108] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7664414Z  2025-11-04 00:57:07.914 UTC [116] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7664804Z  2025-11-04 00:57:17.979 UTC [125] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7665176Z  2025-11-04 00:57:28.048 UTC [133] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7665553Z  2025-11-04 00:57:38.112 UTC [141] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7665927Z  2025-11-04 00:57:48.195 UTC [150] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7666301Z  2025-11-04 00:57:58.295 UTC [158] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7667377Z  2025-11-04 00:58:08.380 UTC [167] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7667800Z  2025-11-04 00:58:18.444 UTC [176] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7668175Z  2025-11-04 00:58:28.517 UTC [184] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7668552Z  2025-11-04 00:58:38.584 UTC [193] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7669048Z  2025-11-04 00:58:47.449 UTC [194] ERROR:  relation "scheduled_exports" does not exist at character 215
+2025-11-04T00:58:58.7670355Z  2025-11-04 00:58:47.449 UTC [194] STATEMENT:  select "id", "user_id", "name", "data_type", "format", "frequency", "time", "day_of_week", "day_of_month", "recipients", "options", "enabled", "last_run", "next_run", "failure_log", "created_at", "updated_at" from "scheduled_exports" where "scheduled_exports"."enabled" = $1 order by "scheduled_exports"."next_run" asc
+2025-11-04T00:58:58.7672637Z  2025-11-04 00:58:47.667 UTC [195] ERROR:  relation "users" does not exist at character 111
+2025-11-04T00:58:58.7673736Z  2025-11-04 00:58:47.667 UTC [195] STATEMENT:  select "id", "email", "first_name", "last_name", "profile_image_url", "role", "created_at", "updated_at" from "users" where "users"."email" = $1 limit $2
+2025-11-04T00:58:58.7674712Z  2025-11-04 00:58:47.921 UTC [196] ERROR:  relation "jobs" does not exist at character 1096
+2025-11-04T00:58:58.7678586Z  2025-11-04 00:58:47.921 UTC [196] STATEMENT:  select "id", "name", "address", "builder_id", "plan_id", "lot_id", "contractor", "status", "inspection_type", "pricing", "scheduled_date", "completed_date", "field_work_complete", "field_work_completed_at", "photo_upload_complete", "photo_upload_completed_at", "completed_items", "total_items", "priority", "latitude", "longitude", "location_accuracy", "location_captured_at", "floor_area", "surface_area", "house_volume", "stories", "notes", "builder_signature_url", "builder_signed_at", "builder_signer_name", "compliance_status", "compliance_flags", "last_compliance_check", "last_report_sent_at", "source_google_event_id", "google_event_id", "original_scheduled_date", "is_cancelled", "created_by", "assigned_to", "assigned_at", "assigned_by", "estimated_duration", "territory", "previous_test_id", "multifamily_program", "certification_path", "unit_count", "sample_size", "mro_organization", "builder_verified_items_count", "builder_verified_items_photo_required", "billed_in_invoice_id", "selected_optional_features", "adjusted_floor_area", "adjusted_volume", "adjusted_surface_area" from "jobs"
+2025-11-04T00:58:58.7682267Z  2025-11-04 00:58:48.319 UTC [197] ERROR:  relation "jobs" does not exist at character 1096
+2025-11-04T00:58:58.7685546Z  2025-11-04 00:58:48.319 UTC [197] STATEMENT:  select "id", "name", "address", "builder_id", "plan_id", "lot_id", "contractor", "status", "inspection_type", "pricing", "scheduled_date", "completed_date", "field_work_complete", "field_work_completed_at", "photo_upload_complete", "photo_upload_completed_at", "completed_items", "total_items", "priority", "latitude", "longitude", "location_accuracy", "location_captured_at", "floor_area", "surface_area", "house_volume", "stories", "notes", "builder_signature_url", "builder_signed_at", "builder_signer_name", "compliance_status", "compliance_flags", "last_compliance_check", "last_report_sent_at", "source_google_event_id", "google_event_id", "original_scheduled_date", "is_cancelled", "created_by", "assigned_to", "assigned_at", "assigned_by", "estimated_duration", "territory", "previous_test_id", "multifamily_program", "certification_path", "unit_count", "sample_size", "mro_organization", "builder_verified_items_count", "builder_verified_items_photo_required", "billed_in_invoice_id", "selected_optional_features", "adjusted_floor_area", "adjusted_volume", "adjusted_surface_area" from "jobs"
+2025-11-04T00:58:58.7689429Z  2025-11-04 00:58:48.343 UTC [198] ERROR:  relation "achievements" does not exist at character 96
+2025-11-04T00:58:58.7690160Z  2025-11-04 00:58:48.343 UTC [198] STATEMENT:  select "id", "name", "description", "type", "icon_name", "criteria", "tier", "created_at" from "achievements" where "achievements"."name" = $1 limit $2
+2025-11-04T00:58:58.7691032Z  2025-11-04 00:58:48.356 UTC [199] ERROR:  relation "builders" does not exist at character 384
+2025-11-04T00:58:58.7692441Z  2025-11-04 00:58:48.356 UTC [199] STATEMENT:  select "id", "name", "company_name", "email", "phone", "address", "trade_specialization", "rating", "total_jobs", "notes", "volume_tier", "billing_terms", "preferred_lead_time", "abbreviations", "status", "auto_created_from_event", "needs_review", "confidence", "construction_manager_name", "construction_manager_email", "construction_manager_phone", "created_by", "created_at" from "builders"
+2025-11-04T00:58:58.7693852Z  2025-11-04 00:58:48.371 UTC [200] ERROR:  relation "users" does not exist at character 111
+2025-11-04T00:58:58.7694574Z  2025-11-04 00:58:48.371 UTC [200] STATEMENT:  select "id", "email", "first_name", "last_name", "profile_image_url", "role", "created_at", "updated_at" from "users" where "users"."id" = $1 limit $2
+2025-11-04T00:58:58.7695279Z  2025-11-04 00:58:48.381 UTC [201] ERROR:  relation "users" does not exist at character 111
+2025-11-04T00:58:58.7695983Z  2025-11-04 00:58:48.381 UTC [201] STATEMENT:  select "id", "email", "first_name", "last_name", "profile_image_url", "role", "created_at", "updated_at" from "users" where "users"."email" = $1 limit $2
+2025-11-04T00:58:58.7697059Z  2025-11-04 00:58:48.469 UTC [202] ERROR:  relation "background_jobs" does not exist at character 13
+2025-11-04T00:58:58.7699400Z  2025-11-04 00:58:48.469 UTC [202] STATEMENT:  insert into "background_jobs" ("id", "job_name", "display_name", "description", "schedule", "enabled", "last_run_at", "last_status", "last_duration_ms", "last_error", "next_run_at", "success_count", "failure_count", "average_duration_ms", "metadata", "created_at", "updated_at") values (default, $1, $2, $3, $4, $5, default, default, default, default, default, default, default, default, default, default, default) on conflict ("job_name") do update set "display_name" = $6, "description" = $7, "schedule" = $8, "enabled" = $9, "updated_at" = $10 returning "id", "job_name", "display_name", "description", "schedule", "enabled", "last_run_at", "last_status", "last_duration_ms", "last_error", "next_run_at", "success_count", "failure_count", "average_duration_ms", "metadata", "created_at", "updated_at"
+2025-11-04T00:58:58.7701743Z  2025-11-04 00:58:48.506 UTC [203] ERROR:  relation "background_jobs" does not exist at character 13
+2025-11-04T00:58:58.7704056Z  2025-11-04 00:58:48.506 UTC [203] STATEMENT:  insert into "background_jobs" ("id", "job_name", "display_name", "description", "schedule", "enabled", "last_run_at", "last_status", "last_duration_ms", "last_error", "next_run_at", "success_count", "failure_count", "average_duration_ms", "metadata", "created_at", "updated_at") values (default, $1, $2, $3, $4, $5, default, default, default, default, default, default, default, default, default, default, default) on conflict ("job_name") do update set "display_name" = $6, "description" = $7, "schedule" = $8, "enabled" = $9, "updated_at" = $10 returning "id", "job_name", "display_name", "description", "schedule", "enabled", "last_run_at", "last_status", "last_duration_ms", "last_error", "next_run_at", "success_count", "failure_count", "average_duration_ms", "metadata", "created_at", "updated_at"
+2025-11-04T00:58:58.7706300Z  2025-11-04 00:58:48.697 UTC [212] FATAL:  role "root" does not exist
+2025-11-04T00:58:58.7706909Z  2025-11-04 00:58:48.744 UTC [204] ERROR:  relation "users" does not exist at character 111
+2025-11-04T00:58:58.7707604Z  2025-11-04 00:58:48.744 UTC [204] STATEMENT:  select "id", "email", "first_name", "last_name", "profile_image_url", "role", "created_at", "updated_at" from "users" where "users"."id" = $1 limit $2
+2025-11-04T00:58:58.7708302Z  2025-11-04 00:58:48.837 UTC [213] ERROR:  relation "users" does not exist at character 111
+2025-11-04T00:58:58.7709001Z  2025-11-04 00:58:48.837 UTC [213] STATEMENT:  select "id", "email", "first_name", "last_name", "profile_image_url", "role", "created_at", "updated_at" from "users" where "users"."id" = $1 limit $2
+2025-11-04T00:58:58.7709823Z  2025-11-04 00:58:48.873 UTC [214] ERROR:  relation "users" does not exist at character 111
+2025-11-04T00:58:58.7710526Z  2025-11-04 00:58:48.873 UTC [214] STATEMENT:  select "id", "email", "first_name", "last_name", "profile_image_url", "role", "created_at", "updated_at" from "users" where "users"."email" = $1 limit $2
+2025-11-04T00:58:58.7711253Z  2025-11-04 00:58:48.916 UTC [215] ERROR:  relation "background_jobs" does not exist at character 13
+2025-11-04T00:58:58.7713623Z  2025-11-04 00:58:48.916 UTC [215] STATEMENT:  insert into "background_jobs" ("id", "job_name", "display_name", "description", "schedule", "enabled", "last_run_at", "last_status", "last_duration_ms", "last_error", "next_run_at", "success_count", "failure_count", "average_duration_ms", "metadata", "created_at", "updated_at") values (default, $1, $2, $3, $4, $5, default, default, default, default, default, default, default, default, default, default, default) on conflict ("job_name") do update set "display_name" = $6, "description" = $7, "schedule" = $8, "enabled" = $9, "updated_at" = $10 returning "id", "job_name", "display_name", "description", "schedule", "enabled", "last_run_at", "last_status", "last_duration_ms", "last_error", "next_run_at", "success_count", "failure_count", "average_duration_ms", "metadata", "created_at", "updated_at"
+2025-11-04T00:58:58.7716033Z  2025-11-04 00:58:48.939 UTC [216] ERROR:  relation "jobs" does not exist at character 1096
+2025-11-04T00:58:58.7719554Z  2025-11-04 00:58:48.939 UTC [216] STATEMENT:  select "id", "name", "address", "builder_id", "plan_id", "lot_id", "contractor", "status", "inspection_type", "pricing", "scheduled_date", "completed_date", "field_work_complete", "field_work_completed_at", "photo_upload_complete", "photo_upload_completed_at", "completed_items", "total_items", "priority", "latitude", "longitude", "location_accuracy", "location_captured_at", "floor_area", "surface_area", "house_volume", "stories", "notes", "builder_signature_url", "builder_signed_at", "builder_signer_name", "compliance_status", "compliance_flags", "last_compliance_check", "last_report_sent_at", "source_google_event_id", "google_event_id", "original_scheduled_date", "is_cancelled", "created_by", "assigned_to", "assigned_at", "assigned_by", "estimated_duration", "territory", "previous_test_id", "multifamily_program", "certification_path", "unit_count", "sample_size", "mro_organization", "builder_verified_items_count", "builder_verified_items_photo_required", "billed_in_invoice_id", "selected_optional_features", "adjusted_floor_area", "adjusted_volume", "adjusted_surface_area" from "jobs"
+2025-11-04T00:58:58.7722902Z  
+2025-11-04T00:58:58.7723159Z  The database cluster will be initialized with locale "en_US.utf8".
+2025-11-04T00:58:58.7723568Z  The default database encoding has accordingly been set to "UTF8".
+2025-11-04T00:58:58.7723962Z  The default text search configuration will be set to "english".
+2025-11-04T00:58:58.7724257Z  
+2025-11-04T00:58:58.7724429Z  Data page checksums are disabled.
+2025-11-04T00:58:58.7724649Z  
+2025-11-04T00:58:58.7724913Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2025-11-04T00:58:58.7725269Z  creating subdirectories ... ok
+2025-11-04T00:58:58.7725559Z  selecting dynamic shared memory implementation ... posix
+2025-11-04T00:58:58.7725883Z  selecting default max_connections ... 100
+2025-11-04T00:58:58.7726154Z  selecting default shared_buffers ... 128MB
+2025-11-04T00:58:58.7726409Z  selecting default time zone ... Etc/UTC
+2025-11-04T00:58:58.7727074Z  creating configuration files ... ok
+2025-11-04T00:58:58.7727324Z  running bootstrap script ... ok
+2025-11-04T00:58:58.7727592Z  performing post-bootstrap initialization ... ok
+2025-11-04T00:58:58.7727864Z  syncing data to disk ... ok
+2025-11-04T00:58:58.7728066Z  
+2025-11-04T00:58:58.7728212Z  
+2025-11-04T00:58:58.7728415Z  Success. You can now start the database server using:
+2025-11-04T00:58:58.7728901Z  
+2025-11-04T00:58:58.7729112Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+2025-11-04T00:58:58.7729380Z  
+2025-11-04T00:58:58.7729925Z  waiting for server to start....2025-11-04 00:56:08.080 UTC [48] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2025-11-04T00:58:58.7730684Z  2025-11-04 00:56:08.082 UTC [48] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2025-11-04T00:58:58.7731165Z  2025-11-04 00:56:08.085 UTC [51] LOG:  database system was shut down at 2025-11-04 00:56:07 UTC
+2025-11-04T00:58:58.7731606Z  2025-11-04 00:56:08.089 UTC [48] LOG:  database system is ready to accept connections
+2025-11-04T00:58:58.7731928Z   done
+2025-11-04T00:58:58.7732087Z  server started
+2025-11-04T00:58:58.7732257Z  CREATE DATABASE
+2025-11-04T00:58:58.7732424Z  
+2025-11-04T00:58:58.7732569Z  
+2025-11-04T00:58:58.7732868Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2025-11-04T00:58:58.7733228Z  
+2025-11-04T00:58:58.7733449Z  2025-11-04 00:56:08.270 UTC [48] LOG:  received fast shutdown request
+2025-11-04T00:58:58.7733904Z  waiting for server to shut down....2025-11-04 00:56:08.271 UTC [48] LOG:  aborting any active transactions
+2025-11-04T00:58:58.7734501Z  2025-11-04 00:56:08.273 UTC [48] LOG:  background worker "logical replication launcher" (PID 54) exited with exit code 1
+2025-11-04T00:58:58.7735081Z  2025-11-04 00:56:08.273 UTC [49] LOG:  shutting down
+2025-11-04T00:58:58.7735477Z  2025-11-04 00:56:08.273 UTC [49] LOG:  checkpoint starting: shutdown immediate
+2025-11-04T00:58:58.7737069Z  2025-11-04 00:56:08.295 UTC [49] LOG:  checkpoint complete: wrote 922 buffers (5.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.014 s, sync=0.007 s, total=0.023 s; sync files=301, longest=0.005 s, average=0.001 s; distance=4239 kB, estimate=4239 kB
+2025-11-04T00:58:58.7738484Z  2025-11-04 00:56:08.303 UTC [48] LOG:  database system is shut down
+2025-11-04T00:58:58.7738990Z   done
+2025-11-04T00:58:58.7739250Z  server stopped
+2025-11-04T00:58:58.7739509Z  
+2025-11-04T00:58:58.7739868Z  PostgreSQL init process complete; ready for start up.
+2025-11-04T00:58:58.7740340Z  
+2025-11-04T00:58:58.7748691Z Stop and remove container: 28ac28a2c09d4c6a80beba4f8051917b_postgres15_ae0233
+2025-11-04T00:58:58.7755810Z ##[command]/usr/bin/docker rm --force 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:58:59.0464840Z 6b2c6084b839e6394e0627379907fcb21270fbfd00d23f4ef649c301b677e20c
+2025-11-04T00:58:59.0499092Z Remove container network: github_network_9d55782ff15e4abb9ef4b65e2c5f5885
+2025-11-04T00:58:59.0504015Z ##[command]/usr/bin/docker network rm github_network_9d55782ff15e4abb9ef4b65e2c5f5885
+2025-11-04T00:58:59.1572372Z github_network_9d55782ff15e4abb9ef4b65e2c5f5885
+2025-11-04T00:58:59.1640541Z Cleaning up orphan processes
+2025-11-04T00:58:59.1986795Z Terminate orphan process: pid (4486) (node)
+2025-11-04T00:58:59.2022649Z Terminate orphan process: pid (4497) (node)
+2025-11-04T00:58:59.2067336Z Terminate orphan process: pid (4509) (esbuild)
+2025-11-04T00:58:59.2093010Z Terminate orphan process: pid (4518) (esbuild)
+2025-11-04T00:58:59.2120298Z Terminate orphan process: pid (4543) (esbuild)
