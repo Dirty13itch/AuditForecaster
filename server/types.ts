@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { SelectUser } from '../shared/schema';
+import type { User } from '../shared/schema';
 
 // Authenticated request with user session
 export interface AuthenticatedRequest extends Request {
-  user: SelectUser & {
+  user?: User & {
     claims?: {
       sub: string;
       email: string;
@@ -11,11 +11,8 @@ export interface AuthenticatedRequest extends Request {
       last_name?: string;
     };
   };
-  session: {
-    user: SelectUser;
-    userId: string;
-    save: (callback?: (err: any) => void) => void;
-  };
+  // Use a loose session typing to avoid conflict with express-session declarations
+  session?: any;
 }
 
 // Request handler type for authenticated routes

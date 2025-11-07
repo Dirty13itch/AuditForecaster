@@ -221,7 +221,7 @@ export const builderAgreements = pgTable("builder_agreements", {
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
   status: text("status", { enum: ["active", "expired", "terminated", "pending"] }).notNull(),
-  defaultInspectionPrice: real("default_inspection_price"),
+  defaultInspectionPrice: decimal("default_inspection_price", { precision: 10, scale: 2 }),
   paymentTerms: text("payment_terms"),
   inspectionTypesIncluded: text("inspection_types_included").array(),
   notes: text("notes"),
@@ -247,7 +247,7 @@ export const builderPrograms = pgTable("builder_programs", {
   expirationDate: timestamp("expiration_date"),
   status: text("status", { enum: ["active", "inactive", "suspended"] }).notNull(),
   certificationNumber: text("certification_number"),
-  rebateAmount: real("rebate_amount"),
+  rebateAmount: decimal("rebate_amount", { precision: 10, scale: 2 }),
   requiresDocumentation: boolean("requires_documentation").default(true),
   notes: text("notes"),
   createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -397,7 +397,7 @@ export const lots = pgTable("lots", {
   streetAddress: text("street_address"),
   planId: varchar("plan_id").references(() => plans.id, { onDelete: 'set null' }),
   status: text("status", { enum: ["available", "under_construction", "completed", "sold", "on_hold"] }).notNull(),
-  squareFootage: real("square_footage"),
+  squareFootage: decimal("square_footage", { precision: 10, scale: 2 }),
   notes: text("notes"),
   createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
@@ -413,10 +413,10 @@ export const plans = pgTable("plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
   planName: text("plan_name").notNull(),
-  floorArea: real("floor_area"),
-  surfaceArea: real("surface_area"),
-  houseVolume: real("house_volume"),
-  stories: real("stories"),
+  floorArea: decimal("floor_area", { precision: 10, scale: 2 }),
+  surfaceArea: decimal("surface_area", { precision: 10, scale: 2 }),
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }),
+  stories: decimal("stories", { precision: 3, scale: 1 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
@@ -431,8 +431,8 @@ export const planOptionalFeatures = pgTable("plan_optional_features", {
   featureType: text("feature_type", { enum: ["room", "upgrade", "structural"] }).notNull(),
   impactsFloorArea: boolean("impacts_floor_area").default(false),
   impactsVolume: boolean("impacts_volume").default(false),
-  floorAreaDelta: real("floor_area_delta"),
-  volumeDelta: real("volume_delta"),
+  floorAreaDelta: decimal("floor_area_delta", { precision: 10, scale: 2 }),
+  volumeDelta: decimal("volume_delta", { precision: 10, scale: 2 }),
   isAvailable: boolean("is_available").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
@@ -473,7 +473,7 @@ export const jobs = pgTable("jobs", {
       "energy_star"         // Energy Star
     ]
   }).notNull(),
-  pricing: real("pricing"),
+  pricing: decimal("pricing", { precision: 10, scale: 2 }),
   scheduledDate: timestamp("scheduled_date"),
   completedDate: timestamp("completed_date"),
   fieldWorkComplete: boolean("field_work_complete").default(false),
@@ -487,10 +487,10 @@ export const jobs = pgTable("jobs", {
   longitude: real("longitude"),
   locationAccuracy: real("location_accuracy"), // GPS accuracy in meters
   locationCapturedAt: timestamp("location_captured_at"), // When GPS was captured
-  floorArea: real("floor_area"),
-  surfaceArea: real("surface_area"),
-  houseVolume: real("house_volume"),
-  stories: real("stories"),
+  floorArea: decimal("floor_area", { precision: 10, scale: 2 }),
+  surfaceArea: decimal("surface_area", { precision: 10, scale: 2 }),
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }),
+  stories: decimal("stories", { precision: 3, scale: 1 }),
   notes: text("notes"),
   builderSignatureUrl: text("builder_signature_url"),
   builderSignedAt: timestamp("builder_signed_at"),
@@ -524,9 +524,9 @@ export const jobs = pgTable("jobs", {
   builderVerifiedItemsPhotoRequired: boolean("builder_verified_items_photo_required").default(false),
   billedInInvoiceId: varchar("billed_in_invoice_id").references(() => invoices.id, { onDelete: 'set null' }),
   selectedOptionalFeatures: jsonb("selected_optional_features").default('[]'),
-  adjustedFloorArea: real("adjusted_floor_area"),
-  adjustedVolume: real("adjusted_volume"),
-  adjustedSurfaceArea: real("adjusted_surface_area"),
+  adjustedFloorArea: decimal("adjusted_floor_area", { precision: 10, scale: 2 }),
+  adjustedVolume: decimal("adjusted_volume", { precision: 10, scale: 2 }),
+  adjustedSurfaceArea: decimal("adjusted_surface_area", { precision: 10, scale: 2 }),
 }, (table) => [
   index("idx_jobs_builder_id").on(table.builderId),
   index("idx_jobs_plan_id").on(table.planId),
@@ -564,7 +564,7 @@ export const jobTypeConfig = pgTable("job_type_config", {
   }).notNull(),
   requiredTests: text("required_tests").array().default(sql`ARRAY[]::text[]`), // ['blower_door', 'duct_leakage', 'ventilation']
   defaultDuration: integer("default_duration").default(120), // Minutes
-  basePricing: real("base_pricing"), // Default pricing
+  basePricing: decimal("base_pricing", { precision: 10, scale: 2 }), // Default pricing
   workflowTemplate: text("workflow_template"), // Reference to workflow template type
   requiredPhotos: text("required_photos").array().default(sql`ARRAY[]::text[]`), // Required photo types
   completionRequirements: jsonb("completion_requirements").default({
@@ -744,13 +744,13 @@ export const expenses = pgTable("expenses", {
   jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'cascade' }),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   category: text("category").notNull(),
-  amount: real("amount").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description"),
   receiptUrl: text("receipt_url"),
   date: timestamp("date").notNull(),
   isDeductible: boolean("is_deductible").default(true),
   ocrText: text("ocr_text"),
-  ocrConfidence: real("ocr_confidence"),
+  ocrConfidence: decimal("ocr_confidence", { precision: 5, scale: 2 }),
   ocrMetadata: jsonb("ocr_metadata"),
   // New financial tracking columns
   categoryId: varchar("category_id").references(() => expenseCategories.id, { onDelete: 'set null' }),
@@ -760,10 +760,10 @@ export const expenses = pgTable("expenses", {
   swipeClassification: varchar("swipe_classification", { 
     enum: ["business", "personal"] 
   }),
-  gpsLatitude: real("gps_latitude"),
-  gpsLongitude: real("gps_longitude"),
+  gpsLatitude: decimal("gps_latitude", { precision: 10, scale: 8 }),
+  gpsLongitude: decimal("gps_longitude", { precision: 11, scale: 8 }),
   receiptPath: varchar("receipt_path"),
-  ocrAmount: real("ocr_amount"),
+  ocrAmount: decimal("ocr_amount", { precision: 10, scale: 2 }),
   ocrVendor: varchar("ocr_vendor"),
   ocrDate: date("ocr_date"),
   approvedBy: varchar("approved_by").references(() => users.id, { onDelete: 'set null' }),
@@ -785,7 +785,7 @@ export const mileageLogs = pgTable("mileage_logs", {
   date: timestamp("date").notNull(),
   startLocation: text("start_location"),
   endLocation: text("end_location"),
-  distance: real("distance").notNull(),
+  distance: decimal("distance", { precision: 10, scale: 2 }).notNull(),
   purpose: text("purpose"),
   isWorkRelated: boolean("is_work_related"),
   jobId: varchar("job_id"),
@@ -797,15 +797,15 @@ export const mileageLogs = pgTable("mileage_logs", {
   // Manual odometer fields (legacy, still used for manual entries)
   startOdometer: integer("start_odometer"),
   endOdometer: integer("end_odometer"),
-  rate: real("rate"),
+  rate: decimal("rate", { precision: 10, scale: 2 }),
   notes: text("notes"),
   // GPS auto-tracking fields
   startTimestamp: timestamp("start_timestamp"),
   endTimestamp: timestamp("end_timestamp"),
   distanceMeters: integer("distance_meters"), // Calculated from GPS points
   durationSeconds: integer("duration_seconds"),
-  averageSpeed: real("average_speed"), // m/s
-  businessProbability: real("business_probability"), // 0-1 AI score
+  averageSpeed: decimal("average_speed", { precision: 10, scale: 2 }), // m/s
+  businessProbability: decimal("business_probability", { precision: 3, scale: 2 }), // 0-1 AI score
   routeSummary: jsonb("route_summary"), // { totalDistance, totalTime, startCoords, endCoords, waypoints }
   trackingSource: text("tracking_source", { 
     enum: ["manual", "gps_auto", "gps_manual"] 
@@ -924,7 +924,7 @@ export const reportFieldValues = pgTable("report_field_values", {
   templateFieldId: varchar("template_field_id").notNull(),  // No FK constraint for component-based templates
   // Store different value types
   valueText: text("value_text"),
-  valueNumber: real("value_number"),
+  valueNumber: decimal("value_number", { precision: 20, scale: 5 }),
   valueBoolean: boolean("value_boolean"),
   valueDate: date("value_date"),
   valueTime: time("value_time"),
@@ -969,17 +969,17 @@ export const fieldDependencies = pgTable("field_dependencies", {
 export const forecasts = pgTable("forecasts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
-  predictedTdl: real("predicted_tdl"),
-  predictedDlo: real("predicted_dlo"),
-  predictedAch50: real("predicted_ach50"),
-  actualTdl: real("actual_tdl"),
-  actualDlo: real("actual_dlo"),
-  actualAch50: real("actual_ach50"),
-  cfm50: real("cfm50"),
-  houseVolume: real("house_volume"),
-  houseSurfaceArea: real("house_surface_area"),
-  totalDuctLeakageCfm25: real("total_duct_leakage_cfm25"),
-  ductLeakageToOutsideCfm25: real("duct_leakage_to_outside_cfm25"),
+  predictedTdl: decimal("predicted_tdl", { precision: 10, scale: 2 }),
+  predictedDlo: decimal("predicted_dlo", { precision: 10, scale: 2 }),
+  predictedAch50: decimal("predicted_ach50", { precision: 10, scale: 2 }),
+  actualTdl: decimal("actual_tdl", { precision: 10, scale: 2 }),
+  actualDlo: decimal("actual_dlo", { precision: 10, scale: 2 }),
+  actualAch50: decimal("actual_ach50", { precision: 10, scale: 2 }),
+  cfm50: decimal("cfm50", { precision: 10, scale: 2 }),
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }),
+  houseSurfaceArea: decimal("house_surface_area", { precision: 10, scale: 2 }),
+  totalDuctLeakageCfm25: decimal("total_duct_leakage_cfm25", { precision: 10, scale: 2 }),
+  ductLeakageToOutsideCfm25: decimal("duct_leakage_to_outside_cfm25", { precision: 10, scale: 2 }),
   totalLedCount: integer("total_led_count"),
   stripLedCount: integer("strip_led_count"),
   suppliesInsideConditioned: integer("supplies_inside_conditioned"),
@@ -990,9 +990,9 @@ export const forecasts = pgTable("forecasts", {
   testConditions: text("test_conditions"),
   equipmentNotes: text("equipment_notes"),
   weatherConditions: text("weather_conditions"),
-  outdoorTemp: real("outdoor_temp"),
-  indoorTemp: real("indoor_temp"),
-  windSpeed: real("wind_speed"),
+  outdoorTemp: decimal("outdoor_temp", { precision: 5, scale: 1 }),
+  indoorTemp: decimal("indoor_temp", { precision: 5, scale: 1 }),
+  windSpeed: decimal("wind_speed", { precision: 5, scale: 1 }),
   confidence: integer("confidence"),
   recordedAt: timestamp("recorded_at").default(sql`now()`),
 }, (table) => [
@@ -1056,7 +1056,7 @@ export const photos = pgTable("photos", {
   tags: text("tags").array(),
   annotationData: jsonb("annotation_data"),
   ocrText: text("ocr_text"),
-  ocrConfidence: real("ocr_confidence"),
+  ocrConfidence: decimal("ocr_confidence", { precision: 5, scale: 2 }),
   ocrMetadata: jsonb("ocr_metadata"),
   isFavorite: boolean("is_favorite").default(false),
   orderIndex: integer("order_index").default(0),
@@ -1084,7 +1084,7 @@ export const complianceRules = pgTable("compliance_rules", {
   userId: varchar("user_id"),
   codeYear: text("code_year").notNull(),
   metricType: text("metric_type").notNull(),
-  threshold: real("threshold").notNull(),
+  threshold: decimal("threshold", { precision: 10, scale: 2 }).notNull(),
   units: text("units").notNull(),
   severity: text("severity").notNull(),
   isActive: boolean("is_active").default(true),
@@ -1277,41 +1277,41 @@ export const blowerDoorTests = pgTable("blower_door_tests", {
   equipmentCalibrationDate: timestamp("equipment_calibration_date"),
   
   // Building Information
-  houseVolume: real("house_volume").notNull(), // cubic feet
-  conditionedArea: real("conditioned_area").notNull(), // square feet
-  surfaceArea: real("surface_area"), // square feet
-  numberOfStories: real("number_of_stories").notNull(),
+  houseVolume: decimal("house_volume", { precision: 10, scale: 2 }).notNull(), // cubic feet
+  conditionedArea: decimal("conditioned_area", { precision: 10, scale: 2 }).notNull(), // square feet
+  surfaceArea: decimal("surface_area", { precision: 10, scale: 2 }), // square feet
+  numberOfStories: decimal("number_of_stories", { precision: 3, scale: 1 }).notNull(),
   basementType: text("basement_type", { enum: ["none", "unconditioned", "conditioned"] }).notNull(),
   
   // Weather Conditions for corrections
-  outdoorTemp: real("outdoor_temp"), // Fahrenheit
-  indoorTemp: real("indoor_temp"), // Fahrenheit
-  outdoorHumidity: real("outdoor_humidity"), // percentage
-  indoorHumidity: real("indoor_humidity"), // percentage
-  windSpeed: real("wind_speed"), // mph
-  barometricPressure: real("barometric_pressure"), // inches Hg
-  altitude: real("altitude"), // feet above sea level
+  outdoorTemp: decimal("outdoor_temp", { precision: 5, scale: 1 }), // Fahrenheit
+  indoorTemp: decimal("indoor_temp", { precision: 5, scale: 1 }), // Fahrenheit
+  outdoorHumidity: decimal("outdoor_humidity", { precision: 5, scale: 1 }), // percentage
+  indoorHumidity: decimal("indoor_humidity", { precision: 5, scale: 1 }), // percentage
+  windSpeed: decimal("wind_speed", { precision: 5, scale: 1 }), // mph
+  barometricPressure: decimal("barometric_pressure", { precision: 6, scale: 2 }), // inches Hg
+  altitude: decimal("altitude", { precision: 8, scale: 1 }), // feet above sea level
   
   // Multi-point test data (stored as JSON array)
   testPoints: jsonb("test_points"), // Array of {housePressure, fanPressure, cfm, ringConfiguration}
   
   // Calculated Results
-  cfm50: real("cfm50").notNull(), // CFM at 50 Pa
-  ach50: real("ach50").notNull(), // Air changes per hour at 50 Pa
-  ela: real("ela"), // Effective Leakage Area (sq inches)
-  nFactor: real("n_factor"), // Flow exponent (typically 0.5-0.7)
-  correlationCoefficient: real("correlation_coefficient"), // R² value
+  cfm50: decimal("cfm50", { precision: 10, scale: 2 }).notNull(), // CFM at 50 Pa
+  ach50: decimal("ach50", { precision: 6, scale: 2 }).notNull(), // Air changes per hour at 50 Pa
+  ela: decimal("ela", { precision: 8, scale: 2 }), // Effective Leakage Area (sq inches)
+  nFactor: decimal("n_factor", { precision: 4, scale: 3 }), // Flow exponent (typically 0.5-0.7)
+  correlationCoefficient: decimal("correlation_coefficient", { precision: 4, scale: 3 }), // R² value
   
   // Minnesota Code Compliance (2020 Energy Code)
   codeYear: text("code_year").default("2020"),
-  codeLimit: real("code_limit"), // ACH50 limit per code
+  codeLimit: decimal("code_limit", { precision: 6, scale: 2 }), // ACH50 limit per code
   meetsCode: boolean("meets_code").notNull(),
-  margin: real("margin"), // How much under/over the limit
+  margin: decimal("margin", { precision: 6, scale: 2 }), // How much under/over the limit
   
   // Additional fields
   notes: text("notes"),
   weatherCorrectionApplied: boolean("weather_correction_applied").default(false),
-  altitudeCorrectionFactor: real("altitude_correction_factor"),
+  altitudeCorrectionFactor: decimal("altitude_correction_factor", { precision: 4, scale: 3 }),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1341,31 +1341,31 @@ export const ductLeakageTests = pgTable("duct_leakage_tests", {
   // System Information
   systemType: text("system_type", { enum: ["forced_air", "heat_pump", "hydronic", "other"] }).notNull(),
   numberOfSystems: integer("number_of_systems").default(1),
-  conditionedArea: real("conditioned_area").notNull(), // square feet
-  systemAirflow: real("system_airflow"), // Design CFM
+  conditionedArea: decimal("conditioned_area", { precision: 10, scale: 2 }).notNull(), // square feet
+  systemAirflow: decimal("system_airflow", { precision: 10, scale: 2 }), // Design CFM
   
   // Total Duct Leakage Test (at 25 Pa)
-  totalFanPressure: real("total_fan_pressure"), // Pa
+  totalFanPressure: decimal("total_fan_pressure", { precision: 8, scale: 2 }), // Pa
   totalRingConfiguration: text("total_ring_configuration"),
-  cfm25Total: real("cfm25_total"), // Total leakage CFM at 25 Pa
-  totalCfmPerSqFt: real("total_cfm_per_sqft"), // CFM25/100 sq ft
-  totalPercentOfFlow: real("total_percent_of_flow"), // As % of system airflow
+  cfm25Total: decimal("cfm25_total", { precision: 10, scale: 2 }), // Total leakage CFM at 25 Pa
+  totalCfmPerSqFt: decimal("total_cfm_per_sqft", { precision: 8, scale: 3 }), // CFM25/100 sq ft
+  totalPercentOfFlow: decimal("total_percent_of_flow", { precision: 6, scale: 2 }), // As % of system airflow
   
   // Duct Leakage to Outside (at 25 Pa)
-  outsideHousePressure: real("outside_house_pressure"), // Pa
-  outsideFanPressure: real("outside_fan_pressure"), // Pa
+  outsideHousePressure: decimal("outside_house_pressure", { precision: 8, scale: 2 }), // Pa
+  outsideFanPressure: decimal("outside_fan_pressure", { precision: 8, scale: 2 }), // Pa
   outsideRingConfiguration: text("outside_ring_configuration"),
-  cfm25Outside: real("cfm25_outside"), // Leakage to outside CFM at 25 Pa
-  outsideCfmPerSqFt: real("outside_cfm_per_sqft"), // CFM25/100 sq ft
-  outsidePercentOfFlow: real("outside_percent_of_flow"), // As % of system airflow
+  cfm25Outside: decimal("cfm25_outside", { precision: 10, scale: 2 }), // Leakage to outside CFM at 25 Pa
+  outsideCfmPerSqFt: decimal("outside_cfm_per_sqft", { precision: 8, scale: 3 }), // CFM25/100 sq ft
+  outsidePercentOfFlow: decimal("outside_percent_of_flow", { precision: 6, scale: 2 }), // As % of system airflow
   
   // Pressure Pan Testing
   pressurePanReadings: jsonb("pressure_pan_readings"), // Array of {location, supplyReturn, reading, passFail}
   
   // Minnesota Code Compliance (2020 Energy Code)
   codeYear: text("code_year").default("2020"),
-  totalDuctLeakageLimit: real("total_duct_leakage_limit"), // CFM25/100 sq ft
-  outsideLeakageLimit: real("outside_leakage_limit"), // CFM25/100 sq ft
+  totalDuctLeakageLimit: decimal("total_duct_leakage_limit", { precision: 6, scale: 2 }), // CFM25/100 sq ft
+  outsideLeakageLimit: decimal("outside_leakage_limit", { precision: 6, scale: 2 }), // CFM25/100 sq ft
   meetsCodeTDL: boolean("meets_code_tdl"), // Total Duct Leakage compliance
   meetsCodeDLO: boolean("meets_code_dlo"), // Duct Leakage to Outside compliance
   
@@ -1401,57 +1401,57 @@ export const ventilationTests = pgTable("ventilation_tests", {
   equipmentCalibrationDate: timestamp("equipment_calibration_date"),
   
   // House Characteristics
-  floorArea: real("floor_area").notNull(), // Total conditioned floor area (sq ft)
+  floorArea: decimal("floor_area", { precision: 10, scale: 2 }).notNull(), // Total conditioned floor area (sq ft)
   bedrooms: integer("bedrooms").notNull(),
-  stories: real("stories").default("1"), // Building height (1, 1.5, 2, etc.)
+  stories: decimal("stories", { precision: 3, scale: 1 }).default("1"), // Building height (1, 1.5, 2, etc.)
   
   // ASHRAE 62.2 Whole-House Ventilation Calculations
-  requiredVentilationRate: real("required_ventilation_rate"), // Qtotal (cfm)
-  requiredContinuousRate: real("required_continuous_rate"), // For continuous operation
-  infiltrationCredit: real("infiltration_credit"), // From blower door if available (cfm)
-  adjustedRequiredRate: real("adjusted_required_rate"), // After infiltration credit
+  requiredVentilationRate: decimal("required_ventilation_rate", { precision: 8, scale: 2 }), // Qtotal (cfm)
+  requiredContinuousRate: decimal("required_continuous_rate", { precision: 8, scale: 2 }), // For continuous operation
+  infiltrationCredit: decimal("infiltration_credit", { precision: 8, scale: 2 }), // From blower door if available (cfm)
+  adjustedRequiredRate: decimal("adjusted_required_rate", { precision: 8, scale: 2 }), // After infiltration credit
   
   // Kitchen Exhaust Fan
   kitchenExhaustType: text("kitchen_exhaust_type", { enum: ["intermittent", "continuous", "none"] }),
-  kitchenRatedCFM: real("kitchen_rated_cfm"),
-  kitchenMeasuredCFM: real("kitchen_measured_cfm"),
+  kitchenRatedCFM: decimal("kitchen_rated_cfm", { precision: 8, scale: 2 }),
+  kitchenMeasuredCFM: decimal("kitchen_measured_cfm", { precision: 8, scale: 2 }),
   kitchenMeetsCode: boolean("kitchen_meets_code"), // ≥100 intermittent or ≥25 continuous
   kitchenNotes: text("kitchen_notes"),
   
   // Bathroom Exhaust Fans (supporting up to 4 bathrooms)
   bathroom1Type: text("bathroom1_type", { enum: ["intermittent", "continuous", "none"] }),
-  bathroom1RatedCFM: real("bathroom1_rated_cfm"),
-  bathroom1MeasuredCFM: real("bathroom1_measured_cfm"),
+  bathroom1RatedCFM: decimal("bathroom1_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom1MeasuredCFM: decimal("bathroom1_measured_cfm", { precision: 8, scale: 2 }),
   bathroom1MeetsCode: boolean("bathroom1_meets_code"), // ≥50 intermittent or ≥20 continuous
   
   bathroom2Type: text("bathroom2_type", { enum: ["intermittent", "continuous", "none"] }),
-  bathroom2RatedCFM: real("bathroom2_rated_cfm"),
-  bathroom2MeasuredCFM: real("bathroom2_measured_cfm"),
+  bathroom2RatedCFM: decimal("bathroom2_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom2MeasuredCFM: decimal("bathroom2_measured_cfm", { precision: 8, scale: 2 }),
   bathroom2MeetsCode: boolean("bathroom2_meets_code"),
   
   bathroom3Type: text("bathroom3_type", { enum: ["intermittent", "continuous", "none"] }),
-  bathroom3RatedCFM: real("bathroom3_rated_cfm"),
-  bathroom3MeasuredCFM: real("bathroom3_measured_cfm"),
+  bathroom3RatedCFM: decimal("bathroom3_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom3MeasuredCFM: decimal("bathroom3_measured_cfm", { precision: 8, scale: 2 }),
   bathroom3MeetsCode: boolean("bathroom3_meets_code"),
   
   bathroom4Type: text("bathroom4_type", { enum: ["intermittent", "continuous", "none"] }),
-  bathroom4RatedCFM: real("bathroom4_rated_cfm"),
-  bathroom4MeasuredCFM: real("bathroom4_measured_cfm"),
+  bathroom4RatedCFM: decimal("bathroom4_rated_cfm", { precision: 8, scale: 2 }),
+  bathroom4MeasuredCFM: decimal("bathroom4_measured_cfm", { precision: 8, scale: 2 }),
   bathroom4MeetsCode: boolean("bathroom4_meets_code"),
   
   // Mechanical Ventilation System
   mechanicalVentilationType: text("mechanical_ventilation_type", { 
     enum: ["none", "supply_only", "exhaust_only", "balanced_hrv", "balanced_erv", "other"] 
   }).default("none"),
-  mechanicalRatedCFM: real("mechanical_rated_cfm"),
-  mechanicalMeasuredSupplyCFM: real("mechanical_measured_supply_cfm"),
-  mechanicalMeasuredExhaustCFM: real("mechanical_measured_exhaust_cfm"),
+  mechanicalRatedCFM: decimal("mechanical_rated_cfm", { precision: 8, scale: 2 }),
+  mechanicalMeasuredSupplyCFM: decimal("mechanical_measured_supply_cfm", { precision: 8, scale: 2 }),
+  mechanicalMeasuredExhaustCFM: decimal("mechanical_measured_exhaust_cfm", { precision: 8, scale: 2 }),
   mechanicalOperatingSchedule: text("mechanical_operating_schedule", { enum: ["continuous", "intermittent", "on_demand"] }),
   mechanicalControls: text("mechanical_controls"), // Timer, humidity sensor, manual, etc.
   mechanicalNotes: text("mechanical_notes"),
   
   // Total Ventilation Provided
-  totalVentilationProvided: real("total_ventilation_provided"), // Total cfm from all sources
+  totalVentilationProvided: decimal("total_ventilation_provided", { precision: 8, scale: 2 }), // Total cfm from all sources
   meetsVentilationRequirement: boolean("meets_ventilation_requirement"), // Provided ≥ Required
   
   // Minnesota Code Compliance (2020 Energy Code + ASHRAE 62.2)
@@ -1486,9 +1486,9 @@ export const builderRateCards = pgTable("builder_rate_cards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
   jobType: varchar("job_type").notNull(),
-  baseRate: real("base_rate").notNull(),
+  baseRate: decimal("base_rate", { precision: 10, scale: 2 }).notNull(),
   volumeTierStart: integer("volume_tier_start").default(0).notNull(),
-  volumeDiscount: real("volume_discount").default("0"),
+  volumeDiscount: decimal("volume_discount", { precision: 5, scale: 2 }).default("0"),
   effectiveStartDate: date("effective_start_date").notNull(),
   effectiveEndDate: date("effective_end_date"),
   billingCodes: jsonb("billing_codes"), // {rush: 50, weekend: 75}
@@ -1506,9 +1506,9 @@ export const invoices = pgTable("invoices", {
   builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
   periodStart: date("period_start").notNull(),
   periodEnd: date("period_end").notNull(),
-  subtotal: real("subtotal").notNull(),
-  tax: real("tax").default("0").notNull(),
-  total: real("total").notNull(),
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  tax: decimal("tax", { precision: 10, scale: 2 }).default("0").notNull(),
+  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
   status: varchar("status", { 
     enum: ["draft", "reviewed", "sent", "paid"] 
   }).notNull().default("draft"),
@@ -1533,8 +1533,8 @@ export const invoiceLineItems = pgTable("invoice_line_items", {
   jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
   description: text("description").notNull(),
   quantity: integer("quantity").default(1).notNull(),
-  unitPrice: real("unit_price").notNull(),
-  lineTotal: real("line_total").notNull(),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   jobType: varchar("job_type"),
 }, (table) => [
   index("idx_invoice_line_items_invoice_id").on(table.invoiceId),
@@ -1545,7 +1545,7 @@ export const invoiceLineItems = pgTable("invoice_line_items", {
 export const payments = pgTable("payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceId: varchar("invoice_id").references(() => invoices.id, { onDelete: 'set null' }),
-  amount: real("amount").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   paymentDate: date("payment_date").notNull(),
   paymentMethod: varchar("payment_method", { 
     enum: ["direct_deposit", "check", "wire"] 
@@ -1566,11 +1566,11 @@ export const arSnapshots = pgTable("ar_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   snapshotDate: date("snapshot_date").notNull(),
   builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
-  current: real("current").default("0").notNull(),
-  days30: real("days_30").default("0").notNull(),
-  days60: real("days_60").default("0").notNull(),
-  days90Plus: real("days_90_plus").default("0").notNull(),
-  totalAR: real("total_ar").notNull(),
+  current: decimal("current", { precision: 10, scale: 2 }).default("0").notNull(),
+  days30: decimal("days_30", { precision: 10, scale: 2 }).default("0").notNull(),
+  days60: decimal("days_60", { precision: 10, scale: 2 }).default("0").notNull(),
+  days90Plus: decimal("days_90_plus", { precision: 10, scale: 2 }).default("0").notNull(),
+  totalAR: decimal("total_ar", { precision: 10, scale: 2 }).notNull(),
 }, (table) => [
   index("idx_ar_snapshots_snapshot_builder").on(table.snapshotDate, table.builderId),
   index("idx_ar_snapshots_builder_id").on(table.builderId),
@@ -1591,7 +1591,7 @@ export const expenseRules = pgTable("expense_rules", {
   vendorPattern: varchar("vendor_pattern").notNull(),
   categoryId: varchar("category_id").notNull().references(() => expenseCategories.id, { onDelete: 'cascade' }),
   autoApprove: boolean("auto_approve").default(false).notNull(),
-  maxAutoApproveAmount: real("max_auto_approve_amount"),
+  maxAutoApproveAmount: decimal("max_auto_approve_amount", { precision: 10, scale: 2 }),
   priority: integer("priority").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
@@ -1606,7 +1606,7 @@ export const jobCostLedger = pgTable("job_cost_ledger", {
   costType: varchar("cost_type", { 
     enum: ["labor", "travel", "equipment", "expense"] 
   }).notNull(),
-  amount: real("amount").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description"),
   recordedAt: timestamp("recorded_at").defaultNow(),
 }, (table) => [
@@ -1619,7 +1619,7 @@ export const jobCostLedger = pgTable("job_cost_ledger", {
 export const mileageRateHistory = pgTable("mileage_rate_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   effectiveDate: date("effective_date").notNull(),
-  ratePerMile: real("rate_per_mile").notNull(),
+  ratePerMile: decimal("rate_per_mile", { precision: 5, scale: 3 }).notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
@@ -1665,7 +1665,7 @@ export const financialSettings = pgTable("financial_settings", {
   companyAddress: text("company_address"),
   companyPhone: varchar("company_phone"),
   companyEmail: varchar("company_email"),
-  taxRate: real("tax_rate").default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
   invoicePrefix: varchar("invoice_prefix").default("INV"),
   nextInvoiceNumber: integer("next_invoice_number").default(1000),
   paymentTerms: text("payment_terms"),
@@ -1686,8 +1686,8 @@ export const equipment = pgTable("equipment", {
   model: text("model"),
   serialNumber: text("serial_number").unique(),
   purchaseDate: timestamp("purchase_date"),
-  purchaseCost: real("purchase_cost"),
-  currentValue: real("current_value"),
+  purchaseCost: decimal("purchase_cost", { precision: 10, scale: 2 }),
+  currentValue: decimal("current_value", { precision: 10, scale: 2 }),
   status: text("status", { 
     enum: ["available", "in_use", "maintenance", "retired"] 
   }).notNull().default("available"),
@@ -1723,7 +1723,7 @@ export const equipmentCalibrations = pgTable("equipment_calibrations", {
   nextDue: timestamp("next_due").notNull(),
   performedBy: text("performed_by"),
   certificateNumber: text("certificate_number"),
-  cost: real("cost"),
+  cost: decimal("cost", { precision: 10, scale: 2 }),
   passed: boolean("passed").notNull().default(true),
   notes: text("notes"),
   documentPath: text("document_path"),
@@ -1740,7 +1740,7 @@ export const equipmentMaintenance = pgTable("equipment_maintenance", {
   maintenanceDate: timestamp("maintenance_date").notNull(),
   performedBy: text("performed_by"),
   description: text("description").notNull(),
-  cost: real("cost"),
+  cost: decimal("cost", { precision: 10, scale: 2 }),
   nextDue: timestamp("next_due"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1774,17 +1774,17 @@ export const qaInspectionScores = pgTable("qa_inspection_scores", {
   jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   inspectorId: varchar("inspector_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   reportInstanceId: varchar("report_instance_id").references(() => reportInstances.id, { onDelete: 'set null' }),
-  totalScore: real("total_score").notNull(),
-  maxScore: real("max_score").notNull().default("100"),
-  percentage: real("percentage").notNull(),
+  totalScore: decimal("total_score", { precision: 5, scale: 2 }).notNull(),
+  maxScore: decimal("max_score", { precision: 5, scale: 2 }).notNull().default("100"),
+  percentage: decimal("percentage", { precision: 5, scale: 2 }).notNull(),
   grade: text("grade", { enum: ["A", "B", "C", "D", "F"] }).notNull(),
-  overallScore: real("overall_score"),
+  overallScore: decimal("overall_score", { precision: 5, scale: 2 }),
   categoryScores: jsonb("category_scores"),
-  completenessScore: real("completeness_score"),
-  accuracyScore: real("accuracy_score"),
-  complianceScore: real("compliance_score"),
-  photoQualityScore: real("photo_quality_score"),
-  timelinessScore: real("timeliness_score"),
+  completenessScore: decimal("completeness_score", { precision: 5, scale: 2 }),
+  accuracyScore: decimal("accuracy_score", { precision: 5, scale: 2 }),
+  complianceScore: decimal("compliance_score", { precision: 5, scale: 2 }),
+  photoQualityScore: decimal("photo_quality_score", { precision: 5, scale: 2 }),
+  timelinessScore: decimal("timeliness_score", { precision: 5, scale: 2 }),
   reviewStatus: text("review_status", { 
     enum: ["pending", "reviewed", "approved", "needs_improvement"] 
   }).notNull().default("pending"),
@@ -1864,12 +1864,12 @@ export const qaPerformanceMetrics = pgTable("qa_performance_metrics", {
   }).notNull(),
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
-  avgScore: real("avg_score"),
+  avgScore: decimal("avg_score", { precision: 5, scale: 2 }),
   jobsCompleted: integer("jobs_completed").notNull().default(0),
   jobsReviewed: integer("jobs_reviewed").notNull().default(0),
-  onTimeRate: real("on_time_rate"),
-  firstPassRate: real("first_pass_rate"),
-  customerSatisfaction: real("customer_satisfaction"),
+  onTimeRate: decimal("on_time_rate", { precision: 5, scale: 2 }),
+  firstPassRate: decimal("first_pass_rate", { precision: 5, scale: 2 }),
+  customerSatisfaction: decimal("customer_satisfaction", { precision: 5, scale: 2 }),
   strongAreas: text("strong_areas").array(),
   improvementAreas: text("improvement_areas").array(),
   calculatedAt: timestamp("calculated_at").defaultNow(),
@@ -1970,7 +1970,7 @@ export const taxCreditProjects = pgTable("tax_credit_projects", {
   }).notNull(),
   totalUnits: integer("total_units").notNull(),
   qualifiedUnits: integer("qualified_units").default(0),
-  creditAmount: real("credit_amount").default("0"),
+  creditAmount: decimal("credit_amount", { precision: 12, scale: 2 }).default("0"),
   certificationDate: timestamp("certification_date"),
   taxYear: integer("tax_year").notNull(),
   status: text("status", { 
@@ -2031,14 +2031,14 @@ export const unitCertifications = pgTable("unit_certifications", {
   jobId: varchar("job_id").references(() => jobs.id, { onDelete: 'set null' }),
   unitAddress: text("unit_address").notNull(),
   unitNumber: text("unit_number"),
-  heatingLoad: real("heating_load"),
-  coolingLoad: real("cooling_load"),
-  annualEnergyUse: real("annual_energy_use"),
-  percentSavings: real("percent_savings"),
+  heatingLoad: decimal("heating_load", { precision: 10, scale: 2 }),
+  coolingLoad: decimal("cooling_load", { precision: 10, scale: 2 }),
+  annualEnergyUse: decimal("annual_energy_use", { precision: 10, scale: 2 }),
+  percentSavings: decimal("percent_savings", { precision: 5, scale: 2 }),
   qualified: boolean("qualified").default(false),
   certificationDate: timestamp("certification_date"),
-  blowerDoorACH50: real("blower_door_ach50"),
-  ductLeakageCFM25: real("duct_leakage_cfm25"),
+  blowerDoorACH50: decimal("blower_door_ach50", { precision: 8, scale: 2 }),
+  ductLeakageCFM25: decimal("duct_leakage_cfm25", { precision: 8, scale: 2 }),
   hersIndex: integer("hers_index"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),

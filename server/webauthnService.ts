@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 import { db } from './db';
 import { webauthnCredentials, webauthnChallenges } from '@shared/schema';
-import { eq, and, isNull, lt, desc } from 'drizzle-orm';
+import { eq, and, isNull, lt, desc, sql } from 'drizzle-orm';
 import { serverLogger } from './logger';
 import { createAuditLog } from './auditLogger';
 import type { User } from '@shared/schema';
+import type { Request } from 'express';
+import { storage } from './storage';
 
 // WebAuthn configuration
 const RP_NAME = 'Energy Audit Pro';
@@ -147,17 +149,21 @@ export async function storeCredential(
   });
   
   // Create audit log
-  await createAuditLog({
-    userId,
-    action: 'webauthn.credential.registered',
-    resourceType: 'webauthn_credential',
-    resourceId: credentialId,
-    metadata: {
-      deviceName,
-      deviceType,
-      transports,
+  await createAuditLog(
+    {} as Request,
+    {
+      userId,
+      action: 'webauthn.credential.registered',
+      resourceType: 'webauthn_credential',
+      resourceId: credentialId,
+      metadata: {
+        deviceName,
+        deviceType,
+        transports,
+      },
     },
-  });
+    storage
+  );
   
   serverLogger.info('[WebAuthn] New credential registered', {
     userId,
@@ -236,17 +242,21 @@ export async function verifyCredential(
         })
         .where(eq(webauthnCredentials.id, credential.id));
       
-      await createAuditLog({
-        userId: credential.userId,
-        action: 'webauthn.credential.revoked',
-        resourceType: 'webauthn_credential',
-        resourceId: credentialId,
-        metadata: {
-          reason: 'Possible replay attack',
-          signCount,
-          expectedCounter: credential.counter + 1,
+      await createAuditLog(
+        {} as Request,
+        {
+          userId: credential.userId,
+          action: 'webauthn.credential.revoked',
+          resourceType: 'webauthn_credential',
+          resourceId: credentialId,
+          metadata: {
+            reason: 'Possible replay attack',
+            signCount,
+            expectedCounter: credential.counter + 1,
+          },
         },
-      });
+        storage
+      );
       
       return { verified: false };
     }
@@ -286,15 +296,19 @@ export async function verifyCredential(
         .where(eq(webauthnCredentials.id, credential.id));
       
       // Create audit log for successful authentication
-      await createAuditLog({
-        userId: credential.userId,
-        action: 'webauthn.authentication.success',
-        resourceType: 'webauthn_credential',
-        resourceId: credentialId,
-        metadata: {
-          deviceName: credential.deviceName,
+      await createAuditLog(
+        {} as Request,
+        {
+          userId: credential.userId,
+          action: 'webauthn.authentication.success',
+          resourceType: 'webauthn_credential',
+          resourceId: credentialId,
+          metadata: {
+            deviceName: credential.deviceName,
+          },
         },
-      });
+        storage
+      );
       
       serverLogger.info('[WebAuthn] Authentication successful', {
         userId: credential.userId,
@@ -305,15 +319,19 @@ export async function verifyCredential(
     }
     
     // Log failed authentication
-    await createAuditLog({
-      userId: credential.userId,
-      action: 'webauthn.authentication.failed',
-      resourceType: 'webauthn_credential',
-      resourceId: credentialId,
-      metadata: {
-        reason: 'Signature verification failed',
+    await createAuditLog(
+      {} as Request,
+      {
+        userId: credential.userId,
+        action: 'webauthn.authentication.failed',
+        resourceType: 'webauthn_credential',
+        resourceId: credentialId,
+        metadata: {
+          reason: 'Signature verification failed',
+        },
       },
-    });
+      storage
+    );
     
     return { verified: false };
   } catch (error) {
@@ -352,16 +370,20 @@ export async function revokeCredential(
     })
     .where(eq(webauthnCredentials.id, credential.id));
   
-  await createAuditLog({
-    userId,
-    action: 'webauthn.credential.revoked',
-    resourceType: 'webauthn_credential',
-    resourceId: credentialId,
-    metadata: {
-      reason,
-      deviceName: credential.deviceName,
+  await createAuditLog(
+    {} as Request,
+    {
+      userId,
+      action: 'webauthn.credential.revoked',
+      resourceType: 'webauthn_credential',
+      resourceId: credentialId,
+      metadata: {
+        reason,
+        deviceName: credential.deviceName,
+      },
     },
-  });
+    storage
+  );
   
   serverLogger.info('[WebAuthn] Credential revoked', {
     userId,
