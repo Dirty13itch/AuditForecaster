@@ -83,6 +83,44 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// WebAuthn credential storage
+export const webauthnCredentials = pgTable("webauthn_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  credentialId: text("credential_id").notNull(),
+  publicKey: text("public_key").notNull(),
+  counter: integer("counter").notNull().default(0),
+  deviceName: text("device_name"),
+  deviceType: text("device_type", { enum: ["platform", "cross-platform", "unknown"] }).default("unknown"),
+  transports: text("transports").array(),
+  aaguid: text("aaguid"),
+  lastUsedAt: timestamp("last_used_at"),
+  revokedAt: timestamp("revoked_at"),
+  revokedReason: text("revoked_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_webauthn_credentials_user_id").on(table.userId),
+  index("idx_webauthn_credentials_credential_id").on(table.credentialId),
+]);
+
+// WebAuthn challenges storage
+export const webauthnChallenges = pgTable("webauthn_challenges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
+  challenge: text("challenge").notNull(),
+  type: text("type", { enum: ["registration", "authentication"] }).notNull(),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  expiresAt: timestamp("expires_at").notNull(),
+  verified: boolean("verified").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_webauthn_challenges_user_id").on(table.userId),
+  index("idx_webauthn_challenges_type").on(table.type),
+  index("idx_webauthn_challenges_expires_at").on(table.expiresAt),
+]);
+
 // Organizations table for multi-tenant architecture
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2427,6 +2465,9 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: tru
 export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ id: true, timestamp: true, actorId: true }); // actorId injected server-side from req.user.id
 export const insertGoldenPathResultSchema = createInsertSchema(goldenPathResults).omit({ id: true, executedAt: true });
 export const insertAccessibilityAuditResultSchema = createInsertSchema(accessibilityAuditResults).omit({ id: true, auditedAt: true });
+
+// Useful insert type exports for services
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
 export const insertPerformanceMetricSchema = createInsertSchema(performanceMetrics).omit({ id: true, measuredAt: true });
 export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
 export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true }).extend({
