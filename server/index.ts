@@ -2,6 +2,7 @@ import { initSentry, Sentry, isSentryEnabled, captureException, sentryUserMiddle
 initSentry();
 
 import express, { type Request, Response, NextFunction } from "express";
+import type { Server } from 'http';
 import helmet from "helmet";
 import compression from "compression";
 import cors from "cors";
@@ -718,3 +719,19 @@ startServer().catch((error) => {
   serverLogger.error('[Server] Fatal error during startup:', error);
   process.exit(1);
 });
+
+/**
+ * Graceful shutdown helper for test environments / integration harness
+ */
+export async function stopServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (serverInstance) {
+      serverInstance.close(() => {
+        serverLogger.info('[Server] Test harness stopped server');
+        resolve();
+      });
+    } else {
+      resolve();
+    }
+  });
+}

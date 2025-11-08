@@ -70,7 +70,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Mark as read mutation
   const markAsReadMutation = useMutation({
     mutationFn: (notificationId: string) => 
-      apiRequest(`/api/notifications/${notificationId}/read`, { method: "POST" }),
+      apiRequest("POST", `/api/notifications/${notificationId}/read`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
@@ -79,7 +79,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Mark all as read mutation
   const markAllAsReadMutation = useMutation({
     mutationFn: () => 
-      apiRequest("/api/notifications/mark-all-read", { method: "POST" }),
+      apiRequest("POST", "/api/notifications/mark-all-read"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
@@ -88,7 +88,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Delete notification mutation
   const deleteNotificationMutation = useMutation({
     mutationFn: (notificationId: string) => 
-      apiRequest(`/api/notifications/${notificationId}`, { method: "DELETE" }),
+      apiRequest("DELETE", `/api/notifications/${notificationId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
@@ -97,10 +97,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Update preferences mutation
   const updatePreferencesMutation = useMutation({
     mutationFn: (preferences: Partial<NotificationPreference>) => 
-      apiRequest("/api/notifications/preferences", { 
-        method: "PUT", 
-        body: JSON.stringify(preferences) 
-      }),
+      apiRequest("PUT", "/api/notifications/preferences", preferences),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/preferences"] });
     },

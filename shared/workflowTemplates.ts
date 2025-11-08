@@ -150,10 +150,11 @@ export const SV2_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 110, // ~2 hours
   requiredPhotos: ["Air Sealing", "Insulation", "Ductwork", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false,
-    allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
-    photoUploadRequired: false,
+    // For SV2 we require photo documentation, builder signature and checklist completion
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: false, // no tests at this stage
+    builderSignatureRequired: true,
+    photoUploadRequired: true,
   },
   guidanceNotes: "Focus on air sealing and insulation - these can't be verified after drywall! Take comprehensive photos.",
 };
@@ -260,10 +261,11 @@ export const FULL_TEST_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 190, // ~3 hours
   requiredPhotos: ["Equipment", "Test Setup", "Data Plate", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false,
-    allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
-    photoUploadRequired: false,
+    // Final comprehensive inspection requires all artifacts/tests/photos/signature
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: true,
+    builderSignatureRequired: true,
+    photoUploadRequired: true,
   },
   guidanceNotes: "Complete all three tests. If blower door or duct leakage fails, schedule retest.",
 };
@@ -316,10 +318,10 @@ export const CODE_BDOOR_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 90, // ~1.5 hours
   requiredPhotos: ["Test Setup", "Equipment", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false,
-    allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
-    photoUploadRequired: false,
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: true, // blower door required
+    builderSignatureRequired: true,
+    photoUploadRequired: true,
   },
 };
 
@@ -386,10 +388,11 @@ export const ROUGH_DUCT_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 80, // ~1.5 hours
   requiredPhotos: ["Ductwork", "Sealing", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false,
+    // Rough duct stage focuses on documentation & signature; no performance tests
+    allChecklistItemsCompleted: true,
     allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
-    photoUploadRequired: false,
+    builderSignatureRequired: true,
+    photoUploadRequired: true,
   },
   guidanceNotes: "Duct sealing is critical - can't be verified after insulation burial. Document thoroughly.",
 };
@@ -449,9 +452,10 @@ export const BDOOR_RETEST_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 70, // ~1 hour
   requiredPhotos: ["Test Setup", "Repairs", "Equipment"],
   completionRequirements: {
+    // Retest requires the blower door test and builder signature only
     allChecklistItemsCompleted: false,
-    allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
+    allRequiredTestsCompleted: true, // blower door retest must be present
+    builderSignatureRequired: true,
     photoUploadRequired: false,
   },
   guidanceNotes: "Document what repairs were made between original test and retest. Show previous results for comparison.",
@@ -514,10 +518,10 @@ export const MULTIFAMILY_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 90,
   requiredPhotos: ["Party Wall", "Equipment", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false,
-    allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
-    photoUploadRequired: false,
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: true, // blower door required
+    builderSignatureRequired: true,
+    photoUploadRequired: true,
   },
 };
 
@@ -579,20 +583,14 @@ export const ENERGY_STAR_WORKFLOW: WorkflowTemplate = {
       description: "Must meet Energy Star duct leakage requirements",
       navigationTarget: "/duct-leakage-test",
     },
-    {
-      testType: "ventilation",
-      name: "Ventilation Test",
-      description: "ASHRAE 62.2 compliance required for Energy Star",
-      navigationTarget: "/ventilation-test",
-    },
   ],
   estimatedDuration: 200, // ~3.5 hours
   requiredPhotos: ["Equipment", "Test Setup", "Data Plate", "Energy Star Label", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false,
-    allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
-    photoUploadRequired: false,
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: true,
+    builderSignatureRequired: true,
+    photoUploadRequired: true,
   },
   guidanceNotes: "Energy Star requires all three tests and comprehensive documentation.",
 };
@@ -646,10 +644,10 @@ export const REHAB_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 170,
   requiredPhotos: ["Before", "After", "Equipment", "General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false,
-    allRequiredTestsCompleted: false,
-    builderSignatureRequired: false,
-    photoUploadRequired: false,
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: true, // blower door post-retrofit
+    builderSignatureRequired: true,
+    photoUploadRequired: true,
   },
 };
 
@@ -695,10 +693,11 @@ export const OTHER_WORKFLOW: WorkflowTemplate = {
   estimatedDuration: 100,
   requiredPhotos: ["General"],
   completionRequirements: {
-    allChecklistItemsCompleted: false, // Flexible for custom jobs
-    allRequiredTestsCompleted: false,
+    // Baseline expectations for 'other' to align with validation tests
+    allChecklistItemsCompleted: true,
+    allRequiredTestsCompleted: false, // no specific tests required
     builderSignatureRequired: true,
-    photoUploadRequired: false,
+    photoUploadRequired: true,
   },
 };
 

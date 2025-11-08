@@ -118,7 +118,9 @@ export function addBreadcrumb(
 ): void {
   // Always log breadcrumbs for debugging (even if Sentry disabled)
   const breadcrumbLog = logger.child({ context: 'Breadcrumb' });
-  breadcrumbLog[level](`[${category}] ${message}`, data || {});
+  // Winston uses 'warn' instead of 'warning'
+  const method = (level === 'warning' ? 'warn' : level) as 'info' | 'warn' | 'error';
+  (breadcrumbLog as any)[method](`[${category}] ${message}`, data || {});
   
   // Send to Sentry if enabled
   if (sentryEnabled) {

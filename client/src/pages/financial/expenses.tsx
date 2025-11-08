@@ -394,7 +394,7 @@ function ExpensesContent() {
       if (data.amount <= 0) {
         throw new Error("Amount must be greater than zero");
       }
-      return apiRequest("/api/expenses", { method: "POST", body: data });
+      return apiRequest("POST", "/api/expenses", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
@@ -417,7 +417,7 @@ function ExpensesContent() {
   // Update expense mutation (for swipe actions)
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertExpense> }) => {
-      return apiRequest(`/api/expenses/${id}`, { method: "PATCH", body: data });
+      return apiRequest("PATCH", `/api/expenses/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });

@@ -67,11 +67,12 @@ import { cn } from "@/lib/utils";
 import type { Builder, BuilderInteraction, InsertBuilderInteraction } from "@shared/schema";
 
 const INTERACTION_TYPES = [
-  { value: "phone", label: "Phone Call", icon: Phone },
+  { value: "call", label: "Phone Call", icon: Phone },
   { value: "email", label: "Email", icon: Mail },
-  { value: "meeting", label: "Meeting", icon: Users },
-  { value: "site_visit", label: "Site Visit", icon: CalIcon },
-  { value: "other", label: "Other", icon: MessageSquare },
+  { value: "meeting", label: "Meeting", icon: Calendar },
+  { value: "text", label: "Text Message", icon: MessageSquare },
+  { value: "site_visit", label: "Site Visit", icon: MapPin },
+  { value: "other", label: "Other", icon: MoreHorizontal },
 ];
 
 const OUTCOME_OPTIONS = [
@@ -82,13 +83,13 @@ const OUTCOME_OPTIONS = [
 ];
 
 const interactionFormSchema = z.object({
-  interactionDate: z.date({ required_error: "Interaction date is required" }),
-  interactionType: z.enum(["phone", "email", "meeting", "site_visit", "other"]),
+  interactionType: z.enum(["call", "email", "meeting", "text", "site_visit", "other"]),
+  interactionDate: z.date(),
   contactName: z.string().optional(),
   userName: z.string().optional(),
   notes: z.string().min(1, "Notes are required"),
-  outcome: z.enum(["positive", "neutral", "negative", "no_answer"]).optional(),
-  followUpRequired: z.boolean().default(false),
+  outcome: z.string().optional(),
+  followUpRequired: z.boolean(),
 });
 
 type InteractionFormValues = z.infer<typeof interactionFormSchema>;
@@ -113,17 +114,15 @@ export function BuilderInteractionsTab({ builder }: BuilderInteractionsTabProps)
   const form = useForm<InteractionFormValues>({
     resolver: zodResolver(interactionFormSchema),
     defaultValues: {
+      interactionType: "call",
       interactionDate: new Date(),
-      interactionType: "phone",
       contactName: "",
       userName: "",
       notes: "",
-      outcome: "neutral",
+      outcome: "",
       followUpRequired: false,
     },
-  });
-
-  const createMutation = useMutation({
+  });  const createMutation = useMutation({
     mutationFn: async (data: InsertBuilderInteraction) => {
       const res = await apiRequest(
         "POST",
@@ -216,7 +215,7 @@ export function BuilderInteractionsTab({ builder }: BuilderInteractionsTabProps)
     setInteractionToEdit(null);
     form.reset({
       interactionDate: new Date(),
-      interactionType: "phone",
+      interactionType: "call",
       contactName: "",
       userName: "",
       notes: "",

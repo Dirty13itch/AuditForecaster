@@ -1,8 +1,6 @@
 import * as client from "openid-client";
 import { getConfig } from "../config";
 import { serverLogger } from "../logger";
-import { db } from "../db";
-import { sql } from "drizzle-orm";
 
 export interface ValidationResult {
   component: string;
@@ -222,9 +220,11 @@ async function validateDatabaseConnectivity(): Promise<ValidationResult> {
       };
     }
     
-    serverLogger.debug('[Validation] Testing database connectivity');
-    
-    await db.execute(sql`SELECT 1`);
+  serverLogger.debug('[Validation] Testing database connectivity');
+  // Lazy import to avoid requiring DATABASE_URL for tests that don't touch DB
+  const { db } = await import('../db');
+  const { sql } = await import('drizzle-orm');
+  await db.execute(sql`SELECT 1`);
     
     const result = await db.execute(sql`
       SELECT COUNT(*) as count 

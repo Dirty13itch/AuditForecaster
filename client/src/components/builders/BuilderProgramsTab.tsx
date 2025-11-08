@@ -52,18 +52,18 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { Builder, BuilderProgram, InsertBuilderProgram } from "@shared/schema";
 
-const STATUS_OPTIONS = [
+const PROGRAM_STATUSES = [
   { value: "active", label: "Active", variant: "default" as const },
-  { value: "inactive", label: "Inactive", variant: "secondary" as const },
-  { value: "pending", label: "Pending", variant: "outline" as const },
+  { value: "inactive", label: "Inactive", variant: "outline" as const },
+  { value: "suspended", label: "Suspended", variant: "destructive" as const },
 ];
 
 const programFormSchema = z.object({
   programName: z.string().min(1, "Program name is required"),
-  programType: z.string().min(1, "Program type is required"),
-  enrollmentDate: z.date({ required_error: "Enrollment date is required" }),
-  expirationDate: z.date().optional().nullable(),
-  status: z.enum(["active", "inactive", "pending"]),
+  programType: z.string(),
+  enrollmentDate: z.date(),
+  expirationDate: z.date().optional(),
+  status: z.enum(["active", "inactive", "suspended"]),
   certificationLevel: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -210,7 +210,7 @@ export function BuilderProgramsTab({ builder }: BuilderProgramsTabProps) {
       programType: program.programType,
       enrollmentDate: new Date(program.enrollmentDate),
       expirationDate: program.expirationDate ? new Date(program.expirationDate) : null,
-      status: program.status as "active" | "inactive" | "pending",
+      status: program.status as "active" | "inactive" | "suspended",
       certificationLevel: program.certificationLevel || "",
       notes: program.notes || "",
     });

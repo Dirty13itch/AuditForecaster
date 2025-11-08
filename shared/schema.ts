@@ -1526,7 +1526,7 @@ export const builderRateCards = pgTable("builder_rate_cards", {
   jobType: varchar("job_type").notNull(),
   baseRate: real("base_rate").notNull(),
   volumeTierStart: integer("volume_tier_start").default(0).notNull(),
-  volumeDiscount: real("volume_discount").default("0"),
+  volumeDiscount: real("volume_discount").default(0),
   effectiveStartDate: date("effective_start_date").notNull(),
   effectiveEndDate: date("effective_end_date"),
   billingCodes: jsonb("billing_codes"), // {rush: 50, weekend: 75}
@@ -1545,7 +1545,7 @@ export const invoices = pgTable("invoices", {
   periodStart: date("period_start").notNull(),
   periodEnd: date("period_end").notNull(),
   subtotal: real("subtotal").notNull(),
-  tax: real("tax").default("0").notNull(),
+  tax: real("tax").default(0).notNull(),
   total: real("total").notNull(),
   status: varchar("status", { 
     enum: ["draft", "reviewed", "sent", "paid"] 
@@ -1604,10 +1604,10 @@ export const arSnapshots = pgTable("ar_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   snapshotDate: date("snapshot_date").notNull(),
   builderId: varchar("builder_id").notNull().references(() => builders.id, { onDelete: 'cascade' }),
-  current: real("current").default("0").notNull(),
-  days30: real("days_30").default("0").notNull(),
-  days60: real("days_60").default("0").notNull(),
-  days90Plus: real("days_90_plus").default("0").notNull(),
+  current: real("current").default(0).notNull(),
+  days30: real("days_30").default(0).notNull(),
+  days60: real("days_60").default(0).notNull(),
+  days90Plus: real("days_90_plus").default(0).notNull(),
   totalAR: real("total_ar").notNull(),
 }, (table) => [
   index("idx_ar_snapshots_snapshot_builder").on(table.snapshotDate, table.builderId),
@@ -1703,7 +1703,7 @@ export const financialSettings = pgTable("financial_settings", {
   companyAddress: text("company_address"),
   companyPhone: varchar("company_phone"),
   companyEmail: varchar("company_email"),
-  taxRate: real("tax_rate").default("0"),
+  taxRate: real("tax_rate").default(0),
   invoicePrefix: varchar("invoice_prefix").default("INV"),
   nextInvoiceNumber: integer("next_invoice_number").default(1000),
   paymentTerms: text("payment_terms"),
@@ -1813,7 +1813,7 @@ export const qaInspectionScores = pgTable("qa_inspection_scores", {
   inspectorId: varchar("inspector_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   reportInstanceId: varchar("report_instance_id").references(() => reportInstances.id, { onDelete: 'set null' }),
   totalScore: real("total_score").notNull(),
-  maxScore: real("max_score").notNull().default("100"),
+  maxScore: real("max_score").notNull().default(100),
   percentage: real("percentage").notNull(),
   grade: text("grade", { enum: ["A", "B", "C", "D", "F"] }).notNull(),
   overallScore: real("overall_score"),
@@ -2008,7 +2008,7 @@ export const taxCreditProjects = pgTable("tax_credit_projects", {
   }).notNull(),
   totalUnits: integer("total_units").notNull(),
   qualifiedUnits: integer("qualified_units").default(0),
-  creditAmount: real("credit_amount").default("0"),
+  creditAmount: real("credit_amount").default(0),
   certificationDate: timestamp("certification_date"),
   taxYear: integer("tax_year").notNull(),
   status: text("status", { 
@@ -2111,48 +2111,6 @@ export const systemConfig = pgTable("system_config", {
 }, (table) => [
   index("idx_system_config_key").on(table.key),
   index("idx_system_config_updated_by").on(table.updatedBy),
-]);
-
-// WebAuthn credentials table for storing biometric authentication data
-export const webauthnCredentials = pgTable("webauthn_credentials", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  credentialId: text("credential_id").notNull().unique(), // Base64 encoded credential ID
-  publicKey: text("public_key").notNull(), // Base64 encoded public key
-  counter: integer("counter").notNull().default(0), // Signature counter for replay protection
-  deviceName: text("device_name"), // User-friendly device name
-  deviceType: text("device_type", { 
-    enum: ["platform", "cross-platform", "unknown"] 
-  }).notNull().default("unknown"),
-  aaguid: text("aaguid"), // Authenticator Attestation GUID
-  transports: text("transports").array(), // Available transports (usb, nfc, ble, internal)
-  lastUsedAt: timestamp("last_used_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  revokedAt: timestamp("revoked_at"), // For soft deletion
-  revokedReason: text("revoked_reason"),
-}, (table) => [
-  index("idx_webauthn_credentials_user_id").on(table.userId),
-  index("idx_webauthn_credentials_credential_id").on(table.credentialId),
-  index("idx_webauthn_credentials_created_at").on(table.createdAt),
-  index("idx_webauthn_credentials_last_used").on(table.lastUsedAt),
-]);
-
-// WebAuthn challenges table for tracking authentication attempts
-export const webauthnChallenges = pgTable("webauthn_challenges", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
-  challenge: text("challenge").notNull(), // Base64 encoded challenge
-  type: text("type", { 
-    enum: ["registration", "authentication"] 
-  }).notNull(),
-  verified: boolean("verified").default(false),
-  userAgent: text("user_agent"),
-  ipAddress: text("ip_address"),
-  createdAt: timestamp("created_at").defaultNow(),
-  expiresAt: timestamp("expires_at").notNull(),
-}, (table) => [
-  index("idx_webauthn_challenges_user_id").on(table.userId),
-  index("idx_webauthn_challenges_expires_at").on(table.expiresAt),
 ]);
 
 // Background Jobs Tracking for Production Monitoring
@@ -2467,7 +2425,6 @@ export const insertGoldenPathResultSchema = createInsertSchema(goldenPathResults
 export const insertAccessibilityAuditResultSchema = createInsertSchema(accessibilityAuditResults).omit({ id: true, auditedAt: true });
 
 // Useful insert type exports for services
-export type InsertAuditLog = typeof auditLogs.$inferInsert;
 export const insertPerformanceMetricSchema = createInsertSchema(performanceMetrics).omit({ id: true, measuredAt: true });
 export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
 export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true }).extend({
@@ -2507,6 +2464,8 @@ export const insertBuilderRateCardSchema = createInsertSchema(builderRateCards).
   baseRate: z.coerce.number(),
   volumeDiscount: z.coerce.number().nullable().optional(),
 });
+
+
 
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true }).extend({
   periodStart: z.coerce.date(),
@@ -2913,7 +2872,6 @@ export type InsertInspectorPreferences = z.infer<typeof insertInspectorPreferenc
 export type EmailPreference = typeof emailPreferences.$inferSelect;
 export type InsertEmailPreference = z.infer<typeof insertEmailPreferenceSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
-export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 export type GoldenPathResult = typeof goldenPathResults.$inferSelect;
@@ -3077,4 +3035,30 @@ export interface CalendarImportLogsResponse {
   total: number;
   limit: number;
   offset: number;
+}
+
+// Stub types for component-based template fields (migrated away from database tables)
+// These types are used by client-side conditional logic and field editing components
+export interface TemplateField {
+  id: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  configuration?: unknown; // JSON configuration for field options
+  conditions?: unknown; // JSON conditions for conditional logic
+  formula?: string | null;
+  defaultValue?: unknown;
+  helpText?: string | null;
+  placeholder?: string | null;
+  order?: number;
+  sectionId?: string;
+}
+
+export interface TemplateSection {
+  id: string;
+  title: string;
+  description?: string | null;
+  order?: number;
+  templateId?: string;
+  fields?: TemplateField[];
 }

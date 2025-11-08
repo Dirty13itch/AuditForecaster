@@ -85,7 +85,7 @@ export default function JobDialog({
       planId: job?.planId || undefined,
       lotId: job?.lotId || undefined,
       contractor: job?.contractor || "",
-      inspectionType: job?.inspectionType || "",
+      inspectionType: job?.inspectionType || undefined,
       pricing: job?.pricing ? parseFloat(job.pricing as any) : undefined,
       scheduledDate: job?.scheduledDate ? new Date(job.scheduledDate) : undefined,
       priority: (job?.priority as "low" | "medium" | "high") || "medium",

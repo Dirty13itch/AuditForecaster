@@ -80,10 +80,7 @@ export function EquipmentCheckout({
       expectedReturn?: Date;
       notes?: string;
     }) => {
-      return apiRequest('/api/checkouts', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      return apiRequest('POST', '/api/checkouts', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/equipment'] });
@@ -110,10 +107,7 @@ export function EquipmentCheckout({
       condition: 'good' | 'fair' | 'poor';
       notes?: string;
     }) => {
-      return apiRequest(`/api/checkouts/${checkoutId}/checkin`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      return apiRequest('POST', `/api/checkouts/${checkoutId}/checkin`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/equipment'] });

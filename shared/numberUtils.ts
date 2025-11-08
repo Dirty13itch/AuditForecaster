@@ -16,16 +16,18 @@
  */
 export function safeToFixed(value: number | null | undefined | string, decimals: number = 2): string {
   const num = typeof value === 'number' ? value : parseFloat(value as string);
-  
-  if (typeof num === 'number' && !isNaN(num)) {
-    return num.toFixed(decimals);
+
+  if (typeof num === 'number' && !isNaN(num) && isFinite(num)) {
+    // Use explicit rounding to avoid floating point edge cases (e.g., 1.2345)
+    const factor = 10 ** decimals;
+    const rounded = Math.round((num + Number.EPSILON) * factor) / factor;
+    return rounded.toFixed(decimals);
   }
-  
-  // Fix: when decimals is 0, return '0' not '0.'
+
   if (decimals === 0) {
     return '0';
   }
-  
+
   return '0.' + '0'.repeat(decimals);
 }
 
@@ -96,4 +98,78 @@ export function safeDivide(
   
   // Check if result is valid
   return isFinite(result) ? result : fallback;
+}
+
+/**
+ * Converts a database decimal string to a number with type safety.
+ * Handles PostgreSQL decimal/numeric fields that return strings via Drizzle.
+ * Alias for safeParseFloat to clarify intent for decimal columns.
+ * 
+ * @param value - The decimal string from database or existing number
+ * @param defaultValue - Value to return if conversion fails (default: 0)
+ * @returns number
+ * 
+ * @example
+ * toNumber("3.50", 0) // 3.5
+ * toNumber(null, 0) // 0
+ * toNumber(undefined, 0) // 0
+ */
+export function toNumber(
+  value: string | number | null | undefined,
+  defaultValue: number = 0
+): number {
+  return safeParseFloat(value, defaultValue);
+}
+
+/**
+ * Converts a number to a decimal string suitable for database insertion.
+ * Returns null for null/undefined to maintain database constraints.
+ * 
+ * @param value - The value to convert
+ * @param precision - Number of decimal places (default: 2)
+ * @returns string representation or null
+ * 
+ * @example
+ * toDecimalString(3.5) // "3.50"
+ * toDecimalString(null) // null
+ * toDecimalString(1.2345, 3) // "1.235"
+ */
+export function toDecimalString(
+  value: number | string | null | undefined,
+  precision: number = 2
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  
+  const num = safeParseFloat(value, 0);
+  return safeToFixed(num, precision);
+}
+
+/**
+ * Calculate percentage as a number (not 0-1 decimal).
+ * Handles string decimals from database.
+ * 
+ * @param numerator - The numerator value
+ * @param denominator - The denominator value
+ * @param precision - Decimal places (default: 1)
+ * @returns percentage number or 0 if denominator is 0
+ * 
+ * @example
+ * calculatePercentage(45, 100) // 45.0
+ * calculatePercentage("7", "50", 2) // 14.00
+ */
+export function calculatePercentage(
+  numerator: string | number | null | undefined,
+  denominator: string | number | null | undefined,
+  precision: number = 1
+): number {
+  const num = toNumber(numerator, 0);
+  const denom = toNumber(denominator, 0);
+  
+  if (denom === 0) {
+    return 0;
+  }
+  
+  return safeParseFloat((num / denom) * 100, 0);
 }

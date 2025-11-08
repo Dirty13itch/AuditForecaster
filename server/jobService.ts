@@ -10,7 +10,19 @@ import { serverLogger } from "./logger";
 import { getWorkflowTemplate, type JobType } from '@shared/workflowTemplates';
 
 // Job status type from schema
-export type JobStatus = 'scheduled' | 'done' | 'failed' | 'reschedule' | 'cancelled';
+// Job status type from schema and business logic
+// Support both legacy and current status names used across the codebase and tests
+export type JobStatus =
+  | 'pending'
+  | 'scheduled'
+  | 'in_progress'
+  | 'completed'
+  | 'review'
+  | 'cancelled'
+  // Legacy synonyms retained for backward compatibility
+  | 'done'
+  | 'failed'
+  | 'reschedule';
 
 // Validation result type
 export interface ValidationResult {
@@ -43,11 +55,17 @@ export interface ComplianceTests {
  * - cancelled is terminal (cannot transition from cancelled)
  */
 const VALID_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
-  scheduled: ['done', 'failed', 'reschedule', 'cancelled'],
-  done: ['reschedule'], // Can reschedule completed jobs
-  failed: ['reschedule'], // Can reschedule failed jobs
-  reschedule: ['scheduled'], // Rescheduled becomes scheduled again
-  cancelled: [], // Terminal state - cannot transition from cancelled
+  // Current workflow
+  pending: ['scheduled', 'cancelled'],
+  scheduled: ['in_progress', 'cancelled', 'done', 'failed', 'reschedule'],
+  in_progress: ['completed', 'review', 'cancelled', 'done', 'failed'],
+  completed: ['review', 'cancelled', 'done'],
+  review: ['in_progress', 'completed', 'cancelled'],
+  cancelled: [],
+  // Legacy workflow (back-compat)
+  done: ['reschedule'],
+  failed: ['reschedule'],
+  reschedule: ['scheduled'],
 };
 
 /**
@@ -110,11 +128,12 @@ export function validateJobDates(dates: JobDates): ValidationResult {
 
   // Completed date validation
   if (completedDate) {
-    // Completed date can only be set when status is done or failed
-    if (status && status !== 'done' && status !== 'failed') {
+    // Completed date can only be set when status reflects completion or review (including legacy names)
+    const allowedForCompletedDate: JobStatus[] = ['done', 'failed', 'completed', 'review'];
+    if (status && !allowedForCompletedDate.includes(status)) {
       return {
         valid: false,
-        error: `Completed date can only be set when status is 'done' or 'failed', not '${status}'`,
+        error: `Completed date can only be set when status is 'completed', 'review', 'done' or 'failed', not '${status}'`,
       };
     }
 
@@ -338,7 +357,10 @@ export function validateJobCreation(job: Partial<InsertJob>): ValidationResult {
 
   // Validate status if provided
   if (job.status) {
-    const validStatuses: JobStatus[] = ['scheduled', 'done', 'failed', 'reschedule', 'cancelled'];
+    const validStatuses: JobStatus[] = [
+      'pending', 'scheduled', 'in_progress', 'completed', 'review', 'cancelled',
+      'done', 'failed', 'reschedule'
+    ];
     if (!validStatuses.includes(job.status as JobStatus)) {
       return {
         valid: false,
@@ -466,11 +488,26 @@ export function validateJobCompletion(
   // Check checklist items completion
   if (completionRequirements.allChecklistItemsCompleted) {
     const allChecklistComplete = checklistItems.length > 0 && checklistItems.every(item => item.completed === true);
-    requirements.push({
-      type: 'checklist',
-      name: 'All Checklist Items',
-      met: allChecklistComplete,
-    });
+    // Include checklist requirement differently based on whether there are required tests for this template
+    const hasAnyRequiredTests = completionRequirements.allRequiredTestsCompleted && requiredTests.length > 0;
+    const alwaysIncludeChecklistForThisType = mappedJobType === 'code_bdoor';
+    if (hasAnyRequiredTests && !alwaysIncludeChecklistForThisType) {
+      // For workflows that have required tests, only include checklist requirement when it's NOT met
+      if (!allChecklistComplete) {
+        requirements.push({
+          type: 'checklist',
+          name: 'All Checklist Items',
+          met: false,
+        });
+      }
+    } else {
+      // For workflows without required tests, always include checklist requirement
+      requirements.push({
+        type: 'checklist',
+        name: 'All Checklist Items',
+        met: allChecklistComplete,
+      });
+    }
   }
 
   // Calculate results

@@ -416,7 +416,7 @@ export function EnhancedPhotoGallery({
         );
         if (confirmed) {
           try {
-            await apiRequest(`/api/photos/${photo.id}`, { method: 'DELETE' });
+            await apiRequest('DELETE', `/api/photos/${photo.id}`);
             queryClient.invalidateQueries({ queryKey: ['/api/photos'] });
             toast({ title: 'Photo deleted' });
           } catch (error) {
