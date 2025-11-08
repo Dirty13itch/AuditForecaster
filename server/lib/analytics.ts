@@ -19,6 +19,65 @@
 import { serverLogger } from '../logger';
 
 /**
+ * Optional Analytics Provider Integration
+ * 
+ * Supports PostHog, Mixpanel, or Segment based on environment configuration.
+ * Falls back to logging-only mode if no provider is configured.
+ */
+let analyticsProvider: 'posthog' | 'mixpanel' | 'segment' | null = null;
+let posthog: any = null;
+let mixpanel: any = null;
+let segmentAnalytics: any = null;
+
+// Initialize analytics provider based on environment
+const ANALYTICS_PROVIDER = process.env.ANALYTICS_PROVIDER;
+const POSTHOG_KEY = process.env.POSTHOG_API_KEY;
+const MIXPANEL_TOKEN = process.env.MIXPANEL_TOKEN;
+const SEGMENT_WRITE_KEY = process.env.SEGMENT_WRITE_KEY;
+
+async function initializeAnalyticsProvider() {
+  if (ANALYTICS_PROVIDER === 'posthog' && POSTHOG_KEY) {
+    try {
+      const { PostHog } = await import('posthog-node');
+      posthog = new PostHog(POSTHOG_KEY, {
+        host: process.env.POSTHOG_HOST || 'https://app.posthog.com',
+      });
+      analyticsProvider = 'posthog';
+      serverLogger.info('[Analytics] PostHog provider initialized');
+    } catch (error) {
+      serverLogger.warn('[Analytics] PostHog initialization failed', { error });
+    }
+  } else if (ANALYTICS_PROVIDER === 'mixpanel' && MIXPANEL_TOKEN) {
+    try {
+      const Mixpanel = await import('mixpanel');
+      mixpanel = Mixpanel.init(MIXPANEL_TOKEN);
+      analyticsProvider = 'mixpanel';
+      serverLogger.info('[Analytics] Mixpanel provider initialized');
+    } catch (error) {
+      serverLogger.warn('[Analytics] Mixpanel initialization failed', { error });
+    }
+  } else if (ANALYTICS_PROVIDER === 'segment' && SEGMENT_WRITE_KEY) {
+    try {
+      const { Analytics } = await import('@segment/analytics-node');
+      segmentAnalytics = new Analytics({ writeKey: SEGMENT_WRITE_KEY });
+      analyticsProvider = 'segment';
+      serverLogger.info('[Analytics] Segment provider initialized');
+    } catch (error) {
+      serverLogger.warn('[Analytics] Segment initialization failed', { error });
+    }
+  }
+  
+  if (!analyticsProvider) {
+    serverLogger.info('[Analytics] No provider configured - using logging-only mode');
+  }
+}
+
+// Initialize on module load
+initializeAnalyticsProvider().catch((error) => {
+  serverLogger.error('[Analytics] Provider initialization error', { error });
+});
+
+/**
  * Entity types tracked by analytics
  */
 export type EntityType =
@@ -314,38 +373,60 @@ export class AnalyticsService {
       metadata: event.metadata,
     });
 
-    // TODO: Integration with analytics provider
-    // Example implementations:
-    
-    // PostHog:
-    // posthog.capture({
-    //   distinctId: event.actorId,
-    //   event: event.type,
-    //   properties: {
-    //     route: event.route,
-    //     correlationId: event.correlationId,
-    //     ...event.metadata,
-    //   },
-    // });
-    
-    // Mixpanel:
-    // mixpanel.track(event.type, {
-    //   distinct_id: event.actorId,
-    //   route: event.route,
-    //   correlation_id: event.correlationId,
-    //   ...event.metadata,
-    // });
-    
-    // Segment:
-    // analytics.track({
-    //   userId: event.actorId,
-    //   event: event.type,
-    //   properties: {
-    //     route: event.route,
-    //     correlationId: event.correlationId,
-    //     ...event.metadata,
-    //   },
-    // });
+    // Prepare common properties
+    const properties = {
+      route: event.route,
+      correlationId: event.correlationId,
+      ...(('entityType' in event) && { entityType: event.entityType }),
+      ...(('entityId' in event) && { entityId: event.entityId }),
+      ...event.metadata,
+    };
+
+    // Send to configured analytics provider
+    try {
+      if (analyticsProvider === 'posthog' && posthog) {
+        posthog.capture({
+          distinctId: event.actorId,
+          event: event.type,
+          properties,
+        });
+      } else if (analyticsProvider === 'mixpanel' && mixpanel) {
+        mixpanel.track(event.type, {
+          distinct_id: event.actorId,
+          ...properties,
+        });
+      } else if (analyticsProvider === 'segment' && segmentAnalytics) {
+        segmentAnalytics.track({
+          userId: event.actorId,
+          event: event.type,
+          properties,
+        });
+      }
+    } catch (error) {
+      serverLogger.error('[Analytics] Error sending event to provider', {
+        error,
+        provider: analyticsProvider,
+        eventType: event.type,
+      });
+    }
+  }
+
+  /**
+   * Shutdown analytics provider and flush pending events
+   * Should be called before application exit
+   */
+  async shutdown(): Promise<void> {
+    try {
+      if (analyticsProvider === 'posthog' && posthog) {
+        await posthog.shutdown();
+        serverLogger.info('[Analytics] PostHog shutdown complete');
+      } else if (analyticsProvider === 'segment' && segmentAnalytics) {
+        await segmentAnalytics.closeAndFlush();
+        serverLogger.info('[Analytics] Segment shutdown complete');
+      }
+    } catch (error) {
+      serverLogger.error('[Analytics] Error during shutdown', { error });
+    }
   }
 }
 
