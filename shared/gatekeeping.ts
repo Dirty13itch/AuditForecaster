@@ -78,33 +78,74 @@ export function getRuntimeEnv(): RuntimeEnvironment {
 }
 
 /**
- * Get Golden Path test status for a route (stubbed for now)
+ * Get Golden Path test status for a route
  * 
- * TODO: Integrate with actual GP test results from docs/product/golden-path-report.md
+ * Parses actual GP test results from docs/product/golden-path-report.md
  * 
  * @param goldenPathId - GP test ID (e.g., "GP-01", "GP-02")
- * @returns Test status
+ * @returns Test status from the report
  */
 function getGoldenPathStatus(goldenPathId?: string): GoldenPathStatus {
-  // Stub: All GP tests pass for now
-  // In production, this would read from golden-path-report.md or a database
   if (!goldenPathId) {
     return { passed: true };
   }
   
-  // For demo: GP-01 and GP-02 pass, others pending
-  if (goldenPathId === 'GP-01' || goldenPathId === 'GP-02') {
+  try {
+    // Read golden-path-report.md and parse test status
+    const fs = require('fs');
+    const path = require('path');
+    const reportPath = path.join(process.cwd(), 'docs/product/golden-path-report.md');
+    
+    if (!fs.existsSync(reportPath)) {
+      // Fallback if file doesn't exist
+      return { passed: false, lastRun: undefined };
+    }
+    
+    const content = fs.readFileSync(reportPath, 'utf-8');
+    
+    // Parse test status for the given GP ID
+    const gpSectionRegex = new RegExp(`## ${goldenPathId}:([\\s\\S]*?)(?=##|$)`, 'i');
+    const match = content.match(gpSectionRegex);
+    
+    if (!match) {
+      return { passed: false, lastRun: undefined };
+    }
+    
+    const section = match[1];
+    
+    // Extract status emoji/text
+    const statusMatch = section.match(/\*\*Status\*\*:\s*([^\n]+)/);
+    const status = statusMatch ? statusMatch[1] : '';
+    
+    // Extract last executed date
+    const dateMatch = section.match(/\*\*Last Executed\*\*:\s*([^\n]+)/);
+    const lastExecuted = dateMatch ? dateMatch[1] : undefined;
+    
+    // Extract duration
+    const durationMatch = section.match(/\*\*Duration\*\*:\s*([^\n]+)/);
+    const durationStr = durationMatch ? durationMatch[1] : undefined;
+    
+    // Parse duration (e.g., "120 seconds" -> 120000 ms)
+    let duration: number | undefined;
+    if (durationStr && !durationStr.includes('N/A')) {
+      const durationSeconds = parseInt(durationStr.match(/\d+/)?.[0] || '0');
+      duration = durationSeconds * 1000;
+    }
+    
+    // Determine if test passed based on status indicators
+    const passed = status.includes('🟢') || status.includes('✅') || 
+                   status.toLowerCase().includes('pass') ||
+                   status.toLowerCase().includes('complete');
+    
     return {
-      passed: true,
-      lastRun: new Date().toISOString(),
-      duration: 120000, // 2 minutes
+      passed,
+      lastRun: lastExecuted && !lastExecuted.includes('Not yet') ? lastExecuted : undefined,
+      duration,
     };
+  } catch (error) {
+    // Fallback to stub on error
+    return { passed: false, lastRun: undefined };
   }
-  
-  return {
-    passed: false,
-    lastRun: undefined,
-  };
 }
 
 /**

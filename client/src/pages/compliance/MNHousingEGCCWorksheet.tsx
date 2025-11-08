@@ -413,10 +413,8 @@ function MNHousingEGCCWorksheetContent() {
    * Submits completed worksheet for review. Changes status from
    * "draft" or "in_progress" to "submitted". Once submitted,
    * the worksheet is locked to prevent further edits.
-   * 
-   * TODO: Add server-side submission API call
    */
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     // Phase 5 - HARDEN: Validate worksheet completion
     const hasComplianceApproach = worksheet.prescriptivePath || 
                                    worksheet.performancePath || 
@@ -452,14 +450,43 @@ function MNHousingEGCCWorksheetContent() {
     // Save before submitting
     saveDraft();
     
-    // Update status to submitted
-    setWorksheet(prev => ({ ...prev, complianceStatus: "submitted" }));
-    
-    toast({
-      title: "Worksheet submitted",
-      description: "MN Housing EGCC worksheet submitted for review.",
-    });
-  }, [worksheet, saveDraft, toast]);
+    // Submit to server
+    try {
+      const response = await fetch(`/api/compliance/mn-housing-egcc/${jobId}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ worksheet }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to submit worksheet');
+      }
+
+      const result = await response.json();
+      
+      // Update status to submitted
+      setWorksheet(prev => ({ 
+        ...prev, 
+        complianceStatus: "submitted",
+        submissionDate: result.submissionDate || new Date().toISOString(),
+      }));
+      
+      toast({
+        title: "Worksheet submitted",
+        description: "MN Housing EGCC worksheet submitted for review.",
+      });
+    } catch (error) {
+      toast({
+        title: "Submission failed",
+        description: error instanceof Error ? error.message : "Failed to submit worksheet. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [worksheet, saveDraft, toast, jobId]);
 
   /**
    * Phase 3 - OPTIMIZE: Memoized PDF download handler

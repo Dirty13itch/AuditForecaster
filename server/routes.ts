@@ -12456,6 +12456,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/compliance/mn-housing-egcc/:jobId/submit - Submit MN Housing EGCC worksheet
+  app.post("/api/compliance/mn-housing-egcc/:jobId/submit", isAuthenticated, csrfSynchronisedProtection, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { jobId } = idParamSchema.parse(req.params);
+      
+      serverLogger.info('[API/Compliance/MNHousingEGCC/Submit] Submission requested', { 
+        jobId,
+        userId: req.user?.claims?.sub 
+      });
+
+      // Validate worksheet data
+      const { worksheet } = req.body;
+      if (!worksheet) {
+        return res.status(400).json({ 
+          message: 'Missing worksheet data' 
+        });
+      }
+
+      // Verify job exists and user has access
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        serverLogger.warn('[API/Compliance/MNHousingEGCC/Submit] Job not found', { jobId });
+        return res.status(404).json({ message: 'Job not found' });
+      }
+
+      // Role-based access: inspectors can only submit for their own jobs
+      if (req.user?.role !== 'admin' && job.assignedTo !== req.user?.claims?.sub) {
+        serverLogger.warn('[API/Compliance/MNHousingEGCC/Submit] Access denied', { 
+          jobId,
+          userId: req.user?.claims?.sub,
+          assignedTo: job.assignedTo
+        });
+        return res.status(403).json({ message: "You can only submit worksheets for jobs assigned to you" });
+      }
+
+      // Save worksheet as compliance artifact
+      const artifact = await storage.uploadComplianceArtifact({
+        jobId,
+        programType: 'egcc',
+        artifactType: 'worksheet',
+        documentPath: `worksheet-${jobId}-${Date.now()}.json`, // Virtual path for tracking
+        uploadedBy: req.user?.claims?.sub || 'unknown',
+      });
+
+      // Store the actual worksheet data in a separate table or as JSON
+      // For now, we'll store it in the job's complianceFlags field
+      await storage.updateJob(jobId, {
+        complianceFlags: {
+          ...(job.complianceFlags as object || {}),
+          egccWorksheet: worksheet,
+          egccSubmissionDate: new Date().toISOString(),
+          egccArtifactId: artifact.id,
+        },
+        complianceStatus: 'submitted',
+        lastComplianceCheck: new Date(),
+      });
+
+      // Track analytics event
+      analytics.updateEntity({
+        actorId: req.user?.claims?.sub || 'unknown',
+        route: `/compliance/mn-housing-egcc/${jobId}`,
+        correlationId: req.headers['x-correlation-id'] as string || '',
+        entityType: 'job',
+        entityId: jobId,
+        metadata: {
+          action: 'worksheet_submitted',
+          programType: 'egcc',
+        },
+      });
+
+      serverLogger.info('[API/Compliance/MNHousingEGCC/Submit] Worksheet submitted successfully', { 
+        jobId,
+        artifactId: artifact.id,
+        userId: req.user?.claims?.sub
+      });
+
+      res.status(200).json({ 
+        message: 'Worksheet submitted successfully',
+        artifactId: artifact.id,
+        submissionDate: new Date().toISOString()
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        serverLogger.warn('[API/Compliance/MNHousingEGCC/Submit] Validation error', { error });
+        const { status, message } = handleValidationError(error);
+        return res.status(status).json({ message });
+      }
+      logError('Compliance/MNHousingEGCC/Submit', error, { jobId: req.params.jobId });
+      res.status(500).json({ 
+        message: 'Failed to submit worksheet. Please try again.' 
+      });
+    }
+  });
+
   // Google Calendar preferences
   app.get('/api/calendar-preferences', isAuthenticated, async (req, res) => {
     try {
