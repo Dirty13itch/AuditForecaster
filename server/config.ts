@@ -19,12 +19,6 @@ export interface ServerConfig {
 export function validateConfig(): ServerConfig {
   const errors: string[] = [];
   
-  // Required in all environments
-  const requiredVars = {
-    REPL_ID: process.env.REPL_ID,
-    SESSION_SECRET: process.env.SESSION_SECRET,
-  };
-  
   // Check DATABASE_URL (required for production, optional for dev)
   const databaseUrl = process.env.DATABASE_URL;
   const nodeEnv = process.env.NODE_ENV || 'development';
@@ -39,16 +33,29 @@ export function validateConfig(): ServerConfig {
     }
   }
   
-  // Check REPLIT_DOMAINS
-  const replitDomains = process.env.REPLIT_DOMAINS;
-  if (!replitDomains) {
-    errors.push('REPLIT_DOMAINS is required for authentication');
+  // Check SESSION_SECRET (always required)
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    errors.push('SESSION_SECRET environment variable is required');
   }
   
-  // Check other required vars
-  for (const [key, value] of Object.entries(requiredVars)) {
-    if (!value) {
-      errors.push(`${key} environment variable is required`);
+  // Check REPLIT_DOMAINS (required in production, optional in development)
+  const replitDomains = process.env.REPLIT_DOMAINS;
+  if (!replitDomains) {
+    if (isProduction) {
+      errors.push('REPLIT_DOMAINS is required for authentication in production');
+    } else {
+      serverLogger.warn('[Config] REPLIT_DOMAINS not set - using localhost for development');
+    }
+  }
+  
+  // Check REPL_ID (required in production, optional in development)
+  const replId = process.env.REPL_ID;
+  if (!replId) {
+    if (isProduction) {
+      errors.push('REPL_ID environment variable is required in production');
+    } else {
+      serverLogger.warn('[Config] REPL_ID not set - using default for development');
     }
   }
   
@@ -83,10 +90,10 @@ export function validateConfig(): ServerConfig {
     port: parseInt(process.env.PORT || '5000', 10),
     nodeEnv,
     databaseUrl: databaseUrl || '',
-    sessionSecret: requiredVars.SESSION_SECRET!,
-    replitDomains: replitDomains!.split(',').map(d => d.trim()),
+    sessionSecret: sessionSecret!,
+    replitDomains: replitDomains ? replitDomains.split(',').map(d => d.trim()) : ['localhost:5000', 'localhost:3000'],
     issuerUrl: process.env.ISSUER_URL || 'https://replit.com/oidc',
-    replId: requiredVars.REPL_ID!,
+    replId: replId || 'dev-repl-id',
     isDevelopment,
     isProduction,
   };

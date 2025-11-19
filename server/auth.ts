@@ -4,6 +4,7 @@ import passport from "passport";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
+import createMemoryStore from "memorystore";
 import { storage } from "./storage";
 import { serverLogger } from "./logger";
 import memoize from "memoizee";
@@ -436,7 +437,6 @@ export function getSession() {
     });
   } else {
     serverLogger.warn('[Auth] DATABASE_URL not set - using in-memory session store');
-    const createMemoryStore = require("memorystore");
     const MemoryStore = createMemoryStore(session);
     sessionStore = new MemoryStore({
       checkPeriod: 86400000,
@@ -605,22 +605,59 @@ async function upsertUserAndStoreInSession(claims: any): Promise<SessionUser> {
 }
 
 export async function setupAuth(app: Express) {
-  // Validate required environment variables
-  if (!process.env.REPLIT_DOMAINS) {
+  // Validate required environment variables (with development fallbacks)
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const isDevelopment = nodeEnv === 'development';
+  
+  // Allow completely skipping auth setup in development/CI environments
+  if (isDevelopment && process.env.SKIP_AUTH_SETUP === 'true') {
+    serverLogger.warn('[Auth] Authentication setup skipped (SKIP_AUTH_SETUP=true)');
+    serverLogger.warn('[Auth] This is only allowed in development mode!');
+    
+    // Setup minimal session middleware for development
+    app.use(session({
+      secret: process.env.SESSION_SECRET || 'dev-secret-key-change-me',
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: false, // Allow non-HTTPS in dev
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      },
+    }));
+    
+    // Add a mock authentication middleware that always passes
+    app.use((req, res, next) => {
+      // Mock authenticated user for development
+      if (!req.session) {
+        req.session = {} as any;
+      }
+      next();
+    });
+    
+    return;
+  }
+  
+  const replitDomains = process.env.REPLIT_DOMAINS || (isDevelopment ? 'localhost:5000,localhost:3000' : '');
+  const replId = process.env.REPL_ID || (isDevelopment ? 'dev-repl-id' : '');
+  const sessionSecret = process.env.SESSION_SECRET;
+  
+  if (!replitDomains) {
     throw new Error("Environment variable REPLIT_DOMAINS not provided");
   }
-  if (!process.env.REPL_ID) {
+  if (!replId) {
     throw new Error("Environment variable REPL_ID not provided");
   }
-  if (!process.env.SESSION_SECRET) {
+  if (!sessionSecret) {
     throw new Error("Environment variable SESSION_SECRET not provided");
   }
 
   // Log environment configuration for debugging
   serverLogger.info(`[Auth] Initializing authentication system`, {
-    domains: process.env.REPLIT_DOMAINS.split(",").map(d => d.trim()),
-    replId: process.env.REPL_ID,
-    hasSessionSecret: !!process.env.SESSION_SECRET,
+    domains: replitDomains.split(",").map(d => d.trim()),
+    replId: replId,
+    hasSessionSecret: !!sessionSecret,
     issuerUrl: process.env.ISSUER_URL || "https://replit.com/oidc",
   });
 
