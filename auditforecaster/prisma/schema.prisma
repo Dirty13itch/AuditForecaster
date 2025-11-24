@@ -1,0 +1,400 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          String    @default("INSPECTOR")
+  passwordHash  String?
+  accounts      Account[]
+  sessions      Session[]
+
+  // Google Calendar Integration
+  googleCalendarId String?
+  nextSyncToken    String?
+  watchResourceId  String?
+  watchExpiration  BigInt?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobs      Job[]
+  vehicles  Vehicle[]
+  equipment Equipment[]
+  expenses  Expense[]
+
+  // Link to Builder for Builder Portal users
+  builderId String?
+  builder   Builder? @relation(fields: [builderId], references: [id])
+}
+
+model TaxCredit {
+  id                String   @id @default(cuid())
+  jobId             String   @unique
+  job               Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  creditAmount      Float // e.g., 2500 or 5000
+  certificationDate DateTime
+  status            String // PENDING, SUBMITTED, APPROVED, DENIED
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Vehicle {
+  id           String    @id @default(cuid())
+  name         String
+  licensePlate String    @unique
+  vin          String?
+  make         String
+  model        String
+  year         Int
+  mileage      Int
+  status       String    @default("ACTIVE") // ACTIVE, MAINTENANCE, RETIRED
+  lastService  DateTime?
+  nextService  DateTime?
+  assignedTo   String?
+  assignedUser User?     @relation(fields: [assignedTo], references: [id])
+  notes        String?
+
+  mileageLogs MileageLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Equipment {
+  id              String    @id @default(cuid())
+  name            String // e.g., "Retrotec 5000"
+  type            String // e.g., "Blower Door", "Duct Blaster", "Infrared Camera"
+  serialNumber    String    @unique
+  status          String    @default("ACTIVE") // ACTIVE, CALIBRATION_DUE, REPAIR, RETIRED
+  lastCalibration DateTime?
+  nextCalibration DateTime?
+  assignedTo      String?
+  assignedUser    User?     @relation(fields: [assignedTo], references: [id])
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model Builder {
+  id           String   @id @default(cuid())
+  name         String
+  email        String?
+  phone        String?
+  address      String?
+  contactInfo  String?
+  paymentTerms String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  jobs         Job[]
+  subdivisions Subdivision[]
+  priceLists   PriceList[]
+  plans        Plan[] // New relation to plans
+  User         User[]
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  pdfUrl      String?
+  builderId   String
+  builder     Builder  @relation(fields: [builderId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Subdivision {
+  id         String      @id @default(cuid())
+  name       String
+  builderId  String
+  builder    Builder     @relation(fields: [builderId], references: [id])
+  jobs       Job[]
+  priceLists PriceList[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ServiceItem {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  basePrice   Float
+
+  priceListItems PriceListItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PriceList {
+  id            String       @id @default(cuid())
+  name          String
+  builderId     String?
+  builder       Builder?     @relation(fields: [builderId], references: [id])
+  subdivisionId String?
+  subdivision   Subdivision? @relation(fields: [subdivisionId], references: [id])
+
+  items PriceListItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PriceListItem {
+  id            String      @id @default(cuid())
+  priceListId   String
+  priceList     PriceList   @relation(fields: [priceListId], references: [id])
+  serviceItemId String
+  serviceItem   ServiceItem @relation(fields: [serviceItemId], references: [id])
+  price         Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([priceListId, serviceItemId])
+}
+
+model Job {
+  id              String    @id @default(cuid())
+  lotNumber       String
+  streetAddress   String
+  city            String
+  address         String
+  status          String    @default("PENDING") // Was Enum JobStatus
+  scheduledDate   DateTime?
+  rejectionReason String?
+
+  // Geocoding for weather and routing
+  latitude  Float?
+  longitude Float?
+
+  // Google Integration
+  googleEventId  String? @unique // Google Calendar Event ID
+  googleHtmlLink String? // Link to event in Google Calendar
+  googleAlbumId  String? // Google Photos Album ID
+  googleAlbumUrl String? // Link to Google Photos Album
+
+  inspectorId String?
+  inspector   User?   @relation(fields: [inspectorId], references: [id])
+
+  builderId String?
+  builder   Builder? @relation(fields: [builderId], references: [id])
+
+  subdivisionId String?
+  subdivision   Subdivision? @relation(fields: [subdivisionId], references: [id])
+
+  inspections Inspection[]
+  taxCredit   TaxCredit?
+  expenses    Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Inspection {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id])
+
+  type   String @default("BLOWER_DOOR") // Was Enum InspectionType
+  status String @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED
+
+  // iAuditor Parity Fields
+  score    Float?
+  maxScore Float?
+  answers  Json? // Structured responses matching the template
+  metadata Json? // Device info, location, duration, etc.
+
+  data         String // Legacy: Was Json (keep for migration if needed, or deprecate)
+  checklist    String? // Legacy: Was Json
+  signatureUrl String?
+
+  photos      Photo[]
+  actionItems ActionItem[]
+
+  reportTemplateId String?
+  reportTemplate   ReportTemplate? @relation(fields: [reportTemplateId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Photo {
+  id       String  @id @default(cuid())
+  url      String
+  caption  String?
+  category String? // e.g., "Exterior", "Attic"
+
+  // Metadata from EXIF or upload
+  latitude  Float?
+  longitude Float?
+  takenAt   DateTime?
+
+  inspectionId String
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ReportTemplate {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  // iAuditor Parity Fields
+  structure Json? // Full definition: pages, sections, items, logic
+  scoring   Json? // Scoring configuration: weights, max scores
+
+  checklistItems String? // Legacy: JSON definition (keep for migration)
+  isDefault      Boolean @default(false)
+
+  inspections Inspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActionItem {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+  status      String  @default("OPEN") // OPEN, RESOLVED
+  priority    String  @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+
+  inspectionId String
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  assignedToEmail String? // Email of the builder/super
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Expense {
+  id     String   @id @default(cuid())
+  date   DateTime
+  amount Float
+
+  category    String? // Travel, Equipment, Meals, etc. (Optional for pending)
+  status      String  @default("PENDING") // PENDING, CLASSIFIED
+  description String?
+  receiptUrl  String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MileageLog {
+  id       String   @id @default(cuid())
+  date     DateTime
+  distance Float
+
+  purpose       String? // Business, Personal (Optional for pending)
+  status        String  @default("PENDING") // PENDING, CLASSIFIED
+  startLocation String?
+  endLocation   String?
+
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subcontractor {
+  id     String  @id @default(cuid())
+  name   String
+  type   String // Individual, Company
+  email  String?
+  phone  String?
+  taxId  String? // Consider encryption in app layer if needed
+  status String  @default("ACTIVE")
+
+  complianceDocs ComplianceDoc[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ComplianceDoc {
+  id             String    @id @default(cuid())
+  type           String // W9, COI, License
+  url            String
+  expirationDate DateTime?
+
+  subcontractorId String
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CorporateDoc {
+  id    String   @id @default(cuid())
+  title String
+  type  String // Bylaws, Minutes, TaxReturn
+  url   String
+  date  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

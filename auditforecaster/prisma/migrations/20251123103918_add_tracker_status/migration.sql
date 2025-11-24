@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "Expense" ADD COLUMN     "status" TEXT NOT NULL DEFAULT 'PENDING',
+ALTER COLUMN "category" DROP NOT NULL;
+
+-- AlterTable
+ALTER TABLE "MileageLog" ADD COLUMN     "status" TEXT NOT NULL DEFAULT 'PENDING',
+ALTER COLUMN "purpose" DROP NOT NULL;
