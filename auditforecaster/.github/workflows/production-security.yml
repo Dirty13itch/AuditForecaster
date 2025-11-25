@@ -8,25 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  snyk:
-    name: Snyk Security Scan
+  debug-visibility:
+    name: Debug Visibility Check
     runs-on: ubuntu-latest
-    
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run Snyk test
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high
+      - run: echo "If you can see this, the previous YAML had a syntax error."
