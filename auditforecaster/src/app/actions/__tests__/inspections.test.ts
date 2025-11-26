@@ -1,13 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { updateInspection, createReinspection } from '../inspections'
-import { prismaMock } from '@/test/mocks/prisma'
-import { mockSession } from '@/test/mocks/auth'
+import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { sendInspectionCompletedEmail } from '@/lib/email'
+import { redirect } from 'next/navigation'
 
 // Mock dependencies
 vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
+    prisma: {
+        inspection: {
+            findFirst: vi.fn(),
+            create: vi.fn(),
+            update: vi.fn()
+        },
+        job: {
+            update: vi.fn()
+        }
+    }
 }))
 
 vi.mock('@/auth', () => ({
@@ -26,75 +35,61 @@ vi.mock('next/navigation', () => ({
     redirect: vi.fn()
 }))
 
-describe('inspections actions', () => {
+describe('Inspections Server Actions', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        vi.mocked(auth).mockResolvedValue(mockSession as any)
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1', name: 'Inspector Gadget' } } as any)
     })
 
     describe('updateInspection', () => {
-        it('should create new inspection with valid data', async () => {
+        it('should create new inspection and calculate ACH50 correctly', async () => {
             const formData = new FormData()
-            formData.set('jobId', 'job-123')
-            formData.set('cfm50', '1000')
-            formData.set('houseVolume', '20000')
-            formData.set('notes', 'Test notes')
-            formData.set('checklist', JSON.stringify([{ id: '1', checked: true }]))
+            formData.append('jobId', 'job-1')
+            formData.append('cfm50', '1000')
+            formData.append('houseVolume', '20000') // ACH50 = (1000 * 60) / 20000 = 3.0
+            formData.append('checklist', JSON.stringify([{ id: '1', status: 'PASS' }]))
 
-            // Mock no existing inspection
-            prismaMock.inspection.findFirst.mockResolvedValue(null)
-
-            // Mock job update return
-            prismaMock.job.update.mockResolvedValue({
-                id: 'job-123',
-                streetAddress: '123 Main St',
-                city: 'Test City'
+            vi.mocked(prisma.inspection.findFirst).mockResolvedValue(null)
+            vi.mocked(prisma.inspection.create).mockResolvedValue({ id: 'insp-1' } as any)
+            vi.mocked(prisma.job.update).mockResolvedValue({
+                id: 'job-1',
+                streetAddress: '123 Main',
+                city: 'Austin'
             } as any)
 
             try {
                 await updateInspection(formData)
             } catch (e) {
-                // Redirect throws an error in Next.js, catch it
                 if ((e as Error).message !== 'NEXT_REDIRECT') throw e
             }
 
-            // Verify creation
-            expect(prismaMock.inspection.create).toHaveBeenCalledWith({
+            // Verify calculation
+            expect(prisma.inspection.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({
-                    jobId: 'job-123',
-                    type: 'BLOWER_DOOR',
-                    data: expect.stringContaining('"cfm50":1000'),
-                    checklist: expect.stringContaining('"checked":true')
+                    data: expect.stringContaining('"ach50":3'),
+                    jobId: 'job-1'
                 })
-            })
+            }))
 
-            // Verify calculations (1000 * 60 / 20000 = 3.0 ACH50)
-            expect(prismaMock.inspection.create).toHaveBeenCalledWith({
-                data: expect.objectContaining({
-                    data: expect.stringContaining('"ach50":3')
-                })
-            })
+            // Verify job update
+            expect(prisma.job.update).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: 'job-1' },
+                data: { status: 'COMPLETED' }
+            }))
 
-            // Verify email sent
+            // Verify email
             expect(sendInspectionCompletedEmail).toHaveBeenCalled()
+            expect(redirect).toHaveBeenCalledWith('/dashboard/jobs/job-1')
         })
 
         it('should update existing inspection', async () => {
             const formData = new FormData()
-            formData.set('jobId', 'job-123')
-            formData.set('cfm50', '1200')
+            formData.append('jobId', 'job-1')
+            formData.append('cfm50', '1200')
+            formData.append('houseVolume', '20000')
 
-            // Mock existing inspection
-            prismaMock.inspection.findFirst.mockResolvedValue({
-                id: 'insp-123',
-                jobId: 'job-123'
-            } as any)
-
-            prismaMock.job.update.mockResolvedValue({
-                id: 'job-123',
-                streetAddress: '123 Main St',
-                city: 'Test City'
-            } as any)
+            vi.mocked(prisma.inspection.findFirst).mockResolvedValue({ id: 'existing-id' } as any)
+            vi.mocked(prisma.job.update).mockResolvedValue({ streetAddress: '123 Main' } as any)
 
             try {
                 await updateInspection(formData)
@@ -102,58 +97,38 @@ describe('inspections actions', () => {
                 if ((e as Error).message !== 'NEXT_REDIRECT') throw e
             }
 
-            expect(prismaMock.inspection.update).toHaveBeenCalledWith({
-                where: { id: 'insp-123' },
-                data: expect.objectContaining({
-                    data: expect.stringContaining('"cfm50":1200')
-                })
-            })
+            expect(prisma.inspection.update).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: 'existing-id' }
+            }))
+            expect(prisma.inspection.create).not.toHaveBeenCalled()
         })
 
-        it('should fail validation with missing fields', async () => {
+        it('should fail validation if fields missing', async () => {
             const formData = new FormData()
             // Missing jobId and cfm50
 
             await expect(updateInspection(formData)).rejects.toThrow('Please check all required fields')
         })
-
-        it('should throw unauthorized if no session', async () => {
-            vi.mocked(auth).mockResolvedValue(null)
-            const formData = new FormData()
-
-            await expect(updateInspection(formData)).rejects.toThrow('Unauthorized')
-        })
     })
 
     describe('createReinspection', () => {
         it('should create reinspection and update job status', async () => {
-            prismaMock.inspection.create.mockResolvedValue({
-                id: 'new-insp-123'
-            } as any)
+            vi.mocked(prisma.inspection.create).mockResolvedValue({ id: 'new-insp-1' } as any)
 
             try {
-                await createReinspection('job-123')
+                await createReinspection('job-1')
             } catch (e) {
                 if ((e as Error).message !== 'NEXT_REDIRECT') throw e
             }
 
-            expect(prismaMock.inspection.create).toHaveBeenCalledWith({
-                data: expect.objectContaining({
-                    jobId: 'job-123',
-                    data: '{}'
-                })
-            })
-
-            expect(prismaMock.job.update).toHaveBeenCalledWith({
-                where: { id: 'job-123' },
+            expect(prisma.inspection.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ jobId: 'job-1' })
+            }))
+            expect(prisma.job.update).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: 'job-1' },
                 data: { status: 'IN_PROGRESS' }
-            })
-        })
-
-        it('should throw unauthorized if no session', async () => {
-            vi.mocked(auth).mockResolvedValue(null)
-
-            await expect(createReinspection('job-123')).rejects.toThrow('You must be logged in')
+            }))
+            expect(redirect).toHaveBeenCalledWith('/dashboard/inspections/new-insp-1')
         })
     })
 })

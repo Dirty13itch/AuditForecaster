@@ -3,12 +3,17 @@
  * Tests Zod validation and database operations
  */
 
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
 import { createServiceItem, updateServiceItem, createPriceList, upsertPriceListItem } from '@/app/actions/pricing'
 
+vi.mock('next/cache', () => ({
+    revalidatePath: vi.fn()
+}))
+
 // Mock auth for testing
-jest.mock('@/auth', () => ({
-    auth: jest.fn(() => Promise.resolve({
+vi.mock('@/auth', () => ({
+    auth: vi.fn(() => Promise.resolve({
         user: {
             id: 'test-admin-id',
             email: 'admin@example.com',
@@ -23,27 +28,30 @@ describe('Pricing Server Actions', () => {
     let testServiceItemId: string
 
     beforeAll(async () => {
-        // Create test builder
-        const builder = await prisma.builder.create({
-            data: {
-                name: 'Test Builder Co',
-                email: 'test@builder.com'
-            }
-        })
-        testBuilderId = builder.id
+        // Mock builder creation
+        const mockBuilder = {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            name: 'Test Builder Co',
+            email: 'test@builder.com'
+        }
+            ; (prisma.builder.create as any).mockResolvedValue(mockBuilder)
+        testBuilderId = mockBuilder.id
     })
 
     afterAll(async () => {
-        // Cleanup
-        await prisma.priceListItem.deleteMany({})
-        await prisma.priceList.deleteMany({})
-        await prisma.serviceItem.deleteMany({})
-        await prisma.builder.delete({ where: { id: testBuilderId } })
-        await prisma.$disconnect()
+        vi.clearAllMocks()
     })
 
     describe('createServiceItem', () => {
         it('should create a service item with valid data', async () => {
+            const mockServiceItem = {
+                id: '123e4567-e89b-12d3-a456-426614174001',
+                name: 'Blower Door Test',
+                description: 'Standard blower door testing',
+                basePrice: 150.00
+            }
+                ; (prisma.serviceItem.create as any).mockResolvedValue(mockServiceItem)
+
             const result = await createServiceItem({
                 name: 'Blower Door Test',
                 description: 'Standard blower door testing',
@@ -81,6 +89,13 @@ describe('Pricing Server Actions', () => {
 
     describe('updateServiceItem', () => {
         it('should update service item with valid data', async () => {
+            const mockUpdatedItem = {
+                id: '123e4567-e89b-12d3-a456-426614174001',
+                name: 'Blower Door Test',
+                basePrice: 175.00
+            }
+                ; (prisma.serviceItem.update as any).mockResolvedValue(mockUpdatedItem)
+
             const result = await updateServiceItem(testServiceItemId, {
                 basePrice: 175.00
             })
@@ -101,6 +116,13 @@ describe('Pricing Server Actions', () => {
 
     describe('createPriceList', () => {
         it('should create a price list with valid data', async () => {
+            const mockPriceList = {
+                id: '123e4567-e89b-12d3-a456-426614174002',
+                name: 'Standard Pricing 2024',
+                builderId: testBuilderId
+            }
+                ; (prisma.priceList.create as any).mockResolvedValue(mockPriceList)
+
             const result = await createPriceList({
                 name: 'Standard Pricing 2024',
                 builderId: testBuilderId
@@ -126,15 +148,24 @@ describe('Pricing Server Actions', () => {
         let priceListId: string
 
         beforeAll(async () => {
-            const priceList = await prisma.priceList.create({
-                data: {
-                    name: 'Test Price List for Items'
-                }
-            })
-            priceListId = priceList.id
+            const mockPriceList = {
+                id: '123e4567-e89b-12d3-a456-426614174003',
+                name: 'Test Price List for Items'
+            }
+                ; (prisma.priceList.create as any).mockResolvedValue(mockPriceList)
+
+            priceListId = mockPriceList.id
         })
 
         it('should create a new price list item', async () => {
+            const mockItem = {
+                id: '123e4567-e89b-12d3-a456-426614174004',
+                priceListId,
+                serviceItemId: testServiceItemId,
+                price: 200.00
+            }
+                ; (prisma.priceListItem.upsert as any).mockResolvedValue(mockItem)
+
             const result = await upsertPriceListItem(priceListId, testServiceItemId, 200.00)
 
             expect(result.success).toBe(true)
@@ -142,6 +173,14 @@ describe('Pricing Server Actions', () => {
         })
 
         it('should update existing price list item', async () => {
+            const mockItem = {
+                id: '123e4567-e89b-12d3-a456-426614174004',
+                priceListId,
+                serviceItemId: testServiceItemId,
+                price: 225.00
+            }
+                ; (prisma.priceListItem.upsert as any).mockResolvedValue(mockItem)
+
             const result = await upsertPriceListItem(priceListId, testServiceItemId, 225.00)
 
             expect(result.success).toBe(true)

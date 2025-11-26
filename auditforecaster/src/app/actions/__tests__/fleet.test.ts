@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createVehicle, updateVehicle, deleteVehicle } from '../fleet'
-import { prismaMock } from '@/test/mocks/prisma'
+import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
 import { auth } from '@/auth'
 import { logger } from '@/lib/logger'
+import { mockReset } from 'vitest-mock-extended'
 
 // Mock dependencies
-vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
-}))
+// prisma is already mocked in setup.ts
 
 vi.mock('@/auth', () => ({
     auth: vi.fn()
@@ -22,6 +21,7 @@ describe('fleet actions', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         vi.mocked(auth).mockResolvedValue(mockSession as any)
+        mockReset(prisma as any)
     })
 
     describe('createVehicle', () => {
@@ -35,26 +35,26 @@ describe('fleet actions', () => {
             formData.set('mileage', '1000')
             formData.set('status', 'ACTIVE')
 
-            prismaMock.vehicle.create.mockResolvedValue({
-                id: '1',
-                name: 'Test Truck',
-                make: 'Ford',
-                model: 'F-150',
-                year: 2023,
-                licensePlate: 'ABC-123',
-                vin: null,
-                mileage: 1000,
-                status: 'ACTIVE',
-                nextService: null,
-                assignedTo: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            })
+                ; (prisma.vehicle.create as any).mockResolvedValue({
+                    id: '1',
+                    name: 'Test Truck',
+                    make: 'Ford',
+                    model: 'F-150',
+                    year: 2023,
+                    licensePlate: 'ABC-123',
+                    vin: null,
+                    mileage: 1000,
+                    status: 'ACTIVE',
+                    nextService: null,
+                    assignedTo: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                })
 
             const result = await createVehicle(null, formData)
 
             expect(result.message).toBe('Vehicle created successfully')
-            expect(prismaMock.vehicle.create).toHaveBeenCalledWith({
+            expect(prisma.vehicle.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({
                     name: 'Test Truck',
                     licensePlate: 'ABC-123'
@@ -85,26 +85,26 @@ describe('fleet actions', () => {
             formData.set('mileage', '2000')
             formData.set('status', 'ACTIVE')
 
-            prismaMock.vehicle.update.mockResolvedValue({
-                id: '1',
-                name: 'Updated Truck',
-                make: 'Ford',
-                model: 'F-150',
-                year: 2023,
-                licensePlate: 'ABC-123',
-                vin: null,
-                mileage: 2000,
-                status: 'ACTIVE',
-                nextService: null,
-                assignedTo: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            })
+                ; (prisma.vehicle.update as any).mockResolvedValue({
+                    id: '1',
+                    name: 'Updated Truck',
+                    make: 'Ford',
+                    model: 'F-150',
+                    year: 2023,
+                    licensePlate: 'ABC-123',
+                    vin: null,
+                    mileage: 2000,
+                    status: 'ACTIVE',
+                    nextService: null,
+                    assignedTo: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                })
 
             const result = await updateVehicle('1', null, formData)
 
             expect(result.message).toBe('Vehicle updated successfully')
-            expect(prismaMock.vehicle.update).toHaveBeenCalledWith({
+            expect(prisma.vehicle.update).toHaveBeenCalledWith({
                 where: { id: '1' },
                 data: expect.objectContaining({
                     name: 'Updated Truck',
@@ -116,7 +116,7 @@ describe('fleet actions', () => {
 
     describe('deleteVehicle', () => {
         it('should delete vehicle', async () => {
-            prismaMock.vehicle.delete.mockResolvedValue({
+            ; (prisma.vehicle.delete as any).mockResolvedValue({
                 id: '1',
                 name: 'Deleted Truck',
                 make: 'Ford',
@@ -135,7 +135,7 @@ describe('fleet actions', () => {
             const result = await deleteVehicle('1')
 
             expect(result.message).toBe('Vehicle deleted successfully')
-            expect(prismaMock.vehicle.delete).toHaveBeenCalledWith({
+            expect(prisma.vehicle.delete).toHaveBeenCalledWith({
                 where: { id: '1' }
             })
         })

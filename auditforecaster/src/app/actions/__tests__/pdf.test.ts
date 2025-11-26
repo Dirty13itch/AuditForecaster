@@ -1,16 +1,24 @@
-
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { generatePDF } from '@/app/actions/pdf'
 import { prisma } from '@/lib/prisma'
 
-// Mock puppeteer
-jest.mock('puppeteer', () => ({
-    launch: jest.fn().mockResolvedValue({
-        newPage: jest.fn().mockResolvedValue({
-            goto: jest.fn().mockResolvedValue(null),
-            pdf: jest.fn().mockResolvedValue(Buffer.from('mock-pdf-content')),
-            close: jest.fn().mockResolvedValue(null)
-        }),
-        close: jest.fn().mockResolvedValue(null)
+vi.mock('puppeteer', () => ({
+    default: {
+        launch: vi.fn().mockResolvedValue({
+            newPage: vi.fn().mockResolvedValue({
+                goto: vi.fn().mockResolvedValue(null),
+                pdf: vi.fn().mockResolvedValue(Buffer.from('mock-pdf-content')),
+                close: vi.fn().mockResolvedValue(null)
+            }),
+            close: vi.fn().mockResolvedValue(null)
+        })
+    }
+}))
+
+// Mock auth
+vi.mock('@/auth', () => ({
+    auth: vi.fn().mockResolvedValue({
+        user: { id: 'test-user', role: 'ADMIN' }
     })
 }))
 
@@ -19,44 +27,52 @@ describe('PDF Generation Server Action', () => {
     let testBuilderId: string
 
     beforeAll(async () => {
-        // Create test data
-        const builder = await prisma.builder.create({
-            data: {
-                name: 'PDF Test Builder',
-                email: 'pdf@test.com'
-            }
-        })
-        testBuilderId = builder.id
+        // Mock prisma responses
+        const mockBuilder = {
+            id: 'builder-1',
+            name: 'PDF Test Builder',
+            email: 'pdf@test.com'
+        }
+            ; (prisma.builder.create as any).mockResolvedValue(mockBuilder)
+        testBuilderId = mockBuilder.id
 
-        const job = await prisma.job.create({
-            data: {
-                lotNumber: 'PDF-TEST-001',
-                streetAddress: '456 PDF Lane',
-                city: 'Testville',
-                address: '456 PDF Lane, Testville',
-                status: 'COMPLETED',
-                builderId: testBuilderId
-            }
-        })
-        testJobId = job.id
+        const mockJob = {
+            id: 'job-1',
+            lotNumber: 'PDF-TEST-001',
+            streetAddress: '456 PDF Lane',
+            city: 'Testville',
+            address: '456 PDF Lane, Testville',
+            status: 'COMPLETED',
+            builderId: testBuilderId,
+            builder: mockBuilder,
+            inspections: [{
+                id: 'insp-1',
+                type: 'BLOWER_DOOR',
+                createdAt: new Date()
+            }]
+        }
+            ; (prisma.job.create as any).mockResolvedValue(mockJob)
+        testJobId = mockJob.id
 
-        // Create an inspection for the job
-        await prisma.inspection.create({
-            data: {
+            ; (prisma.inspection.create as any).mockResolvedValue({
+                id: 'insp-1',
                 jobId: testJobId,
                 type: 'BLOWER_DOOR',
                 data: JSON.stringify({ cfm50: 1200 }),
                 checklist: JSON.stringify([]),
-            }
-        })
+            })
+
+            // Mock findUnique for generatePDF
+            ; (prisma.job.findUnique as any).mockImplementation((args: any) => {
+                if (args.where.id === testJobId) {
+                    return Promise.resolve(mockJob)
+                }
+                return Promise.resolve(null)
+            })
     })
 
     afterAll(async () => {
-        // Clean up
-        await prisma.inspection.deleteMany({ where: { jobId: testJobId } })
-        await prisma.job.delete({ where: { id: testJobId } })
-        await prisma.builder.delete({ where: { id: testBuilderId } })
-        await prisma.$disconnect()
+        vi.clearAllMocks()
     })
 
     it('should generate a PDF for a valid job', async () => {

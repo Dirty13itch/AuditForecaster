@@ -21,9 +21,9 @@ export async function createBuilder(formData: FormData) {
     try {
         const rawData = {
             name: formData.get('name'),
-            email: formData.get('email'),
-            phone: formData.get('phone'),
-            address: formData.get('address'),
+            email: formData.get('email') || undefined,
+            phone: formData.get('phone') || undefined,
+            address: formData.get('address') || undefined,
         }
 
         const validatedFields = BuilderSchema.parse(rawData)
@@ -54,9 +54,9 @@ export async function updateBuilder(id: string, prevState: unknown, formData: Fo
     try {
         const rawData = {
             name: formData.get('name'),
-            email: formData.get('email'),
-            phone: formData.get('phone'),
-            address: formData.get('address'),
+            email: formData.get('email') || undefined,
+            phone: formData.get('phone') || undefined,
+            address: formData.get('address') || undefined,
         }
 
         const validatedFields = BuilderSchema.parse(rawData)

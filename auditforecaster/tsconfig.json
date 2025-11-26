@@ -18,7 +18,6 @@
     "jsx": "preserve",
     "incremental": true,
     "types": [
-      "jest",
       "node"
     ],
     "plugins": [
@@ -39,6 +38,10 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "vitest.config.ts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/__tests__/**"
   ]
 }

@@ -1,48 +1,54 @@
-import { z } from "zod"
+import { z } from 'zod'
 
 const envSchema = z.object({
-    // Database
+    // Server-side
     DATABASE_URL: z.string().url(),
-
-    // Auth
     NEXTAUTH_URL: z.string().url(),
     NEXTAUTH_SECRET: z.string().min(32),
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
-    // Email (Optional for development)
+    // Google Integration (Optional but recommended)
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+
+    // Email (Optional)
     RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().email().optional(),
 
-    // Sentry (Optional for development)
+    // Sentry (Optional)
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
 
-    // Node Environment
-    NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+    // Rate Limiting (Optional)
+    UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+    UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 })
 
-export type Env = z.infer<typeof envSchema>
+const processEnv = {
+    DATABASE_URL: process.env.DATABASE_URL,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
+    NODE_ENV: process.env.NODE_ENV,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM,
+    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+}
 
-// Validate environment variables at build/startup time
-function validateEnv(): Env {
-    try {
-        const parsed = envSchema.parse(process.env)
+// Validate on import
+const parsed = envSchema.safeParse(processEnv)
 
-        // Warn if Sentry is not configured in production
-        if (parsed.NODE_ENV === "production" && !parsed.NEXT_PUBLIC_SENTRY_DSN) {
-            console.warn("⚠️  WARNING: NEXT_PUBLIC_SENTRY_DSN not set in production")
-            console.warn("   Error tracking will not be available")
-        }
-
-        return parsed
-    } catch (error) {
-        if (error instanceof z.ZodError) {
-            console.error("❌ Invalid environment variables:")
-            console.error(JSON.stringify(error.errors, null, 2))
-            throw new Error("Environment validation failed")
-        }
-        throw error
+if (!parsed.success) {
+    console.error(
+        '❌ Invalid environment variables:',
+        JSON.stringify(parsed.error.format(), null, 4)
+    )
+    // Only throw in production to prevent dev crashes if optional vars are missing
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('Invalid environment variables')
     }
 }
 
-// Export validated env (this will throw if invalid)
-export const env = validateEnv()
-
+export const env = parsed.success ? parsed.data : processEnv as z.infer<typeof envSchema>

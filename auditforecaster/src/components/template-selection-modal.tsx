@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getTemplatesForSelection, createInspectionWithTemplate } from '@/app/actions/advanced-templates'
+import { getTemplatesForSelection } from '@/app/actions/jobs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useToast } from '@/components/ui/use-toast'
 import { X, FileText } from 'lucide-react'
 
 type TemplateSelectionModalProps = {
@@ -20,6 +21,7 @@ type Template = {
 
 export function TemplateSelectionModal({ jobId, onClose }: TemplateSelectionModalProps) {
     const router = useRouter()
+    const { toast } = useToast()
     const [templates, setTemplates] = useState<Template[]>([])
     const [loading, setLoading] = useState(true)
     const [creating, setCreating] = useState(false)
@@ -42,11 +44,29 @@ export function TemplateSelectionModal({ jobId, onClose }: TemplateSelectionModa
     const handleSelectTemplate = async (templateId: string) => {
         setCreating(true)
         try {
-            const result = await createInspectionWithTemplate(jobId, templateId)
-            router.push(`/inspections/${result.inspectionId}/run`)
+            const response = await fetch('/api/inspections/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ jobId, templateId }),
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Failed to create inspection')
+            }
+
+            const result = await response.json()
+            onClose() // Close modal immediately on success
+            router.push(`/dashboard/inspections/${jobId}`)
         } catch (error) {
             console.error('Failed to create inspection:', error)
-            alert('Failed to create inspection')
+            toast({
+                title: "Error",
+                description: "Failed to create inspection. Please try again.",
+                variant: "destructive",
+            })
             setCreating(false)
         }
     }

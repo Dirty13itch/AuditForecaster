@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTemplate, updateTemplate, deleteTemplate } from '../templates'
-import { prismaMock } from '@/test/mocks/prisma'
+import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
 import { auth } from '@/auth'
+import { mockDeep, mockReset } from 'vitest-mock-extended'
 
 // Mock dependencies
-vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
-}))
+// prisma is already mocked in setup.ts
 
 vi.mock('@/auth', () => ({
     auth: vi.fn()
@@ -21,6 +20,7 @@ describe('templates actions', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         vi.mocked(auth).mockResolvedValue(mockSession as any)
+        mockReset(prisma as any)
     })
 
     describe('createTemplate', () => {
@@ -29,18 +29,18 @@ describe('templates actions', () => {
             formData.set('name', 'New Template')
             formData.set('checklistItems', JSON.stringify([{ label: 'Item 1' }]))
 
-            prismaMock.reportTemplate.create.mockResolvedValue({
-                id: 'temp-1',
-                name: 'New Template',
-                checklistItems: JSON.stringify([{ label: 'Item 1' }]),
-                isDefault: false,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            })
+                ; (prisma.reportTemplate.create as any).mockResolvedValue({
+                    id: 'temp-1',
+                    name: 'New Template',
+                    checklistItems: JSON.stringify([{ label: 'Item 1' }]),
+                    isDefault: false,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                })
 
             await createTemplate(formData)
 
-            expect(prismaMock.reportTemplate.create).toHaveBeenCalledWith({
+            expect(prisma.reportTemplate.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({
                     name: 'New Template',
                     checklistItems: expect.stringContaining('"label":"Item 1"')
@@ -74,7 +74,7 @@ describe('templates actions', () => {
 
             await updateTemplate('temp-1', formData)
 
-            expect(prismaMock.reportTemplate.update).toHaveBeenCalledWith({
+            expect(prisma.reportTemplate.update).toHaveBeenCalledWith({
                 where: { id: 'temp-1' },
                 data: expect.objectContaining({
                     name: 'Updated Template'
@@ -91,13 +91,13 @@ describe('templates actions', () => {
             await updateTemplate('temp-1', formData)
 
             // Should unset other defaults
-            expect(prismaMock.reportTemplate.updateMany).toHaveBeenCalledWith({
+            expect(prisma.reportTemplate.updateMany).toHaveBeenCalledWith({
                 where: { isDefault: true },
                 data: { isDefault: false }
             })
 
             // Should set this one as default
-            expect(prismaMock.reportTemplate.update).toHaveBeenCalledWith({
+            expect(prisma.reportTemplate.update).toHaveBeenCalledWith({
                 where: { id: 'temp-1' },
                 data: expect.objectContaining({
                     isDefault: true
@@ -113,7 +113,7 @@ describe('templates actions', () => {
 
             await deleteTemplate(validUuid)
 
-            expect(prismaMock.reportTemplate.delete).toHaveBeenCalledWith({
+            expect(prisma.reportTemplate.delete).toHaveBeenCalledWith({
                 where: { id: validUuid }
             })
         })

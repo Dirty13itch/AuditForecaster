@@ -1,30 +1,36 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createReinspection } from '../inspections'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 
 // Mock dependencies
-jest.mock('@/lib/prisma', () => ({
+vi.mock('@/lib/prisma', () => ({
     prisma: {
         inspection: {
-            create: jest.fn(),
+            create: vi.fn(),
         },
         job: {
-            update: jest.fn(),
+            update: vi.fn(),
         }
     }
 }))
 
-jest.mock('@/auth', () => ({
-    auth: jest.fn(),
+vi.mock('@/auth', () => ({
+    auth: vi.fn(),
 }))
 
-jest.mock('next/navigation', () => ({
-    redirect: jest.fn(),
+vi.mock('next/navigation', () => ({
+    redirect: vi.fn(),
 }))
 
-jest.mock('next/cache', () => ({
-    revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+    revalidatePath: vi.fn(),
+}))
+
+// Mock email to prevent Resend initialization
+vi.mock('@/lib/email', () => ({
+    sendInspectionCompletedEmail: vi.fn(),
 }))
 
 describe('createReinspection', () => {
@@ -32,17 +38,17 @@ describe('createReinspection', () => {
     const mockUserId = 'user-123'
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     it('creates a new inspection and updates job status', async () => {
         // Mock auth session
-        (auth as jest.Mock).mockResolvedValue({ user: { id: mockUserId } })
+        vi.mocked(auth).mockResolvedValue({ user: { id: mockUserId } } as any)
 
         // Mock prisma responses
         const mockNewInspection = { id: 'inspection-new' }
-            ; (prisma.inspection.create as jest.Mock).mockResolvedValue(mockNewInspection)
-            ; (prisma.job.update as jest.Mock).mockResolvedValue({ id: mockJobId })
+        vi.mocked(prisma.inspection.create).mockResolvedValue(mockNewInspection as any)
+        vi.mocked(prisma.job.update).mockResolvedValue({ id: mockJobId } as any)
 
         await createReinspection(mockJobId)
 
@@ -67,7 +73,7 @@ describe('createReinspection', () => {
     })
 
     it('throws error if not authenticated', async () => {
-        (auth as jest.Mock).mockResolvedValue(null)
+        vi.mocked(auth).mockResolvedValue(null)
 
         await expect(createReinspection(mockJobId)).rejects.toThrow('You must be logged in')
     })

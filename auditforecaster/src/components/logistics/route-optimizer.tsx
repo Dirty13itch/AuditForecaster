@@ -7,6 +7,7 @@ import { Map, Navigation } from 'lucide-react'
 import { getTodaysRoute } from '@/app/actions/logistics'
 
 export function RouteOptimizer() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [jobs, setJobs] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 

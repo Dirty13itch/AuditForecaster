@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import { ArrowLeft, FileText, Camera, CheckCircle2, XCircle, MinusCircle } from "lucide-react";
-import Image from "next/image";
+import { ArrowLeft, FileText, CheckCircle2, XCircle, MinusCircle } from "lucide-react";
+import { EkotropeSyncButton } from "@/components/integrations/ekotrope-sync-button";
 
 // Types for inspection data and checklist items
 interface InspectionData {
@@ -75,6 +75,11 @@ export default async function InspectionDetailsPage({
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <EkotropeSyncButton
+                        inspectionId={inspection.id}
+                        isSynced={!!job.ekotropeSyncedAt}
+                        syncedAt={job.ekotropeSyncedAt}
+                    />
                     <Link href={`/dashboard/reports/${id}`}>
                         <Button variant="outline">
                             <FileText className="mr-2 h-4 w-4" />
@@ -174,54 +179,10 @@ export default async function InspectionDetailsPage({
                             ))}
                         </div>
                     </CardContent>
-                </Card>
-            )}
-
-            {/* Photos */}
-            {inspection.photos.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Camera className="h-5 w-5" />
-                            Photos ({inspection.photos.length})
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {inspection.photos.map((photo) => (
-                                <div key={photo.id} className="space-y-2">
-                                    <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden relative">
-                                        <Image
-                                            src={photo.url}
-                                            alt={photo.caption || "Inspection photo"}
-                                            fill
-                                            className="object-cover"
-                                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
-                                        />
-                                    </div>
-                                    {photo.caption && <p className="text-sm text-gray-600">{photo.caption}</p>}
-                                    {photo.category && (
-                                        <Badge variant="outline" className="text-xs">
-                                            {photo.category}
-                                        </Badge>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Digital Signature */}
-            {inspection.signatureUrl && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Digital Signature</CardTitle>
-                    </CardHeader>
                     <CardContent>
                         <div className="bg-white border rounded-lg p-4 inline-block">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={inspection.signatureUrl} alt="Inspector signature" className="max-w-xs" />
+                            <img src={inspection.signatureUrl || undefined} alt="Inspector signature" className="max-w-xs" />
                         </div>
                         <p className="text-sm text-gray-500 mt-2">
                             Signed by {job.inspector?.name} on {format(new Date(inspection.createdAt), "MMMM dd, yyyy")}

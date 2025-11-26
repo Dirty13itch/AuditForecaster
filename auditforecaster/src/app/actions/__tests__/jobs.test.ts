@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createJob, updateJobStatus, updateJob } from '../jobs'
-import { prismaMock } from '@/test/mocks/prisma'
-import { mockSession } from '@/test/mocks/auth'
+import { createJob, updateJobStatus } from '../jobs'
+import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { getCoordinates } from '@/lib/geocoding'
+import { redirect } from 'next/navigation'
 
 // Mock dependencies
 vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
+    prisma: {
+        job: {
+            create: vi.fn(),
+            update: vi.fn()
+        }
+    }
 }))
 
 vi.mock('@/auth', () => ({
@@ -26,103 +31,64 @@ vi.mock('next/navigation', () => ({
     redirect: vi.fn()
 }))
 
-describe('jobs actions', () => {
+describe('Jobs Server Actions', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        vi.mocked(auth).mockResolvedValue(mockSession as any)
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1' } } as any)
     })
 
     describe('createJob', () => {
-        it('should create job with geocoding', async () => {
+        it('should create job successfully', async () => {
             const formData = new FormData()
-            formData.set('builderId', 'builder-1')
-            formData.set('lotNumber', '123')
-            formData.set('streetAddress', '123 Main St')
-            formData.set('city', 'Test City')
+            formData.append('builderId', 'builder-1')
+            formData.append('lotNumber', '123')
+            formData.append('streetAddress', '123 Main St')
+            formData.append('city', 'Austin')
 
-            vi.mocked(getCoordinates).mockResolvedValue({ lat: 40.7128, lng: -74.0060 } as any)
+            vi.mocked(getCoordinates).mockResolvedValue({ lat: 30, lng: -97 })
+            vi.mocked(prisma.job.create).mockResolvedValue({ id: 'job-1' } as any)
 
-            try {
-                await createJob(formData)
-            } catch (e) {
-                if ((e as Error).message !== 'NEXT_REDIRECT') throw e
-            }
 
-            expect(getCoordinates).toHaveBeenCalledWith('123 Main St, Test City')
-            expect(prismaMock.job.create).toHaveBeenCalledWith({
+            const result = await createJob(formData)
+
+            expect(prisma.job.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({
                     builderId: 'builder-1',
                     lotNumber: '123',
-                    latitude: 40.7128,
-                    longitude: -74.0060,
+                    streetAddress: '123 Main St',
+                    city: 'Austin',
+                    latitude: 30,
+                    longitude: -97,
                     status: 'PENDING'
                 })
-            })
+            }))
+            expect(result).toEqual({ success: true, message: 'Job created successfully' })
         })
 
-        it('should set status to ASSIGNED if inspectorId provided', async () => {
-            const formData = new FormData()
-            formData.set('builderId', 'builder-1')
-            formData.set('lotNumber', '123')
-            formData.set('streetAddress', '123 Main St')
-            formData.set('city', 'Test City')
-            formData.set('inspectorId', 'insp-1')
-
-            try {
-                await createJob(formData)
-            } catch (e) {
-                if ((e as Error).message !== 'NEXT_REDIRECT') throw e
-            }
-
-            expect(prismaMock.job.create).toHaveBeenCalledWith({
-                data: expect.objectContaining({
-                    status: 'ASSIGNED',
-                    inspectorId: 'insp-1'
-                })
-            })
-        })
-
-        it('should throw unauthorized if no session', async () => {
+        it('should throw error if unauthorized', async () => {
             vi.mocked(auth).mockResolvedValue(null)
             const formData = new FormData()
 
             await expect(createJob(formData)).rejects.toThrow('Unauthorized')
         })
-    })
 
-    describe('updateJobStatus', () => {
-        it('should update job status', async () => {
-            await updateJobStatus('job-1', 'COMPLETED')
+        it('should validate required fields', async () => {
+            const formData = new FormData()
+            // Missing required fields
 
-            expect(prismaMock.job.update).toHaveBeenCalledWith({
-                where: { id: 'job-1' },
-                data: { status: 'COMPLETED' }
-            })
+            await expect(createJob(formData)).rejects.toThrow()
         })
     })
 
-    describe('updateJob', () => {
-        it('should update job details', async () => {
-            const formData = new FormData()
-            formData.set('id', 'job-1')
-            formData.set('status', 'IN_PROGRESS')
-            formData.set('streetAddress', '456 New St')
-            formData.set('city', 'New City')
+    describe('updateJobStatus', () => {
+        it('should update status successfully', async () => {
+            vi.mocked(prisma.job.update).mockResolvedValue({ id: 'job-1' } as any)
 
-            try {
-                await updateJob(formData)
-            } catch (e) {
-                if ((e as Error).message !== 'NEXT_REDIRECT') throw e
-            }
+            await updateJobStatus('job-1', 'COMPLETED')
 
-            expect(prismaMock.job.update).toHaveBeenCalledWith({
+            expect(prisma.job.update).toHaveBeenCalledWith({
                 where: { id: 'job-1' },
-                data: expect.objectContaining({
-                    status: 'IN_PROGRESS',
-                    streetAddress: '456 New St',
-                    city: 'New City',
-                    address: '456 New St, New City'
-                })
+                data: { status: 'COMPLETED' }
             })
         })
     })

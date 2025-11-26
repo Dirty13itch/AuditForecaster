@@ -25,30 +25,35 @@ export async function createJob(formData: FormData) {
         lotNumber: formData.get('lotNumber'),
         streetAddress: formData.get('streetAddress'),
         city: formData.get('city'),
-        scheduledDate: formData.get('scheduledDate'),
-        inspectorId: formData.get('inspectorId'),
+        scheduledDate: formData.get('scheduledDate') || undefined,
+        inspectorId: formData.get('inspectorId') || undefined,
     })
 
     const fullAddress = `${validatedFields.streetAddress}, ${validatedFields.city}`
     const coords = await getCoordinates(fullAddress)
 
-    await prisma.job.create({
-        data: {
-            builderId: validatedFields.builderId,
-            lotNumber: validatedFields.lotNumber,
-            streetAddress: validatedFields.streetAddress,
-            address: fullAddress,
-            city: validatedFields.city,
-            scheduledDate: validatedFields.scheduledDate ? new Date(validatedFields.scheduledDate) : new Date(),
-            status: validatedFields.inspectorId ? 'ASSIGNED' : 'PENDING',
-            inspectorId: validatedFields.inspectorId || null,
-            latitude: coords?.lat || null,
-            longitude: coords?.lng || null,
-        }
-    })
+    try {
+        await prisma.job.create({
+            data: {
+                builderId: validatedFields.builderId,
+                lotNumber: validatedFields.lotNumber,
+                streetAddress: validatedFields.streetAddress,
+                address: fullAddress,
+                city: validatedFields.city,
+                scheduledDate: validatedFields.scheduledDate ? new Date(validatedFields.scheduledDate) : new Date(),
+                status: validatedFields.inspectorId ? 'ASSIGNED' : 'PENDING',
+                inspectorId: validatedFields.inspectorId || null,
+                latitude: coords?.lat || null,
+                longitude: coords?.lng || null,
+            }
+        })
 
-    revalidatePath('/dashboard/jobs')
-    redirect('/dashboard/jobs')
+        revalidatePath('/dashboard/jobs')
+        return { success: true, message: 'Job created successfully' }
+    } catch (error) {
+        console.error('Failed to create job:', error)
+        return { success: false, message: 'Failed to create job' }
+    }
 }
 
 export async function updateJobStatus(id: string, status: string) {
@@ -85,4 +90,24 @@ export async function updateJob(formData: FormData) {
 
     revalidatePath('/dashboard/jobs')
     redirect('/dashboard/jobs')
+}
+
+
+
+export async function getTemplatesForSelection() {
+    const session = await auth()
+    if (!session) throw new Error("Unauthorized")
+
+    const templates = await prisma.reportTemplate.findMany({
+        select: {
+            id: true,
+            name: true,
+            description: true
+        },
+        orderBy: {
+            createdAt: 'desc'
+        }
+    })
+
+    return templates
 }

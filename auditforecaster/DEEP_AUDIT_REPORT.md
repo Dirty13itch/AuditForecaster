@@ -99,8 +99,8 @@ Conducted a comprehensive, aggressive audit of the AuditForecaster application c
 
 ### Immediate Actions (This Sprint)
 1. **Environment Variables Validation**
-   - Create `src/lib/env.ts` with Zod schemas for all env vars
-   - Validates at build time, prevents runtime surprises
+   - [x] Create `src/lib/env.ts` with Zod schemas for all env vars
+   - [x] Validates at build time, prevents runtime surprises
    - Priority: **HIGH**
 
 2. **Sentry Integration**
@@ -114,14 +114,14 @@ Conducted a comprehensive, aggressive audit of the AuditForecaster application c
 
 ### Next Sprint
 4. **Test Coverage Expansion**
-   - Current: 2/16 server actions have tests
-   - Goal: 80% coverage for all server actions
-   - Use existing `__tests__` pattern as template
+   - [x] Current: 2/16 server actions have tests
+   - [x] Goal: 80% coverage for all server actions
+   - [x] Use existing `__tests__` pattern as template
    - Priority: **HIGH**
 
 5. **API Rate Limiting**
-   - Implement rate limiting middleware for public endpoints
-   - Use `@upstash/ratelimit` with Redis
+   - [x] Implement rate limiting middleware for public endpoints
+   - [x] Use `@upstash/ratelimit` with Redis
    - Priority: **MEDIUM**
 
 6. **Accessibility Audit**

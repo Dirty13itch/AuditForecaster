@@ -1,35 +1,36 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { InspectionForm } from '../inspection-form'
 import { updateInspection } from '@/app/actions/inspections'
+import { vi, describe, it, expect } from 'vitest'
 
 // Mock dependencies
-jest.mock('@/app/actions/inspections', () => ({
-    updateInspection: jest.fn(),
+vi.mock('@/app/actions/inspections', () => ({
+    updateInspection: vi.fn(),
 }))
 
-jest.mock('@/components/ui/use-toast', () => ({
-    useToast: jest.fn(() => ({ toast: jest.fn() })),
+vi.mock('@/components/ui/use-toast', () => ({
+    useToast: vi.fn(() => ({ toast: vi.fn() })),
 }))
 
-jest.mock('@/hooks/use-offline-sync', () => ({
+vi.mock('@/hooks/use-offline-sync', () => ({
     useOfflineSync: () => ({
         isOffline: false,
         lastSaved: null,
         offlineData: null,
-        saveDraft: jest.fn()
+        saveDraft: vi.fn()
     })
 }))
 
 // Mock child components to avoid deep rendering issues
-jest.mock('@/components/photo-upload', () => ({
+vi.mock('@/components/photo-upload', () => ({
     PhotoUpload: () => <div data-testid="photo-upload">Photo Upload Component</div>
 }))
 
-jest.mock('@/components/checklist-section', () => ({
+vi.mock('@/components/checklist-section', () => ({
     ChecklistSection: () => <div data-testid="checklist-section">Checklist Section Component</div>
 }))
 
-jest.mock('@/components/signature-pad', () => ({
+vi.mock('@/components/signature-pad', () => ({
     SignaturePad: () => <div data-testid="signature-pad">Signature Pad Component</div>
 }))
 
@@ -53,8 +54,8 @@ describe('InspectionForm', () => {
     })
 
     it('submits inspection data', async () => {
-        const mockUpdateInspection = updateInspection as jest.Mock
-        mockUpdateInspection.mockResolvedValue(undefined)
+        const mockUpdateInspection = vi.mocked(updateInspection)
+        mockUpdateInspection.mockResolvedValue(undefined as any)
 
         render(<InspectionForm jobId={mockJobId} initialData={mockInitialData} />)
 

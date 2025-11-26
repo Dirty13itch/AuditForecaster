@@ -1,4 +1,3 @@
-
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
@@ -6,6 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import type { User } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { authConfig } from "./auth.config"
+import { env } from "@/lib/env"
 
 async function getUser(email: string): Promise<User | undefined> {
     try {
@@ -19,7 +20,9 @@ async function getUser(email: string): Promise<User | undefined> {
     }
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+
+const nextAuthResult = NextAuth({
+    ...authConfig,
     providers: [
         Google({
             clientId: process.env.GOOGLE_CLIENT_ID,
@@ -50,15 +53,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     if (passwordsMatch) return user;
                 }
 
-                console.log('Invalid credentials');
+
                 return null;
             },
         }),
     ],
     callbacks: {
+        ...authConfig.callbacks,
         async session({ session, token }) {
             // Add role to session
             if (token.sub && session.user) {
+                session.user.id = token.sub
                 const user = await prisma.user.findUnique({ where: { id: token.sub } })
                 if (user) {
                     session.user.role = user.role
@@ -84,7 +89,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return token
         }
     },
-    pages: {
-        signIn: '/login',
-    },
 })
+
+export const { handlers, auth, signIn, signOut } = nextAuthResult
+export const authId = (auth as any)._id
+export { nextAuthResult }

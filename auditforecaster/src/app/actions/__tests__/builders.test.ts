@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createBuilder, updateBuilder, deleteBuilder } from '../builders'
-import { prismaMock } from '@/test/mocks/prisma'
+import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
 import { auth } from '@/auth'
 import { logger } from '@/lib/logger'
+import { mockReset } from 'vitest-mock-extended'
 
 // Mock dependencies
-vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
-}))
+// prisma is already mocked in setup.ts
 
 vi.mock('@/auth', () => ({
     auth: vi.fn()
@@ -23,6 +22,7 @@ describe('builders actions', () => {
         vi.clearAllMocks()
         // Default to authenticated
         vi.mocked(auth).mockResolvedValue(mockSession as any)
+        mockReset(prisma as any)
     })
 
     describe('createBuilder', () => {
@@ -31,20 +31,20 @@ describe('builders actions', () => {
             formData.set('name', 'Test Builder')
             formData.set('email', 'test@example.com')
 
-            prismaMock.builder.create.mockResolvedValue({
-                id: '1',
-                name: 'Test Builder',
-                email: 'test@example.com',
-                phone: null,
-                address: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            })
+                ; (prisma.builder.create as any).mockResolvedValue({
+                    id: '1',
+                    name: 'Test Builder',
+                    email: 'test@example.com',
+                    phone: null,
+                    address: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                })
 
             const result = await createBuilder(formData)
 
             expect(result.message).toBe('Builder created successfully')
-            expect(prismaMock.builder.create).toHaveBeenCalledWith({
+            expect(prisma.builder.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({
                     name: 'Test Builder',
                     email: 'test@example.com'
@@ -75,20 +75,20 @@ describe('builders actions', () => {
             const formData = new FormData()
             formData.set('name', 'Updated Builder')
 
-            prismaMock.builder.update.mockResolvedValue({
-                id: '1',
-                name: 'Updated Builder',
-                email: null,
-                phone: null,
-                address: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            })
+                ; (prisma.builder.update as any).mockResolvedValue({
+                    id: '1',
+                    name: 'Updated Builder',
+                    email: null,
+                    phone: null,
+                    address: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                })
 
             const result = await updateBuilder('1', null, formData)
 
             expect(result.message).toBe('Builder updated successfully')
-            expect(prismaMock.builder.update).toHaveBeenCalledWith({
+            expect(prisma.builder.update).toHaveBeenCalledWith({
                 where: { id: '1' },
                 data: expect.objectContaining({
                     name: 'Updated Builder'
@@ -99,7 +99,7 @@ describe('builders actions', () => {
 
     describe('deleteBuilder', () => {
         it('should delete builder', async () => {
-            prismaMock.builder.delete.mockResolvedValue({
+            ; (prisma.builder.delete as any).mockResolvedValue({
                 id: '1',
                 name: 'Deleted Builder',
                 email: null,
@@ -112,7 +112,7 @@ describe('builders actions', () => {
             const result = await deleteBuilder('1')
 
             expect(result.message).toBe('Builder deleted successfully')
-            expect(prismaMock.builder.delete).toHaveBeenCalledWith({
+            expect(prisma.builder.delete).toHaveBeenCalledWith({
                 where: { id: '1' }
             })
         })

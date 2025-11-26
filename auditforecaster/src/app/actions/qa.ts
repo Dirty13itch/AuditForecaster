@@ -45,7 +45,7 @@ export async function rejectJob(formData: FormData) {
 
     const result = RejectJobSchema.safeParse({
         jobId: formData.get('jobId'),
-        reason: formData.get('reason')
+        reason: formData.get('reason') || ""
     })
 
     if (!result.success) {

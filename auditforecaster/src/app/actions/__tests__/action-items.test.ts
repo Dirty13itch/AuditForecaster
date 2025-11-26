@@ -1,31 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createActionItem, getActionItems, updateActionItemStatus } from '../action-items'
-import { prismaMock } from '@/test/mocks/prisma'
+import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
 import { auth } from '@/auth'
-import { sendEmail } from '../email'
-
-// Mock dependencies
-vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
-}))
-
-vi.mock('@/auth', () => ({
-    auth: vi.fn()
-}))
-
-vi.mock('../email', () => ({
-    sendEmail: vi.fn().mockResolvedValue(undefined)
-}))
+import { mockReset } from 'vitest-mock-extended'
 
 vi.mock('next/cache', () => ({
     revalidatePath: vi.fn()
 }))
 
+vi.mock('../email', () => ({
+    sendEmail: vi.fn().mockResolvedValue({ success: true })
+}))
+
+import { sendEmail } from '../email'
+
 describe('action-items actions', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         vi.mocked(auth).mockResolvedValue(mockSession as any)
+        mockReset(prisma as any)
     })
 
     describe('createActionItem', () => {
@@ -37,19 +31,19 @@ describe('action-items actions', () => {
                 assignedToEmail: 'contractor@example.com'
             }
 
-            prismaMock.actionItem.create.mockResolvedValue({
-                id: 'item-1',
-                ...data,
-                status: 'OPEN',
-                description: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            } as any)
+                ; (prisma.actionItem.create as any).mockResolvedValue({
+                    id: 'item-1',
+                    ...data,
+                    status: 'OPEN',
+                    description: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                } as any)
 
             const result = await createActionItem(data)
 
             expect(result.success).toBe(true)
-            expect(prismaMock.actionItem.create).toHaveBeenCalledWith({
+            expect(prisma.actionItem.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({
                     title: 'Fix Window',
                     assignedToEmail: 'contractor@example.com'
@@ -69,15 +63,15 @@ describe('action-items actions', () => {
                 priority: 'LOW'
             }
 
-            prismaMock.actionItem.create.mockResolvedValue({
-                id: 'item-1',
-                ...data,
-                status: 'OPEN',
-                assignedToEmail: null,
-                description: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            } as any)
+                ; (prisma.actionItem.create as any).mockResolvedValue({
+                    id: 'item-1',
+                    ...data,
+                    status: 'OPEN',
+                    assignedToEmail: null,
+                    description: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                } as any)
 
             const result = await createActionItem(data)
 
@@ -99,14 +93,14 @@ describe('action-items actions', () => {
 
     describe('getActionItems', () => {
         it('should fetch action items', async () => {
-            prismaMock.actionItem.findMany.mockResolvedValue([
+            ; (prisma.actionItem.findMany as any).mockResolvedValue([
                 { id: 'item-1', title: 'Fix Window' }
             ] as any)
 
             const result = await getActionItems('insp-1')
 
             expect(result).toHaveLength(1)
-            expect(prismaMock.actionItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            expect(prisma.actionItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
                 where: { inspectionId: 'insp-1' }
             }))
         })
@@ -116,7 +110,7 @@ describe('action-items actions', () => {
         it('should update status', async () => {
             await updateActionItemStatus('item-1', 'COMPLETED')
 
-            expect(prismaMock.actionItem.update).toHaveBeenCalledWith({
+            expect(prisma.actionItem.update).toHaveBeenCalledWith({
                 where: { id: 'item-1' },
                 data: { status: 'COMPLETED' }
             })

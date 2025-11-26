@@ -1,14 +1,15 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { CreateJobForm } from '../create-job-form'
 import { createJob } from '@/app/actions/jobs'
+import { vi, describe, it, expect } from 'vitest'
 
 // Mock dependencies
-jest.mock('@/app/actions/jobs', () => ({
-    createJob: jest.fn(),
+vi.mock('@/app/actions/jobs', () => ({
+    createJob: vi.fn(),
 }))
 
-jest.mock('@/components/ui/use-toast', () => ({
-    useToast: jest.fn(() => ({ toast: jest.fn() })),
+vi.mock('@/components/ui/use-toast', () => ({
+    useToast: vi.fn(() => ({ toast: vi.fn() })),
 }))
 
 // Mock Radix UI Select to simplify testing
@@ -18,7 +19,7 @@ type MockProps = {
     [key: string]: any;
 }
 
-jest.mock('@/components/ui/select', () => ({
+vi.mock('@/components/ui/select', () => ({
     Select: ({ children }: MockProps) => <div data-testid="select">{children}</div>,
     SelectTrigger: ({ children }: MockProps) => <button>{children}</button>,
     SelectValue: ({ placeholder }: MockProps) => <span>{placeholder}</span>,
@@ -42,8 +43,8 @@ describe('CreateJobForm', () => {
     })
 
     it('submits form with data', async () => {
-        const mockCreateJob = createJob as jest.Mock
-        mockCreateJob.mockResolvedValue(undefined)
+        const mockCreateJob = vi.mocked(createJob)
+        mockCreateJob.mockResolvedValue(undefined as any)
 
         render(<CreateJobForm builders={mockBuilders} inspectors={mockInspectors} />)
 

@@ -29,7 +29,7 @@ export async function createUser(_prevState: unknown, formData: FormData) {
             name: formData.get('name'),
             email: formData.get('email'),
             role: formData.get('role'),
-            password: formData.get('password'),
+            password: formData.get('password') || undefined,
         }
 
         const validatedFields = UserSchema.parse(rawData)
@@ -72,7 +72,7 @@ export async function updateUser(id: string, _prevState: unknown, formData: Form
             name: formData.get('name'),
             email: formData.get('email'),
             role: formData.get('role'),
-            password: formData.get('password'),
+            password: formData.get('password') || undefined,
         }
 
         const validatedFields = UserSchema.parse(rawData)

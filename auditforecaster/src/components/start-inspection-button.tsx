@@ -16,7 +16,7 @@ export function StartInspectionButton({ jobId, hasInspections, inspectionId }: S
     if (hasInspections && inspectionId) {
         return (
             <Button asChild>
-                <a href={`/inspections/${inspectionId}/run`}>Continue Inspection</a>
+                <a href={`/dashboard/inspections/${jobId}`}>Continue Inspection</a>
             </Button>
         )
     }

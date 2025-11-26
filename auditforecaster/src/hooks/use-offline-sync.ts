@@ -30,6 +30,25 @@ export function useOfflineSync<T>(jobId: string) {
     }, [])
 
     // ------------------------------------------------------------
+    // Notify when back online if unsynced changes exist
+    // ------------------------------------------------------------
+    useEffect(() => {
+        if (!isOffline) {
+            const checkUnsynced = async () => {
+                const draft = await getInspectionDraft(jobId)
+                if (draft && !draft.synced) {
+                    toast({
+                        title: 'You are back online',
+                        description: 'You have unsynced changes. Please submit the form to save to the server.',
+                        variant: 'default'
+                    })
+                }
+            }
+            checkUnsynced()
+        }
+    }, [isOffline, jobId, toast])
+
+    // ------------------------------------------------------------
     // Load any previously saved draft when the hook mounts
     // ------------------------------------------------------------
     useEffect(() => {

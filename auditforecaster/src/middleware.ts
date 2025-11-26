@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import NextAuth from 'next-auth';
+import { authConfig } from './auth.config';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
+import { env } from '@/lib/env';
+
+const { auth } = NextAuth(authConfig);
+
 // Initialize Redis if credentials exist
-const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+const redis = (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN)
     ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        url: env.UPSTASH_REDIS_REST_URL,
+        token: env.UPSTASH_REDIS_REST_TOKEN,
     })
     : null;
 
@@ -29,6 +34,7 @@ export default auth(async (req) => {
     const isLoggedIn = !!req.auth;
     const isOnDashboard = req.nextUrl.pathname.startsWith('/dashboard');
 
+
     // Initialize response
     let response = NextResponse.next();
 
@@ -38,6 +44,8 @@ export default auth(async (req) => {
         } else {
             return NextResponse.redirect(new URL('/api/auth/signin', req.nextUrl));
         }
+    } else if (isLoggedIn && req.nextUrl.pathname === '/login') {
+        return NextResponse.redirect(new URL('/dashboard', req.nextUrl));
     }
 
     // Rate limiting logic for API

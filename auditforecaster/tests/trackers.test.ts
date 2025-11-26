@@ -1,4 +1,18 @@
+import { describe, it, expect, vi } from 'vitest'
 import { prisma } from "@/lib/prisma";
+
+// Since we can't easily connect to the live DB in this specific test runner environment without 
+// ensuring the DB is running and seeded, we will mock the Prisma client for this test file 
+// to verify the *logic flow* rather than the actual DB constraint (which we verified via schema migration).
+
+vi.mock('@/lib/prisma', () => ({
+    prisma: {
+        mileageLog: {
+            create: vi.fn().mockImplementation((args) => Promise.resolve({ ...args.data, id: 'test-id' })),
+            update: vi.fn().mockImplementation((args) => Promise.resolve({ ...args.data, id: 'test-id' }))
+        }
+    }
+}))
 
 describe('Tracker Classification Logic', () => {
     // Mock data
@@ -33,16 +47,3 @@ describe('Tracker Classification Logic', () => {
         expect(updateData.purpose).toBe('Business');
     });
 });
-
-// Since we can't easily connect to the live DB in this specific test runner environment without 
-// ensuring the DB is running and seeded, we will mock the Prisma client for this test file 
-// to verify the *logic flow* rather than the actual DB constraint (which we verified via schema migration).
-
-jest.mock('@/lib/prisma', () => ({
-    prisma: {
-        mileageLog: {
-            create: jest.fn().mockImplementation((args) => Promise.resolve({ ...args.data, id: 'test-id' })),
-            update: jest.fn().mockImplementation((args) => Promise.resolve({ ...args.data, id: 'test-id' }))
-        }
-    }
-}));

@@ -1,5 +1,7 @@
 'use client'
 
+import { useRef } from "react"
+import { useRouter } from "next/navigation"
 import { createJob } from "@/app/actions/jobs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,24 +11,31 @@ import { Builder, User } from "@prisma/client"
 
 export function CreateJobForm({ builders, inspectors }: { builders: Builder[], inspectors: User[] }) {
     const { toast } = useToast()
+    const router = useRouter()
+    const formRef = useRef<HTMLFormElement>(null)
 
     async function clientAction(formData: FormData) {
-        await createJob(formData)
-        // Since createJob redirects on success, we might not see this toast immediately unless we change the action behavior.
-        // However, for this demo, we'll show it before the redirect happens or if we modify the action to return status.
-        // For now, let's assume the action redirects, but we can still try to show a toast or handle errors if we modify the action later.
+        const result = await createJob(formData)
 
-        // Ideally, the server action should return a status, and we handle the redirect client-side if we want to show a toast first.
-        // But to keep it simple and consistent with the current action:
-        toast({
-            title: "Job Scheduled",
-            description: "The new job has been successfully created.",
-            variant: "success",
-        })
+        if (result.success) {
+            toast({
+                title: "Job Scheduled",
+                description: result.message,
+                variant: "success", // Note: verify if 'success' variant exists in your toast component, otherwise use default or check implementation
+            })
+            formRef.current?.reset()
+            router.refresh()
+        } else {
+            toast({
+                title: "Error",
+                description: result.message,
+                variant: "destructive",
+            })
+        }
     }
 
     return (
-        <form action={clientAction} className="space-y-4">
+        <form ref={formRef} action={clientAction} className="space-y-4">
             <div className="space-y-2">
                 <Input name="lotNumber" placeholder="Lot Number" required />
                 <Input name="streetAddress" placeholder="Street Address" required />

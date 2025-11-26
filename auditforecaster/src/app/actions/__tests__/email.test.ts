@@ -1,19 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { sendEmail, sendInvoiceEmail } from '../email'
-import { prismaMock } from '@/test/mocks/prisma'
+import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
-import { auth } from '@/auth'
 import { getGmailClient } from '@/lib/google'
 import { logger } from '@/lib/logger'
+import { mockReset } from 'vitest-mock-extended'
 
-// Mock dependencies
-vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
-}))
+// Mock @/auth directly
+vi.mock('@/auth', () => {
+    console.log('MOCK FACTORY EXECUTED')
+    const auth = vi.fn()
+        ; (auth as any)._id = Math.random()
+    return {
+        auth,
+        signIn: vi.fn(),
+        signOut: vi.fn(),
+        handlers: { GET: vi.fn(), POST: vi.fn() }
+    }
+})
 
-vi.mock('@/auth', () => ({
-    auth: vi.fn()
-}))
+import { auth } from '@/auth'
 
 vi.mock('@/lib/google', () => ({
     getGmailClient: vi.fn()
@@ -37,8 +43,10 @@ describe('email actions', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        mockGmailClient.users.messages.send.mockResolvedValue({})
         vi.mocked(auth).mockResolvedValue(mockSession as any)
         vi.mocked(getGmailClient).mockResolvedValue(mockGmailClient as any)
+        mockReset(prisma as any)
     })
 
     describe('sendEmail', () => {
@@ -74,7 +82,7 @@ describe('email actions', () => {
         })
 
         it('should fail if unauthorized', async () => {
-            vi.mocked(auth).mockResolvedValue(null)
+            vi.mocked(auth as any).mockResolvedValue(null)
             const params = {
                 to: 'test@example.com',
                 subject: 'Test',
@@ -102,7 +110,7 @@ describe('email actions', () => {
 
     describe('sendInvoiceEmail', () => {
         it('should send invoice email', async () => {
-            prismaMock.job.findUnique.mockResolvedValue({
+            ; (prisma.job.findUnique as any).mockResolvedValue({
                 id: 'job-1',
                 lotNumber: '123',
                 streetAddress: '123 Main St',
@@ -116,7 +124,7 @@ describe('email actions', () => {
         })
 
         it('should fail if job not found', async () => {
-            prismaMock.job.findUnique.mockResolvedValue(null)
+            ; (prisma.job.findUnique as any).mockResolvedValue(null)
 
             const result = await sendInvoiceEmail('job-1')
 
@@ -125,7 +133,7 @@ describe('email actions', () => {
         })
 
         it('should fail if unauthorized', async () => {
-            vi.mocked(auth).mockResolvedValue(null)
+            vi.mocked(auth as any).mockResolvedValue(null)
 
             const result = await sendInvoiceEmail('job-1')
 

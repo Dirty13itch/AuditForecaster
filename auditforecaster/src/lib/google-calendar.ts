@@ -1,4 +1,4 @@
-import { google, calendar_v3 } from 'googleapis'
+import { calendar_v3 } from 'googleapis'
 import { prisma } from '@/lib/prisma'
 import { getCalendarClient } from './google'
 import { logger } from '@/lib/logger'
@@ -62,7 +62,7 @@ export async function syncEvents(userId: string) {
 
     do {
         try {
-            // Explicitly typed as any due to Gaxios version mismatch in googleapis
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const response: any = await client.events.list({
                 calendarId: user.googleCalendarId,
                 syncToken: syncToken || undefined,
@@ -103,7 +103,7 @@ export async function syncEvents(userId: string) {
             pageToken = response.data.nextPageToken || undefined
             syncToken = response.data.nextSyncToken || undefined
 
-        } catch (e: any) {
+        } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
             if (e.code === 410) {
                 // Sync token invalid, full sync required
                 logger.warn('Sync token invalid, clearing...', { userId })

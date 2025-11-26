@@ -1,0 +1,109 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createInvoice, getUninvoicedJobs } from '../invoices'
+import { prisma } from '@/lib/prisma'
+import { auth } from '@/auth'
+
+// Mock prisma
+vi.mock('@/lib/prisma', () => ({
+    prisma: {
+        job: {
+            findMany: vi.fn(),
+            updateMany: vi.fn()
+        },
+        invoice: {
+            count: vi.fn(),
+            create: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+            findUnique: vi.fn()
+        },
+        $transaction: vi.fn((callback) => callback(prisma))
+    }
+}))
+
+// Mock auth
+vi.mock('@/auth', () => ({
+    auth: vi.fn()
+}))
+
+// Mock revalidatePath
+vi.mock('next/cache', () => ({
+    revalidatePath: vi.fn()
+}))
+
+describe('invoices actions', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        vi.mocked(auth).mockResolvedValue({
+            user: { id: 'user-1', role: 'ADMIN' }
+        } as any)
+    })
+
+    describe('getUninvoicedJobs', () => {
+        it('should return jobs', async () => {
+            const mockJobs = [{ id: 'job-1', address: '123 Main' }]
+            vi.mocked(prisma.job.findMany).mockResolvedValue(mockJobs as any)
+
+            const result = await getUninvoicedJobs('builder-1')
+
+            expect(result).toEqual(mockJobs)
+            expect(prisma.job.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: expect.objectContaining({ builderId: 'builder-1' })
+            }))
+        })
+    })
+
+    describe('createInvoice', () => {
+        it('should create invoice successfully', async () => {
+            const mockJobs = [
+                {
+                    id: 'job-1',
+                    address: '123 Main',
+                    subdivision: {
+                        priceLists: [{
+                            items: [{
+                                price: 100,
+                                serviceItem: { name: 'Inspection' }
+                            }]
+                        }]
+                    }
+                }
+            ]
+            vi.mocked(prisma.job.findMany).mockResolvedValue(mockJobs as any)
+            vi.mocked(prisma.invoice.count).mockResolvedValue(0)
+            vi.mocked(prisma.invoice.create).mockResolvedValue({ id: 'inv-1' } as any)
+
+            const result = await createInvoice({
+                builderId: 'builder-1',
+                jobIds: ['job-1'],
+                dueDate: new Date()
+            })
+
+            expect(result.success).toBe(true)
+            expect(result.invoiceId).toBe('inv-1')
+            expect(prisma.invoice.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({
+                    totalAmount: 100,
+                    items: {
+                        create: expect.arrayContaining([
+                            expect.objectContaining({
+                                unitPrice: 100,
+                                totalPrice: 100
+                            })
+                        ])
+                    }
+                })
+            }))
+        })
+
+        it('should throw error if no jobs found', async () => {
+            vi.mocked(prisma.job.findMany).mockResolvedValue([])
+
+            await expect(createInvoice({
+                builderId: 'builder-1',
+                jobIds: ['job-1'],
+                dueDate: new Date()
+            })).rejects.toThrow('No valid jobs found')
+        })
+    })
+})

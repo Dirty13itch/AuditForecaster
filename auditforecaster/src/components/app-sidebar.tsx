@@ -23,10 +23,11 @@ import {
     HardHat,
     MapPin,
     Activity,
-    Link as LinkIcon
+    Link as LinkIcon,
+    BarChart3
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 
 type NavItem = {
@@ -42,6 +43,12 @@ const NAV_ITEMS: NavItem[] = [
         name: "Dashboard",
         href: "/dashboard",
         icon: Home,
+        roles: ["ADMIN"]
+    },
+    {
+        name: "Analytics",
+        href: "/dashboard/analytics",
+        icon: BarChart3,
         roles: ["ADMIN"]
     },
     {
@@ -151,9 +158,19 @@ const NAV_ITEMS: NavItem[] = [
     },
 ]
 
-export function AppSidebar({ userRole, onSignOut }: { userRole: string, onSignOut: () => Promise<void> }) {
+export function AppSidebar({ userRole, onSignOut, className }: { userRole: string, onSignOut: () => Promise<void>, className?: string }) {
     const pathname = usePathname()
-    const [expandedItems, setExpandedItems] = useState<string[]>(["Jobs", "Builders", "Reports", "Finances", "Assets", "Team", "Logistics", "Admin", "Settings"])
+    const [expandedItems, setExpandedItems] = useState<string[]>([])
+
+    // Auto-expand the active section based on pathname
+    useEffect(() => {
+        const activeItem = NAV_ITEMS.find(item =>
+            item.children?.some(child => pathname.startsWith(child.href))
+        )
+        if (activeItem && !expandedItems.includes(activeItem.name)) {
+            setExpandedItems(prev => [...prev, activeItem.name])
+        }
+    }, [pathname])
 
     const toggleExpand = (name: string) => {
         setExpandedItems(prev =>
@@ -166,7 +183,7 @@ export function AppSidebar({ userRole, onSignOut }: { userRole: string, onSignOu
     const isVisible = (item: NavItem) => item.roles.includes(userRole)
 
     return (
-        <aside className="w-full border-r bg-gray-100/40 md:w-64 md:min-h-screen flex flex-col">
+        <aside className={cn("w-full border-r bg-gray-100/40 md:w-64 md:min-h-screen flex flex-col", className)}>
             <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6 bg-white">
                 <Link href="/" className="flex items-center gap-2 font-semibold">
                     <span className="">Ulrich Energy</span>

@@ -58,7 +58,7 @@ export async function uploadPhotoToGoogle(albumId: string, photo: string | Buffe
             'Content-Type': 'application/octet-stream',
             'X-Goog-Upload-Protocol': 'raw',
         },
-        body: imageBuffer as any
+        body: imageBuffer as BodyInit
     })
 
     if (!uploadResponse.ok) {

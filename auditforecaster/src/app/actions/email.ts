@@ -18,6 +18,7 @@ type SendEmailParams = {
 
 export async function sendEmail({ to, subject, body, attachments = [] }: SendEmailParams) {
     const session = await auth()
+
     if (!session?.user?.id) throw new Error('Unauthorized')
 
     const client = await getGmailClient()

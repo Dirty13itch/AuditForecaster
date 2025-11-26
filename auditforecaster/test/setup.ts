@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { vi } from 'vitest'
+import { vi, beforeEach } from 'vitest'
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
@@ -16,10 +16,40 @@ vi.mock('next/navigation', () => ({
 }))
 
 // Mock Next.js cache
-vi.mock('next/cache', () => ({
-    revalidatePath: vi.fn(),
-    revalidateTag: vi.fn(),
+vi.mock('next-auth', () => {
+    console.log('SETUP: Mocking next-auth')
+    const auth = vi.fn()
+        ; (auth as any)._id = 'GLOBAL_MOCK_AUTH'
+    const handlers = { GET: vi.fn(), POST: vi.fn() }
+    const signIn = vi.fn()
+    const signOut = vi.fn()
+
+    const NextAuth = vi.fn(() => ({
+        auth,
+        handlers,
+        signIn,
+        signOut,
+    }))
+
+    return {
+        default: NextAuth,
+        auth,
+        signIn,
+        signOut,
+    }
+})
+
+// Mock Prisma
+import { mockDeep, mockReset } from 'vitest-mock-extended'
+import { PrismaClient } from '@prisma/client'
+
+vi.mock('@/lib/prisma', () => ({
+    prisma: mockDeep<PrismaClient>(),
 }))
+
+beforeEach(() => {
+    mockReset(mockDeep<PrismaClient>())
+})
 
 // Mock Logger
 vi.mock('@/lib/logger', () => ({

@@ -1,7 +1,7 @@
 import { auth, signOut } from "@/auth"
 import { ToastProvider } from "@/components/ui/use-toast"
+import { MobileNav } from "@/components/mobile-nav"
 import { AppSidebar } from "@/components/app-sidebar"
-
 import { AICopilot } from "@/components/ai-copilot"
 
 export default async function DashboardLayout({
@@ -22,7 +22,18 @@ export default async function DashboardLayout({
                 Skip to main content
             </a>
             <div className="flex min-h-screen flex-col md:flex-row">
+                <div className="md:hidden p-4 border-b flex items-center bg-white sticky top-0 z-40">
+                    <MobileNav
+                        userRole={role}
+                        onSignOut={async () => {
+                            'use server';
+                            await signOut({ redirectTo: '/login' });
+                        }}
+                    />
+                    <span className="ml-2 font-semibold">Ulrich Energy</span>
+                </div>
                 <AppSidebar
+                    className="hidden md:flex"
                     userRole={role}
                     onSignOut={async () => {
                         'use server';

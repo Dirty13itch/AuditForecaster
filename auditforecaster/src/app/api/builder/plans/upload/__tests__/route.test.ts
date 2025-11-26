@@ -1,105 +1,102 @@
-/**
- * @jest-environment node
- */
-import { POST } from '../route';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/auth';
-import { writeFile } from 'fs/promises';
-
-interface MockResponse {
-    body?: string;
-    status: number;
-    headers?: Map<string, string>;
-}
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { POST } from '../route'
+import { prisma } from '@/lib/prisma'
+import { auth } from '@/auth'
+import { writeFile } from 'fs/promises'
+import { NextResponse } from 'next/server'
 
 // Mock dependencies
-jest.mock('@/lib/prisma', () => ({
+vi.mock('@/lib/prisma', () => ({
     prisma: {
         plan: {
-            create: jest.fn(),
-        },
-    },
-}));
+            create: vi.fn(),
+        }
+    }
+}))
 
-jest.mock('@/auth', () => ({
-    auth: jest.fn(),
-}));
+vi.mock('@/auth', () => ({
+    auth: vi.fn(),
+}))
 
-jest.mock('fs/promises', () => ({
-    writeFile: jest.fn(),
-}));
+vi.mock('fs/promises', () => ({
+    writeFile: vi.fn(),
+    default: {
+        writeFile: vi.fn(),
+    }
+}))
 
-// Mock NextResponse
-jest.mock('next/server', () => {
+vi.mock('next/server', () => {
     return {
         NextResponse: class {
-            body?: string;
-            status: number;
-
-            constructor(body: string, init?: { status?: number }) {
-                this.body = body;
-                this.status = init?.status || 200;
+            status: number
+            constructor(body: any, init?: any) {
+                this.status = init?.status || 200
             }
-            static json(body: Record<string, unknown>, init?: { status?: number }): MockResponse {
+            static json(body: any, init?: any) {
                 return {
-                    body: JSON.stringify(body),
+                    json: async () => body,
                     status: init?.status || 200,
-                    headers: new Map([['content-type', 'application/json']]),
-                };
+                }
             }
-        },
-    };
-});
+        }
+    }
+})
 
 describe('Plan Upload API', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
-    });
+        vi.clearAllMocks()
+    })
 
     it('should return 401 if not authenticated', async () => {
-        (auth as jest.Mock).mockResolvedValue(null);
+        vi.mocked(auth).mockResolvedValue(null)
         const req = {
-            formData: jest.fn(),
-        } as unknown as Request;
-        const res = await POST(req) as unknown as MockResponse;
-        expect(res.status).toBe(401);
-    });
+            formData: vi.fn(),
+        } as unknown as Request
+
+        const res = await POST(req)
+        expect(res.status).toBe(401)
+    })
 
     it('should return 400 if missing fields', async () => {
-        (auth as jest.Mock).mockResolvedValue({ user: { id: '1' } });
-        const formData = new Map();
+        vi.mocked(auth).mockResolvedValue({ user: { id: '1' } } as any)
+        const formData = new Map()
         // Empty map
         const req = {
-            formData: jest.fn().mockResolvedValue(formData),
-        } as unknown as Request;
+            formData: vi.fn().mockResolvedValue(formData),
+        } as unknown as Request
 
-        const res = await POST(req) as unknown as MockResponse;
-        expect(res.status).toBe(400);
-    });
+        const res = await POST(req)
+        expect(res.status).toBe(400)
+    })
 
     it('should create plan and return 200 on success', async () => {
-        (auth as jest.Mock).mockResolvedValue({ user: { id: '1' } });
-        (prisma.plan.create as jest.Mock).mockResolvedValue({ id: 'plan-1', title: 'Test Plan' });
-        (writeFile as jest.Mock).mockResolvedValue(undefined);
+        vi.mocked(auth).mockResolvedValue({ user: { id: '1' } } as any)
+        vi.mocked(prisma.plan.create).mockResolvedValue({ id: 'plan-1', title: 'Test Plan' } as any)
+        vi.mocked(writeFile).mockResolvedValue(undefined)
 
-        const formData = new Map();
-        const file = new File(['dummy content'], 'test.pdf', { type: 'application/pdf' });
-        formData.set('file', file);
-        formData.set('builderId', 'builder-1');
-        formData.set('title', 'Test Plan');
-        formData.set('description', 'Test Description');
+        const formData = new Map()
+        const file = {
+            name: 'test.pdf',
+            type: 'application/pdf',
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
+            size: 1024
+        }
+        formData.set('file', file)
+        formData.set('builderId', 'builder-1')
+        formData.set('title', 'Test Plan')
+        formData.set('description', 'Test Description')
 
         const req = {
-            formData: jest.fn().mockResolvedValue(formData),
-        } as unknown as Request;
+            formData: vi.fn().mockResolvedValue(formData),
+        } as unknown as Request
 
-        const res = await POST(req) as unknown as MockResponse;
-        expect(res.status).toBe(200);
+        const res = await POST(req)
+        expect(res.status).toBe(200)
         expect(prisma.plan.create).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({
                 title: 'Test Plan',
                 builderId: 'builder-1',
             }),
-        }));
-    });
-});
+        }))
+    })
+})

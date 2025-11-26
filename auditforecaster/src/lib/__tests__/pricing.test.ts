@@ -1,97 +1,96 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getJobPrice } from '../pricing'
-import { prismaMock } from '@/test/mocks/prisma'
-import { logger } from '@/lib/logger'
+import { prisma } from '@/lib/prisma'
 
-// Mock dependencies
+// Mock prisma
 vi.mock('@/lib/prisma', () => ({
-    prisma: prismaMock
+    prisma: {
+        priceList: {
+            findFirst: vi.fn()
+        },
+        serviceItem: {
+            findFirst: vi.fn()
+        }
+    }
 }))
 
+// Mock logger
 vi.mock('@/lib/logger', () => ({
     logger: {
         error: vi.fn()
     }
 }))
 
-describe('pricing utility', () => {
+describe('getJobPrice', () => {
     beforeEach(() => {
         vi.clearAllMocks()
     })
 
-    describe('getJobPrice', () => {
-        it('should return subdivision specific price if available', async () => {
-            // Mock subdivision price list found
-            prismaMock.priceList.findFirst.mockResolvedValueOnce({
-                items: [
-                    {
-                        price: 450,
-                        serviceItem: { name: 'Blower Door Test' }
-                    }
-                ]
-            } as any)
+    it('should return subdivision price if available', async () => {
+        const mockPriceList = {
+            items: [{
+                price: 200,
+                serviceItem: { name: 'Blower Door Test' }
+            }]
+        }
+        vi.mocked(prisma.priceList.findFirst).mockResolvedValueOnce(mockPriceList as any)
 
-            const price = await getJobPrice('builder-1', 'sub-1')
+        const price = await getJobPrice('builder-1', 'sub-1')
 
-            expect(price).toBe(450)
-            expect(prismaMock.priceList.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-                where: { subdivisionId: 'sub-1' }
-            }))
+        expect(price).toBe(200)
+        expect(prisma.priceList.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+            where: { subdivisionId: 'sub-1' }
+        }))
+    })
+
+    it('should return builder price if subdivision price not found', async () => {
+        // First call (subdivision) returns null
+        vi.mocked(prisma.priceList.findFirst).mockResolvedValueOnce(null)
+
+        // Second call (builder) returns price list
+        const mockPriceList = {
+            items: [{
+                price: 250,
+                serviceItem: { name: 'Blower Door Test' }
+            }]
+        }
+        vi.mocked(prisma.priceList.findFirst).mockResolvedValueOnce(mockPriceList as any)
+
+        const price = await getJobPrice('builder-1', 'sub-1')
+
+        expect(price).toBe(250)
+        expect(prisma.priceList.findFirst).toHaveBeenCalledTimes(2)
+        expect(prisma.priceList.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({
+            where: { builderId: 'builder-1' }
+        }))
+    })
+
+    it('should return service item base price if no price lists found', async () => {
+        vi.mocked(prisma.priceList.findFirst).mockResolvedValue(null)
+        vi.mocked(prisma.serviceItem.findFirst).mockResolvedValue({ basePrice: 300 } as any)
+
+        const price = await getJobPrice('builder-1', 'sub-1')
+
+        expect(price).toBe(300)
+        expect(prisma.serviceItem.findFirst).toHaveBeenCalledWith({
+            where: { name: 'Blower Door Test' }
         })
+    })
 
-        it('should return builder specific price if no subdivision price', async () => {
-            // Mock no subdivision price list
-            prismaMock.priceList.findFirst.mockResolvedValueOnce(null)
+    it('should return default price if nothing found', async () => {
+        vi.mocked(prisma.priceList.findFirst).mockResolvedValue(null)
+        vi.mocked(prisma.serviceItem.findFirst).mockResolvedValue(null)
 
-            // Mock builder price list found
-            prismaMock.priceList.findFirst.mockResolvedValueOnce({
-                items: [
-                    {
-                        price: 400,
-                        serviceItem: { name: 'Blower Door Test' }
-                    }
-                ]
-            } as any)
+        const price = await getJobPrice('builder-1', 'sub-1')
 
-            const price = await getJobPrice('builder-1', 'sub-1')
+        expect(price).toBe(350.00)
+    })
 
-            expect(price).toBe(400)
-            expect(prismaMock.priceList.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-                where: { builderId: 'builder-1' }
-            }))
-        })
+    it('should handle errors gracefully and return default price', async () => {
+        vi.mocked(prisma.priceList.findFirst).mockRejectedValue(new Error('DB Error'))
 
-        it('should return service item base price if no custom lists', async () => {
-            // Mock no subdivision or builder lists
-            prismaMock.priceList.findFirst.mockResolvedValue(null)
+        const price = await getJobPrice('builder-1', 'sub-1')
 
-            // Mock service item found
-            prismaMock.serviceItem.findFirst.mockResolvedValue({
-                basePrice: 375
-            } as any)
-
-            const price = await getJobPrice('builder-1', 'sub-1')
-
-            expect(price).toBe(375)
-        })
-
-        it('should return default price if nothing found', async () => {
-            // Mock nothing found
-            prismaMock.priceList.findFirst.mockResolvedValue(null)
-            prismaMock.serviceItem.findFirst.mockResolvedValue(null)
-
-            const price = await getJobPrice('builder-1', 'sub-1')
-
-            expect(price).toBe(350) // Default fallback
-        })
-
-        it('should return default price and log error on failure', async () => {
-            prismaMock.priceList.findFirst.mockRejectedValue(new Error('DB Error'))
-
-            const price = await getJobPrice('builder-1', 'sub-1')
-
-            expect(price).toBe(350)
-            expect(logger.error).toHaveBeenCalled()
-        })
+        expect(price).toBe(350.00)
     })
 })

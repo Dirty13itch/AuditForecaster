@@ -25,11 +25,16 @@ export function MileageTracker() {
     const [isTracking, setIsTracking] = useState(false)
     const [distance, setDistance] = useState(0)
     const [startPos, setStartPos] = useState<{ lat: number; lng: number } | null>(null)
-    const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null)
+    // const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null)
     const [startLocationName, setStartLocationName] = useState('')
     const [endLocationName, setEndLocationName] = useState('')
     const [selectedVehicle, setSelectedVehicle] = useState<string>('')
-    const [vehicles, setVehicles] = useState<any[]>([]) // Need to fetch vehicles
+    interface Vehicle {
+        id: string;
+        name: string;
+        licensePlate: string;
+    }
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]) // Need to fetch vehicles
 
     useEffect(() => {
         // Mock vehicles for now or fetch
@@ -45,7 +50,7 @@ export function MileageTracker() {
             watchId = navigator.geolocation.watchPosition(
                 (position) => {
                     const { latitude, longitude } = position.coords;
-                    setCurrentPos({ lat: latitude, lng: longitude });
+                    // setCurrentPos({ lat: latitude, lng: longitude });
 
                     if (startPos) {
                         const dist = calculateDistance(startPos.lat, startPos.lng, latitude, longitude);
@@ -68,7 +73,7 @@ export function MileageTracker() {
         }
         navigator.geolocation.getCurrentPosition((pos) => {
             setStartPos({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-            setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+            // setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude })
             setIsTracking(true)
             setDistance(0)
             setStartLocationName('Current Location') // In real app, reverse geocode here
@@ -94,7 +99,7 @@ export function MileageTracker() {
 
         // Reset
         setStartPos(null)
-        setCurrentPos(null)
+        // setCurrentPos(null)
         setDistance(0)
         setStartLocationName('')
         setEndLocationName('')

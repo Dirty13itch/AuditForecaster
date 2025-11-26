@@ -40,35 +40,58 @@ export async function saveAdvancedTemplate(data: {
     return { success: true }
 }
 
+import * as fs from 'fs'
+
 export async function createInspectionWithTemplate(jobId: string, templateId: string) {
-    const session = await auth()
-    if (!session?.user?.id) throw new Error("Unauthorized")
-
-    const inspection = await prisma.inspection.create({
-        data: {
-            jobId,
-            reportTemplateId: templateId,
-            data: '{}',
-            answers: {},
-            score: 0,
+    try {
+        const session = await auth()
+        if (!session?.user?.id) {
+            const msg = "createInspectionWithTemplate: No session or user ID\n"
+            fs.appendFileSync('debug.log', msg)
+            console.error(msg)
+            throw new Error("Unauthorized")
         }
-    })
 
-    return { inspectionId: inspection.id }
+        const msg = `Creating inspection for job ${jobId} with template ${templateId}\n`
+        fs.appendFileSync('debug.log', msg)
+        console.log(msg)
+
+        const inspection = await prisma.inspection.create({
+            data: {
+                jobId,
+                reportTemplateId: templateId,
+                data: '{}',
+                answers: {},
+                score: 0,
+            }
+        })
+
+        fs.appendFileSync('debug.log', `Inspection created: ${inspection.id}\n`)
+        console.log(`Inspection created: ${inspection.id}`)
+        return { inspectionId: inspection.id }
+    } catch (error) {
+        const msg = `createInspectionWithTemplate ERROR: ${error instanceof Error ? error.message : String(error)}\nStack: ${error instanceof Error ? error.stack : ''}\n`
+        fs.appendFileSync('debug.log', msg)
+        console.error("createInspectionWithTemplate ERROR:", error)
+        throw error
+    }
 }
 
 export async function getTemplatesForSelection() {
     const session = await auth()
     if (!session) throw new Error("Unauthorized")
 
-    return await prisma.reportTemplate.findMany({
+    const templates = await prisma.reportTemplate.findMany({
         select: {
             id: true,
             name: true,
-            description: true,
+            description: true
         },
         orderBy: {
             createdAt: 'desc'
         }
     })
+
+    return templates
 }
+

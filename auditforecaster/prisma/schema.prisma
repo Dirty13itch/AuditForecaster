@@ -15,6 +15,7 @@ model User {
   image         String?
   role          String    @default("INSPECTOR")
   passwordHash  String?
+  baseRate      Float?    // Base monthly rate for salaried subcontractors
   accounts      Account[]
   sessions      Session[]
 
@@ -31,10 +32,16 @@ model User {
   vehicles  Vehicle[]
   equipment Equipment[]
   expenses  Expense[]
+  payouts   Payout[]
+  routes    Route[]
+
+
 
   // Link to Builder for Builder Portal users
   builderId String?
   builder   Builder? @relation(fields: [builderId], references: [id])
+
+  savedReports SavedReport[]
 }
 
 model TaxCredit {
@@ -65,10 +72,39 @@ model Vehicle {
   assignedUser User?     @relation(fields: [assignedTo], references: [id])
   notes        String?
 
-  mileageLogs MileageLog[]
+  mileageLogs   MileageLog[]
+  maintenance   VehicleMaintenance[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model VehicleMaintenance {
+  id            String    @id @default(cuid())
+  date          DateTime
+  type          String    // OIL_CHANGE, TIRE_ROTATION, REPAIR, INSPECTION
+  cost          Float
+  description   String?
+  mileage       Int?      // Odometer reading at time of service
+  
+  vehicleId     String
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model SavedReport {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  config        Json      // Stores selected columns, filters, sorting
+  
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Equipment {
@@ -140,6 +176,7 @@ model Builder {
   subdivisions Subdivision[]
   priceLists   PriceList[]
   plans        Plan[] // New relation to plans
+  invoices     Invoice[]
   User         User[]
 }
 
@@ -226,6 +263,16 @@ model Job {
   googleAlbumId  String? // Google Photos Album ID
   googleAlbumUrl String? // Link to Google Photos Album
 
+  // SupplyPro Integration
+  buildProOrderId String? @unique
+  buildProSyncedAt DateTime?
+
+  // Ekotrope Integration
+  ekotropeProjectId String?
+  ekotropeSyncedAt  DateTime?
+  hersScore         Int?
+  hersCertUrl       String?
+
   inspectorId String?
   inspector   User?   @relation(fields: [inspectorId], references: [id])
 
@@ -238,6 +285,13 @@ model Job {
   inspections Inspection[]
   taxCredit   TaxCredit?
   expenses    Expense[]
+  invoiceItems InvoiceItem[]
+
+  payoutId      String?
+  payout        Payout?   @relation(fields: [payoutId], references: [id])
+  payoutAmount  Float? // Snapshot of the amount paid for this job
+  
+  routeStops    RouteStop[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -330,8 +384,9 @@ model Expense {
 
   category    String? // Travel, Equipment, Meals, etc. (Optional for pending)
   status      String  @default("PENDING") // PENDING, CLASSIFIED
-  description String?
-  receiptUrl  String?
+  description     String?
+  rejectionReason String?
+  receiptUrl      String?
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
@@ -394,6 +449,125 @@ model CorporateDoc {
   type  String // Bylaws, Minutes, TaxReturn
   url   String
   date  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+
+model Invoice {
+  id          String   @id @default(cuid())
+  number      String   @unique // e.g., INV-2024-001
+  date        DateTime @default(now())
+  dueDate     DateTime
+  status      String   @default("DRAFT") // DRAFT, SENT, PAID, VOID, OVERDUE
+  totalAmount Float
+  notes       String?
+  pdfUrl      String?
+
+  sentAt      DateTime?
+  paidAt      DateTime?
+
+  builderId   String
+  builder     Builder @relation(fields: [builderId], references: [id])
+
+  items       InvoiceItem[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float
+  totalPrice  Float
+
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  jobId       String?
+  job         Job?    @relation(fields: [jobId], references: [id]) // Optional link to a job
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Payout {
+  id          String    @id @default(cuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  amount      Float
+  status      String    @default("DRAFT") // DRAFT, PAID
+  
+  generatedAt DateTime  @default(now())
+  paidAt      DateTime?
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+
+  jobs        Job[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Route {
+  id            String      @id @default(cuid())
+  date          DateTime
+  status        String      @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  totalDistance Float?      // in miles
+  totalDuration Int?        // in minutes
+  
+  driverId      String
+  driver        User        @relation(fields: [driverId], references: [id])
+  
+  stops         RouteStop[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model RouteStop {
+  id               String    @id @default(cuid())
+  order            Int
+  estimatedArrival DateTime?
+  status           String    @default("PENDING") // PENDING, COMPLETED, SKIPPED
+  
+  routeId          String
+  route            Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  
+  jobId            String?
+  job              Job?      @relation(fields: [jobId], references: [id])
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model IntegrationLog {
+  id        String   @id @default(cuid())
+  service   String   // SUPPLYPRO, EKOTROPE, GOOGLE
+  action    String   // JOB_INGESTION, SYNC, UPLOAD
+  success   Boolean
+  jobId     String?
+  request   String?  // JSON string
+  response  String?  // JSON string or error message
+  error     String?
+
+  createdAt DateTime @default(now())
+}
+
+model IntegrationSettings {
+  id                         String  @id @default(cuid())
+  ekotropeApiKey             String?
+  ekotropeEnabled            Boolean @default(false)
+  supplyProApiKey            String?
+  supplyProEnabled           Boolean @default(false)
+  autoCreateJobsFromBuildPro Boolean @default(true)
+  autoSyncToEkotrope         Boolean @default(true)
+  autoGenerateHERSCerts      Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

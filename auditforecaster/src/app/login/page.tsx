@@ -23,7 +23,10 @@ export default function LoginPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form action={dispatch} className="space-y-4">
+                    <form action={(formData) => {
+                        console.log('Form action triggered on client');
+                        dispatch(formData);
+                    }} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
                             <Input
@@ -52,7 +55,7 @@ export default function LoginPage() {
                                 <p className="text-sm text-red-500">{errorMessage}</p>
                             )}
                         </div>
-                        <Button className="w-full" aria-disabled={isPending}>
+                        <Button className="w-full" aria-disabled={isPending} type="submit">
                             {isPending ? 'Signing in...' : 'Sign in'}
                         </Button>
                     </form>
