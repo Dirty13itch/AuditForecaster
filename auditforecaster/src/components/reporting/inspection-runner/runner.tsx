@@ -54,6 +54,7 @@ export function InspectionRunner({
     };
 
     const currentPage = structure.pages[currentPageIndex];
+    if (!currentPage) return <div className="p-4 text-center">No pages in template</div>;
 
 
 

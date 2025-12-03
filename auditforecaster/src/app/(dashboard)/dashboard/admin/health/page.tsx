@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Database, Server, AlertTriangle, CheckCircle } from "lucide-react";
+import { Activity, Database, Server } from "lucide-react";
 
 export const metadata = {
     title: 'System Health | AuditForecaster',
@@ -18,7 +18,7 @@ export default async function HealthPage() {
         take: 10
     });
 
-    const pendingMutations = 0; // Placeholder until we can query Redis/Queue directly
+    // const pendingMutations = 0; // Placeholder until we can query Redis/Queue directly
 
     return (
         <div className="space-y-8">

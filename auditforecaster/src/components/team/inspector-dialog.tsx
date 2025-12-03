@@ -224,7 +224,7 @@ export function InspectorDialog({ mode, inspector, trigger }: InspectorDialogPro
                                                     </FormItem>
                                                 )}
                                             />
-                                            <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-gray-500 hover:text-red-400 hover:bg-transparent">
+                                            <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-gray-500 hover:text-red-400 hover:bg-transparent" aria-label="Remove certification">
                                                 <Trash className="h-4 w-4" />
                                             </Button>
                                         </div>

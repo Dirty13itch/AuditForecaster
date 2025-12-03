@@ -101,12 +101,12 @@ export function VehicleCard({ vehicle, users }: VehicleCardProps) {
                         vehicle={vehicle}
                         users={users}
                         trigger={
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10" aria-label="Edit vehicle">
                                 <Settings className="h-3 w-3" />
                             </Button>
                         }
                     />
-                    <Button variant="ghost" size="icon" onClick={handleDelete} className="h-8 w-8 text-gray-400 hover:text-red-400 hover:bg-white/10">
+                    <Button variant="ghost" size="icon" onClick={handleDelete} className="h-8 w-8 text-gray-400 hover:text-red-400 hover:bg-white/10" aria-label="Delete vehicle">
                         <Trash className="h-3 w-3" />
                     </Button>
                 </div>

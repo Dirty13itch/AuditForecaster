@@ -84,7 +84,7 @@ export function InspectorCard({ inspector }: InspectorCardProps) {
                         mode="edit"
                         inspector={inspector}
                         trigger={
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10" aria-label="Edit inspector">
                                 <Pencil className="h-3 w-3" />
                             </Button>
                         }

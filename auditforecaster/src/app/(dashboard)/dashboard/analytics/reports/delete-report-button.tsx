@@ -22,7 +22,7 @@ export function DeleteReportButton({ id }: { id: string }) {
     }
 
     return (
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={handleDelete}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={handleDelete} aria-label="Delete report">
             <Trash className="h-4 w-4" />
         </Button>
     )

@@ -56,6 +56,10 @@ export default async function InspectionDetailsPage({
     }
 
     const inspection = job.inspections[0];
+
+    if (!inspection) {
+        return null;
+    }
     const inspectionData: InspectionData = inspection.data ? JSON.parse(inspection.data) : {};
     const checklist: ChecklistItem[] = inspection.checklist ? JSON.parse(inspection.checklist) : [];
 
@@ -65,7 +69,7 @@ export default async function InspectionDetailsPage({
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <Link href={`/dashboard/jobs/${id}`}>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label="Go back">
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     </Link>

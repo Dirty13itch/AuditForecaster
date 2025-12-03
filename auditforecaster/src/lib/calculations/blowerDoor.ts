@@ -184,13 +184,14 @@ export function averageMultiPointTests(
         const sorted = [...cfmReadings].sort((a, b) => a - b);
         const median = sorted[Math.floor(sorted.length / 2)];
 
-        // Flag readings more than 20% different from median
-        outliers = cfmReadings.filter(reading => {
-            const percentDiff = Math.abs((reading - median) / median);
-            return percentDiff > 0.20;
-        });
-
-        hasOutliers = outliers.length > 0;
+        if (median !== undefined) {
+            // Flag readings more than 20% different from median
+            outliers = cfmReadings.filter(reading => {
+                const percentDiff = Math.abs((reading - median) / median);
+                return percentDiff > 0.20;
+            });
+            hasOutliers = outliers.length > 0;
+        }
     }
 
     return {

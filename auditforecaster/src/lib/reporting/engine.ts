@@ -1,4 +1,4 @@
-// import { z } from 'zod';
+
 
 // --- Type Definitions ---
 
@@ -97,17 +97,20 @@ export function evaluateLogic(
     for (const rule of (structure.logic || [])) {
         const allConditionsMet = rule.conditions.every((c) => evaluateCondition(c, answers));
 
-        if (allConditionsMet) {
-            if (rule.action === 'show') {
-                state[rule.targetId].visible = true;
-            } else if (rule.action === 'hide') {
-                state[rule.targetId].visible = false;
-            } else if (rule.action === 'require') {
-                state[rule.targetId].required = true;
-            }
-        } else {
-            if (rule.action === 'show') {
-                state[rule.targetId].visible = false;
+        const target = state[rule.targetId];
+        if (target) {
+            if (allConditionsMet) {
+                if (rule.action === 'show') {
+                    target.visible = true;
+                } else if (rule.action === 'hide') {
+                    target.visible = false;
+                } else if (rule.action === 'require') {
+                    target.required = true;
+                }
+            } else {
+                if (rule.action === 'show') {
+                    target.visible = false;
+                }
             }
         }
     }

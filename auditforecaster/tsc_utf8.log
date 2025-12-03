@@ -1,0 +1,64 @@
+﻿
+> auditforecaster@0.1.0 type-check
+> tsc --noEmit
+
+e2e/functional.spec.ts(40,44): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+prisma/seed.ts(181,28): error TS2532: Object is possibly 'undefined'.
+prisma/seed.ts(191,28): error TS2532: Object is possibly 'undefined'.
+prisma/seed.ts(202,28): error TS2532: Object is possibly 'undefined'.
+prisma/seed.ts(213,28): error TS2532: Object is possibly 'undefined'.
+prisma/seed.ts(224,28): error TS2532: Object is possibly 'undefined'.
+scripts/audit.ts(77,19): error TS2532: Object is possibly 'undefined'.
+scripts/audit.ts(82,19): error TS2532: Object is possibly 'undefined'.
+src/app/(dashboard)/dashboard/finances/invoices/create/invoice-wizard.tsx(34,52): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | (() => string)'.
+  Type 'undefined' is not assignable to type 'string | (() => string)'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(59,44): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(59,73): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(60,40): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(60,74): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(79,39): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(104,61): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(112,51): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(116,35): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(185,39): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/inspections/[id]/page.tsx(188,81): error TS18048: 'inspection' is possibly 'undefined'.
+src/app/(dashboard)/dashboard/logistics/routes/route-generator.tsx(56,78): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+src/app/actions/finances.ts(25,25): error TS2532: Object is possibly 'undefined'.
+src/app/actions/finances.ts(45,25): error TS2532: Object is possibly 'undefined'.
+src/app/actions/logistics.ts(76,28): error TS18048: 'job' is possibly 'undefined'.
+src/app/actions/logistics.ts(77,28): error TS18048: 'job' is possibly 'undefined'.
+src/app/actions/logistics.ts(88,33): error TS2345: Argument of type '({ subdivision: { name: string; } | null; } & { status: string; id: string; createdAt: Date; updatedAt: Date; builderId: string | null; lotNumber: string; streetAddress: string; ... 20 more ...; payoutId: string | null; }) | undefined' is not assignable to parameter of type '{ subdivision: { name: string; } | null; } & { status: string; id: string; createdAt: Date; updatedAt: Date; builderId: string | null; lotNumber: string; streetAddress: string; ... 20 more ...; payoutId: string | null; }'.
+  Type 'undefined' is not assignable to type '{ subdivision: { name: string; } | null; } & { status: string; id: string; createdAt: Date; updatedAt: Date; builderId: string | null; lotNumber: string; streetAddress: string; ... 20 more ...; payoutId: string | null; }'.
+    Type 'undefined' is not assignable to type '{ subdivision: { name: string; } | null; }'.
+src/app/actions/logistics.ts(91,22): error TS18048: 'nextJob' is possibly 'undefined'.
+src/app/actions/logistics.ts(92,22): error TS18048: 'nextJob' is possibly 'undefined'.
+src/app/actions/pricing.ts(37,41): error TS2532: Object is possibly 'undefined'.
+src/app/actions/pricing.ts(58,41): error TS2532: Object is possibly 'undefined'.
+src/app/actions/pricing.ts(94,41): error TS2532: Object is possibly 'undefined'.
+src/app/actions/pricing.ts(161,41): error TS2532: Object is possibly 'undefined'.
+src/app/actions/qa.ts(29,25): error TS2532: Object is possibly 'undefined'.
+src/app/actions/qa.ts(53,25): error TS2532: Object is possibly 'undefined'.
+src/app/actions/routes.ts(73,58): error TS18048: 'job' is possibly 'undefined'.
+src/app/actions/routes.ts(73,74): error TS18048: 'job' is possibly 'undefined'.
+src/app/actions/routes.ts(74,93): error TS18048: 'job' is possibly 'undefined'.
+src/app/actions/routes.ts(74,107): error TS18048: 'job' is possibly 'undefined'.
+src/app/actions/routes.ts(103,28): error TS18048: 'job' is possibly 'undefined'.
+src/app/actions/subdivisions.ts(20,41): error TS2532: Object is possibly 'undefined'.
+src/app/actions/subdivisions.ts(44,41): error TS2532: Object is possibly 'undefined'.
+src/app/actions/templates.ts(31,25): error TS2532: Object is possibly 'undefined'.
+src/app/actions/templates.ts(61,25): error TS2532: Object is possibly 'undefined'.
+src/components/finances/approval-deck.tsx(57,34): error TS18048: 'currentExpense' is possibly 'undefined'.
+src/components/finances/approval-deck.tsx(77,26): error TS18048: 'currentExpense' is possibly 'undefined'.
+src/components/finances/approval-deck.tsx(78,21): error TS2322: Type 'Expense | undefined' is not assignable to type 'Expense'.
+  Type 'undefined' is not assignable to type 'Expense'.
+src/components/reporting/inspection-runner/runner.tsx(101,48): error TS18048: 'currentPage' is possibly 'undefined'.
+src/components/reporting/inspection-runner/runner.tsx(108,18): error TS18048: 'currentPage' is possibly 'undefined'.
+src/components/reporting/template-builder/builder.tsx(93,40): error TS2532: Object is possibly 'undefined'.
+src/components/reporting/template-builder/builder.tsx(95,23): error TS2532: Object is possibly 'undefined'.

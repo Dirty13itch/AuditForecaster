@@ -44,11 +44,11 @@ export function CalendarView({ jobs }: CalendarViewProps) {
                     </CardTitle>
                 </div>
                 <div className="flex items-center space-x-1">
-                    <Button variant="outline" size="icon" onClick={prevMonth}>
+                    <Button variant="outline" size="icon" onClick={prevMonth} aria-label="Previous month">
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <Button variant="outline" onClick={today}>Today</Button>
-                    <Button variant="outline" size="icon" onClick={nextMonth}>
+                    <Button variant="outline" size="icon" onClick={nextMonth} aria-label="Next month">
                         <ChevronRight className="h-4 w-4" />
                     </Button>
                 </div>

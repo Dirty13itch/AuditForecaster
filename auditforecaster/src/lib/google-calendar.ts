@@ -53,7 +53,7 @@ export async function watchCalendar(userId: string, calendarId: string) {
 
 export async function syncEvents(userId: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } })
-    if (!user?.googleCalendarId) return
+    if (!user || !user.googleCalendarId) return
 
     const client = await getCalendarClient(userId)
 
@@ -62,13 +62,18 @@ export async function syncEvents(userId: string) {
 
     do {
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const response = await client.events.list({
                 calendarId: user.googleCalendarId,
                 syncToken: syncToken || undefined,
                 pageToken: pageToken || undefined,
                 singleEvents: true, // Expand recurring events
-            }) as any
+            }) as unknown as {
+                data: {
+                    items?: calendar_v3.Schema$Event[];
+                    nextPageToken?: string | null;
+                    nextSyncToken?: string | null;
+                }
+            }
 
             const events = response.data.items || []
 
@@ -101,7 +106,7 @@ export async function syncEvents(userId: string) {
             }
 
             pageToken = response.data.nextPageToken || undefined
-            syncToken = response.data.nextSyncToken || undefined
+            syncToken = response.data.nextSyncToken || null
 
         } catch (e: unknown) {
             if (typeof e === 'object' && e && 'code' in e && (e as { code: number }).code === 410) {
@@ -134,11 +139,11 @@ function parseEventToJob(event: calendar_v3.Schema$Event) {
 
     // Regex to extract Lot Number (e.g., "Lot 123 - ...")
     const lotMatch = title.match(/Lot\s*(\w+)/i)
-    const lotNumber = lotMatch ? `Lot ${lotMatch[1]}` : 'Unknown Lot'
+    const lotNumber = (lotMatch && lotMatch[1]) ? `Lot ${lotMatch[1]}` : 'Unknown Lot'
 
     // Simple address extraction (everything after " - " or just the title)
     const addressParts = title.split(' - ')
-    const streetAddress = addressParts.length > 1 ? addressParts[1] : title
+    const streetAddress = (addressParts.length > 1 && addressParts[1]) ? addressParts[1] : title
 
     // Basic validation
     if (!title) return null
@@ -158,7 +163,8 @@ function extractCity(address: string): string {
     // Very basic extraction, assumes "City, State" format
     const parts = address.split(',')
     if (parts.length >= 2) {
-        return parts[parts.length - 2].trim()
+        const cityPart = parts[parts.length - 2]
+        return cityPart ? cityPart.trim() : 'Unknown'
     }
     return 'Unknown'
 }

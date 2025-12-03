@@ -4,6 +4,7 @@ import BuilderSchedulePage from '../builder/schedule/page'
 import EquipmentPage from '../assets/equipment/page'
 import FleetPage from '../assets/fleet/page'
 import { prisma } from '@/lib/prisma'
+import { Vehicle, User, Job, Equipment } from '@prisma/client'
 
 // Mock Next.js Link
 vi.mock('next/link', () => ({
@@ -84,7 +85,7 @@ describe('Dashboard Integration Tests', () => {
                     status: 'Scheduled',
                     builder: { name: 'Test Builder' }
                 }
-            ] as any)
+            ] as unknown as (Job & { builder: { name: string } })[])
 
             const Page = await BuilderSchedulePage()
             render(Page)
@@ -99,7 +100,7 @@ describe('Dashboard Integration Tests', () => {
         it('renders equipment page with items', async () => {
             vi.mocked(prisma.equipment.findMany).mockResolvedValue([
                 { id: '1', name: 'Blower Door', type: 'Testing', status: 'Active' }
-            ] as any)
+            ] as unknown as Equipment[])
 
             render(await EquipmentPage())
             expect(screen.getByText('Equipment')).toBeInTheDocument()
@@ -112,10 +113,11 @@ describe('Dashboard Integration Tests', () => {
         it('renders fleet page with vehicles', async () => {
             vi.mocked(prisma.vehicle.findMany).mockResolvedValue([
                 { id: '1', name: 'Truck 1', licensePlate: 'ABC-123', status: 'Active', mileage: 50000 }
-            ] as any)
+            ] as unknown as Vehicle[])
+
             vi.mocked(prisma.user.findMany).mockResolvedValue([
                 { id: '1', name: 'Test User' }
-            ] as any)
+            ] as unknown as User[])
 
             render(await FleetPage())
             expect(screen.getByText('Fleet')).toBeInTheDocument()

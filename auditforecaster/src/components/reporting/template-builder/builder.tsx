@@ -23,8 +23,11 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
 
     const updatePage = (pageIndex: number, updates: Partial<Page>) => {
         const newPages = [...structure.pages];
-        newPages[pageIndex] = { ...newPages[pageIndex], ...updates };
-        setStructure({ ...structure, pages: newPages });
+        const page = newPages[pageIndex];
+        if (page) {
+            newPages[pageIndex] = { ...page, ...updates };
+            setStructure({ ...structure, pages: newPages });
+        }
     };
 
     const addSection = (pageIndex: number) => {
@@ -34,8 +37,11 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
             items: []
         };
         const newPages = [...structure.pages];
-        newPages[pageIndex].sections.push(newSection);
-        setStructure({ ...structure, pages: newPages });
+        const page = newPages[pageIndex];
+        if (page) {
+            page.sections.push(newSection);
+            setStructure({ ...structure, pages: newPages });
+        }
     };
 
     const addItem = (pageIndex: number, sectionIndex: number) => {
@@ -45,17 +51,29 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
             label: 'New Question'
         };
         const newPages = [...structure.pages];
-        newPages[pageIndex].sections[sectionIndex].items.push(newItem);
-        setStructure({ ...structure, pages: newPages });
+        const page = newPages[pageIndex];
+        if (page) {
+            const section = page.sections[sectionIndex];
+            if (section) {
+                section.items.push(newItem);
+                setStructure({ ...structure, pages: newPages });
+            }
+        }
     };
 
     const updateItem = (pageIndex: number, sectionIndex: number, itemIndex: number, updates: Partial<QuestionItem>) => {
         const newPages = [...structure.pages];
-        newPages[pageIndex].sections[sectionIndex].items[itemIndex] = {
-            ...newPages[pageIndex].sections[sectionIndex].items[itemIndex],
-            ...updates
-        };
-        setStructure({ ...structure, pages: newPages });
+        const page = newPages[pageIndex];
+        if (page) {
+            const section = page.sections[sectionIndex];
+            if (section) {
+                const item = section.items[itemIndex];
+                if (item) {
+                    section.items[itemIndex] = { ...item, ...updates };
+                    setStructure({ ...structure, pages: newPages });
+                }
+            }
+        }
     };
 
     const [isLogicOpen, setIsLogicOpen] = useState(false);
@@ -71,24 +89,37 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
         const questions = getAllQuestions();
         if (questions.length < 2) return; // Need at least 2 questions
 
+        const q1 = questions[0];
+        const q2 = questions[1];
+        if (!q1 || !q2) return;
+
         const newRule: LogicRule = {
-            conditions: [{ questionId: questions[0].id, operator: 'equals', value: '' }],
+            conditions: [{ questionId: q1.id, operator: 'equals', value: '' }],
             action: 'show',
-            targetId: questions[1].id
+            targetId: q2.id
         };
         setStructure({ ...structure, logic: [...(structure.logic || []), newRule] });
     };
 
     const updateRule = (index: number, updates: Partial<LogicRule>) => {
         const newLogic = [...(structure.logic || [])];
-        newLogic[index] = { ...newLogic[index], ...updates };
-        setStructure({ ...structure, logic: newLogic });
+        const rule = newLogic[index];
+        if (rule) {
+            newLogic[index] = { ...rule, ...updates } as LogicRule;
+            setStructure({ ...structure, logic: newLogic });
+        }
     };
 
     const updateCondition = (ruleIndex: number, conditionIndex: number, updates: Partial<LogicCondition>) => {
         const newLogic = [...(structure.logic || [])];
-        newLogic[ruleIndex].conditions[conditionIndex] = { ...newLogic[ruleIndex].conditions[conditionIndex], ...updates };
-        setStructure({ ...structure, logic: newLogic });
+        const rule = newLogic[ruleIndex];
+        if (rule) {
+            const condition = rule.conditions[conditionIndex];
+            if (condition) {
+                rule.conditions[conditionIndex] = { ...condition, ...updates } as LogicCondition;
+                setStructure({ ...structure, logic: newLogic });
+            }
+        }
     };
 
     const removeRule = (index: number) => {
@@ -176,7 +207,7 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
                                     </SelectContent>
                                 </Select>
 
-                                <Button variant="ghost" size="icon" onClick={() => removeRule(index)}>
+                                <Button variant="ghost" size="icon" onClick={() => removeRule(index)} aria-label="Remove rule">
                                     <Trash2 className="h-4 w-4 text-red-500" />
                                 </Button>
                             </div>
@@ -201,7 +232,7 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
                             <Button variant="destructive" size="icon" onClick={() => {
                                 const newPages = structure.pages.filter((_, i) => i !== pageIndex);
                                 setStructure({ ...structure, pages: newPages });
-                            }}>
+                            }} aria-label="Delete page">
                                 <Trash2 className="h-4 w-4" />
                             </Button>
                         </div>
@@ -215,15 +246,24 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
                                         value={section.title}
                                         onChange={(e) => {
                                             const newPages = [...structure.pages];
-                                            newPages[pageIndex].sections[sectionIndex].title = e.target.value;
-                                            setStructure({ ...structure, pages: newPages });
+                                            const page = newPages[pageIndex];
+                                            if (page) {
+                                                const sec = page.sections[sectionIndex];
+                                                if (sec) {
+                                                    sec.title = e.target.value;
+                                                    setStructure({ ...structure, pages: newPages });
+                                                }
+                                            }
                                         }}
                                     />
                                     <Button variant="ghost" size="icon" onClick={() => {
                                         const newPages = [...structure.pages];
-                                        newPages[pageIndex].sections = newPages[pageIndex].sections.filter((_, i) => i !== sectionIndex);
-                                        setStructure({ ...structure, pages: newPages });
-                                    }}>
+                                        const page = newPages[pageIndex];
+                                        if (page) {
+                                            page.sections = page.sections.filter((_, i) => i !== sectionIndex);
+                                            setStructure({ ...structure, pages: newPages });
+                                        }
+                                    }} aria-label="Delete section">
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
@@ -244,44 +284,20 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
                                                         onValueChange={(val: string) => updateItem(pageIndex, sectionIndex, itemIndex, { type: val as QuestionItem['type'] })}
                                                     >
                                                         <SelectTrigger className="w-[150px]">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="text">Text</SelectItem>
-                                                            <SelectItem value="number">Number</SelectItem>
-                                                            <SelectItem value="select">Select</SelectItem>
-                                                            <SelectItem value="photo">Photo</SelectItem>
-                                                            <SelectItem value="signature">Signature</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    {/* Add more property editors here (required, weight, options) */}
+                                                        </Button>
                                                 </div>
                                             </div>
-                                            <Button variant="ghost" size="icon" onClick={() => {
-                                                const newPages = [...structure.pages];
-                                                newPages[pageIndex].sections[sectionIndex].items = newPages[pageIndex].sections[sectionIndex].items.filter((_, i) => i !== itemIndex);
-                                                setStructure({ ...structure, pages: newPages });
-                                            }}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                    <Button variant="outline" size="sm" onClick={() => addItem(pageIndex, sectionIndex)}>
-                                        <Plus className="h-4 w-4 mr-2" /> Add Question
-                                    </Button>
-                                </div>
-                            </div>
                         ))}
-                        <Button variant="secondary" size="sm" onClick={() => addSection(pageIndex)}>
-                            <Plus className="h-4 w-4 mr-2" /> Add Section
-                        </Button>
-                    </CardContent>
+                                            <Button variant="secondary" size="sm" onClick={() => addSection(pageIndex)}>
+                                                <Plus className="h-4 w-4 mr-2" /> Add Section
+                                            </Button>
+                                        </CardContent>
                 </Card>
             ))}
 
-            <Button variant="outline" className="w-full py-8 border-dashed" onClick={addPage}>
-                <Plus className="h-6 w-6 mr-2" /> Add Page
-            </Button>
-        </div>
-    );
+                                <Button variant="outline" className="w-full py-8 border-dashed" onClick={addPage}>
+                                    <Plus className="h-6 w-6 mr-2" /> Add Page
+                                </Button>
+                            </div>
+                        );
 }

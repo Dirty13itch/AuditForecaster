@@ -1,0 +1,5 @@
+# HARDWARE CONFIGURATION
+- GPU: AMD Radeon RX 5700 (Windows)
+- COMPUTE: DirectML (NOT CUDA)
+- LIBRARY: Use `torch-directml` for all PyTorch/AI tasks.
+- DEVICE INIT: `device = torch_directml.device()`

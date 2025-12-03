@@ -71,7 +71,7 @@ export function AssetQRCode({ assetId, name, serialNumber }: AssetQRCodeProps) {
     return (
         <Dialog>
             <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" title="View QR Code">
+                <Button variant="ghost" size="icon" title="View QR Code" aria-label="View QR Code">
                     <div className="h-6 w-6 flex items-center justify-center rounded-md border bg-white">
                         <div className="h-3 w-3 bg-black" />
                     </div>

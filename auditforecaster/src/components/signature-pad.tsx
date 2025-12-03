@@ -89,8 +89,13 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
     const getCoordinates = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
         let clientX, clientY
         if ('touches' in e) {
-            clientX = e.touches[0].clientX
-            clientY = e.touches[0].clientY
+            const touch = e.touches[0]
+            if (touch) {
+                clientX = touch.clientX
+                clientY = touch.clientY
+            } else {
+                return { offsetX: 0, offsetY: 0 }
+            }
         } else {
             clientX = (e as React.MouseEvent).clientX
             clientY = (e as React.MouseEvent).clientY

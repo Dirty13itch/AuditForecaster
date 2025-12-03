@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { JobBoard } from "@/components/jobs/job-board"
 import { JobDialog } from "@/components/jobs/job-dialog"
+import { JobFilters } from "@/components/jobs/job-filters"
 
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
@@ -78,6 +79,7 @@ export default async function JobsPage({
         <JobDialog builders={builders} inspectors={inspectors} />
       </div>
 
+      <JobFilters />
       <JobBoard jobs={jobs} />
     </div>
   )

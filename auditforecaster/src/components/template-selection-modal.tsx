@@ -59,7 +59,8 @@ export function TemplateSelectionModal({ jobId, onClose }: TemplateSelectionModa
 
             const result = await response.json()
             onClose() // Close modal immediately on success
-            router.push(`/dashboard/inspections/${jobId}`)
+            // Redirect to the runner, not the details page
+            router.push(`/inspections/${result.inspectionId}/run`)
         } catch (error) {
             console.error('Failed to create inspection:', error)
             toast({
@@ -76,7 +77,7 @@ export function TemplateSelectionModal({ jobId, onClose }: TemplateSelectionModa
             <Card className="w-full max-w-2xl max-h-[80vh] flex flex-col">
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Select Inspection Template</CardTitle>
-                    <Button variant="ghost" size="icon" onClick={onClose}>
+                    <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
                         <X className="h-4 w-4" />
                     </Button>
                 </CardHeader>

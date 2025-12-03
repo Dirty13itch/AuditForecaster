@@ -1,6 +1,5 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
-// import DOMPurify from 'isomorphic-dompurify'; // Moved to security-client.ts
 import { env } from '@/lib/env';
 
 // --- Rate Limiting ---
