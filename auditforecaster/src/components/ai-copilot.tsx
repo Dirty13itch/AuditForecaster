@@ -34,6 +34,7 @@ export function AICopilot() {
                     onClick={() => setIsOpen(true)}
                 >
                     <Bot className="h-8 w-8 text-white" />
+                    <span className="sr-only">Open Audit Copilot</span>
                 </Button>
             )}
 
@@ -44,7 +45,7 @@ export function AICopilot() {
                         <CardTitle className="text-sm flex items-center gap-2">
                             <Bot className="h-4 w-4" /> Audit Copilot
                         </CardTitle>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-white hover:bg-indigo-700" onClick={() => setIsOpen(false)}>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-white hover:bg-indigo-700" onClick={() => setIsOpen(false)} aria-label="Close">
                             <X className="h-4 w-4" />
                         </Button>
                     </CardHeader>
@@ -52,8 +53,8 @@ export function AICopilot() {
                         {messages.map((m, i) => (
                             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[80%] p-3 rounded-lg text-sm ${m.role === 'user'
-                                        ? 'bg-indigo-600 text-white rounded-br-none'
-                                        : 'bg-white border shadow-sm rounded-bl-none'
+                                    ? 'bg-indigo-600 text-white rounded-br-none'
+                                    : 'bg-white border shadow-sm rounded-bl-none'
                                     }`}>
                                     {m.text}
                                 </div>
@@ -68,7 +69,7 @@ export function AICopilot() {
                                 placeholder="Ask a question..."
                                 onKeyDown={e => e.key === 'Enter' && handleSend()}
                             />
-                            <Button size="icon" onClick={handleSend}>
+                            <Button size="icon" onClick={handleSend} aria-label="Send message">
                                 <Send className="h-4 w-4" />
                             </Button>
                         </div>

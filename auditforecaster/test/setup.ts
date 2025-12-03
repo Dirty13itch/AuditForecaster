@@ -1,6 +1,11 @@
 import '@testing-library/jest-dom'
 import { vi, beforeEach } from 'vitest'
 
+// Setup Environment Variables
+vi.stubEnv('NEXTAUTH_URL', 'http://localhost:3000')
+vi.stubEnv('NEXTAUTH_SECRET', 'super-secret-secret-at-least-32-chars-long')
+vi.stubEnv('DATABASE_URL', 'postgres://localhost:5432/test')
+
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
     useRouter: () => ({

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { logger } from "@/lib/logger"
 import { auth } from "@/auth"
 import { z } from "zod"
 
@@ -43,7 +44,7 @@ export async function createServiceItem(data: z.infer<typeof ServiceItemSchema>)
         revalidatePath('/dashboard/settings/pricing')
         return { success: true, data: serviceItem }
     } catch (error) {
-        console.error('Failed to create service item:', error)
+        logger.error('Failed to upsert price list item', { error })
         return { success: false, error: 'Failed to create service item' }
     }
 }

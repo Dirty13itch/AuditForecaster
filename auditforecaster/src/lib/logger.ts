@@ -1,99 +1,71 @@
-/**
- * Production-grade logger
- * Provides structured logging with different levels and context
- */
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG";
 
 interface LogContext {
-    [key: string]: unknown
+    userId?: string;
+    path?: string;
+    method?: string;
+    [key: string]: unknown;
 }
 
 class Logger {
-    private context: LogContext = {}
-
-    constructor(defaultContext: LogContext = {}) {
-        this.context = defaultContext
-    }
-
-    private log(level: LogLevel, message: string, context: LogContext = {}) {
+    private async log(level: LogLevel, message: string, context?: LogContext) {
+        const timestamp = new Date().toISOString();
         const logEntry = {
-            timestamp: new Date().toISOString(),
+            timestamp,
             level,
             message,
-            ...this.context,
-            ...context,
-            environment: process.env.NODE_ENV,
-            version: '0.1.0', // Could be imported from package.json
-        }
+            ...context
+        };
 
-        // In production, send to logging service (e.g., Sentry, DataDog)
+        // Console Output (JSON for machine readability in production)
         if (process.env.NODE_ENV === 'production') {
-            // Log to console in JSON format for log aggregation
-            const jsonLog = JSON.stringify(logEntry);
-
-            if (level === 'error') {
-                console.error(jsonLog);
-            } else {
-                console.log(jsonLog);
-            }
-
-            // Send errors to Sentry (if configured)
-            if (level === 'error' && context.error instanceof Error) {
-                // Sentry is configured globally via next.config.ts (when enabled)
-                // We can also explicitly capture here if needed
-            }
+            console.log(JSON.stringify(logEntry));
         } else {
-            // Development: Pretty print
-            const emoji = {
-                debug: '🔍',
-                info: 'ℹ️',
-                warn: '⚠️',
-                error: '❌',
-            }[level]
-
-            const stream = level === 'error' ? console.error : console.log;
-
-            stream(
-                `${emoji} [${level.toUpperCase()}]`,
-                message,
-                context
-            )
+            // Pretty print for development
+            const color = level === 'ERROR' ? '\x1b[31m' : level === 'WARN' ? '\x1b[33m' : '\x1b[36m';
+            console.log(`${color}[${level}] \x1b[0m${message}`, context || '');
         }
-    }
 
-    debug(message: string, context?: LogContext) {
-        this.log('debug', message, context)
+        // Persist Errors to DB (Async, fire-and-forget)
+        if (level === 'ERROR' || level === 'WARN') {
+            try {
+                // We use a detached promise to not block the main thread
+                // In a serverless env, we might need to await this or use a queue
+                prisma.systemLog.create({
+                    data: {
+                        level,
+                        message,
+                        context: context as unknown as Prisma.InputJsonValue,
+                        userId: context?.userId,
+                    }
+                }).catch(err => console.error('Failed to write log to DB:', err));
+            } catch (e) {
+                // Fallback if Prisma fails
+                console.error('Logger failed to persist:', e);
+            }
+        }
     }
 
     info(message: string, context?: LogContext) {
-        this.log('info', message, context)
+        this.log("INFO", message, context);
     }
 
     warn(message: string, context?: LogContext) {
-        this.log('warn', message, context)
+        this.log("WARN", message, context);
     }
 
-    error(message: string, error?: Error | unknown, context?: LogContext) {
-        this.log('error', message, {
-            ...context,
-            error: error instanceof Error ? {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-            } : error,
-        })
+    error(message: string, context?: LogContext) {
+        this.log("ERROR", message, context);
     }
 
-    child(additionalContext: LogContext) {
-        return new Logger({ ...this.context, ...additionalContext })
+    debug(message: string, context?: LogContext) {
+        if (process.env.NODE_ENV !== 'production') {
+            this.log("DEBUG", message, context);
+        }
     }
 }
 
-// Export singleton logger
-export const logger = new Logger({
-    service: 'auditforecaster',
-})
-
-// Export Logger class for creating child loggers
-export { Logger }
+export const logger = new Logger();

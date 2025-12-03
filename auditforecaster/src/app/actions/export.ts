@@ -9,7 +9,7 @@ export async function exportData(type: 'JOBS' | 'INVOICES' | 'PAYOUTS') {
         throw new Error("Unauthorized")
     }
 
-    let data: any[] = []
+    let data: unknown[] = []
     let headers: string[] = []
 
     if (type === 'JOBS') {
@@ -38,7 +38,9 @@ export async function exportData(type: 'JOBS' | 'INVOICES' | 'PAYOUTS') {
     // Convert to CSV
     const csvRows = [headers.join(',')]
 
-    for (const row of data) {
+    for (const r of data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const row = r as any
         const values = headers.map(header => {
             let val = ''
             if (type === 'JOBS') {

@@ -3,6 +3,7 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { logger } from '@/lib/logger'
 
 export async function logTrip(data: {
     vehicleId: string
@@ -39,7 +40,7 @@ export async function logTrip(data: {
         revalidatePath('/dashboard/logistics/mileage')
         return { success: true, log }
     } catch (error) {
-        console.error('Failed to log trip:', error)
+        logger.error('Failed to log trip', { error })
         return { success: false, error: 'Failed to log trip' }
     }
 }

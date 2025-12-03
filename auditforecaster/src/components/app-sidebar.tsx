@@ -24,7 +24,8 @@ import {
     MapPin,
     Activity,
     Link as LinkIcon,
-    BarChart3
+    BarChart3,
+    Terminal
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect } from "react"
@@ -134,6 +135,15 @@ const NAV_ITEMS: NavItem[] = [
         children: [
             { name: "Integrations", href: "/dashboard/admin/integrations", icon: LinkIcon, roles: ["ADMIN"] },
             { name: "System Health", href: "/dashboard/admin/health", icon: Activity, roles: ["ADMIN"] },
+        ]
+    },
+    {
+        name: "Dev Tools",
+        href: "/dashboard/dev",
+        icon: Terminal,
+        roles: ["ADMIN"],
+        children: [
+            { name: "Progress", href: "/dashboard/dev/progress", icon: BarChart3, roles: ["ADMIN"] },
         ]
     },
     {
@@ -249,7 +259,7 @@ export function AppSidebar({ userRole, onSignOut, className }: { userRole: strin
 
             <div className="border-t p-4 bg-white">
                 <form action={onSignOut}>
-                    <Button variant="ghost" size="sm" className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Button variant="ghost" size="sm" className="w-full justify-start text-red-700 hover:text-red-800 hover:bg-red-50">
                         <LogOut className="mr-2 h-4 w-4" />
                         Sign Out
                     </Button>

@@ -1,0 +1,75 @@
+```
+{
+    "features": [
+        {
+            "id": "phase-1",
+            "category": "stabilization",
+            "description": "Phase 1: Stabilization (Linting, Basic Tests)",
+            "status": "done",
+            "verification_steps": [
+                "npm run lint",
+                "npm test"
+            ]
+        },
+        {
+            "id": "phase-2",
+            "category": "infrastructure",
+            "description": "Phase 2: Scaling Infrastructure (Feature Flags, Task Claiming)",
+            "status": "done",
+            "verification_steps": [
+                "Verify feature flags in UI",
+                "Test task claiming"
+            ]
+        },
+        {
+            "id": "phase-3",
+            "category": "analytics",
+            "description": "Phase 3: Advanced Analytics (Server Actions, Charts)",
+            "status": "done",
+            "verification_steps": [
+                "Check Analytics page",
+                "Verify charts"
+            ]
+        },
+        {
+            "id": "phase-4",
+            "category": "offline",
+            "description": "Phase 4: Offline Sync V2 (Conflict Resolution, DLQ)",
+            "status": "done",
+            "verification_steps": [
+                "Test offline sync",
+                "Check DLQ"
+            ]
+        },
+        {
+            "id": "phase-5",
+            "category": "infrastructure",
+            "description": "Phase 5: Infrastructure Hardening (Pre-commit, Agent Review)",
+            "status": "done",
+            "verification_steps": [
+                "Run pre-commit script",
+                "Run agent review"
+            ]
+        },
+        {
+            "id": "phase-6",
+            "category": "testing",
+            "description": "Phase 6: Comprehensive Testing (Jobs, PDF, Integration)",
+            "status": "done",
+            "verification_steps": [
+                "npm test"
+            ]
+        },
+        {
+            "id": "phase-7",
+            "category": "internal-tools",
+            "description": "Phase 7: Internal Tools & Dashboards (Progress Dashboard)",
+            "status": "todo",
+            "verification_steps": [
+                "Visit /dashboard/dev/progress",
+                "Verify feature list matches JSON"
+            ]
+        }
+    ]
+}
+```

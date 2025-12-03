@@ -27,6 +27,23 @@ Automated code quality checks and fixes
 Database management operations
 - Backup, restore, migration
 
+## 🤖 Agent Harness
+
+This project uses a structured harness for AI agents to ensure reliable, incremental progress.
+
+### Structure
+- **`features.json`**: The source of truth for tasks. Agents pick the next "todo" item.
+- **`progress.md`**: Append-only log of agent sessions.
+- **`context.md`**: Compacted project context.
+- **`scripts/agent-init.ts`**: Initialization script for agents.
+
+### Usage
+Agents should run `npm run agent:init` at the start of every session to:
+1.  Understand the environment (pwd, git).
+2.  See recent progress.
+3.  Pick a task from `features.json`.
+4.  Verify system health.
+
 ## 🎯 Project Standards
 
 All work on this project must follow:

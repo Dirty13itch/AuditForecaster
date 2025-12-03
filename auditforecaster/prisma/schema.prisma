@@ -15,6 +15,7 @@ model User {
   image         String?
   role          String    @default("INSPECTOR")
   passwordHash  String?
+  tokenVersion  Int       @default(1) // Security: For session revocation
   baseRate      Float?    // Base monthly rate for salaried subcontractors
   accounts      Account[]
   sessions      Session[]
@@ -31,6 +32,7 @@ model User {
   jobs      Job[]
   vehicles  Vehicle[]
   equipment Equipment[]
+  equipmentAssignments EquipmentAssignment[]
   expenses  Expense[]
   payouts   Payout[]
   routes    Route[]
@@ -42,6 +44,45 @@ model User {
   builder   Builder? @relation(fields: [builderId], references: [id])
 
   savedReports SavedReport[]
+  certifications Certification[] // Consultant: Track specific cert details
+  hersRaterId    String?         // Consultant: Critical for Ekotrope sync
+  
+  onboarding     OnboardingChecklist?
+  apiKeys        ApiKey[]
+  taskClaims     TaskClaim[]
+
+  @@index([builderId])
+}
+
+model OnboardingChecklist {
+  id               String  @id @default(cuid())
+  uniformIssued    Boolean @default(false)
+  ipadIssued       Boolean @default(false)
+  badgePrinted     Boolean @default(false)
+  trainingComplete Boolean @default(false)
+  notes            String?
+  
+  userId           String  @unique
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Certification {
+  id             String    @id @default(cuid())
+  name           String    // e.g. "BPI Building Analyst", "RESNET HERS Rater"
+  licenseNumber  String?
+  issuedDate     DateTime?
+  expirationDate DateTime?
+  
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
 }
 
 model TaxCredit {
@@ -77,6 +118,9 @@ model Vehicle {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([assignedTo])
+  @@index([status])
 }
 
 model VehicleMaintenance {
@@ -92,6 +136,9 @@ model VehicleMaintenance {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([vehicleId])
+  @@index([date])
 }
 
 model SavedReport {
@@ -105,6 +152,8 @@ model SavedReport {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
 }
 
 model Equipment {
@@ -115,11 +164,40 @@ model Equipment {
   status          String    @default("ACTIVE") // ACTIVE, CALIBRATION_DUE, REPAIR, RETIRED
   lastCalibration DateTime?
   nextCalibration DateTime?
+  
+  purchasePrice   Float?    // Deep Layer: Financial tracking
+  purchaseDate    DateTime?
+  
   assignedTo      String?
   assignedUser    User?     @relation(fields: [assignedTo], references: [id])
+  
+  calibrationCertUrl String? // Deep Scope: Proof of compliance
+  assignments     EquipmentAssignment[] // Deep Scope: Chain of Custody
+
   notes           String?
+  version         Int       @default(1) // Optimistic Locking
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([assignedTo])
+}
+
+model EquipmentAssignment {
+  id          String    @id @default(cuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  
+  assignedAt  DateTime  @default(now())
+  returnedAt  DateTime?
+  
+  notes       String?   // Condition upon checkout/return
+
+  @@index([equipmentId])
+  @@index([userId])
 }
 
 model Account {
@@ -141,6 +219,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -151,6 +230,8 @@ model Session {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model VerificationToken {
@@ -189,6 +270,8 @@ model Plan {
   builder     Builder  @relation(fields: [builderId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([builderId])
 }
 
 model Subdivision {
@@ -201,6 +284,8 @@ model Subdivision {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([builderId])
 }
 
 model ServiceItem {
@@ -227,6 +312,9 @@ model PriceList {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([builderId])
+  @@index([subdivisionId])
 }
 
 model PriceListItem {
@@ -241,6 +329,8 @@ model PriceListItem {
   updatedAt DateTime @updatedAt
 
   @@unique([priceListId, serviceItemId])
+  @@index([priceListId])
+  @@index([serviceItemId])
 }
 
 model Job {
@@ -293,8 +383,17 @@ model Job {
   
   routeStops    RouteStop[]
 
+  version       Int      @default(1) // Optimistic Locking
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([inspectorId])
+  @@index([builderId])
+  @@index([subdivisionId])
+  @@index([payoutId])
+  @@index([createdAt])
+  @@index([scheduledDate])
 }
 
 model Inspection {
@@ -323,6 +422,11 @@ model Inspection {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([jobId])
+  @@index([reportTemplateId])
+  @@index([createdAt])
 }
 
 model Photo {
@@ -341,6 +445,8 @@ model Photo {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([inspectionId])
 }
 
 model ReportTemplate {
@@ -375,6 +481,9 @@ model ActionItem {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([inspectionId])
+  @@index([status])
 }
 
 model Expense {
@@ -396,6 +505,9 @@ model Expense {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([jobId])
 }
 
 model MileageLog {
@@ -413,6 +525,8 @@ model MileageLog {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([vehicleId])
 }
 
 model Subcontractor {
@@ -441,6 +555,8 @@ model ComplianceDoc {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([subcontractorId])
 }
 
 model CorporateDoc {
@@ -474,8 +590,13 @@ model Invoice {
 
   items       InvoiceItem[]
 
+  version     Int      @default(1) // Optimistic Locking
+  deletedAt   DateTime? // Soft Delete
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([builderId])
+  @@index([status])
 }
 
 model InvoiceItem {
@@ -493,7 +614,57 @@ model InvoiceItem {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([jobId])
 }
+
+
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   // "INFO", "WARN", "ERROR"
+  message   String
+  context   Json?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([createdAt])
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  name      String   // e.g. "Zapier Integration"
+  keyHash   String   @unique
+  scopes    String[] // "READ_JOBS", "WRITE_JOBS"
+  lastUsed  DateTime?
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String   // "Job", "Inspection", "User"
+  entityId   String
+  action     String   // "CREATE", "UPDATE", "DELETE"
+  actorId    String   // User ID or API Key ID
+  changes    Json?    // { before: {}, after: {} }
+  ipAddress  String?
+  
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([actorId])
+}
+
 
 model Payout {
   id          String    @id @default(cuid())
@@ -512,6 +683,8 @@ model Payout {
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
 }
 
 model Route {
@@ -528,6 +701,9 @@ model Route {
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  @@index([driverId])
+  @@index([date])
 }
 
 model RouteStop {
@@ -544,6 +720,9 @@ model RouteStop {
 
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  @@index([routeId])
+  @@index([jobId])
 }
 
 model IntegrationLog {
@@ -557,6 +736,9 @@ model IntegrationLog {
   error     String?
 
   createdAt DateTime @default(now())
+
+  @@index([jobId])
+  @@index([createdAt])
 }
 
 model IntegrationSettings {
@@ -571,4 +753,17 @@ model IntegrationSettings {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model TaskClaim {
+  id        String   @id @default(cuid())
+  taskId    String   // ID of the job/inspection being claimed
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([taskId]) // Only one active claim per task
+  @@index([expiresAt]) // For cleanup
+  @@index([userId])
 }

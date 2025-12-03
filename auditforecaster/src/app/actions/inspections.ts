@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { auth } from "@/auth"
 import { sendInspectionCompletedEmail } from "@/lib/email"
 import { z } from "zod"
+import { logger } from "@/lib/logger"
 
 const InspectionSchema = z.object({
     jobId: z.string().min(1, "Job ID is required"),
@@ -15,8 +16,6 @@ const InspectionSchema = z.object({
     checklist: z.string().nullable().optional().transform(v => v || undefined),
     signature: z.string().nullable().optional().transform(v => v || undefined),
 })
-
-
 
 export async function updateInspection(formData: FormData): Promise<never> {
     const session = await auth()
@@ -33,7 +32,7 @@ export async function updateInspection(formData: FormData): Promise<never> {
         })
 
         if (!validatedFields.success) {
-            console.error('Validation failed:', validatedFields.error.flatten().fieldErrors)
+            logger.error('Validation failed', { error: validatedFields.error.flatten().fieldErrors })
             throw new Error('Please check all required fields')
         }
 
@@ -113,7 +112,7 @@ export async function updateInspection(formData: FormData): Promise<never> {
                 `${process.env.NEXTAUTH_URL}/dashboard/jobs/${fields.jobId}`
             )
         } catch (error) {
-            console.error('Failed to send notification:', error)
+            logger.error('Failed to send notification', { error })
             // Don't fail the request if email fails
         }
 
@@ -124,7 +123,7 @@ export async function updateInspection(formData: FormData): Promise<never> {
 
     } catch (error) {
         // Log error for debugging
-        console.error('updateInspection error:', error)
+        logger.error('updateInspection error', { error })
 
         // Re-throw redirect errors (they're expected)
         if (error instanceof Error && error.message === 'NEXT_REDIRECT') {
@@ -161,7 +160,7 @@ export async function createReinspection(jobId: string): Promise<never> {
         redirect(`/dashboard/inspections/${newInspection.id}`)
 
     } catch (error) {
-        console.error('createReinspection error:', error)
+        logger.error('createReinspection error', { error })
 
         // Re-throw redirect errors
         if (error instanceof Error && error.message === 'NEXT_REDIRECT') {
@@ -172,6 +171,3 @@ export async function createReinspection(jobId: string): Promise<never> {
         throw new Error(message)
     }
 }
-
-
-

@@ -3,6 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, FileText, Car, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+    title: "Admin Dashboard | AuditForecaster",
+    description: "Overview of company expenses, mileage, and compliance.",
+};
 
 export default async function AdminPage() {
     const expenses = await prisma.expense.aggregate({

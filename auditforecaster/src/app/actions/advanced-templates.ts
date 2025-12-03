@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
 import { TemplateStructure } from "@/lib/reporting/engine"
+import { logger } from "@/lib/logger"
 
 export async function saveAdvancedTemplate(data: {
     name: string
@@ -30,6 +31,7 @@ export async function saveAdvancedTemplate(data: {
             data: {
                 name: data.name,
                 description: data.description,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 structure: data.structure as any,
                 checklistItems: '[]', // Keep for backwards compatibility
             }
@@ -40,21 +42,13 @@ export async function saveAdvancedTemplate(data: {
     return { success: true }
 }
 
-import * as fs from 'fs'
+
 
 export async function createInspectionWithTemplate(jobId: string, templateId: string) {
     try {
         const session = await auth()
-        if (!session?.user?.id) {
-            const msg = "createInspectionWithTemplate: No session or user ID\n"
-            fs.appendFileSync('debug.log', msg)
-            console.error(msg)
-            throw new Error("Unauthorized")
-        }
-
-        const msg = `Creating inspection for job ${jobId} with template ${templateId}\n`
-        fs.appendFileSync('debug.log', msg)
-        console.log(msg)
+        const msg = `Creating inspection for job ${jobId} with template ${templateId}`
+        logger.info(msg)
 
         const inspection = await prisma.inspection.create({
             data: {
@@ -66,13 +60,10 @@ export async function createInspectionWithTemplate(jobId: string, templateId: st
             }
         })
 
-        fs.appendFileSync('debug.log', `Inspection created: ${inspection.id}\n`)
-        console.log(`Inspection created: ${inspection.id}`)
+        logger.info(`Inspection created: ${inspection.id}`)
         return { inspectionId: inspection.id }
     } catch (error) {
-        const msg = `createInspectionWithTemplate ERROR: ${error instanceof Error ? error.message : String(error)}\nStack: ${error instanceof Error ? error.stack : ''}\n`
-        fs.appendFileSync('debug.log', msg)
-        console.error("createInspectionWithTemplate ERROR:", error)
+        logger.error("createInspectionWithTemplate ERROR", { error })
         throw error
     }
 }

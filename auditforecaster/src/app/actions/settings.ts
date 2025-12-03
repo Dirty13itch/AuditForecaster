@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { logger } from "@/lib/logger"
 import { auth } from "@/auth"
 import { z } from "zod"
 
@@ -54,7 +55,7 @@ export async function updateProfile(prevState: unknown, formData: FormData) {
         revalidatePath('/dashboard/settings')
         return { message: 'Profile updated successfully' }
     } catch (e) {
-        console.error(e)
+        logger.error('Failed to update settings', { error: e })
         return { message: 'Failed to update profile' }
     }
 }

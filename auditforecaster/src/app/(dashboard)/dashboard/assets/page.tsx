@@ -1,6 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Truck, Wrench } from "lucide-react"
+import { Metadata } from "next"
+
+export const metadata: Metadata = {
+    title: "Assets Management | AuditForecaster",
+    description: "Manage equipment and fleet vehicles.",
+}
 
 export default function AssetsPage() {
     return (

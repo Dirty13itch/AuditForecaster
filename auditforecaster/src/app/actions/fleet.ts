@@ -1,9 +1,11 @@
 'use server'
 
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
 import { logger } from "@/lib/logger"
+import { logAudit } from "@/lib/audit"
 
 export async function addMaintenanceLog(data: {
     vehicleId: string
@@ -59,7 +61,7 @@ export async function createVehicle(_prevState: unknown, formData: FormData) {
             throw new Error("Missing required fields")
         }
 
-        await prisma.vehicle.create({
+        const vehicle = await prisma.vehicle.create({
             data: {
                 name,
                 make,
@@ -71,10 +73,17 @@ export async function createVehicle(_prevState: unknown, formData: FormData) {
             }
         })
 
+        await logAudit({
+            entityType: 'Vehicle',
+            entityId: vehicle.id,
+            action: 'CREATE',
+            changes: { name, make, model, year, licensePlate, mileage, status }
+        })
+
         revalidatePath('/dashboard/assets/fleet')
         return { message: 'Vehicle created successfully' }
     } catch (error) {
-        logger.error('Failed to create vehicle:', error)
+        logger.error('Failed to create vehicle', { error })
         return { message: 'Failed to create vehicle' }
     }
 }
@@ -92,7 +101,7 @@ export async function updateVehicle(id: string, _prevState: unknown, formData: F
         const mileage = parseInt(formData.get('mileage') as string)
         const status = formData.get('status') as string
 
-        const data: any = {}
+        const data: Prisma.VehicleUpdateInput = {}
         if (name) data.name = name
         if (make) data.make = make
         if (model) data.model = model
@@ -106,10 +115,17 @@ export async function updateVehicle(id: string, _prevState: unknown, formData: F
             data
         })
 
+        await logAudit({
+            entityType: 'Vehicle',
+            entityId: id,
+            action: 'UPDATE',
+            changes: data
+        })
+
         revalidatePath('/dashboard/assets/fleet')
         return { message: 'Vehicle updated successfully' }
     } catch (error) {
-        logger.error('Failed to update vehicle:', error)
+        logger.error('Failed to update vehicle', { error })
         return { message: 'Failed to update vehicle' }
     }
 }
@@ -123,10 +139,16 @@ export async function deleteVehicle(id: string) {
             where: { id }
         })
 
+        await logAudit({
+            entityType: 'Vehicle',
+            entityId: id,
+            action: 'DELETE'
+        })
+
         revalidatePath('/dashboard/assets/fleet')
         return { message: 'Vehicle deleted successfully' }
     } catch (error) {
-        logger.error('Failed to delete vehicle:', error)
+        logger.error('Failed to delete vehicle', { error })
         return { message: 'Failed to delete vehicle' }
     }
 }

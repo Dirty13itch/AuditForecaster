@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
         // Trigger Sync (Fire and forget to avoid timeout)
         syncEvents(userId).catch(err => {
-            logger.error(`Sync failed for user ${userId}`, err)
+            logger.error(`Sync failed for user ${userId}`, { error: err })
         })
 
         return NextResponse.json({ status: 'syncing' })

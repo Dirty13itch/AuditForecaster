@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { format } from 'date-fns'
 
+export const dynamic = 'force-dynamic'
+
 export default async function MileagePage() {
     const logs = await getMileageLogs()
 

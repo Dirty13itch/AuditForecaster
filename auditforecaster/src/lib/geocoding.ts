@@ -9,6 +9,7 @@ export async function getCoordinates(address: string): Promise<{ lat: number; ln
                 headers: {
                     'User-Agent': 'AuditForecaster/1.0', // Required by Nominatim
                 },
+                signal: AbortSignal.timeout(5000)
             }
         );
 

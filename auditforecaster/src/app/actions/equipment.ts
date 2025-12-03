@@ -1,144 +1,178 @@
 'use server'
 
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/auth"
+import { Prisma } from "@prisma/client"
+import { EquipmentClientSchema, EquipmentClientInput } from "@/lib/schemas"
 import { revalidatePath } from "next/cache"
+import { z } from "zod"
+import { addYears } from "date-fns"
+import { auth } from "@/auth"
 import { logger } from "@/lib/logger"
 
-export async function checkOutEquipment(equipmentId: string) {
-    const session = await auth()
-    if (!session?.user) throw new Error("Unauthorized")
-
-    const equipment = await prisma.equipment.findUnique({
-        where: { id: equipmentId }
-    })
-
-    if (!equipment) throw new Error("Equipment not found")
-    if (equipment.status !== 'AVAILABLE') throw new Error("Equipment is not available")
-
-    await prisma.equipment.update({
-        where: { id: equipmentId },
-        data: {
-            status: 'IN_USE',
-            assignedTo: session.user.id
-        }
-    })
-
-    revalidatePath('/dashboard/assets/equipment')
-    return { success: true }
-}
-
-export async function checkInEquipment(equipmentId: string, notes?: string) {
-    const session = await auth()
-    if (!session?.user) throw new Error("Unauthorized")
-
-    const equipment = await prisma.equipment.findUnique({
-        where: { id: equipmentId }
-    })
-
-    if (!equipment) throw new Error("Equipment not found")
-
-    await prisma.equipment.update({
-        where: { id: equipmentId },
-        data: {
-            status: 'AVAILABLE',
-            assignedTo: null,
-            notes: notes ? `${equipment.notes ? equipment.notes + '\n' : ''}${notes}` : equipment.notes
-        }
-    })
-
-    revalidatePath('/dashboard/assets/equipment')
-    return { success: true }
-}
-
-export async function getEquipmentHistory(equipmentId: string) {
-    // EquipmentLog does not exist in schema, returning empty array or removing function
-    // For now, returning empty array to satisfy potential callers, or we could remove it.
-    // Given the test might expect it, we'll return []
-    return []
-}
-
-export async function createEquipment(_prevState: unknown, formData: FormData) {
+export async function createEquipment(data: EquipmentClientInput) {
     try {
         const session = await auth()
-        if (!session?.user) throw new Error("Unauthorized")
-
-        const name = formData.get('name') as string
-        const type = formData.get('type') as string
-        const serialNumber = formData.get('serialNumber') as string
-        const status = formData.get('status') as string || 'ACTIVE'
-
-        if (!name || !type || !serialNumber) {
-            throw new Error("Missing required fields")
+        if (session?.user?.role !== "ADMIN") {
+            return { success: false, message: "Unauthorized: Admin access required" }
         }
 
-        // Check for duplicate serial number
-        const existing = await prisma.equipment.findUnique({
-            where: { serialNumber }
-        })
+        const validated = EquipmentClientSchema.parse(data)
 
-        if (existing) {
-            return { message: 'Equipment with this serial number already exists' }
+        // Auto-calc next calibration if not provided
+        let nextCal = validated.nextCalibration
+        if (!nextCal && validated.lastCalibration) {
+            nextCal = addYears(validated.lastCalibration, 1)
         }
 
         await prisma.equipment.create({
             data: {
-                name,
-                type,
-                serialNumber,
-                status,
-                // condition removed as it's not in schema
-            }
+                ...validated,
+                nextCalibration: nextCal
+            },
         })
 
-        revalidatePath('/dashboard/assets/equipment')
-        return { message: 'Equipment added successfully' }
+        revalidatePath("/dashboard/assets/equipment")
+        return { success: true, message: "Equipment added to inventory" }
     } catch (error) {
-        logger.error('Failed to create equipment:', error)
-        return { message: 'Failed to create equipment' }
+        if (error instanceof z.ZodError) {
+            return { success: false, message: "Invalid data", errors: error.errors }
+        }
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            return { success: false, message: "Serial Number already exists" }
+        }
+        logger.error("Failed to create equipment", { error })
+        return { success: false, message: "Failed to create equipment" }
     }
 }
 
-export async function updateEquipment(id: string, _prevState: unknown, formData: FormData) {
+export async function updateEquipment(id: string, data: EquipmentClientInput) {
     try {
         const session = await auth()
-        if (!session?.user) throw new Error("Unauthorized")
+        if (session?.user?.role !== "ADMIN") {
+            return { success: false, message: "Unauthorized: Admin access required" }
+        }
 
-        const name = formData.get('name') as string
-        const type = formData.get('type') as string
-        const status = formData.get('status') as string
-
-        const data: any = {}
-        if (name) data.name = name
-        if (type) data.type = type
-        if (status) data.status = status
+        const validated = EquipmentClientSchema.parse(data)
 
         await prisma.equipment.update({
             where: { id },
-            data
+            data: validated,
         })
 
-        revalidatePath('/dashboard/assets/equipment')
-        return { message: 'Equipment updated successfully' }
+        revalidatePath("/dashboard/assets/equipment")
+        return { success: true, message: "Equipment updated successfully" }
     } catch (error) {
-        logger.error('Failed to update equipment:', error)
-        return { message: 'Failed to update equipment' }
+        if (error instanceof z.ZodError) {
+            return { success: false, message: "Invalid data", errors: error.errors }
+        }
+        logger.error("Failed to update equipment", { error })
+        return { success: false, message: "Failed to update equipment" }
+    }
+}
+
+export async function assignEquipment(equipmentId: string, userId: string) {
+    try {
+        const session = await auth()
+        if (session?.user?.role !== "ADMIN") {
+            return { success: false, message: "Unauthorized: Admin access required" }
+        }
+
+        // Deep Layer Check: Verify Calibration Status
+        const equipment = await prisma.equipment.findUnique({
+            where: { id: equipmentId }
+        })
+
+        if (!equipment) {
+            return { success: false, message: "Equipment not found" }
+        }
+
+        if (equipment.status === 'CALIBRATION_DUE' || equipment.status === 'REPAIR' || equipment.status === 'RETIRED') {
+            return { success: false, message: `Cannot assign: Equipment is ${equipment.status}` }
+        }
+
+        if (equipment.nextCalibration && equipment.nextCalibration < new Date()) {
+            return { success: false, message: "Compliance Alert: Calibration is overdue" }
+        }
+
+        // Transaction: Update Equipment AND Create Assignment Log
+        await prisma.$transaction([
+            prisma.equipment.update({
+                where: { id: equipmentId },
+                data: { assignedTo: userId }
+            }),
+            prisma.equipmentAssignment.create({
+                data: {
+                    equipmentId,
+                    userId,
+                    assignedAt: new Date()
+                }
+            })
+        ])
+
+        revalidatePath("/dashboard/assets/equipment")
+        return { success: true, message: "Equipment checked out successfully" }
+    } catch (error) {
+        logger.error("Failed to assign equipment", { error })
+        return { success: false, message: "Failed to assign equipment" }
+    }
+}
+
+export async function returnEquipment(equipmentId: string) {
+    try {
+        const session = await auth()
+        if (session?.user?.role !== "ADMIN") {
+            return { success: false, message: "Unauthorized: Admin access required" }
+        }
+
+        // Find the active assignment
+        const activeAssignment = await prisma.equipmentAssignment.findFirst({
+            where: {
+                equipmentId,
+                returnedAt: null
+            }
+        })
+
+        const queries: Prisma.PrismaPromise<any>[] = [
+            prisma.equipment.update({
+                where: { id: equipmentId },
+                data: { assignedTo: null }
+            })
+        ]
+
+        if (activeAssignment) {
+            queries.push(
+                prisma.equipmentAssignment.update({
+                    where: { id: activeAssignment.id },
+                    data: { returnedAt: new Date() }
+                })
+            )
+        }
+
+        await prisma.$transaction(queries)
+
+        revalidatePath("/dashboard/assets/equipment")
+        return { success: true, message: "Equipment returned to inventory" }
+    } catch (error) {
+        logger.error("Failed to return equipment", { error })
+        return { success: false, message: "Failed to return equipment" }
     }
 }
 
 export async function deleteEquipment(id: string) {
     try {
         const session = await auth()
-        if (!session?.user) throw new Error("Unauthorized")
+        if (session?.user?.role !== "ADMIN") {
+            return { success: false, message: "Unauthorized: Admin access required" }
+        }
 
         await prisma.equipment.delete({
             where: { id }
         })
 
-        revalidatePath('/dashboard/assets/equipment')
-        return { message: 'Equipment deleted successfully' }
+        revalidatePath("/dashboard/assets/equipment")
+        return { success: true, message: "Equipment deleted successfully" }
     } catch (error) {
-        logger.error('Failed to delete equipment:', error)
-        return { message: 'Failed to delete equipment' }
+        logger.error("Failed to delete equipment", { error })
+        return { success: false, message: "Failed to delete equipment" }
     }
 }

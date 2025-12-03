@@ -42,3 +42,10 @@ next-env.d.ts
 
 # uploads
 /public/uploads/
+
+*storybook.log
+storybook-static
+
+# playwright
+/test-results/
+/playwright-report/

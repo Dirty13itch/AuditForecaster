@@ -63,12 +63,12 @@ export async function syncEvents(userId: string) {
     do {
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const response: any = await client.events.list({
+            const response = await client.events.list({
                 calendarId: user.googleCalendarId,
                 syncToken: syncToken || undefined,
                 pageToken: pageToken || undefined,
                 singleEvents: true, // Expand recurring events
-            })
+            }) as any
 
             const events = response.data.items || []
 
@@ -103,8 +103,8 @@ export async function syncEvents(userId: string) {
             pageToken = response.data.nextPageToken || undefined
             syncToken = response.data.nextSyncToken || undefined
 
-        } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-            if (e.code === 410) {
+        } catch (e: unknown) {
+            if (typeof e === 'object' && e && 'code' in e && (e as { code: number }).code === 410) {
                 // Sync token invalid, full sync required
                 logger.warn('Sync token invalid, clearing...', { userId })
                 await prisma.user.update({
@@ -121,7 +121,7 @@ export async function syncEvents(userId: string) {
     if (syncToken) {
         await prisma.user.update({
             where: { id: userId },
-            data: { nextSyncToken: syncToken },
+            data: { nextSyncToken: syncToken || null },
         })
     }
 }

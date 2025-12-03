@@ -7,7 +7,7 @@ import { TemplateStructure } from '@/lib/reporting/engine'
 
 export default async function RunInspectionPage({ params }: { params: Promise<{ id: string }> }) {
     const session = await auth()
-    if (!session?.user?.id) redirect('/auth/signin')
+    if (!session?.user?.id) redirect('/login')
 
     const { id } = await params
 

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { logger } from "@/lib/logger"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { auth } from "@/auth"
@@ -59,7 +60,7 @@ export async function createUser(_prevState: unknown, formData: FormData) {
         revalidatePath('/dashboard/team/users')
         return { message: 'User created successfully' }
     } catch (e: unknown) {
-        console.error(e)
+        logger.error('Failed to create user', { error: e })
         return { message: e instanceof Error ? e.message : 'Failed to create user' }
     }
 }
@@ -95,7 +96,7 @@ export async function updateUser(id: string, _prevState: unknown, formData: Form
         revalidatePath('/dashboard/team/users')
         return { message: 'User updated successfully' }
     } catch (e: unknown) {
-        console.error(e)
+        logger.error('Failed to create user', { error: e })
         return { message: e instanceof Error ? e.message : 'Failed to update user' }
     }
 }

@@ -23,6 +23,7 @@ async function getUser(email: string): Promise<User | undefined> {
 
 const nextAuthResult = NextAuth({
     ...authConfig,
+    trustHost: true,
     providers: [
         Google({
             clientId: process.env.GOOGLE_CLIENT_ID,
@@ -52,7 +53,6 @@ const nextAuthResult = NextAuth({
 
                     if (passwordsMatch) return user;
                 }
-
 
                 return null;
             },
@@ -91,6 +91,24 @@ const nextAuthResult = NextAuth({
     },
 })
 
-export const { handlers, auth, signIn, signOut } = nextAuthResult
-export const authId = (auth as any)._id
+export const { handlers, signIn, signOut } = nextAuthResult
+
+// Wrap auth to support E2E mocking
+// Wrap auth to support E2E mocking
+export const auth = async (...args: any[]) => {
+    if (process.env.MOCK_AUTH_FOR_E2E === 'true') {
+        return {
+            user: {
+                name: 'E2E Admin',
+                email: 'admin@example.com',
+                role: 'ADMIN',
+                id: 'e2e-admin-id',
+                builderId: 'e2e-test-builder'
+            },
+            expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        }
+    }
+    return (nextAuthResult.auth as any)(...args)
+}
+
 export { nextAuthResult }

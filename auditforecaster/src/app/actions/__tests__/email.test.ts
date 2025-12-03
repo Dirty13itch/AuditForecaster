@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { sendEmail, sendInvoiceEmail } from '../email'
+import { generateInvoicePDF } from '../pdf'
 import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
 import { getGmailClient } from '@/lib/google'
@@ -30,6 +31,10 @@ vi.mock('@/lib/logger', () => ({
         error: vi.fn(),
         warn: vi.fn()
     }
+}))
+
+vi.mock('../pdf', () => ({
+    generateInvoicePDF: vi.fn()
 }))
 
 describe('email actions', () => {
@@ -109,7 +114,7 @@ describe('email actions', () => {
     })
 
     describe('sendInvoiceEmail', () => {
-        it('should send invoice email', async () => {
+        it('should send invoice email with PDF', async () => {
             ; (prisma.job.findUnique as any).mockResolvedValue({
                 id: 'job-1',
                 lotNumber: '123',
@@ -117,9 +122,22 @@ describe('email actions', () => {
                 builder: { name: 'Test Builder' }
             } as any)
 
+                ; (prisma.invoice.findFirst as any).mockResolvedValue({
+                    id: 'invoice-1',
+                    number: 'INV-001',
+                    totalAmount: 100.00
+                } as any)
+
+            vi.mocked(generateInvoicePDF).mockResolvedValue({
+                success: true,
+                pdf: 'base64pdf',
+                filename: 'invoice.pdf'
+            })
+
             const result = await sendInvoiceEmail('job-1')
 
             expect(result).toEqual({ success: true })
+            expect(generateInvoicePDF).toHaveBeenCalledWith('invoice-1')
             expect(mockGmailClient.users.messages.send).toHaveBeenCalled()
         })
 
@@ -130,6 +148,26 @@ describe('email actions', () => {
 
             expect(result).toEqual({ error: 'Job not found' })
             expect(logger.warn).toHaveBeenCalled()
+        })
+
+        it('should fail if invoice not found', async () => {
+            ; (prisma.job.findUnique as any).mockResolvedValue({ id: 'job-1' })
+                ; (prisma.invoice.findFirst as any).mockResolvedValue(null)
+
+            const result = await sendInvoiceEmail('job-1')
+
+            expect(result).toEqual({ error: 'No invoice found for this job' })
+        })
+
+        it('should fail if PDF generation fails', async () => {
+            ; (prisma.job.findUnique as any).mockResolvedValue({ id: 'job-1' })
+                ; (prisma.invoice.findFirst as any).mockResolvedValue({ id: 'invoice-1' })
+            vi.mocked(generateInvoicePDF).mockResolvedValue({ error: 'PDF Error' })
+
+            const result = await sendInvoiceEmail('job-1')
+
+            expect(result).toEqual({ error: 'Failed to generate PDF attachment' })
+            expect(logger.error).toHaveBeenCalled()
         })
 
         it('should fail if unauthorized', async () => {

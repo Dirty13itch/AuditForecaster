@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { generatePDF } from '@/app/actions/pdf'
 import { prisma } from '@/lib/prisma'
@@ -8,7 +9,8 @@ vi.mock('puppeteer', () => ({
             newPage: vi.fn().mockResolvedValue({
                 goto: vi.fn().mockResolvedValue(null),
                 pdf: vi.fn().mockResolvedValue(Buffer.from('mock-pdf-content')),
-                close: vi.fn().mockResolvedValue(null)
+                close: vi.fn().mockResolvedValue(null),
+                setCookie: vi.fn().mockResolvedValue(null)
             }),
             close: vi.fn().mockResolvedValue(null)
         })
@@ -19,6 +21,14 @@ vi.mock('puppeteer', () => ({
 vi.mock('@/auth', () => ({
     auth: vi.fn().mockResolvedValue({
         user: { id: 'test-user', role: 'ADMIN' }
+    })
+}))
+
+vi.mock('next/headers', () => ({
+    cookies: vi.fn().mockResolvedValue({
+        getAll: vi.fn().mockReturnValue([
+            { name: 'next-auth.session-token', value: 'mock-token' }
+        ])
     })
 }))
 

@@ -247,20 +247,36 @@ async function main() {
                 structure: JSON.stringify({
                     pages: [
                         {
+                            id: 'p1',
                             title: 'Envelope',
-                            items: [
-                                { id: '1', label: 'Windows and doors properly sealed', type: 'pass_fail', required: true },
-                                { id: '2', label: 'Attic hatch insulated and gasketed', type: 'pass_fail', required: true }
+                            sections: [
+                                {
+                                    id: 's1',
+                                    title: 'Air Barrier',
+                                    items: [
+                                        { id: 'q1', label: 'Windows and doors properly sealed', type: 'pass_fail', required: true },
+                                        { id: 'q2', label: 'Attic hatch insulated and gasketed', type: 'pass_fail', required: true }
+                                    ]
+                                }
                             ]
                         },
                         {
-                            title: 'HVAC',
-                            items: [
-                                { id: '3', label: 'HVAC ducts sealed', type: 'pass_fail', required: true }
+                            id: 'p2',
+                            title: 'Mechanicals',
+                            sections: [
+                                {
+                                    id: 's2',
+                                    title: 'HVAC',
+                                    items: [
+                                        { id: 'q3', label: 'HVAC ducts sealed', type: 'pass_fail', required: true },
+                                        { id: 'q4', label: 'Filter accessible', type: 'pass_fail', required: true }
+                                    ]
+                                }
                             ]
                         }
-                    ]
-                })
+                    ],
+                    logic: []
+                } as any) // Cast to any to avoid seed script type issues if types aren't perfectly synced
             }
         })
     }
@@ -279,7 +295,7 @@ async function main() {
                     maxScore: 100,
                     data: JSON.stringify({ cfm50: 1200, ach50: 3.5 }),
                     reportTemplateId: template.id,
-                    answers: JSON.stringify({ '1': 'Pass', '2': 'Pass', '3': 'Pass' }),
+                    answers: JSON.stringify({ 'q1': { value: 'pass' }, 'q2': { value: 'pass' }, 'q3': { value: 'pass' } }),
                     photos: {
                         create: [
                             { url: 'https://placehold.co/600x400?text=Front+Elevation', caption: 'Front Elevation', category: 'Exterior' },
@@ -290,6 +306,32 @@ async function main() {
             })
             console.log('Created inspection for completed job')
         }
+    }
+
+    // 9. Create E2E Test Inspection
+    const e2eJob = await prisma.job.findFirst({ where: { lotNumber: 'Lot 205' } }) // IN_PROGRESS job
+    if (e2eJob && template) {
+        await prisma.inspection.upsert({
+            where: { id: 'e2e-test-inspection' },
+            update: {
+                jobId: e2eJob.id,
+                type: 'BLOWER_DOOR',
+                status: 'IN_PROGRESS',
+                reportTemplateId: template.id,
+                data: '{}',
+                checklist: '[]',
+            },
+            create: {
+                id: 'e2e-test-inspection',
+                jobId: e2eJob.id,
+                type: 'BLOWER_DOOR',
+                status: 'IN_PROGRESS',
+                reportTemplateId: template.id,
+                data: '{}',
+                checklist: '[]',
+            }
+        })
+        console.log('Upserted E2E test inspection')
     }
 
     console.log('Seeding finished.')

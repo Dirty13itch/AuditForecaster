@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { sendQARejectionEmail } from "@/lib/email"
 import { auth } from "@/auth"
 import { z } from "zod"
+import { logger } from "@/lib/logger"
 
 const ApproveJobSchema = z.object({
     jobId: z.string().uuid()
@@ -72,11 +73,10 @@ export async function rejectJob(formData: FormData) {
                 `${process.env.NEXTAUTH_URL}/dashboard/jobs/${result.data.jobId}`
             )
         } catch (error) {
-            console.error('Failed to send rejection email:', error)
+            logger.error('Failed to send rejection email', { error })
         }
     }
 
     revalidatePath('/dashboard/qa')
     redirect('/dashboard/qa')
 }
-

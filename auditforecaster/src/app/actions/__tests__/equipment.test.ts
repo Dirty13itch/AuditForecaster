@@ -3,14 +3,9 @@ import { createEquipment, updateEquipment, deleteEquipment } from '../equipment'
 import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
 import { auth } from '@/auth'
-import { logger } from '@/lib/logger'
 import { mockReset } from 'vitest-mock-extended'
 
 // Mock dependencies
-// prisma is already mocked in setup.ts
-
-
-
 vi.mock('next/cache', () => ({
     revalidatePath: vi.fn()
 }))
@@ -18,8 +13,6 @@ vi.mock('next/cache', () => ({
 vi.unmock('../equipment')
 
 describe('equipment actions', () => {
-    console.log('DEBUG: createEquipment type:', typeof createEquipment)
-    console.log('DEBUG: createEquipment:', createEquipment)
     beforeEach(() => {
         vi.clearAllMocks()
         vi.mocked(auth).mockResolvedValue(mockSession as any)
@@ -28,19 +21,17 @@ describe('equipment actions', () => {
 
     describe('createEquipment', () => {
         it('should create equipment with valid data', async () => {
-            const formData = new FormData()
-            formData.set('name', 'Blower Door')
-            formData.set('type', 'Testing')
-            formData.set('serialNumber', 'SN123456')
-            formData.set('status', 'ACTIVE')
+            const input = {
+                name: 'Blower Door',
+                type: 'Testing',
+                serialNumber: 'SN123456',
+                status: 'ACTIVE' as const
+            }
 
                 ; (prisma.equipment.findUnique as any).mockResolvedValue(null)
                 ; (prisma.equipment.create as any).mockResolvedValue({
                     id: '1',
-                    name: 'Blower Door',
-                    type: 'Testing',
-                    serialNumber: 'SN123456',
-                    status: 'ACTIVE',
+                    ...input,
                     lastCalibration: null,
                     nextCalibration: null,
                     assignedTo: null,
@@ -49,9 +40,9 @@ describe('equipment actions', () => {
                     updatedAt: new Date()
                 })
 
-            const result = await createEquipment(null, formData)
+            const result = await createEquipment(input)
 
-            expect(result.message).toBe('Equipment added successfully')
+            expect(result.message).toBe('Equipment added to inventory')
             expect(prisma.equipment.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({
                     name: 'Blower Door',
@@ -61,38 +52,36 @@ describe('equipment actions', () => {
         })
 
         it('should reject duplicate serial number', async () => {
-            const formData = new FormData()
-            formData.set('name', 'Blower Door')
-            formData.set('type', 'Testing')
-            formData.set('serialNumber', 'SN123456')
-            formData.set('status', 'ACTIVE')
+            const input = {
+                name: 'Blower Door',
+                type: 'Testing',
+                serialNumber: 'SN123456',
+                status: 'ACTIVE' as const
+            }
 
-                ; (prisma.equipment.findUnique as any).mockResolvedValue({
-                    id: '2',
-                    serialNumber: 'SN123456'
-                } as any)
+            // Mock P2002 error
+            const error = new Error('Unique constraint failed')
+                ; (error as any).code = 'P2002'
+                ; (prisma.equipment.create as any).mockRejectedValue(error)
 
-            const result = await createEquipment(null, formData)
+            const result = await createEquipment(input)
 
-            expect(result.message).toContain('already exists')
-            expect(prisma.equipment.create).not.toHaveBeenCalled()
+            expect(result.message).toBe('Serial Number already exists')
         })
     })
 
     describe('updateEquipment', () => {
         it('should update equipment', async () => {
-            const formData = new FormData()
-            formData.set('name', 'Updated Blower Door')
-            formData.set('type', 'Testing')
-            formData.set('serialNumber', 'SN123456')
-            formData.set('status', 'MAINTENANCE')
+            const input = {
+                name: 'Updated Blower Door',
+                type: 'Testing',
+                serialNumber: 'SN123456',
+                status: 'REPAIR' as const
+            }
 
                 ; (prisma.equipment.update as any).mockResolvedValue({
                     id: '1',
-                    name: 'Updated Blower Door',
-                    type: 'Testing',
-                    serialNumber: 'SN123456',
-                    status: 'MAINTENANCE',
+                    ...input,
                     lastCalibration: null,
                     nextCalibration: null,
                     assignedTo: null,
@@ -101,13 +90,13 @@ describe('equipment actions', () => {
                     updatedAt: new Date()
                 })
 
-            const result = await updateEquipment('1', null, formData)
+            const result = await updateEquipment('1', input)
 
             expect(result.message).toBe('Equipment updated successfully')
             expect(prisma.equipment.update).toHaveBeenCalledWith({
                 where: { id: '1' },
                 data: expect.objectContaining({
-                    status: 'MAINTENANCE'
+                    status: 'REPAIR'
                 })
             })
         })

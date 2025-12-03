@@ -50,11 +50,24 @@ export function EquipmentForm({ equipment, users, onSuccess }: EquipmentFormProp
         setIsLoading(true)
 
         const formData = new FormData(event.currentTarget)
+        const data: any = {
+            name: formData.get("name"),
+            type: formData.get("type"),
+            serialNumber: formData.get("serialNumber"),
+            status: formData.get("status"),
+            notes: formData.get("notes"),
+        }
+
+        const lastCal = formData.get("lastCalibration")
+        if (lastCal) data.lastCalibration = new Date(lastCal as string)
+
+        const nextCal = formData.get("nextCalibration")
+        if (nextCal) data.nextCalibration = new Date(nextCal as string)
 
         try {
             const result = equipment
-                ? await updateEquipment(equipment.id, null, formData)
-                : await createEquipment(null, formData)
+                ? await updateEquipment(equipment.id, data)
+                : await createEquipment(data)
 
             toast({
                 title: result.message,

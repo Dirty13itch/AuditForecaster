@@ -35,7 +35,7 @@ Copy the entire project folder from your computer to your Unraid server using SM
 2.  Copy the contents from `.env.production.example`.
 3.  **CRITICAL**: Fill in the real values.
     *   `DATABASE_URL`: Point to your Postgres container.
-        *   Example: `postgresql://user:password@192.168.1.10:5432/auditforecaster?schema=public`
+        *   Example: `postgresql://user:dev_password_change_in_production@192.168.1.10:5432/auditforecaster?schema=public`
         *   **Note**: Use the Unraid server's IP, not `localhost`.
     *   `NEXTAUTH_SECRET`: Generate one with `openssl rand -base64 32`.
     *   `NEXTAUTH_URL`: `http://192.168.1.10:3000` (or your domain).

@@ -1,70 +1,61 @@
-'use client'
+'use client';
 
-import React from 'react'
-import { AlertTriangle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
-export class ErrorBoundary extends React.Component<
-    { children: React.ReactNode },
-    { hasError: boolean; error: Error | null }
-> {
-    constructor(props: { children: React.ReactNode }) {
-        super(props)
-        this.state = { hasError: false, error: null }
+interface Props {
+    children: ReactNode;
+}
+
+interface State {
+    hasError: boolean;
+    error: Error | null;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+    public state: State = {
+        hasError: false,
+        error: null
+    };
+
+    public static getDerivedStateFromError(error: Error): State {
+        return { hasError: true, error };
     }
 
-    static getDerivedStateFromError(error: Error) {
-        return { hasError: true, error }
+    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error('Uncaught error:', error, errorInfo);
     }
 
-    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-        console.error('Error caught by boundary:', error, errorInfo)
-    }
-
-    render() {
+    public render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-                    <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-                        <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                            <AlertTriangle className="h-8 w-8 text-red-600" />
-                        </div>
-                        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                            Something went wrong
-                        </h1>
-                        <p className="text-gray-600 mb-6">
-                            The application encountered an unexpected error. Please try refreshing the page.
-                        </p>
-                        <div className="space-y-2">
-                            <Button
-                                onClick={() => window.location.reload()}
-                                className="w-full"
-                            >
-                                Refresh Page
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={() => this.setState({ hasError: false, error: null })}
-                                className="w-full"
-                            >
-                                Try Again
-                            </Button>
-                        </div>
-                        {process.env.NODE_ENV === 'development' && this.state.error && (
-                            <details className="mt-6 text-left">
-                                <summary className="cursor-pointer text-sm text-gray-500">
-                                    Error Details
-                                </summary>
-                                <pre className="mt-2 text-xs bg-gray-100 p-4 rounded overflow-auto">
-                                    {this.state.error.stack}
-                                </pre>
-                            </details>
-                        )}
+                <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4 text-center">
+                    <div className="bg-destructive/10 p-6 rounded-full mb-6">
+                        <AlertTriangle className="h-12 w-12 text-destructive" />
+                    </div>
+                    <h1 className="text-2xl font-bold tracking-tight mb-2">Something went wrong</h1>
+                    <p className="text-muted-foreground mb-6 max-w-md">
+                        We apologize for the inconvenience. The application encountered an unexpected error.
+                    </p>
+                    {this.state.error && (
+                        <pre className="bg-muted p-4 rounded text-xs text-left mb-6 max-w-md overflow-auto">
+                            {this.state.error.message}
+                        </pre>
+                    )}
+                    <div className="flex gap-4">
+                        <Button onClick={() => window.location.reload()}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Reload Page
+                        </Button>
+                        <Button variant="outline" onClick={() => window.location.href = '/dashboard'}>
+                            Go to Dashboard
+                        </Button>
                     </div>
                 </div>
-            )
+            );
         }
 
-        return this.props.children
+        return this.props.children;
     }
 }

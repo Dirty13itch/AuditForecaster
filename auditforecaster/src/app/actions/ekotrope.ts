@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { mapToEkotropeProject } from '@/lib/integrations/ekotrope'
 import { revalidatePath } from 'next/cache'
+import { logger } from "@/lib/logger"
 
 export async function syncToEkotrope(inspectionId: string) {
     try {
@@ -37,7 +38,7 @@ export async function syncToEkotrope(inspectionId: string) {
         // MOCK IMPLEMENTATION for now
         // const response = await fetch('https://api.ekotrope.com/v1/projects', { ... })
 
-        console.log('Sending to Ekotrope:', JSON.stringify(payload, null, 2))
+        logger.info('Sending to Ekotrope', { payload })
 
         // Simulate API delay and success
         await new Promise(resolve => setTimeout(resolve, 1500)) // Slightly longer for "PDF generation"
@@ -77,7 +78,7 @@ export async function syncToEkotrope(inspectionId: string) {
         return { success: true, projectId: mockEkotropeId }
 
     } catch (error: unknown) {
-        console.error('Ekotrope Sync Error:', error)
+        logger.error('Ekotrope Sync Error', { error })
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
         // Log Failure

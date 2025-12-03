@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { logger } from '@/lib/logger'
 
 export type IntegrationSettingsData = {
     ekotropeApiKey?: string | null
@@ -32,7 +33,7 @@ export async function getIntegrationSettings() {
 
         return { success: true, data: settings }
     } catch (error) {
-        console.error('SERVER ACTION ERROR: Failed to get integration settings:', error)
+        logger.error('Failed to get integration settings', { error })
         return { success: false, error: 'Failed to load settings' }
     }
 }

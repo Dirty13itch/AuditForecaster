@@ -1,29 +1,25 @@
 'use client'
 
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
-import { formatCurrency } from "@/lib/utils"
 
 interface RevenueChartProps {
-    data: {
-        date: string
-        revenue: number
-    }[]
+    data: { date: string; count: number }[]
 }
 
 export function RevenueChart({ data }: RevenueChartProps) {
     return (
-        <Card className="col-span-4">
+        <Card className="col-span-4 border-white/10 bg-white/5 backdrop-blur-xl">
             <CardHeader>
-                <CardTitle>Revenue Trend (30 Days)</CardTitle>
+                <CardTitle className="text-white">Job Velocity (30 Days)</CardTitle>
             </CardHeader>
             <CardContent className="pl-2">
-                <div className="h-[300px] w-full">
+                <div className="h-[200px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={data}>
                             <defs>
-                                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                                <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
                                     <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
@@ -39,19 +35,19 @@ export function RevenueChart({ data }: RevenueChartProps) {
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
-                                tickFormatter={(value) => `$${value}`}
+                                tickFormatter={(value) => `${value}`}
                             />
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <Tooltip
-                                formatter={(value: number) => [formatCurrency(value), "Revenue"]}
-                                contentStyle={{ borderRadius: '8px' }}
+                                contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
+                                itemStyle={{ color: '#10b981' }}
                             />
                             <Area
                                 type="monotone"
-                                dataKey="revenue"
+                                dataKey="count"
                                 stroke="#10b981"
+                                strokeWidth={2}
                                 fillOpacity={1}
-                                fill="url(#colorRevenue)"
+                                fill="url(#colorCount)"
                             />
                         </AreaChart>
                     </ResponsiveContainer>

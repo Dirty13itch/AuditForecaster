@@ -5,6 +5,7 @@ import { getCalendarClient } from '@/lib/google'
 import { watchCalendar } from '@/lib/google-calendar'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { logger } from "@/lib/logger"
 
 export async function listGoogleCalendars() {
     const session = await auth()
@@ -15,7 +16,7 @@ export async function listGoogleCalendars() {
         const response = await client.calendarList.list()
         return response.data.items || []
     } catch (error) {
-        console.error('Failed to list calendars:', error)
+        logger.error('Failed to enable sync', { error })
         return []
     }
 }

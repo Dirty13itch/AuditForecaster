@@ -94,7 +94,7 @@ export function evaluateLogic(
     }
 
     // Apply rules
-    for (const rule of structure.logic) {
+    for (const rule of (structure.logic || [])) {
         const allConditionsMet = rule.conditions.every((c) => evaluateCondition(c, answers));
 
         if (allConditionsMet) {

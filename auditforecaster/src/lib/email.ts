@@ -1,7 +1,12 @@
 import { Resend } from 'resend';
 import { logger } from '@/lib/logger';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const getResend = () => {
+    if (process.env.RESEND_API_KEY) {
+        return new Resend(process.env.RESEND_API_KEY);
+    }
+    return null;
+};
 
 export async function sendInspectionCompletedEmail(
     to: string,
@@ -9,7 +14,8 @@ export async function sendInspectionCompletedEmail(
     inspectorName: string,
     reportUrl: string
 ) {
-    if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.includes('your-resend-api-key')) {
+    const resend = getResend();
+    if (!resend || !process.env.RESEND_API_KEY) {
         logger.warn('Mocking email send (missing API key)', { to, jobAddress, inspectorName });
         return { success: true, id: 'mock-id' };
     }
@@ -44,7 +50,8 @@ export async function sendQARejectionEmail(
     rejectionReason: string,
     jobUrl: string
 ) {
-    if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.includes('your-resend-api-key')) {
+    const resend = getResend();
+    if (!resend || !process.env.RESEND_API_KEY) {
         logger.warn('Mocking email send (missing API key)', { to, jobAddress, rejectionReason });
         return { success: true, id: 'mock-id' };
     }

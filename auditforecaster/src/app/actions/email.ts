@@ -4,6 +4,7 @@ import { getGmailClient } from '@/lib/google'
 import { auth } from '@/auth'
 import { logger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
+import { generateInvoicePDF } from './pdf'
 
 type SendEmailParams = {
     to: string
@@ -96,8 +97,29 @@ export async function sendInvoiceEmail(jobId: string) {
             return { error: 'Job not found' }
         }
 
-        // TODO: Generate actual PDF invoice
-        // For now, we send a detailed notification
+        // Find the latest invoice for this job
+        const invoice = await prisma.invoice.findFirst({
+            where: {
+                items: {
+                    some: {
+                        jobId: jobId
+                    }
+                }
+            },
+            orderBy: { date: 'desc' }
+        })
+
+        if (!invoice) {
+            return { error: 'No invoice found for this job' }
+        }
+
+        const pdfResult = await generateInvoicePDF(invoice.id)
+
+        if (pdfResult.error || !pdfResult.pdf) {
+            logger.error('Failed to generate PDF attachment', { error: pdfResult.error })
+            return { error: 'Failed to generate PDF attachment' }
+        }
+
         const subject = `Invoice for Job: ${job.lotNumber} - ${job.streetAddress}`
         const body = `
             Invoice Generated
@@ -107,14 +129,21 @@ export async function sendInvoiceEmail(jobId: string) {
             - Address: ${job.streetAddress}
             - Builder: ${job.builder?.name || 'Unknown'}
             - Date: ${new Date().toLocaleDateString()}
+            - Invoice #: ${invoice.number}
+            - Amount: $${invoice.totalAmount.toFixed(2)}
             
-            (PDF generation coming soon)
+            Please find the invoice attached.
         `
 
         return sendEmail({
             to: session.user.email || '', // Send to self for testing
             subject,
-            body
+            body,
+            attachments: [{
+                filename: pdfResult.filename || `Invoice-${invoice.number}.pdf`,
+                content: pdfResult.pdf,
+                contentType: 'application/pdf'
+            }]
         })
     } catch (error) {
         logger.error('Failed to send invoice email', { error, jobId })

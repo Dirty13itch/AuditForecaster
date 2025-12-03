@@ -4,6 +4,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from './email'
 import { revalidatePath } from 'next/cache'
+import { logger } from "@/lib/logger"
 
 export async function createActionItem(data: {
     inspectionId: string
@@ -50,13 +51,13 @@ Please address this issue as soon as possible.
                 to: data.assignedToEmail,
                 subject,
                 body
-            }).catch(console.error)
+            }).catch(err => logger.error('Failed to send email', { error: err }))
         }
 
         revalidatePath(`/dashboard/inspections/${data.inspectionId}`)
         return { success: true, actionItem }
     } catch (error) {
-        console.error('Failed to create action item:', error)
+        logger.error('Failed to create action item', { error })
         return { success: false, error: 'Failed to create action item' }
     }
 }

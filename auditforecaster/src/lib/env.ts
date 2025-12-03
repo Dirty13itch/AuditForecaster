@@ -37,13 +37,16 @@ const processEnv = {
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
 }
 
-// Validate on import
-const parsed = envSchema.safeParse(processEnv)
+// Validate on import (Server only)
+const isServer = typeof window === 'undefined'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const parsed = isServer ? envSchema.safeParse(processEnv) : { success: true, data: processEnv as any, error: undefined }
 
 if (!parsed.success) {
     console.error(
         '❌ Invalid environment variables:',
-        JSON.stringify(parsed.error.format(), null, 4)
+        JSON.stringify(parsed.error?.format(), null, 4)
     )
     // Only throw in production to prevent dev crashes if optional vars are missing
     if (process.env.NODE_ENV === 'production') {

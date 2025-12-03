@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
+import { logAudit } from "@/lib/audit"
 
 export async function createInvoice(data: {
     builderId: string
@@ -125,6 +126,14 @@ export async function createInvoice(data: {
             data: { status: 'INVOICED' }
         })
 
+        await logAudit({
+            entityType: 'INVOICE',
+            entityId: newInvoice.id,
+            action: 'CREATE',
+            changes: { number, totalAmount, builderId, jobCount: jobs.length },
+            tx // Pass transaction
+        })
+
         return newInvoice
     })
 
@@ -145,6 +154,13 @@ export async function updateInvoiceStatus(id: string, status: string) {
     await prisma.invoice.update({
         where: { id },
         data
+    })
+
+    await logAudit({
+        entityType: 'INVOICE',
+        entityId: id,
+        action: 'UPDATE',
+        changes: { field: 'status', to: status }
     })
 
     revalidatePath(`/dashboard/finances/invoices/${id}`)
@@ -168,13 +184,26 @@ export async function deleteInvoice(id: string) {
     // Reset job statuses
     const jobIds = invoice.items.map(i => i.jobId).filter(id => id !== null) as string[]
 
-    await prisma.$transaction([
-        prisma.job.updateMany({
+    await prisma.$transaction(async (tx) => {
+        await tx.job.updateMany({
             where: { id: { in: jobIds } },
-            data: { status: 'COMPLETED' } // Revert to completed
-        }),
-        prisma.invoice.delete({ where: { id } })
-    ])
+            data: { status: 'COMPLETED' }
+        })
+
+        // Soft Delete
+        await tx.invoice.update({
+            where: { id },
+            data: { deletedAt: new Date(), status: 'VOID' }
+        })
+
+        await logAudit({
+            entityType: 'INVOICE',
+            entityId: id,
+            action: 'DELETE', // Log as DELETE for clarity, or SOFT_DELETE
+            changes: { reason: 'User deleted draft invoice (Soft Delete)' },
+            tx
+        })
+    })
 
     revalidatePath('/dashboard/finances/invoices')
 }
@@ -193,7 +222,11 @@ export async function getUninvoicedJobs(builderId: string) {
             // Actually, we rely on status not being 'INVOICED'
             // But let's be safe:
             invoiceItems: {
-                none: {}
+                none: {
+                    invoice: {
+                        deletedAt: null
+                    }
+                }
             }
         },
         orderBy: { createdAt: 'desc' },

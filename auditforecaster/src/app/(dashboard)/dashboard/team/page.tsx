@@ -1,6 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Users, UserCheck } from "lucide-react"
+import { Metadata } from "next"
+
+export const metadata: Metadata = {
+    title: "Team Management | AuditForecaster",
+    description: "Manage inspectors and user accounts.",
+}
 
 export default function TeamPage() {
     return (

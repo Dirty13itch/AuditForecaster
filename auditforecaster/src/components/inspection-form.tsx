@@ -15,6 +15,11 @@ import { useToast } from "@/components/ui/use-toast"
 import { useOfflineSync } from "@/hooks/use-offline-sync"
 import { Wifi, WifiOff, Save } from "lucide-react"
 import { ChecklistItem } from "@/lib/offline-storage"
+import { syncEngine } from "@/lib/sync-engine"
+
+import { useTaskClaim } from "@/hooks/use-task-claim"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Lock } from "lucide-react"
 
 // Submit button with loading state
 function SubmitButton() {
@@ -73,6 +78,7 @@ export function InspectionForm({ jobId, inspectionId, initialData, templates = [
     const [isDraft, setIsDraft] = useState<boolean>(false)
 
     const { isOffline, lastSaved, offlineData, saveDraft } = useOfflineSync<InspectionData>(jobId)
+    const { isClaimed, claimedBy, expiresAt } = useTaskClaim(jobId)
 
     // Load offline data when available
     useEffect(() => {
@@ -97,6 +103,7 @@ export function InspectionForm({ jobId, inspectionId, initialData, templates = [
 
     // Auto‑save on any form change
     const handleFormChange = (e: React.FormEvent<HTMLFormElement>) => {
+        if (!isClaimed) return // Prevent edits if not claimed
         const formData = new FormData(e.currentTarget)
         const data = Object.fromEntries(formData.entries())
         saveDraft({ ...data, checklist, signatureUrl: signature || undefined })
@@ -104,19 +111,27 @@ export function InspectionForm({ jobId, inspectionId, initialData, templates = [
 
     // Save when checklist or signature changes
     useEffect(() => {
+        if (!isClaimed) return
         saveDraft({ checklist, signatureUrl: signature || undefined })
-    }, [checklist, signature, saveDraft])
+    }, [checklist, signature, saveDraft, isClaimed])
 
     async function clientAction(formData: FormData) {
+        if (!isClaimed) {
+            toast({ title: 'Locked', description: `Task is currently locked by ${claimedBy}`, variant: 'destructive' })
+            return
+        }
+        // ... existing logic
         formData.set('checklist', JSON.stringify(checklist))
         if (signature) {
             formData.set('signature', signature)
         }
         formData.set('isDraft', String(isDraft))
 
+        const payload = Object.fromEntries(formData.entries())
+
         if (isDraft) {
             // Save locally as draft only
-            saveDraft({ ...Object.fromEntries(formData.entries()), checklist, signatureUrl: signature || undefined })
+            saveDraft({ ...payload, checklist, signatureUrl: signature || undefined })
             toast({ title: 'Draft Saved', description: 'Your inspection draft has been saved locally.', variant: 'default' })
             setIsDraft(false)
             return
@@ -129,17 +144,38 @@ export function InspectionForm({ jobId, inspectionId, initialData, templates = [
             return
         }
 
+        // Offline / Sync Logic
+        if (isOffline) {
+            await syncEngine.enqueue('UPDATE', 'inspection', payload)
+            toast({ title: 'Saved to Outbox', description: 'Inspection saved offline. Will sync when online.', variant: 'default' })
+            return
+        }
+
         try {
             await updateInspection(formData)
             toast({ title: 'Inspection Saved', description: 'The inspection data has been successfully saved.', variant: 'success' })
-        } catch {
-            toast({ title: 'Save Failed', description: 'Could not save to server. Data is saved locally.', variant: 'destructive' })
+        } catch (error) {
+            console.error('Online save failed, falling back to offline queue:', error)
+            // Fallback to offline queue
+            await syncEngine.enqueue('UPDATE', 'inspection', payload)
+            toast({ title: 'Saved to Outbox (Offline)', description: 'Could not reach server. Queued for sync.', variant: 'default' })
         }
     }
 
     return (
         <form action={clientAction} onChange={handleFormChange} className="space-y-8 pb-20 md:pb-0">
             <input type="hidden" name="jobId" value={jobId} />
+
+            {/* Task Claiming Banner */}
+            {!isClaimed && claimedBy && (
+                <Alert variant="destructive">
+                    <Lock className="h-4 w-4" />
+                    <AlertTitle>Task Locked</AlertTitle>
+                    <AlertDescription>
+                        This task is currently being edited by <strong>{claimedBy}</strong>. You cannot make changes until they finish or the lock expires.
+                    </AlertDescription>
+                </Alert>
+            )}
 
             {/* Offline Status Indicator */}
             <div className="flex items-center justify-end space-x-2 text-sm">
@@ -154,6 +190,11 @@ export function InspectionForm({ jobId, inspectionId, initialData, templates = [
                 )}
                 {lastSaved && (
                     <span className="text-gray-400 text-xs">Last saved: {lastSaved.toLocaleTimeString()}</span>
+                )}
+                {isClaimed && expiresAt && (
+                    <span className="text-blue-600 text-xs bg-blue-50 px-2 py-1 rounded">
+                        Lock expires: {expiresAt.toLocaleTimeString()}
+                    </span>
                 )}
             </div>
 

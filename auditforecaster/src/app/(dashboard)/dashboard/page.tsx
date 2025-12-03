@@ -5,6 +5,8 @@ import { RevenueChart, BuilderDistributionChart } from "@/components/analytics-c
 
 import { Metadata } from "next"
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
     title: "Dashboard",
     description: "Overview of your inspection tasks, recent activity, and quick actions.",
@@ -35,12 +37,12 @@ export default async function DashboardPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                        <h2 className="text-sm font-medium tracking-tight">Total Revenue</h2>
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -52,7 +54,7 @@ export default async function DashboardPage() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active Jobs</CardTitle>
+                        <h2 className="text-sm font-medium tracking-tight">Active Jobs</h2>
                         <Activity className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -64,7 +66,7 @@ export default async function DashboardPage() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Builders</CardTitle>
+                        <h2 className="text-sm font-medium tracking-tight">Builders</h2>
                         <HardHat className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -76,7 +78,7 @@ export default async function DashboardPage() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
+                        <h2 className="text-sm font-medium tracking-tight">Completion Rate</h2>
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>

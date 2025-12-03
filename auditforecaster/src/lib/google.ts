@@ -1,4 +1,4 @@
-import { google } from 'googleapis'
+import { google, calendar_v3 } from 'googleapis'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -47,7 +47,7 @@ export async function getGoogleClient(userId?: string) {
     return authClient
 }
 
-export async function getCalendarClient(userId?: string) {
+export async function getCalendarClient(userId?: string): Promise<calendar_v3.Calendar> {
     const authClient = await getGoogleClient(userId)
     return google.calendar({ version: 'v3', auth: authClient })
 }

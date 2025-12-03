@@ -33,6 +33,9 @@ npx prisma db push
 # Seed database (optional)
 npm run db:seed
 
+# Seed for E2E testing (creates Admin/Inspector users)
+npm run db:seed:e2e
+
 # Run development server
 npm run dev
 ```
@@ -119,7 +122,7 @@ src/
 - **Image Optimization**: Next.js Image component for automatic optimization
 - **Error Handling**: Global error boundaries and 404 pages
 - **Loading States**: Skeleton screens for all major pages
-- **Offline Mode**: PWA with offline sync for inspections
+- **Offline Mode**: PWA with offline sync (V2) including retry logic and Dead Letter Queue (DLQ) for failed mutations
 - **Role-Based Access**: Admin, Inspector, Builder roles
 
 ---

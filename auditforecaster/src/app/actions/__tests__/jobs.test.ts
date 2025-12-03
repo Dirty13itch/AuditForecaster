@@ -1,16 +1,20 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createJob, updateJobStatus } from '../jobs'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { getCoordinates } from '@/lib/geocoding'
-import { redirect } from 'next/navigation'
 
 // Mock dependencies
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         job: {
             create: vi.fn(),
-            update: vi.fn()
+            update: vi.fn(),
+            findUnique: vi.fn()
+        },
+        auditLog: {
+            create: vi.fn()
         }
     }
 }))
@@ -31,10 +35,16 @@ vi.mock('next/navigation', () => ({
     redirect: vi.fn()
 }))
 
+vi.mock('next/headers', () => ({
+    headers: vi.fn().mockReturnValue({
+        get: vi.fn().mockReturnValue('127.0.0.1')
+    })
+}))
+
 describe('Jobs Server Actions', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1' } } as any)
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1', role: 'ADMIN' } } as any)
     })
 
     describe('createJob', () => {
@@ -82,6 +92,7 @@ describe('Jobs Server Actions', () => {
 
     describe('updateJobStatus', () => {
         it('should update status successfully', async () => {
+            vi.mocked(prisma.job.findUnique).mockResolvedValue({ id: 'job-1', status: 'PENDING' } as any)
             vi.mocked(prisma.job.update).mockResolvedValue({ id: 'job-1' } as any)
 
             await updateJobStatus('job-1', 'COMPLETED')

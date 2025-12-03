@@ -3,6 +3,12 @@ import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2 } from "lucide-react"
+import { Metadata } from "next"
+
+export const metadata: Metadata = {
+    title: "QA Dashboard | AuditForecaster",
+    description: "Quality assurance review for completed jobs.",
+}
 
 export default async function QADashboardPage() {
     const jobsToReview = await prisma.job.findMany({

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { logger } from "@/lib/logger"
 import { auth } from "@/auth"
 import { z } from "zod"
 
@@ -29,7 +30,7 @@ export async function createSubdivision(data: z.infer<typeof SubdivisionSchema>)
         revalidatePath('/dashboard/builders')
         return { success: true, data: subdivision }
     } catch (error) {
-        console.error('Failed to create subdivision:', error)
+        logger.error('Failed to create subdivision', { error })
         return { success: false, error: 'Failed to create subdivision' }
     }
 }
