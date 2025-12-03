@@ -43,7 +43,18 @@ NEXTAUTH_SECRET=generate_a_long_secret_string
 # Email (Optional)
 RESEND_API_KEY=re_123...
 EMAIL_FROM=noreply@yourdomain.com
+
+# Rate Limiting (Optional - Recommended for Production)
+# UPSTASH_REDIS_REST_URL=https://...
+# UPSTASH_REDIS_REST_TOKEN=...
 ```
+
+### Step 3.5: Performance Optimization (Recommended)
+For best image optimization performance in production, it is recommended to install `sharp`:
+```bash
+npm install sharp
+```
+(This will be included in the next build).
 
 ### Step 4: Login to Registry (If Private)
 If your repository is private, you need to authenticate Docker to pull the image:
