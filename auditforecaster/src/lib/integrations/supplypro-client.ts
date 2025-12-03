@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 
 // Schema for SupplyPro Order (based on typical construction ERPs)
-const SupplyProOrderSchema = z.object({
+export const SupplyProOrderSchema = z.object({
     OrderID: z.string(),
     BuilderName: z.string(),
     Subdivision: z.string().optional(),

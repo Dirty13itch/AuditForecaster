@@ -8,7 +8,13 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 
+import { auth } from "@/auth"
+
 export async function createInspector(data: InspectorInput) {
+    const session = await auth()
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
+
     try {
         const validated = InspectorSchema.parse(data)
 
@@ -52,6 +58,10 @@ export async function createInspector(data: InspectorInput) {
 }
 
 export async function updateInspector(id: string, data: InspectorInput) {
+    const session = await auth()
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
+
     try {
         const validated = InspectorSchema.parse(data)
 
@@ -100,12 +110,16 @@ export async function updateInspector(id: string, data: InspectorInput) {
         revalidatePath("/dashboard/team/inspectors")
         return { success: true, message: "Inspector updated successfully" }
     } catch (error) {
-        console.error("Failed to update inspector:", error)
+        logger.error("Failed to update inspector", { error })
         return { success: false, message: "Failed to update inspector" }
     }
 }
 
 export async function deleteInspector(id: string) {
+    const session = await auth()
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
+
     try {
         await prisma.user.delete({
             where: { id },
@@ -114,7 +128,7 @@ export async function deleteInspector(id: string) {
         revalidatePath("/dashboard/team/inspectors")
         return { success: true, message: "Inspector offboarded successfully" }
     } catch (error) {
-        console.error("Failed to delete inspector:", error)
+        logger.error("Failed to delete inspector", { error })
         return { success: false, message: "Failed to delete inspector" }
     }
 }

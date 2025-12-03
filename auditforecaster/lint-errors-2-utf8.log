@@ -1,0 +1,1291 @@
+﻿
+> auditforecaster@0.1.0 lint
+> next lint
+
+node.exe : `next 
+lint` is deprecated 
+and will be removed 
+in Next.js 16.
+At line:1 char:1
++ & "C:\Program Files
+\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (`next l   
+ int` is ... in N    
+ext.js 16.:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+For new projects, 
+use create-next-app 
+to choose your 
+preferred linter.
+For existing 
+projects, migrate to 
+the ESLint CLI:
+npx 
+@next/codemod@canary 
+next-lint-to-eslint-c
+li .
+
+(node:22088) 
+ESLintIgnoreWarning: 
+The ".eslintignore" 
+file is no longer 
+supported. Switch to 
+using the "ignores" 
+property in 
+"eslint.config.js": h
+ttps://eslint.org/doc
+s/latest/use/configur
+e/migration-guide#ign
+oring-files
+(Use `node 
+--trace-warnings 
+...` to show where 
+the warning was 
+created)
+
+./src/app/(dashboard)
+/dashboard/assets/equ
+ipment/[id]/qrcode/pa
+ge.tsx
+44:25  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+
+./src/app/(dashboard)
+/dashboard/dev/progre
+ss/page.tsx
+1:26  Warning: 
+'Feature' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+72:83  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/(dashboard)
+/dashboard/page.tsx
+2:41  Warning: 
+'CardTitle' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/app/(dashboard)
+/dashboard/reports/[i
+d]/page.tsx
+86:25  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+147:25  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+269:37  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+
+./src/app/(dashboard)
+/dashboard/team/inspe
+ctors/page.tsx
+4:10  Warning: 
+'InspectorInput' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/app/(dashboard)
+/inspections/[id]/run
+/page.tsx
+36:44  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+63:55  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/adv
+anced-templates.ts
+25:46  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+49:15  Warning: 
+'session' is 
+assigned a value but 
+never used.  @typescr
+ipt-eslint/no-unused-
+vars
+
+./src/app/actions/ana
+lytics.ts
+109:9  Error: Use 
+"@ts-expect-error" 
+instead of 
+"@ts-ignore", as 
+"@ts-ignore" will do 
+nothing if the 
+following line is 
+error-free.  @typescr
+ipt-eslint/ban-ts-com
+ment
+116:9  Error: Use 
+"@ts-expect-error" 
+instead of 
+"@ts-ignore", as 
+"@ts-ignore" will do 
+nothing if the 
+following line is 
+error-free.  @typescr
+ipt-eslint/ban-ts-com
+ment
+
+./src/app/actions/equ
+ipment.ts
+135:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/job
+s.ts
+135:42  Warning: '_' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+141:23  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/log
+istics.ts
+105:11  Warning: 
+'route' is assigned 
+a value but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/app/actions/__t
+ests__/action-items.t
+est.ts
+21:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+22:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+34:48  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+41:22  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+66:48  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+74:22  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+96:46  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+98:18  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/advanced-analy
+tics.test.ts
+26:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+47:82  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+63:18  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/builders.test.
+ts
+24:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+25:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+34:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+78:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+102:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/ekotrope.test.
+ts
+53:85  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+54:62  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+55:73  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/email.test.ts
+14:20  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+52:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+53:72  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+54:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+90:31  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+118:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+123:18  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+125:48  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+129:22  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+145:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+154:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+155:48  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+163:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+164:48  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+174:31  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/equipment.test
+.ts
+18:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+19:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+31:51  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+32:47  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+64:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+65:47  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+82:47  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+107:43  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/fleet.test.ts
+23:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+24:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+38:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+88:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+119:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/inspections.te
+st.ts
+41:99  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+53:87  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+58:18  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+91:95  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+92:93  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+116:91  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/invoices.test.
+ts
+39:14  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+45:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+72:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+74:83  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/payouts.test.t
+s
+35:89  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+52:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+53:87  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+76:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+87:85  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/pricing.test.t
+s
+37:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+53:49  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+97:49  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+124:47  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+155:47  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+167:51  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+182:51  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/profitability.
+test.ts
+23:89  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+34:75  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+59:75  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+84:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/qa.test.ts
+31:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+32:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+66:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+71:22  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/reinspection.t
+est.ts
+46:75  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+50:84  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+51:77  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/reports.test.t
+s
+34:62  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+35:90  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+71:62  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+72:85  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+90:62  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/subdivisions.t
+est.ts
+22:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+23:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+33:49  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+81:49  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+101:47  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+103:18  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+116:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+116:118  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/templates.test
+.ts
+6:10  Warning: 
+'mockDeep' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+22:58  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+23:29  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+32:52  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/__t
+ests__/users.test.ts
+36:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+37:71  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+49:81  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+63:82  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+76:87  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/api/builder
+/plans/upload/__tests
+__/route.test.ts
+6:10  Warning: 
+'NextResponse' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+32:31  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+32:43  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+35:31  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+35:43  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+61:68  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+73:68  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+74:97  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/forgot-pass
+word/page.tsx
+23:56  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  
+react/no-unescaped-en
+tities
+
+./src/app/page.tsx
+42:66  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  
+react/no-unescaped-en
+tities
+
+./src/auth.ts
+9:10  Warning: 'env' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+98:37  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+111:36  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/app-
+sidebar.tsx
+183:8  Warning: 
+React Hook useEffect 
+has a missing 
+dependency: 
+'expandedItems'. 
+Either include it or 
+remove the 
+dependency array.  re
+act-hooks/exhaustive-
+deps
+
+./src/components/asse
+ts/asset-qr-code.tsx
+24:11  Warning: 
+'handlePrint' is 
+assigned a value but 
+never used.  @typescr
+ipt-eslint/no-unused-
+vars
+
+./src/components/asse
+ts/equipment-dialog.t
+sx
+40:18  Warning: 
+'AnimatePresence' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/components/asse
+ts/fleet/vehicle-dial
+og.tsx
+44:49  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+53:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/cont
+ractors/subcontractor
+-actions.tsx
+6:5  Warning: 
+'DropdownMenu' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+7:5  Warning: 'Dropdo
+wnMenuContent' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+8:5  Warning: 
+'DropdownMenuItem' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+9:5  Warning: 
+'DropdownMenuLabel' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+10:5  Warning: 'Dropd
+ownMenuSeparator' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+11:5  Warning: 'Dropd
+ownMenuTrigger' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+13:10  Warning: 
+'MoreHorizontal' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+45:18  Warning: 
+'error' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/components/cont
+ractors/subcontractor
+-dialog.tsx
+35:16  Warning: 
+'Pencil' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+80:18  Warning: 
+'error' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/components/equi
+pment-form.tsx
+53:21  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/jobs
+/job-dialog.tsx
+43:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/jobs
+/job-filters.tsx
+19:11  Warning: 
+'createQueryString' 
+is assigned a value 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/components/repo
+rting/inspection-runn
+er/runner.tsx
+61:57  Error: React 
+Hook "useState" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+62:55  Error: React 
+Hook "useState" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+65:43  Error: React 
+Hook "useState" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+68:5  Error: React 
+Hook "useEffect" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+
+./src/components/team
+/inspector-dialog.tsx
+45:51  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+112:44  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  
+react/no-unescaped-en
+tities
+240:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/ui/a
+lert.stories.tsx
+1:1  Error: Do not 
+import renderer 
+package 
+"@storybook/react" 
+directly. Use a 
+framework package 
+instead (e.g. 
+@storybook/nextjs, @s
+torybook/react-vite, 
+@storybook/nextjs-vit
+e, @storybook/react-w
+ebpack5, @storybook/r
+eact-native-web-vite)
+.  storybook/no-rende
+rer-packages
+
+./src/components/ui/b
+utton.stories.tsx
+1:1  Error: Do not 
+import renderer 
+package 
+"@storybook/react" 
+directly. Use a 
+framework package 
+instead (e.g. 
+@storybook/nextjs, @s
+torybook/react-vite, 
+@storybook/nextjs-vit
+e, @storybook/react-w
+ebpack5, @storybook/r
+eact-native-web-vite)
+.  storybook/no-rende
+rer-packages
+
+./src/components/ui/c
+alendar.tsx
+4:10  Warning: 
+'ChevronLeft' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+4:23  Warning: 
+'ChevronRight' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/components/__te
+sts__/create-job-form
+.test.tsx
+47:54  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/__te
+sts__/inspection-form
+.test.tsx
+58:61  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/hooks/use-task-
+claim.ts
+33:9  Error: 
+'interval' is never 
+reassigned. Use 
+'const' instead.  
+prefer-const
+
+./src/hooks/__tests__
+/use-offline-sync.tes
+t.ts
+2:48  Warning: 
+'afterEach' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+60:70  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/lib/audit.ts
+11:30  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/lib/forecasting
+.ts
+18:19  Warning: 'x' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/lib/integration
+s/supplypro-client.ts
+5:7  Warning: 'Supply
+ProOrderSchema' is 
+assigned a value but 
+only used as a type. 
+ @typescript-eslint/n
+o-unused-vars
+
+./src/lib/offline-sto
+rage.ts
+96:37  Warning: 
+'newVersion' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+96:49  Warning: 
+'transaction' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/lib/sync-engine
+.ts
+8:10  Warning: 'Equip
+mentClientInput' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+8:32  Warning: 
+'JobInput' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/lib/task-claimi
+ng.ts
+2:10  Warning: 
+'FeatureFlags' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+31:14  Warning: 
+'error' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/lib/__tests__/t
+ask-claiming.test.ts
+37:68  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+48:14  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+61:14  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/stories/Page.ts
+x
+39:13  Error: `"` 
+can be escaped with 
+`&quot;`, `&ldquo;`, 
+`&#34;`, `&rdquo;`.  
+react/no-unescaped-en
+tities
+39:18  Error: `"` 
+can be escaped with 
+`&quot;`, `&ldquo;`, 
+`&#34;`, `&rdquo;`.  
+react/no-unescaped-en
+tities
+
+info  - Need to 
+disable some ESLint 
+rules? Learn more 
+here: https://nextjs.
+org/docs/app/api-refe
+rence/config/eslint#d
+isabling-rules

@@ -8,7 +8,13 @@ import { logger } from "@/lib/logger"
 
 export async function generatePDF(jobId: string) {
     const session = await auth()
-    if (!session) return { error: 'Unauthorized' }
+    if (!session?.user) return { error: 'Unauthorized' }
+
+    // RBAC: Admin, Inspector, or Builder
+    const role = session.user.role
+    if (role !== 'ADMIN' && role !== 'INSPECTOR' && role !== 'BUILDER') {
+        return { error: 'Unauthorized: Insufficient permissions' }
+    }
 
     const job = await prisma.job.findUnique({
         where: { id: jobId },
@@ -24,6 +30,11 @@ export async function generatePDF(jobId: string) {
 
     if (!job || job.inspections.length === 0) {
         return { error: 'Job or inspection not found' }
+    }
+
+    // Builder Scope Check
+    if (role === 'BUILDER' && session.user.builderId !== job.builderId) {
+        return { error: 'Unauthorized: Access denied' }
     }
 
     try {
@@ -78,7 +89,13 @@ export async function generatePDF(jobId: string) {
 
 export async function generateInvoicePDF(invoiceId: string) {
     const session = await auth()
-    if (!session) return { error: 'Unauthorized' }
+    if (!session?.user) return { error: 'Unauthorized' }
+
+    // RBAC: Admin only for now (Builders might view later)
+    const role = session.user.role
+    if (role !== 'ADMIN') {
+        return { error: 'Unauthorized: Admin access required' }
+    }
 
     const invoice = await prisma.invoice.findUnique({
         where: { id: invoiceId },

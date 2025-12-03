@@ -93,7 +93,7 @@ let dbPromise: Promise<IDBPDatabase<OfflineDB>>;
 function getDB() {
     if (!dbPromise) {
         dbPromise = openDB<OfflineDB>(DB_NAME, DB_VERSION, {
-            upgrade(db, oldVersion, newVersion, transaction) {
+            upgrade(db, oldVersion) {
                 if (oldVersion < 1) {
                     const inspectionStore = db.createObjectStore('inspections', { keyPath: 'id' });
                     inspectionStore.createIndex('by-job', 'jobId');

@@ -50,6 +50,7 @@ export function EquipmentForm({ equipment, users, onSuccess }: EquipmentFormProp
         setIsLoading(true)
 
         const formData = new FormData(event.currentTarget)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data: any = {
             name: formData.get("name"),
             type: formData.get("type"),

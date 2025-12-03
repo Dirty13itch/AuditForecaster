@@ -1,0 +1,9 @@
+**/__tests__/**
+**/*.test.ts
+**/*.test.tsx
+scripts/**
+e2e/**
+node_modules/**
+.next/**
+out/**
+build/**

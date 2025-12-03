@@ -2,35 +2,53 @@ version: '3.8'
 
 services:
   app:
-    image: ghcr.io/dirty13itch/auditforecaster:latest
-    restart: always
+    container_name: auditforecaster-app
+    image: auditforecaster:latest
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
+      - DATABASE_URL=postgresql://auditforecaster:dev_password_change_in_production@postgres:5432/auditforecaster
+      - NEXTAUTH_URL=http://YOUR_UNRAID_IP:3000
+      - NEXTAUTH_SECRET=change_this_to_a_secure_random_string
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/auditforecaster
-      - NEXTAUTH_URL=${NEXTAUTH_URL}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - EMAIL_FROM=${EMAIL_FROM}
-      # Optional: Rate Limiting (defaults to in-memory if missing)
-      # - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
-      # - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+      - UPSTASH_REDIS_REST_URL=http://redis:6379
+      - UPSTASH_REDIS_REST_TOKEN=local_redis_does_not_need_token
     depends_on:
-      - db
-    volumes:
-      - uploads:/app/public/uploads
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - audit-net
 
-  db:
-    image: postgres:15-alpine
-    restart: always
+  postgres:
+    image: postgres:16-alpine
+    container_name: auditforecaster-db
+    restart: unless-stopped
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=auditforecaster
+      POSTGRES_USER: auditforecaster
+      POSTGRES_PASSWORD: dev_password_change_in_production
+      POSTGRES_DB: auditforecaster
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - /mnt/user/appdata/auditforecaster/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U auditforecaster" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - audit-net
 
-volumes:
-  db_data:
-  uploads:
+  redis:
+    image: redis:7-alpine
+    container_name: auditforecaster-redis
+    restart: unless-stopped
+    volumes:
+      - /mnt/user/appdata/auditforecaster/redis:/data
+    networks:
+      - audit-net
+
+networks:
+  audit-net:
+    driver: bridge

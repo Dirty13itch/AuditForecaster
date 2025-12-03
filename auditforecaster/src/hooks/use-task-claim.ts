@@ -8,8 +8,6 @@ export function useTaskClaim(taskId: string) {
     const [expiresAt, setExpiresAt] = useState<Date | null>(null)
 
     useEffect(() => {
-        let interval: NodeJS.Timeout
-
         const claim = async () => {
             const result: ClaimTaskResult = await claimTaskAction(taskId)
             if (result.success) {
@@ -30,7 +28,7 @@ export function useTaskClaim(taskId: string) {
 
         claim()
         // Refresh claim every 4 minutes (if duration is 5 mins)
-        interval = setInterval(claim, 4 * 60 * 1000)
+        const interval = setInterval(claim, 4 * 60 * 1000)
 
         return () => {
             clearInterval(interval)

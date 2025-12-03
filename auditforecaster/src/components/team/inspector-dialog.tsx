@@ -42,6 +42,7 @@ export function InspectorDialog({ mode, inspector, trigger }: InspectorDialogPro
     const { engine } = useSync()
 
     const form = useForm<InspectorInput>({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(InspectorSchema) as any,
         defaultValues: {
             name: inspector?.name || "",
@@ -109,7 +110,7 @@ export function InspectorDialog({ mode, inspector, trigger }: InspectorDialogPro
                 <DialogHeader>
                     <DialogTitle className="text-xl font-bold">{mode === "create" ? "Onboard Inspector" : "Edit Inspector"}</DialogTitle>
                     <DialogDescription className="text-gray-400">
-                        Enter the inspector's details, certifications, and payroll info.
+                        Enter the inspector&apos;s details, certifications, and payroll info.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -237,6 +238,7 @@ export function InspectorDialog({ mode, inspector, trigger }: InspectorDialogPro
                                         <FormField
                                             key={key}
                                             control={form.control}
+                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                             name={`onboarding.${key}` as any}
                                             render={({ field }) => (
                                                 <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-white/10 bg-white/5 p-4">

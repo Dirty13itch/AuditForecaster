@@ -26,7 +26,7 @@ export async function approveJob(formData: FormData) {
     })
 
     if (!result.success) {
-        throw new Error(result.error.errors[0].message)
+        throw new Error(result.error.errors[0]?.message || "Validation failed")
     }
 
     await prisma.job.update({
@@ -50,7 +50,7 @@ export async function rejectJob(formData: FormData) {
     })
 
     if (!result.success) {
-        throw new Error(result.error.errors[0].message)
+        throw new Error(result.error.errors[0]?.message || "Validation failed")
     }
 
     const updatedJob = await prisma.job.update({

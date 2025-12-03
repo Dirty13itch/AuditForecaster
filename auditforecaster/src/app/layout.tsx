@@ -54,14 +54,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ErrorBoundary>
-          <SyncProvider>
-            <SyncIndicator />
-            <Toaster position="top-center" richColors closeButton />
-            <ServiceWorkerRegister />
-            {children}
-          </SyncProvider>
-        </ErrorBoundary>
+        {/* <ErrorBoundary> */}
+        {/* <SyncProvider>
+            <SyncIndicator /> */}
+        {/* <Toaster position="top-center" richColors closeButton />
+          <ServiceWorkerRegister /> */}
+        {children}
+        {/* </SyncProvider> */}
+        {/* </ErrorBoundary> */}
       </body>
     </html>
   );

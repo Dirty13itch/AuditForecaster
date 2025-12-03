@@ -22,6 +22,7 @@ export async function saveAdvancedTemplate(data: {
             data: {
                 name: data.name,
                 description: data.description,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 structure: data.structure as any,
             }
         })

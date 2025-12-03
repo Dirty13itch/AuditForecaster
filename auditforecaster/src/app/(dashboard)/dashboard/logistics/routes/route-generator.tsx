@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation"
 export function RouteGenerator() {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0] || new Date().toISOString())
     // Ideally we'd select a driver, but for MVP let's just use current user or hardcode for demo
     // We need a way to select driver. Let's just assume we are generating for ourselves for now 
     // or add a selector if we had the list. 

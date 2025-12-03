@@ -31,7 +31,7 @@ export function InvoiceWizard({ builders }: { builders: Builder[] }) {
     const [availableJobs, setAvailableJobs] = useState<Job[]>([])
     const [isLoadingJobs, setIsLoadingJobs] = useState(false)
     const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
-    const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0])
+    const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0] || new Date().toISOString())
     const [isSubmitting, setIsSubmitting] = useState(false)
     const router = useRouter()
 

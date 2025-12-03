@@ -1,12 +1,18 @@
 import type { NextConfig } from "next";
 // import { withSentryConfig } from "@sentry/nextjs";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const withPWA = require("next-pwa")({
+const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
   register: true,
   skipWaiting: true,
+  cacheOnFrontEndNav: true,
+  aggressiveFrontEndNavCaching: true,
+  reloadOnOnline: true,
+  swcMinify: true,
+  workboxOptions: {
+    disableDevLogs: true,
+  },
 });
 
 const nextConfig: NextConfig = {
@@ -67,34 +73,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-// Sentry configuration options
-// Temporarily disabled - uncomment when Sentry DSN is configured
-/*
-const sentryOptions = {
-  // For all available options, see:
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
-
-  // Suppresses source map uploading logs during build
-  silent: true,
-  
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
-
-  // Routes browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers (increases server load)
-  tunnelRoute: "/monitoring",
-
-  // Hides source maps from generated client bundles
-  hideSourceMaps: true,
-
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
-
-  // Enables automatic instrumentation of Vercel Cron Monitors.
-  automaticVercelMonitors: true,
-};
-
-export default withSentryConfig(withPWA(nextConfig), sentryOptions);
-*/
-
 export default withPWA(nextConfig);
-

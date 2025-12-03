@@ -16,7 +16,11 @@ import { DeleteUserButton } from "@/components/delete-user-button"
 
 export default async function UsersPage() {
     const users = await prisma.user.findMany({
-        include: {
+        select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
             _count: {
                 select: {
                     jobs: true

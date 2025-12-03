@@ -8,7 +8,12 @@ export default async function InspectorsPage() {
         where: {
             role: 'INSPECTOR'
         },
-        include: {
+        select: {
+            id: true,
+            name: true,
+            email: true,
+            hersRaterId: true,
+            baseRate: true,
             _count: {
                 select: {
                     jobs: true

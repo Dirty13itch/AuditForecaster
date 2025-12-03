@@ -1,0 +1,591 @@
+﻿
+> auditforecaster@0.1.0 lint
+> next lint
+
+node.exe : `next 
+lint` is deprecated 
+and will be removed 
+in Next.js 16.
+At line:1 char:1
++ & "C:\Program Files
+\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (`next l   
+ int` is ... in N    
+ext.js 16.:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+For new projects, 
+use create-next-app 
+to choose your 
+preferred linter.
+For existing 
+projects, migrate to 
+the ESLint CLI:
+npx 
+@next/codemod@canary 
+next-lint-to-eslint-c
+li .
+
+(node:24848) 
+ESLintIgnoreWarning: 
+The ".eslintignore" 
+file is no longer 
+supported. Switch to 
+using the "ignores" 
+property in 
+"eslint.config.js": h
+ttps://eslint.org/doc
+s/latest/use/configur
+e/migration-guide#ign
+oring-files
+(Use `node 
+--trace-warnings 
+...` to show where 
+the warning was 
+created)
+
+./src/app/(dashboard)
+/dashboard/assets/equ
+ipment/[id]/qrcode/pa
+ge.tsx
+44:25  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+
+./src/app/(dashboard)
+/dashboard/dev/progre
+ss/page.tsx
+1:26  Warning: 
+'Feature' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+72:83  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/(dashboard)
+/dashboard/page.tsx
+2:41  Warning: 
+'CardTitle' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/app/(dashboard)
+/dashboard/reports/[i
+d]/page.tsx
+86:25  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+147:25  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+269:37  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher 
+bandwidth. Consider 
+using `<Image />` 
+from `next/image` or 
+a custom image 
+loader to 
+automatically 
+optimize images. 
+This may incur 
+additional usage or 
+cost from your 
+provider. See: https:
+//nextjs.org/docs/mes
+sages/no-img-element 
+ @next/next/no-img-el
+ement
+
+./src/app/(dashboard)
+/dashboard/team/inspe
+ctors/page.tsx
+4:10  Warning: 
+'InspectorInput' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/app/(dashboard)
+/inspections/[id]/run
+/page.tsx
+36:44  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+63:55  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/adv
+anced-templates.ts
+50:15  Warning: 
+'session' is 
+assigned a value but 
+never used.  @typescr
+ipt-eslint/no-unused-
+vars
+
+./src/app/actions/equ
+ipment.ts
+135:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/job
+s.ts
+135:42  Warning: '_' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+141:23  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/app/actions/log
+istics.ts
+105:11  Warning: 
+'route' is assigned 
+a value but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/app/forgot-pass
+word/page.tsx
+23:56  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  
+react/no-unescaped-en
+tities
+
+./src/app/page.tsx
+42:66  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  
+react/no-unescaped-en
+tities
+
+./src/auth.ts
+9:10  Warning: 'env' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+98:37  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+111:36  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/app-
+sidebar.tsx
+183:8  Warning: 
+React Hook useEffect 
+has a missing 
+dependency: 
+'expandedItems'. 
+Either include it or 
+remove the 
+dependency array.  re
+act-hooks/exhaustive-
+deps
+
+./src/components/asse
+ts/asset-qr-code.tsx
+24:11  Warning: 
+'handlePrint' is 
+assigned a value but 
+never used.  @typescr
+ipt-eslint/no-unused-
+vars
+
+./src/components/asse
+ts/equipment-dialog.t
+sx
+40:18  Warning: 
+'AnimatePresence' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/components/asse
+ts/fleet/vehicle-dial
+og.tsx
+44:49  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+53:41  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/cont
+ractors/subcontractor
+-actions.tsx
+6:5  Warning: 
+'DropdownMenu' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+7:5  Warning: 'Dropdo
+wnMenuContent' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+8:5  Warning: 
+'DropdownMenuItem' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+9:5  Warning: 
+'DropdownMenuLabel' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+10:5  Warning: 'Dropd
+ownMenuSeparator' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+11:5  Warning: 'Dropd
+ownMenuTrigger' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+13:10  Warning: 
+'MoreHorizontal' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+45:18  Warning: 
+'error' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/components/cont
+ractors/subcontractor
+-dialog.tsx
+35:16  Warning: 
+'Pencil' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+80:18  Warning: 
+'error' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/components/equi
+pment-form.tsx
+53:21  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/jobs
+/job-dialog.tsx
+43:45  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/jobs
+/job-filters.tsx
+19:11  Warning: 
+'createQueryString' 
+is assigned a value 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/components/repo
+rting/inspection-runn
+er/runner.tsx
+61:57  Error: React 
+Hook "useState" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+62:55  Error: React 
+Hook "useState" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+65:43  Error: React 
+Hook "useState" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+68:5  Error: React 
+Hook "useEffect" is 
+called 
+conditionally. React 
+Hooks must be called 
+in the exact same 
+order in every 
+component render.  re
+act-hooks/rules-of-ho
+oks
+
+./src/components/team
+/inspector-dialog.tsx
+45:51  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+112:44  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  
+react/no-unescaped-en
+tities
+240:74  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/components/ui/a
+lert.stories.tsx
+1:1  Error: Do not 
+import renderer 
+package 
+"@storybook/react" 
+directly. Use a 
+framework package 
+instead (e.g. 
+@storybook/nextjs, @s
+torybook/react-vite, 
+@storybook/nextjs-vit
+e, @storybook/react-w
+ebpack5, @storybook/r
+eact-native-web-vite)
+.  storybook/no-rende
+rer-packages
+
+./src/components/ui/b
+utton.stories.tsx
+1:1  Error: Do not 
+import renderer 
+package 
+"@storybook/react" 
+directly. Use a 
+framework package 
+instead (e.g. 
+@storybook/nextjs, @s
+torybook/react-vite, 
+@storybook/nextjs-vit
+e, @storybook/react-w
+ebpack5, @storybook/r
+eact-native-web-vite)
+.  storybook/no-rende
+rer-packages
+
+./src/components/ui/c
+alendar.tsx
+4:10  Warning: 
+'ChevronLeft' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+4:23  Warning: 
+'ChevronRight' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/hooks/use-task-
+claim.ts
+33:9  Error: 
+'interval' is never 
+reassigned. Use 
+'const' instead.  
+prefer-const
+
+./src/lib/audit.ts
+11:30  Error: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-es
+lint/no-explicit-any
+
+./src/lib/forecasting
+.ts
+18:19  Warning: 'x' 
+is defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/lib/integration
+s/supplypro-client.ts
+5:7  Warning: 'Supply
+ProOrderSchema' is 
+assigned a value but 
+only used as a type. 
+ @typescript-eslint/n
+o-unused-vars
+
+./src/lib/offline-sto
+rage.ts
+96:37  Warning: 
+'newVersion' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+96:49  Warning: 
+'transaction' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/lib/sync-engine
+.ts
+8:10  Warning: 'Equip
+mentClientInput' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+8:32  Warning: 
+'JobInput' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+
+./src/lib/task-claimi
+ng.ts
+2:10  Warning: 
+'FeatureFlags' is 
+defined but never 
+used.  @typescript-es
+lint/no-unused-vars
+31:14  Warning: 
+'error' is defined 
+but never used.  @typ
+escript-eslint/no-unu
+sed-vars
+
+./src/stories/Page.ts
+x
+39:13  Error: `"` 
+can be escaped with 
+`&quot;`, `&ldquo;`, 
+`&#34;`, `&rdquo;`.  
+react/no-unescaped-en
+tities
+39:18  Error: `"` 
+can be escaped with 
+`&quot;`, `&ldquo;`, 
+`&#34;`, `&rdquo;`.  
+react/no-unescaped-en
+tities
+
+info  - Need to 
+disable some ESLint 
+rules? Learn more 
+here: https://nextjs.
+org/docs/app/api-refe
+rence/config/eslint#d
+isabling-rules

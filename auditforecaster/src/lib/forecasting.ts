@@ -15,7 +15,7 @@ export function calculateTrend(data: DataPoint[]) {
     if (n < 2) return {
         slope: 0,
         intercept: 0,
-        predict: (x: number) => data[0]?.y || 0
+        predict: () => data[0]?.y || 0
     }
 
     let sumX = 0

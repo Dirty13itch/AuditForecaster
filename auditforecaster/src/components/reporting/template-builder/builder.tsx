@@ -284,20 +284,50 @@ export function TemplateBuilder({ initialStructure, onSave }: { initialStructure
                                                         onValueChange={(val: string) => updateItem(pageIndex, sectionIndex, itemIndex, { type: val as QuestionItem['type'] })}
                                                     >
                                                         <SelectTrigger className="w-[150px]">
-                                                        </Button>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="text">Text</SelectItem>
+                                                            <SelectItem value="number">Number</SelectItem>
+                                                            <SelectItem value="yes_no">Yes/No</SelectItem>
+                                                            <SelectItem value="select">Select</SelectItem>
+                                                            <SelectItem value="photo">Photo</SelectItem>
+                                                            <SelectItem value="signature">Signature</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <Button variant="ghost" size="icon" onClick={() => {
+                                                        const newPages = [...structure.pages];
+                                                        const page = newPages[pageIndex];
+                                                        if (page) {
+                                                            const section = page.sections[sectionIndex];
+                                                            if (section) {
+                                                                section.items = section.items.filter((_, i) => i !== itemIndex);
+                                                                setStructure({ ...structure, pages: newPages });
+                                                            }
+                                                        }
+                                                    }}>
+                                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                                    </Button>
                                                 </div>
                                             </div>
+                                        </div>
+                                    ))}
+                                    <Button variant="outline" size="sm" onClick={() => addItem(pageIndex, sectionIndex)}>
+                                        <Plus className="h-4 w-4 mr-2" /> Add Question
+                                    </Button>
+                                </div>
+                            </div>
                         ))}
-                                            <Button variant="secondary" size="sm" onClick={() => addSection(pageIndex)}>
-                                                <Plus className="h-4 w-4 mr-2" /> Add Section
-                                            </Button>
-                                        </CardContent>
+                        <Button variant="secondary" size="sm" onClick={() => addSection(pageIndex)}>
+                            <Plus className="h-4 w-4 mr-2" /> Add Section
+                        </Button>
+                    </CardContent>
                 </Card>
             ))}
 
-                                <Button variant="outline" className="w-full py-8 border-dashed" onClick={addPage}>
-                                    <Plus className="h-6 w-6 mr-2" /> Add Page
-                                </Button>
-                            </div>
-                        );
+            <Button variant="outline" className="w-full py-8 border-dashed" onClick={addPage}>
+                <Plus className="h-6 w-6 mr-2" /> Add Page
+            </Button>
+        </div>
+    );
 }

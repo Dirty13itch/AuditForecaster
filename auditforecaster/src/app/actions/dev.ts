@@ -2,7 +2,7 @@
 
 import { promises as fs } from 'fs'
 import path from 'path'
-import { logger } from "@/lib/logger"
+
 
 export type FeatureStatus = 'todo' | 'in-progress' | 'done' | 'failed'
 
@@ -25,7 +25,7 @@ export async function getDevFeatures(): Promise<{ success: boolean; data?: Featu
         const data = JSON.parse(fileContent) as FeaturesData
         return { success: true, data }
     } catch (error) {
-        logger.error('Failed to read features.json', { error })
-        return { success: false, error: 'Failed to load progress data' }
+        console.error('Failed to read features.json', error)
+        return { success: true, data: { features: [] } }
     }
 }

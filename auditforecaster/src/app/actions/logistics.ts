@@ -72,6 +72,7 @@ export async function getTodaysRoute() {
 
         for (let i = 0; i < unvisited.length; i++) {
             const job = unvisited[i]
+            if (!job) continue
             // Use job coords or default if missing (mock geocoding)
             const jobLat = job.latitude || 30.2672 + (Math.random() * 0.1) // Mock spread
             const jobLng = job.longitude || -97.7431 + (Math.random() * 0.1)
@@ -85,6 +86,8 @@ export async function getTodaysRoute() {
 
         if (nearestIndex !== -1) {
             const nextJob = unvisited[nearestIndex]
+            if (!nextJob) break // Should not happen given index check
+
             optimizedOrder.push(nextJob)
             // Update current location to this job
             currentLocation = {

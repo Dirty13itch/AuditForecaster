@@ -41,6 +41,7 @@ export function VehicleDialog({ mode, vehicle, users, trigger }: VehicleDialogPr
     const { engine } = useSync()
 
     const form = useForm<VehicleInput>({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(VehicleSchema) as any,
         defaultValues: {
             name: vehicle?.name || "",
@@ -50,6 +51,7 @@ export function VehicleDialog({ mode, vehicle, users, trigger }: VehicleDialogPr
             licensePlate: vehicle?.licensePlate || "",
             vin: vehicle?.vin || "",
             mileage: vehicle?.mileage || 0,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             status: (vehicle?.status as any) || "ACTIVE",
             assignedTo: vehicle?.assignedTo || "",
             nextService: vehicle?.nextService,

@@ -16,7 +16,8 @@ import { auth } from "@/auth"
 
 export async function createBuilder(formData: FormData) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
 
     try {
         const rawData = {
@@ -50,7 +51,9 @@ export async function createBuilder(formData: FormData) {
 
 export async function updateBuilder(id: string, prevState: unknown, formData: FormData) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
+
     try {
         const rawData = {
             name: formData.get('name'),
@@ -84,7 +87,9 @@ export async function updateBuilder(id: string, prevState: unknown, formData: Fo
 
 export async function deleteBuilder(id: string) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
+
     try {
         await prisma.builder.delete({
             where: { id }

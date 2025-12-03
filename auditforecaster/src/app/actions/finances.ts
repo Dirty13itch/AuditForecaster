@@ -22,7 +22,7 @@ export async function classifyMileage(id: string, purpose: "Business" | "Persona
 
     const result = ClassifyMileageSchema.safeParse({ id, purpose })
     if (!result.success) {
-        throw new Error(result.error.errors[0].message)
+        throw new Error(result.error.errors[0]?.message || "Validation failed")
     }
 
     await prisma.mileageLog.update({
@@ -42,7 +42,7 @@ export async function classifyExpense(id: string, status: "CLASSIFIED", category
 
     const result = ClassifyExpenseSchema.safeParse({ id, status, category })
     if (!result.success) {
-        throw new Error(result.error.errors[0].message)
+        throw new Error(result.error.errors[0]?.message || "Validation failed")
     }
 
     // In a real app, you might map "Business" / "Personal" to specific GL codes

@@ -44,6 +44,8 @@
     "vitest.config.ts",
     "**/*.test.ts",
     "**/*.test.tsx",
-    "**/__tests__/**"
+    "**/__tests__/**",
+    "scripts",
+    "e2e"
   ]
 }

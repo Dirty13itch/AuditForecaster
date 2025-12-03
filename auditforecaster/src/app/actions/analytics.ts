@@ -106,14 +106,14 @@ export async function getAnalyticsData() {
 
     let revenueFromUninvoiced = 0
     for (const job of uninvoicedJobsCurrent) {
-        // @ts-ignore - TS struggles with optional second arg here
+        // @ts-expect-error - TS struggles with optional second arg here
         const price = await getJobPrice(job.builderId, job.subdivisionId)
         revenueFromUninvoiced += price
     }
 
     let revenueFromUninvoicedLast = 0
     for (const job of uninvoicedJobsLast) {
-        // @ts-ignore - TS struggles with optional second arg here
+        // @ts-expect-error - TS struggles with optional second arg here
         const price = await getJobPrice(job.builderId, job.subdivisionId)
         revenueFromUninvoicedLast += price
     }

@@ -180,7 +180,7 @@ export function AppSidebar({ userRole, onSignOut, className }: { userRole: strin
         if (activeItem && !expandedItems.includes(activeItem.name)) {
             setExpandedItems(prev => [...prev, activeItem.name])
         }
-    }, [pathname])
+    }, [pathname, expandedItems])
 
     const toggleExpand = (name: string) => {
         setExpandedItems(prev =>

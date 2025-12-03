@@ -48,6 +48,7 @@ export function ApprovalDeck({ initialExpenses }: { initialExpenses: Expense[] }
     }
 
     const currentExpense = expenses[currentIndex]
+    if (!currentExpense) return null
 
     const handleVote = async (approved: boolean) => {
         if (isProcessing) return

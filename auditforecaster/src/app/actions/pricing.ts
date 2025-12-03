@@ -34,7 +34,7 @@ export async function createServiceItem(data: z.infer<typeof ServiceItemSchema>)
 
     const result = ServiceItemSchema.safeParse(data)
     if (!result.success) {
-        return { success: false, error: result.error.errors[0].message }
+        return { success: false, error: result.error.errors[0]?.message || "Validation failed" }
     }
 
     try {
@@ -55,7 +55,7 @@ export async function updateServiceItem(id: string, data: Partial<z.infer<typeof
 
     const result = ServiceItemSchema.partial().safeParse(data)
     if (!result.success) {
-        return { success: false, error: result.error.errors[0].message }
+        return { success: false, error: result.error.errors[0]?.message || "Validation failed" }
     }
 
     try {
@@ -91,7 +91,7 @@ export async function createPriceList(data: z.infer<typeof PriceListSchema>) {
 
     const result = PriceListSchema.safeParse(data)
     if (!result.success) {
-        return { success: false, error: result.error.errors[0].message }
+        return { success: false, error: result.error.errors[0]?.message || "Validation failed" }
     }
 
     try {
@@ -158,7 +158,7 @@ export async function upsertPriceListItem(priceListId: string, serviceItemId: st
 
     const result = PriceListItemSchema.safeParse({ priceListId, serviceItemId, price })
     if (!result.success) {
-        return { success: false, error: result.error.errors[0].message }
+        return { success: false, error: result.error.errors[0]?.message || "Validation failed" }
     }
 
     try {

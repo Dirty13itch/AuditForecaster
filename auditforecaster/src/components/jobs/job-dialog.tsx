@@ -40,6 +40,7 @@ export function JobDialog({ builders, inspectors }: JobDialogProps) {
     const { engine } = useSync()
 
     const form = useForm<JobInput>({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(JobSchema) as any,
         defaultValues: {
             status: "PENDING"

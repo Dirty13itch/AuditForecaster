@@ -394,6 +394,8 @@ model Job {
   @@index([payoutId])
   @@index([createdAt])
   @@index([scheduledDate])
+  @@index([lotNumber]) // Search optimization
+  @@index([streetAddress]) // Search optimization
 }
 
 model Inspection {

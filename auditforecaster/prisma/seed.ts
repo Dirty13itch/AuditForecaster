@@ -178,7 +178,7 @@ async function main() {
             address: '101 Oak St, Austin, TX',
             status: 'PENDING',
             builderId: builderA.id,
-            subdivisionId: builderA.subdivisions[0].id
+            subdivisionId: builderA.subdivisions[0]!.id
         },
         {
             lotNumber: 'Lot 102',
@@ -188,7 +188,7 @@ async function main() {
             status: 'ASSIGNED',
             inspectorId: inspector1.id,
             builderId: builderA.id,
-            subdivisionId: builderA.subdivisions[0].id,
+            subdivisionId: builderA.subdivisions[0]!.id,
             scheduledDate: new Date(new Date().setDate(new Date().getDate() + 1)), // Tomorrow
         },
         {
@@ -199,7 +199,7 @@ async function main() {
             status: 'IN_PROGRESS',
             inspectorId: inspector2.id,
             builderId: builderB.id,
-            subdivisionId: builderB.subdivisions[0].id,
+            subdivisionId: builderB.subdivisions[0]!.id,
             scheduledDate: new Date(), // Today
         },
         {
@@ -210,7 +210,7 @@ async function main() {
             status: 'COMPLETED',
             inspectorId: inspector2.id,
             builderId: builderB.id,
-            subdivisionId: builderB.subdivisions[0].id,
+            subdivisionId: builderB.subdivisions[0]!.id,
             scheduledDate: new Date(new Date().setDate(new Date().getDate() - 2)), // 2 days ago
         },
         {
@@ -221,7 +221,7 @@ async function main() {
             status: 'REVIEWED',
             inspectorId: inspector1.id,
             builderId: builderA.id,
-            subdivisionId: builderA.subdivisions[1].id,
+            subdivisionId: builderA.subdivisions[1]!.id,
             scheduledDate: new Date(new Date().setDate(new Date().getDate() - 5)),
         },
     ]

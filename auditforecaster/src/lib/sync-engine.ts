@@ -5,7 +5,7 @@ import {
     addFailedMutation,
     MutationQueueItem
 } from './offline-storage';
-import { EquipmentClientInput, JobInput } from '@/lib/schemas';
+// import { EquipmentClientInput, JobInput } from '@/lib/schemas';
 
 // Adapters moved to sync-actions.ts
 

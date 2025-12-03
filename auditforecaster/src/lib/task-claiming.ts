@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { FeatureFlags, isFeatureEnabled } from "@/lib/feature-flags";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { logger } from "@/lib/logger";
 
 export type ClaimTaskResult =
     | { success: true; claimed: boolean; expiresAt?: Date }
@@ -27,7 +28,7 @@ export async function claimTask(taskId: string, userId: string, durationSeconds 
             }
         });
         return { success: true, claimed: true, expiresAt };
-    } catch (error) {
+    } catch {
         // Unique constraint violation means it's already claimed
         const existing = await prisma.taskClaim.findUnique({
             where: { taskId },
@@ -63,6 +64,6 @@ export async function releaseTask(taskId: string, userId: string) {
             }
         });
     } catch (error) {
-        console.error("Failed to release task claim:", error);
+        logger.error("Failed to release task claim", { error });
     }
 }

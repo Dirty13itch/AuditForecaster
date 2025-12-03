@@ -14,7 +14,8 @@ const TemplateSchema = z.object({
 
 export async function createTemplate(formData: FormData) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
 
     const name = formData.get('name') as string
     const checklistItemsJson = formData.get('checklistItems') as string
@@ -28,7 +29,7 @@ export async function createTemplate(formData: FormData) {
 
     const result = TemplateSchema.safeParse({ name, checklistItems })
     if (!result.success) {
-        throw new Error(result.error.errors[0].message)
+        throw new Error(result.error.errors[0]?.message || "Validation failed")
     }
 
     await prisma.reportTemplate.create({
@@ -43,7 +44,8 @@ export async function createTemplate(formData: FormData) {
 
 export async function updateTemplate(id: string, formData: FormData) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
 
     const name = formData.get('name') as string
     const checklistItemsJson = formData.get('checklistItems') as string
@@ -58,7 +60,7 @@ export async function updateTemplate(id: string, formData: FormData) {
 
     const result = TemplateSchema.safeParse({ name, checklistItems })
     if (!result.success) {
-        throw new Error(result.error.errors[0].message)
+        throw new Error(result.error.errors[0]?.message || "Validation failed")
     }
 
     // If setting as default, unset all others
@@ -83,7 +85,8 @@ export async function updateTemplate(id: string, formData: FormData) {
 
 export async function deleteTemplate(id: string) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
 
     const result = z.string().uuid().safeParse(id)
     if (!result.success) {

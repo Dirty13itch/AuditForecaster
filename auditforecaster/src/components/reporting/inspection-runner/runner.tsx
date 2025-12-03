@@ -53,11 +53,6 @@ export function InspectionRunner({
         }));
     };
 
-    const currentPage = structure.pages[currentPageIndex];
-    if (!currentPage) return <div className="p-4 text-center">No pages in template</div>;
-
-
-
     const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
     const [currentActionItem, setCurrentActionItem] = useState<{ title: string; description: string; priority: string; assignedToEmail: string }>({
         title: '', description: '', priority: 'MEDIUM', assignedToEmail: ''
@@ -71,6 +66,9 @@ export function InspectionRunner({
             getActionItems(inspectionId).then(setActionItems);
         });
     }, [inspectionId]);
+
+    const currentPage = structure.pages[currentPageIndex];
+    if (!currentPage) return <div className="p-4 text-center">No pages in template</div>;
 
     const handleCreateActionItem = async () => {
         if (!inspectionId) return;

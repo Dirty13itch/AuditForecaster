@@ -8,7 +8,7 @@ export async function claimTaskAction(taskId: string): Promise<ClaimTaskResult> 
     const session = await auth()
     if (!session?.user?.id) return { success: false, message: "Unauthorized" }
 
-    const role = (session.user as any).role
+    const role = session.user.role
     if (role !== 'ADMIN' && role !== 'INSPECTOR') {
         return { success: false, message: "Unauthorized: Insufficient permissions" }
     }
@@ -20,7 +20,7 @@ export async function releaseTaskAction(taskId: string) {
     const session = await auth()
     if (!session?.user?.id) return { success: false, message: "Unauthorized" }
 
-    const role = (session.user as any).role
+    const role = session.user.role
     if (role !== 'ADMIN' && role !== 'INSPECTOR') {
         return { success: false, message: "Unauthorized: Insufficient permissions" }
     }

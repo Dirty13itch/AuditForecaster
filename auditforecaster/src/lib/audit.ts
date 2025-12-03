@@ -8,17 +8,30 @@ interface AuditLogParams {
     entityType: string
     entityId: string
     action: "CREATE" | "UPDATE" | "DELETE"
-    changes?: Record<string, any>
+    changes?: Record<string, unknown>
     tx?: Prisma.TransactionClient // Optional transaction client
 }
 
-export async function logAudit({ entityType, entityId, action, changes, tx }: AuditLogParams) {
+export async function logAudit({ entityType, entityId, action, changes, tx, actorId: explicitActorId }: AuditLogParams & { actorId?: string }) {
     try {
-        const session = await auth()
-        const headersList = await headers()
-        const ip = headersList.get('x-forwarded-for') || 'unknown'
+        let actorId = explicitActorId || 'SYSTEM'
+        let ip = 'unknown'
 
-        const actorId = session?.user?.id || 'SYSTEM'
+        // Only try to get session/headers if no explicit actorId is provided (implies request context)
+        // or if we want to try anyway but fail gracefully.
+        if (!explicitActorId) {
+            try {
+                const session = await auth()
+                if (session?.user?.id) {
+                    actorId = session.user.id
+                }
+
+                const headersList = await headers()
+                ip = headersList.get('x-forwarded-for') || 'unknown'
+            } catch {
+                // Ignore errors from auth/headers (likely running in worker)
+            }
+        }
 
         const db = tx || prisma
 

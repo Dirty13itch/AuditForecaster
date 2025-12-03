@@ -70,6 +70,8 @@ export async function generateDailyRoute(driverId: string, date: Date) {
 
         for (let i = 0; i < unvisited.length; i++) {
             const job = unvisited[i]
+            if (!job) continue
+
             if (current.latitude && current.longitude && job.latitude && job.longitude) {
                 const dist = getDistanceFromLatLonInKm(current.latitude, current.longitude, job.latitude, job.longitude)
                 if (dist < minDist) {
@@ -84,8 +86,13 @@ export async function generateDailyRoute(driverId: string, date: Date) {
         }
 
         if (nearestIdx !== -1) {
-            current = unvisited.splice(nearestIdx, 1)[0]
-            sortedJobs.push(current)
+            const next = unvisited.splice(nearestIdx, 1)[0]
+            if (next) {
+                current = next
+                sortedJobs.push(current)
+            } else {
+                break
+            }
         } else {
             // Should not happen unless unvisited is empty
             break

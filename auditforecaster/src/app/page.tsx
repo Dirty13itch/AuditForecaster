@@ -39,7 +39,7 @@ export default function LandingPage() {
               </h1>
               <p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
                 Streamline your operations with the most advanced platform for energy raters.
-                From fleet management to predictive analytics, we've got you covered.
+                From fleet management to predictive analytics, we&apos;ve got you covered.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
                 <Link href="/login">
