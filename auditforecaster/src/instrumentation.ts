@@ -5,15 +5,15 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 // import { SEMRESATTRS_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 export function register() {
-    if (process.env.NEXT_RUNTIME === 'nodejs') {
-        const sdk = new NodeSDK({
-            // resource: new Resource({
-            //     'service.name': 'auditforecaster',
-            // }),
-            traceExporter: new OTLPTraceExporter(),
-            instrumentations: [getNodeAutoInstrumentations()],
-        });
+    // if (process.env.NEXT_RUNTIME === 'nodejs') {
+    //     const sdk = new NodeSDK({
+    //         // resource: new Resource({
+    //         //     'service.name': 'auditforecaster',
+    //         // }),
+    //         traceExporter: new OTLPTraceExporter(),
+    //         instrumentations: [getNodeAutoInstrumentations()],
+    //     });
 
-        sdk.start();
-    }
+    //     sdk.start();
+    // }
 }

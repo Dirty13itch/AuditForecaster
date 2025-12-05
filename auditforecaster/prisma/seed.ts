@@ -308,8 +308,26 @@ async function main() {
         }
     }
 
-    // 9. Create E2E Test Inspection
-    const e2eJob = await prisma.job.findFirst({ where: { lotNumber: 'Lot 205' } }) // IN_PROGRESS job
+    // 9. Create E2E Test Inspection & Job
+    const e2eJobData = {
+        id: 'e2e-job-1',
+        lotNumber: 'Lot 205',
+        streetAddress: '205 Pine Ln',
+        city: 'Dallas',
+        address: '205 Pine Ln, Dallas, TX',
+        status: 'IN_PROGRESS',
+        inspectorId: inspector2.id,
+        builderId: builderB.id,
+        subdivisionId: builderB.subdivisions[0]!.id,
+        scheduledDate: new Date(), // Today
+    } as const
+
+    const e2eJob = await prisma.job.upsert({
+        where: { id: 'e2e-job-1' },
+        update: { ...e2eJobData },
+        create: { ...e2eJobData }
+    })
+
     if (e2eJob && template) {
         await prisma.inspection.upsert({
             where: { id: 'e2e-test-inspection' },
@@ -332,6 +350,57 @@ async function main() {
             }
         })
         console.log('Upserted E2E test inspection')
+    }
+
+    // 10. Create Mileage Logs
+    const mileageLogs = [
+        {
+            date: new Date(),
+            distance: 12.5,
+            startLocation: 'Office',
+            endLocation: 'Site A',
+            purpose: 'PENDING',
+            status: 'PENDING',
+            vehicleId: vehicles[0]!.id, // Assuming vehicles created above
+            userId: inspector1.id
+        },
+        {
+            date: new Date(new Date().setDate(new Date().getDate() - 1)),
+            distance: 5.2,
+            startLocation: 'Site A',
+            endLocation: 'Home',
+            purpose: 'PENDING',
+            status: 'PENDING',
+            vehicleId: vehicles[0]!.id,
+            userId: inspector1.id
+        }
+    ]
+
+    // We need to fetch the vehicle first to get its ID if we didn't store it
+    const vehicle = await prisma.vehicle.findFirst({ where: { licensePlate: 'TX-123-ABC' } })
+    
+    if (vehicle) {
+        for (const log of mileageLogs) {
+            // Check if exists (fuzzy check by date and distance)
+            const existing = await prisma.mileageLog.findFirst({ 
+                where: { 
+                    date: log.date, 
+                    distance: log.distance,
+                    userId: log.userId 
+                } 
+            })
+            
+            if (!existing) {
+                await prisma.mileageLog.create({
+                    data: {
+                        ...log,
+                        vehicleId: vehicle.id,
+                        status: 'PENDING' // Ensure status is set
+                    }
+                })
+            }
+        }
+        console.log('Created pending mileage logs')
     }
 
     console.log('Seeding finished.')

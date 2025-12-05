@@ -1,7 +1,8 @@
 'use server'
 
 import { prisma } from "@/lib/prisma"
-import puppeteer from 'puppeteer'
+import { reportQueue } from "@/lib/queue"
+// import puppeteer from 'puppeteer'
 import { auth } from "@/auth"
 import { cookies } from 'next/headers'
 import { logger } from "@/lib/logger"
@@ -38,12 +39,6 @@ export async function generatePDF(jobId: string) {
     }
 
     try {
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        })
-
-        const page = await browser.newPage()
         const cookieStore = await cookies()
         const allCookies = cookieStore.getAll()
         const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
@@ -56,34 +51,24 @@ export async function generatePDF(jobId: string) {
             path: '/',
         }))
 
-        await page.setCookie(...puppeteerCookies)
+        // Enqueue Job
+        await reportQueue.add('generate:PDF', {
+            type: 'PDF',
+            id: jobId,
+            cookies: puppeteerCookies,
+            userEmail: session.user.email || 'notifications@ulrichenergy.com', // Fallback
+            baseUrl
+        });
 
-        await page.goto(`${baseUrl}/dashboard/reports/${jobId}`, {
-            waitUntil: 'networkidle0'
-        })
-
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: {
-                top: '20mm',
-                right: '15mm',
-                bottom: '20mm',
-                left: '15mm'
-            }
-        })
-
-        await browser.close()
-        const base64 = Buffer.from(pdfBuffer).toString('base64')
+        logger.info(`[PDF] Enqueued PDF generation for Job ${jobId}`);
 
         return {
             success: true,
-            pdf: base64,
-            filename: `Report-${job.lotNumber}-${new Date().toISOString().split('T')[0]}.pdf`
+            message: 'Report generation started. You will receive an email shortly.'
         }
     } catch (error) {
         logger.error('PDF generation error', { error })
-        return { error: 'Failed to generate PDF' }
+        return { error: 'Failed to start PDF generation' }
     }
 }
 
@@ -110,12 +95,6 @@ export async function generateInvoicePDF(invoiceId: string) {
     }
 
     try {
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        })
-
-        const page = await browser.newPage()
         const cookieStore = await cookies()
         const allCookies = cookieStore.getAll()
         const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
@@ -128,33 +107,23 @@ export async function generateInvoicePDF(invoiceId: string) {
             path: '/',
         }))
 
-        await page.setCookie(...puppeteerCookies)
+        // Enqueue Job
+        await reportQueue.add('generate:INVOICE', {
+            type: 'INVOICE',
+            id: invoiceId,
+            cookies: puppeteerCookies,
+            userEmail: session.user.email || 'notifications@ulrichenergy.com',
+            baseUrl
+        });
 
-        await page.goto(`${baseUrl}/dashboard/finances/invoices/${invoiceId}`, {
-            waitUntil: 'networkidle0'
-        })
-
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: {
-                top: '20mm',
-                right: '15mm',
-                bottom: '20mm',
-                left: '15mm'
-            }
-        })
-
-        await browser.close()
-        const base64 = Buffer.from(pdfBuffer).toString('base64')
+        logger.info(`[PDF] Enqueued Invoice generation for Invoice ${invoiceId}`);
 
         return {
             success: true,
-            pdf: base64,
-            filename: `Invoice-${invoice.number}.pdf`
+            message: 'Invoice generation started. You will receive an email shortly.'
         }
     } catch (error) {
         logger.error('Invoice PDF generation error', { error })
-        return { error: 'Failed to generate Invoice PDF' }
+        return { error: 'Failed to start Invoice PDF generation' }
     }
 }

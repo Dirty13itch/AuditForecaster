@@ -80,3 +80,37 @@ export async function sendQARejectionEmail(
         return { success: false, error };
     }
 }
+
+export async function sendEmailWithAttachment(
+    to: string,
+    subject: string,
+    html: string,
+    attachments: { filename: string; content: Buffer }[]
+) {
+    const resend = getResend();
+    if (!resend || !process.env.RESEND_API_KEY) {
+        logger.warn('Mocking email send (missing API key)', { to, subject, attachmentCount: attachments.length });
+        return { success: true, id: 'mock-id' };
+    }
+
+    try {
+        const data = await resend.emails.send({
+            from: 'Ulrich Energy <notifications@ulrichenergy.com>',
+            to: [to],
+            subject,
+            html,
+            attachments: attachments.map(a => ({
+                filename: a.filename,
+                content: a.content
+            }))
+        });
+        return { success: true, data };
+    } catch (error) {
+        logger.error('Failed to send email with attachment', {
+            to,
+            subject,
+            error: error instanceof Error ? error.message : String(error)
+        });
+        return { success: false, error };
+    }
+}

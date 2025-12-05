@@ -115,36 +115,12 @@ export async function sendInvoiceEmail(jobId: string) {
 
         const pdfResult = await generateInvoicePDF(invoice.id)
 
-        if (pdfResult.error || !pdfResult.pdf) {
-            logger.error('Failed to generate PDF attachment', { error: pdfResult.error })
-            return { error: 'Failed to generate PDF attachment' }
+        if (pdfResult.error) {
+            logger.error('Failed to queue PDF generation', { error: pdfResult.error })
+            return { error: 'Failed to queue invoice generation' }
         }
 
-        const subject = `Invoice for Job: ${job.lotNumber} - ${job.streetAddress}`
-        const body = `
-            Invoice Generated
-            
-            Job Details:
-            - Lot: ${job.lotNumber}
-            - Address: ${job.streetAddress}
-            - Builder: ${job.builder?.name || 'Unknown'}
-            - Date: ${new Date().toLocaleDateString()}
-            - Invoice #: ${invoice.number}
-            - Amount: $${invoice.totalAmount.toFixed(2)}
-            
-            Please find the invoice attached.
-        `
-
-        return sendEmail({
-            to: session.user.email || '', // Send to self for testing
-            subject,
-            body,
-            attachments: [{
-                filename: pdfResult.filename || `Invoice-${invoice.number}.pdf`,
-                content: pdfResult.pdf,
-                contentType: 'application/pdf'
-            }]
-        })
+        return { success: true, message: 'Invoice email queued' }
     } catch (error) {
         logger.error('Failed to send invoice email', { error, jobId })
         return { error: 'Failed to send invoice' }

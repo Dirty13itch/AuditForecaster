@@ -31,4 +31,5 @@ class QueueFactory {
 }
 
 export const syncQueue = QueueFactory.getQueue('sync-queue');
+export const reportQueue = QueueFactory.getQueue('report-queue');
 export const QueueConnection = connectionOptions;

@@ -3,6 +3,7 @@ import { StatCard } from "@/components/analytics/stat-card"
 import { RevenueChart } from "@/components/analytics/revenue-chart"
 import { PredictiveAlerts } from "@/components/analytics/predictive-alerts"
 import { DollarSign, Activity, Users, CheckCircle } from "lucide-react"
+import { ScenarioBuilder } from "@/components/analytics/scenario-builder"
 
 export const metadata = {
     title: 'Analytics | AuditForecaster',
@@ -57,6 +58,11 @@ export default async function AnalyticsPage() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
                 <RevenueChart data={data.dailyTrend} />
                 <PredictiveAlerts alerts={alerts} />
+            </div>
+
+            <div className="space-y-4">
+                <h3 className="text-xl font-semibold text-white">HERS Score Projection (Ekotrope Simulation)</h3>
+                <ScenarioBuilder />
             </div>
         </div>
     )

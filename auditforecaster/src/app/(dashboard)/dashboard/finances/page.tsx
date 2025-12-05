@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Plus, FileText } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Metadata } from "next";
+import { MileageSwipe } from "@/components/finance/mileage-swipe";
+import { AutoClassifyButton } from "@/components/finance/auto-classify-button";
 
 export const metadata: Metadata = {
     title: "Finances | AuditForecaster",
@@ -22,6 +24,12 @@ export default async function FinancesPage() {
         orderBy: { date: 'desc' },
         take: 20,
         include: { vehicle: true }
+    });
+
+    const pendingLogs = await prisma.mileageLog.findMany({
+        where: { status: 'PENDING' },
+        orderBy: { date: 'desc' },
+        take: 50
     });
 
     return (
@@ -108,6 +116,17 @@ export default async function FinancesPage() {
                 </TabsContent>
 
                 <TabsContent value="mileage" className="space-y-4">
+                    {/* Swipe Interface for Pending Logs */}
+                    {pendingLogs.length > 0 && (
+                        <div className="mb-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold">Pending Classification</h3>
+                                <AutoClassifyButton />
+                            </div>
+                            <MileageSwipe logs={pendingLogs} onComplete={() => {}} />
+                        </div>
+                    )}
+
                     <div className="flex justify-between items-center">
                         <h3 className="text-xl font-semibold">Mileage Log</h3>
                         <Button>
@@ -139,7 +158,15 @@ export default async function FinancesPage() {
                                                 <TableRow key={log.id}>
                                                     <TableCell>{log.date.toLocaleDateString()}</TableCell>
                                                     <TableCell>{log.vehicle.name}</TableCell>
-                                                    <TableCell>{log.purpose}</TableCell>
+                                                    <TableCell>
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                            log.purpose === 'BUSINESS' ? 'bg-green-100 text-green-700' :
+                                                            log.purpose === 'PERSONAL' ? 'bg-red-100 text-red-700' :
+                                                            'bg-gray-100 text-gray-700'
+                                                        }`}>
+                                                            {log.purpose || 'PENDING'}
+                                                        </span>
+                                                    </TableCell>
                                                     <TableCell>{log.startLocation} → {log.endLocation}</TableCell>
                                                     <TableCell>{log.distance} mi</TableCell>
                                                 </TableRow>

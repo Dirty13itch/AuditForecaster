@@ -19,6 +19,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    volumes:
+      - /mnt/user/appdata/auditforecaster/uploads:/app/public/uploads
     networks:
       - audit-net
 

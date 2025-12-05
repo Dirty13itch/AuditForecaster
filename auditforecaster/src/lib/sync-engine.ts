@@ -3,6 +3,8 @@ import {
     getMutationQueue,
     removeMutation,
     addFailedMutation,
+    getAllUnsyncedPhotos,
+    markPhotoSynced,
     MutationQueueItem
 } from './offline-storage';
 // import { EquipmentClientInput, JobInput } from '@/lib/schemas';
@@ -51,6 +53,7 @@ export class SyncEngine {
 
         try {
             await this.processQueue();
+            await this.syncPhotos();
         } finally {
             this.isProcessing = false;
             this.notify(false);
@@ -131,6 +134,39 @@ export class SyncEngine {
                     }
                 }
                 break;
+            }
+        }
+
+    }
+
+    private async syncPhotos() {
+        const photos = await getAllUnsyncedPhotos();
+        if (photos.length === 0) return;
+
+        console.log(`[SyncEngine] Syncing ${photos.length} photos...`);
+        
+        // Import action dynamically
+        const { uploadPhoto } = await import('@/app/actions/photos');
+
+        for (const photo of photos) {
+            try {
+                const formData = new FormData();
+                formData.append('file', photo.file);
+                formData.append('inspectionId', photo.inspectionId);
+                formData.append('caption', photo.caption);
+                formData.append('category', photo.category);
+                formData.append('id', photo.id);
+
+                const result = await uploadPhoto(formData);
+
+                if (result.success) {
+                    await markPhotoSynced(photo.id);
+                    console.log(`[SyncEngine] Synced photo ${photo.id}`);
+                } else {
+                    console.error(`[SyncEngine] Failed to sync photo ${photo.id}:`, result.error);
+                }
+            } catch (error) {
+                console.error(`[SyncEngine] Error syncing photo ${photo.id}:`, error);
             }
         }
     }

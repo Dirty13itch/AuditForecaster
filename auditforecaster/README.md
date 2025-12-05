@@ -185,20 +185,28 @@ Current test coverage focuses on:
 
 ## 🚢 Deployment
 
-### Vercel (Recommended)
+### Unraid (Recommended)
 
-1. Push code to GitHub
-2. Import project to Vercel
-3. Set environment variables in Vercel dashboard
-4. Deploy!
+We have optimized the deployment pipeline for Unraid using Docker Compose.
 
-```bash
-# Or use Vercel CLI
-npm i -g vercel
-vercel
-```
+1.  **Configure Credentials:**
+    Ensure you have SSH access to your Unraid server.
 
-### Docker (Alternative)
+2.  **Deploy:**
+    Run the deployment script from your Windows machine:
+    ```powershell
+    npm run deploy:preview
+    ```
+    This script will:
+    *   Build the Docker image locally.
+    *   Save it to a `.tar` file.
+    *   SCP the image and `docker-compose.prod.yml` to Unraid.
+    *   SSH into Unraid to load the image and restart the containers.
+
+3.  **Verify:**
+    Visit `http://YOUR_UNRAID_IP:3000` to see the application running.
+
+### Manual Docker Deployment
 
 ```bash
 # Build image
@@ -210,18 +218,6 @@ docker run -p 3000:3000 \
   -e NEXTAUTH_URL="..." \
   -e NEXTAUTH_SECRET="..." \
   auditforecaster
-```
-
-### Database Migration
-
-For production deployments:
-
-```bash
-# Generate migration
-npx prisma migrate dev --name init
-
-# Apply to production
-npx prisma migrate deploy
 ```
 
 ---

@@ -215,6 +215,20 @@ export async function getOfflinePhotos(inspectionId: string) {
     return db.getAllFromIndex('photos', 'by-inspection', inspectionId);
 }
 
+export async function getAllUnsyncedPhotos() {
+    const db = await getDB();
+    const all = await db.getAll('photos');
+    return all.filter(p => !p.synced);
+}
+
+export async function markPhotoSynced(id: string) {
+    const db = await getDB();
+    const photo = await db.get('photos', id);
+    if (photo) {
+        await db.put('photos', { ...photo, synced: true });
+    }
+}
+
 export async function getAllUnsyncedInspections() {
     const db = await getDB();
     const all = await db.getAll('inspections');

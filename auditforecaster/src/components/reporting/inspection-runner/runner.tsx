@@ -9,6 +9,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
+import { ActionItemDialog } from '@/components/inspection/action-item-dialog';
 
 type ActionItem = {
     id: string
@@ -46,17 +47,8 @@ export function InspectionRunner({
         setScoreData(score);
     }, [answers, structure]);
 
-    const handleAnswer = (questionId: string, value: string | number | string[] | boolean | null) => {
-        setAnswers(prev => ({
-            ...prev,
-            [questionId]: { questionId, value }
-        }));
-    };
-
     const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
-    const [currentActionItem, setCurrentActionItem] = useState<{ title: string; description: string; priority: string; assignedToEmail: string }>({
-        title: '', description: '', priority: 'MEDIUM', assignedToEmail: ''
-    });
+    const [failedItemTitle, setFailedItemTitle] = useState('');
     const [actionItems, setActionItems] = useState<ActionItem[]>([]);
 
     // Load action items
@@ -67,31 +59,43 @@ export function InspectionRunner({
         });
     }, [inspectionId]);
 
-    const currentPage = structure.pages[currentPageIndex];
-    if (!currentPage) return <div className="p-4 text-center">No pages in template</div>;
-
-    const handleCreateActionItem = async () => {
+    const refreshActionItems = () => {
         if (!inspectionId) return;
+        import('@/app/actions/action-items').then(({ getActionItems }) => {
+            getActionItems(inspectionId).then(setActionItems);
+        });
+    };
 
-        try {
-            const { createActionItem } = await import('@/app/actions/action-items');
-            await createActionItem({
-                inspectionId,
-                title: currentActionItem.title,
-                description: currentActionItem.description,
-                priority: currentActionItem.priority,
-                assignedToEmail: currentActionItem.assignedToEmail
-            });
-            setIsActionDialogOpen(false);
-            setCurrentActionItem({ title: '', description: '', priority: 'MEDIUM', assignedToEmail: '' });
-            // Reload action items
-            import('@/app/actions/action-items').then(({ getActionItems }) => {
-                getActionItems(inspectionId).then(setActionItems);
-            });
-        } catch (error) {
-            console.error(error);
+    const handleAnswer = (questionId: string, value: string | number | string[] | boolean | null) => {
+        setAnswers(prev => ({
+            ...prev,
+            [questionId]: { questionId, value }
+        }));
+
+        // Auto-trigger action item dialog on failure
+        if (value === 'Fail' || value === 'No' || value === false) {
+            // Find the item label
+            let label = '';
+            for (const page of structure.pages) {
+                for (const section of page.sections) {
+                    const item = section.items.find(i => i.id === questionId);
+                    if (item) {
+                        label = item.label;
+                        break;
+                    }
+                }
+                if (label) break;
+            }
+            
+            if (label) {
+                setFailedItemTitle(`Fix: ${label}`);
+                setIsActionDialogOpen(true);
+            }
         }
     };
+
+    const currentPage = structure.pages[currentPageIndex];
+    if (!currentPage) return <div className="p-4 text-center">No pages in template</div>;
 
     return (
         <div className="max-w-3xl mx-auto space-y-6 pb-20">
@@ -125,7 +129,7 @@ export function InspectionRunner({
                                                     size="sm"
                                                     className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
                                                     onClick={() => {
-                                                        setCurrentActionItem(prev => ({ ...prev, title: `Fix: ${item.label}` }));
+                                                        setFailedItemTitle(`Fix: ${item.label}`);
                                                         setIsActionDialogOpen(true);
                                                     }}
                                                 >
@@ -210,58 +214,14 @@ export function InspectionRunner({
             </div>
 
             {/* Action Item Dialog */}
-            {isActionDialogOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <Card className="w-full max-w-md">
-                        <CardHeader>
-                            <h3 className="text-lg font-bold">Create Action Item</h3>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Title</Label>
-                                <Input
-                                    value={currentActionItem.title}
-                                    onChange={(e) => setCurrentActionItem({ ...currentActionItem, title: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Priority</Label>
-                                <Select
-                                    value={currentActionItem.priority}
-                                    onValueChange={(val) => setCurrentActionItem({ ...currentActionItem, priority: val })}
-                                >
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="LOW">Low</SelectItem>
-                                        <SelectItem value="MEDIUM">Medium</SelectItem>
-                                        <SelectItem value="HIGH">High</SelectItem>
-                                        <SelectItem value="CRITICAL">Critical</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Assign To (Email)</Label>
-                                <Input
-                                    type="email"
-                                    placeholder="builder@example.com"
-                                    value={currentActionItem.assignedToEmail}
-                                    onChange={(e) => setCurrentActionItem({ ...currentActionItem, assignedToEmail: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Description</Label>
-                                <Input
-                                    value={currentActionItem.description}
-                                    onChange={(e) => setCurrentActionItem({ ...currentActionItem, description: e.target.value })}
-                                />
-                            </div>
-                            <div className="flex justify-end gap-2 pt-4">
-                                <Button variant="ghost" onClick={() => setIsActionDialogOpen(false)}>Cancel</Button>
-                                <Button onClick={handleCreateActionItem}>Create & Send</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+            {inspectionId && (
+                <ActionItemDialog 
+                    open={isActionDialogOpen} 
+                    onOpenChange={setIsActionDialogOpen} 
+                    inspectionId={inspectionId}
+                    failedItemTitle={failedItemTitle}
+                    onSuccess={refreshActionItems}
+                />
             )}
         </div>
     );
