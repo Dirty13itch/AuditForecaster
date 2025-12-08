@@ -353,48 +353,47 @@ async function main() {
     }
 
     // 10. Create Mileage Logs
-    const mileageLogs = [
-        {
-            date: new Date(),
-            distance: 12.5,
-            startLocation: 'Office',
-            endLocation: 'Site A',
-            purpose: 'PENDING',
-            status: 'PENDING',
-            vehicleId: vehicles[0]!.id, // Assuming vehicles created above
-            userId: inspector1.id
-        },
-        {
-            date: new Date(new Date().setDate(new Date().getDate() - 1)),
-            distance: 5.2,
-            startLocation: 'Site A',
-            endLocation: 'Home',
-            purpose: 'PENDING',
-            status: 'PENDING',
-            vehicleId: vehicles[0]!.id,
-            userId: inspector1.id
-        }
-    ]
-
-    // We need to fetch the vehicle first to get its ID if we didn't store it
+    // We need to fetch the vehicle first to get its ID
     const vehicle = await prisma.vehicle.findFirst({ where: { licensePlate: 'TX-123-ABC' } })
-    
+
     if (vehicle) {
+        const mileageLogs = [
+            {
+                date: new Date(),
+                distance: 12.5,
+                startLocation: 'Office',
+                endLocation: 'Site A',
+                purpose: 'PENDING',
+                status: 'PENDING',
+                vehicleId: vehicle.id,
+                userId: inspector1.id
+            },
+            {
+                date: new Date(new Date().setDate(new Date().getDate() - 1)),
+                distance: 5.2,
+                startLocation: 'Site A',
+                endLocation: 'Home',
+                purpose: 'PENDING',
+                status: 'PENDING',
+                vehicleId: vehicle.id,
+                userId: inspector1.id
+            }
+        ]
+
         for (const log of mileageLogs) {
             // Check if exists (fuzzy check by date and distance)
-            const existing = await prisma.mileageLog.findFirst({ 
-                where: { 
-                    date: log.date, 
+            const existing = await prisma.mileageLog.findFirst({
+                where: {
+                    date: log.date,
                     distance: log.distance,
-                    userId: log.userId 
-                } 
+                    userId: log.userId
+                }
             })
-            
+
             if (!existing) {
                 await prisma.mileageLog.create({
                     data: {
                         ...log,
-                        vehicleId: vehicle.id,
                         status: 'PENDING' // Ensure status is set
                     }
                 })
