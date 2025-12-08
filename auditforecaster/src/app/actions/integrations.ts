@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { logger } from '@/lib/logger'
+import { auth } from '@/auth'
 
 export type IntegrationSettingsData = {
     ekotropeApiKey?: string | null
@@ -15,6 +16,12 @@ export type IntegrationSettingsData = {
 }
 
 export async function getIntegrationSettings() {
+    // Integration settings contain API keys - admin only
+    const session = await auth()
+    if (!session?.user || session.user.role !== 'ADMIN') {
+        return { success: false, error: 'Unauthorized: Admin access required' }
+    }
+
     try {
         let settings = await prisma.integrationSettings.findFirst()
 
@@ -39,6 +46,12 @@ export async function getIntegrationSettings() {
 }
 
 export async function updateIntegrationSettings(data: IntegrationSettingsData) {
+    // Integration settings contain API keys - admin only
+    const session = await auth()
+    if (!session?.user || session.user.role !== 'ADMIN') {
+        return { success: false, error: 'Unauthorized: Admin access required' }
+    }
+
     try {
         const current = await prisma.integrationSettings.findFirst()
 
