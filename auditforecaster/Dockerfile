@@ -2,11 +2,15 @@ FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
+# Copy package files AND prisma schema (needed for postinstall prisma generate)
 COPY package*.json ./
-RUN npm ci
+COPY prisma ./prisma
+
+# Install dependencies (ignore postinstall script, we'll run prisma generate in builder stage)
+RUN npm ci --ignore-scripts
 
 # Rebuild the source code only when needed
 FROM base AS builder
