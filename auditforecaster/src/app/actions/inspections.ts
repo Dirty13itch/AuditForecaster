@@ -41,7 +41,7 @@ export async function updateInspection(formData: FormData): Promise<never> {
 
         // Parse and calculate
         const houseVolume = fields.houseVolume ? safeParseFloat(fields.houseVolume, 0) : null
-        const checklist = safeJsonParse(fields.checklist, null)
+        const checklist = safeJsonParse<unknown[] | null>(fields.checklist, null)
 
         const cfm50Val = safeParseFloat(fields.cfm50, 0)
         if (cfm50Val <= 0) {

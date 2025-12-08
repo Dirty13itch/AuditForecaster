@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { TemplateForm } from "@/components/template-form"
+import { TemplateForm, type ChecklistItem } from "@/components/template-form"
 import { safeJsonParse } from "@/lib/utils"
 
 export default async function EditTemplatePage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,7 +24,7 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ i
             <TemplateForm template={{
                 ...template,
                 description: null,
-                checklistItems: safeJsonParse(template.checklistItems, [])
+                checklistItems: safeJsonParse<ChecklistItem[]>(template.checklistItems, [])
             }} />
         </div>
     )

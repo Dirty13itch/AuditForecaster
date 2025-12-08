@@ -122,7 +122,7 @@ async function handleUpdateInspection(payload: unknown) {
     const fields = validated;
 
     const houseVolume = fields.houseVolume ? safeParseFloat(fields.houseVolume, 0) : null;
-    const checklist = safeJsonParse(fields.checklist, null);
+    const checklist = safeJsonParse<unknown[] | null>(fields.checklist, null);
     const cfm50Val = safeParseFloat(fields.cfm50, 0);
 
     let ach50: number | null = null;

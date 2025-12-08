@@ -79,7 +79,7 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
                 templates={templates.map(t => ({
                     id: t.id,
                     name: t.name,
-                    checklistItems: safeJsonParse(t.checklistItems, [])
+                    checklistItems: safeJsonParse<{ label: string }[]>(t.checklistItems, [])
                 }))}
             />
         </div>
