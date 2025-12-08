@@ -156,14 +156,14 @@ services:
 
   # ===========================================================================
   # UPTIME MONITORING (Uptime Kuma)
-  # Access at: http://YOUR_IP:3001
+  # Access at: http://YOUR_IP:3002
   # ===========================================================================
   uptime-kuma:
     image: louislam/uptime-kuma:1
     container_name: auditforecaster-monitor
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3002:3001"
     volumes:
       - uptime_kuma:/app/data
     networks:

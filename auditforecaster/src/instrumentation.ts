@@ -1,13 +1,23 @@
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+// Instrumentation for OpenTelemetry (optional)
+// Only initialized when OTEL_EXPORTER_OTLP_ENDPOINT is set
 
-export function register() {
-    // Only enable OpenTelemetry in production when endpoint is configured
+export async function register() {
+    // Only enable OpenTelemetry in production server runtime when endpoint is configured
+    if (process.env.NEXT_RUNTIME !== 'nodejs') {
+        return;
+    }
+
     const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    if (!otlpEndpoint) {
+        return;
+    }
 
-    if (process.env.NEXT_RUNTIME === 'nodejs' && otlpEndpoint) {
+    // Dynamic import to avoid bundling issues
+    try {
+        const { NodeSDK } = await import('@opentelemetry/sdk-node');
+        const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
+        const { Resource } = await import('@opentelemetry/resources');
+
         const sdk = new NodeSDK({
             resource: new Resource({
                 'service.name': process.env.OTEL_SERVICE_NAME || 'auditforecaster',
@@ -17,22 +27,17 @@ export function register() {
             traceExporter: new OTLPTraceExporter({
                 url: `${otlpEndpoint}/v1/traces`,
             }),
-            instrumentations: [
-                getNodeAutoInstrumentations({
-                    // Disable noisy instrumentations
-                    '@opentelemetry/instrumentation-fs': { enabled: false },
-                }),
-            ],
         });
 
         sdk.start();
 
-        // Graceful shutdown
         process.on('SIGTERM', () => {
             sdk.shutdown()
                 .then(() => console.log('OpenTelemetry SDK shut down'))
                 .catch((error) => console.error('Error shutting down OpenTelemetry', error))
                 .finally(() => process.exit(0));
         });
+    } catch (error) {
+        console.warn('Failed to initialize OpenTelemetry:', error);
     }
 }
