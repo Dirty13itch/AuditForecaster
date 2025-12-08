@@ -44,7 +44,7 @@ export default async function QADashboardPage() {
             <div className="grid gap-4">
                 {jobsToReview.map((job) => {
                     const inspection = job.inspections[0]
-                    const inspectionData = safeJsonParse<{ cfm50?: number }>(inspection?.data, null)
+                    const inspectionData = safeJsonParse<{ cfm50?: number } | null>(inspection?.data, null)
                     return (
                         <Link href={`/dashboard/qa/${job.id}`} key={job.id}>
                             <Card className="hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-l-blue-500">
