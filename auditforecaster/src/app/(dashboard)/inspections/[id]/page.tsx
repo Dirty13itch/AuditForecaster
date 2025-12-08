@@ -32,7 +32,7 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
     }
 
     const inspection = job.inspections[0]
-    const inspectionData = safeJsonParse(inspection?.data, {})
+    const inspectionData = safeJsonParse<Record<string, unknown>>(inspection?.data, {})
     const checklist = safeJsonParse(inspection?.checklist, [])
 
     return (
