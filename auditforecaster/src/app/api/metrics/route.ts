@@ -1,5 +1,6 @@
 import { register, collectDefaultMetrics } from 'prom-client';
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 // Initialize default metrics collection
 collectDefaultMetrics({ prefix: 'auditforecaster_' });
@@ -13,7 +14,7 @@ export async function GET() {
             },
         });
     } catch (error) {
-        console.error('Metrics endpoint error:', error);
+        logger.error('Metrics endpoint failed', { error });
         return new NextResponse('Internal Server Error', { status: 500 });
     }
 }

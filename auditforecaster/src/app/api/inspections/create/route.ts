@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
     try {
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ inspectionId: inspection.id })
 
     } catch (error) {
-        console.error('API: createInspection error:', error)
+        logger.error('API: createInspection failed', { error })
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Failed to create inspection' },
             { status: 500 }

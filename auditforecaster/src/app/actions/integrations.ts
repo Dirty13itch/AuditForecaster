@@ -54,7 +54,7 @@ export async function updateIntegrationSettings(data: IntegrationSettingsData) {
         revalidatePath('/dashboard/admin/integrations')
         return { success: true }
     } catch (error) {
-        console.error('Failed to update integration settings:', error)
+        logger.error('Failed to update integration settings', { error })
         return { success: false, error: 'Failed to update settings' }
     }
 }

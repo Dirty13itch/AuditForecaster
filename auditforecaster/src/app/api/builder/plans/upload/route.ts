@@ -26,6 +26,12 @@ export async function POST(req: Request) {
             return new NextResponse("Missing required fields", { status: 400 });
         }
 
+        // Validate builderId format (UUID only - prevents path traversal)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(builderId)) {
+            return new NextResponse("Invalid builder ID format", { status: 400 });
+        }
+
         // Validate file type
         if (!ALLOWED_TYPES.includes(file.type)) {
             return new NextResponse(`Invalid file type. Allowed: PDF, JPEG, PNG, WebP`, { status: 400 });
@@ -43,9 +49,11 @@ export async function POST(req: Request) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
-        // Create unique filename
+        // Create unique filename - sanitize original name to prevent path traversal
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const filename = file.name.replace(/\.[^/.]+$/, "") + '-' + uniqueSuffix + '.' + file.name.split('.').pop();
+        const originalName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const extension = (file.name.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '');
+        const filename = `${originalName}-${uniqueSuffix}.${extension}`;
 
         // Ensure uploads directory exists (in a real app, check/create on startup)
         // For this implementation, we'll assume a 'uploads' folder in public or use a relative path

@@ -24,6 +24,12 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
+        // Validate inspectionId format (UUID only - prevents path traversal)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(inspectionId)) {
+            return NextResponse.json({ error: 'Invalid inspection ID format' }, { status: 400 })
+        }
+
         // Validate file type
         const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
         if (!allowedTypes.includes(file.type)) {

@@ -113,7 +113,7 @@ export async function deleteUser(id: string) {
         revalidatePath('/dashboard/team/users')
         return { message: 'User deleted successfully' }
     } catch (e: unknown) {
-        console.error(e)
+        logger.error('Failed to delete user', { error: e })
         return { message: e instanceof Error ? e.message : 'Failed to delete user' }
     }
 }
