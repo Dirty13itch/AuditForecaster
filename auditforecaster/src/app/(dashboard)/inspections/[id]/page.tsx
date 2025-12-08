@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Save } from "lucide-react"
 import { InspectionForm } from "@/components/inspection-form"
 import { safeJsonParse } from "@/lib/utils"
-import type { ChecklistItem } from "@/types"
+import type { ChecklistItem } from "@/lib/offline-storage"
 
 interface InspectionData {
     cfm50?: number
