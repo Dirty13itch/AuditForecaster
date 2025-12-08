@@ -60,11 +60,11 @@ export default async function QAReviewPage({ params }: { params: Promise<{ id: s
                         <CardContent className="grid grid-cols-2 gap-4">
                             <div>
                                 <div className="text-sm text-gray-500">CFM @ 50Pa</div>
-                                <div className="text-3xl font-bold">{inspectionData.cfm50}</div>
+                                <div className="text-3xl font-bold">{String(inspectionData.cfm50 ?? '-')}</div>
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">Notes</div>
-                                <div className="text-gray-700">{inspectionData.notes || 'No notes provided.'}</div>
+                                <div className="text-gray-700">{String(inspectionData.notes || 'No notes provided.')}</div>
                             </div>
                         </CardContent>
                     </Card>
