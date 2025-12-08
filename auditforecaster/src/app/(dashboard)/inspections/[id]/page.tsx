@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Save } from "lucide-react"
 import { InspectionForm } from "@/components/inspection-form"
 import { safeJsonParse } from "@/lib/utils"
+import type { ChecklistItem } from "@/types"
 
 interface InspectionData {
     cfm50?: number
@@ -40,7 +41,7 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
 
     const inspection = job.inspections[0]
     const inspectionData = safeJsonParse<InspectionData>(inspection?.data, {})
-    const checklist = safeJsonParse<unknown[]>(inspection?.checklist, [])
+    const checklist = safeJsonParse<ChecklistItem[]>(inspection?.checklist, [])
 
     return (
         <div className="space-y-6 max-w-3xl mx-auto">
