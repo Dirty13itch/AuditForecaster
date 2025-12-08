@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache"
 import { logger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
 import { z } from "zod"
-import { hash } from "bcryptjs"
+import { hash, compare } from "bcryptjs"
 
 const ProfileSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -77,9 +77,11 @@ export async function changePassword(formData: FormData) {
             throw new Error("User not found or invalid auth method")
         }
 
-        // In a real app, we'd compare hash. For now, assuming we have a compare function or using bcryptjs
-        // const isValid = await compare(validated.currentPassword, user.passwordHash)
-        // if (!isValid) throw new Error("Incorrect current password")
+        // Verify current password before allowing change
+        const isValid = await compare(validated.currentPassword, user.passwordHash)
+        if (!isValid) {
+            return { success: false, message: "Incorrect current password" }
+        }
 
         const newHash = await hash(validated.newPassword, 12)
 

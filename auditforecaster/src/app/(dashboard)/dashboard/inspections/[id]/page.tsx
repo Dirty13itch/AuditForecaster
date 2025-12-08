@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { ArrowLeft, FileText, CheckCircle2, XCircle, MinusCircle } from "lucide-react";
 import { EkotropeSyncButton } from "@/components/integrations/ekotrope-sync-button";
+import { safeJsonParse } from "@/lib/utils";
 
 // Types for inspection data and checklist items
 interface InspectionData {
@@ -60,8 +61,8 @@ export default async function InspectionDetailsPage({
     if (!inspection) {
         return null;
     }
-    const inspectionData: InspectionData = inspection.data ? JSON.parse(inspection.data) : {};
-    const checklist: ChecklistItem[] = inspection.checklist ? JSON.parse(inspection.checklist) : [];
+    const inspectionData: InspectionData = safeJsonParse<InspectionData>(inspection.data, {});
+    const checklist: ChecklistItem[] = safeJsonParse<ChecklistItem[]>(inspection.checklist, []);
 
     return (
         <div className="space-y-6">

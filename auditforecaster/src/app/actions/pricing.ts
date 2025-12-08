@@ -66,7 +66,7 @@ export async function updateServiceItem(id: string, data: Partial<z.infer<typeof
         revalidatePath('/dashboard/settings/pricing')
         return { success: true, data: serviceItem }
     } catch (error) {
-        console.error('Failed to update service item:', error)
+        logger.error('Failed to update service item', { error })
         return { success: false, error: 'Failed to update service item' }
     }
 }
@@ -78,7 +78,7 @@ export async function getServiceItems() {
         })
         return { success: true, data: items }
     } catch (error) {
-        console.error('Failed to fetch service items:', error)
+        logger.error('Failed to fetch service items', { error })
         return { success: false, error: 'Failed to fetch service items' }
     }
 }
@@ -105,7 +105,7 @@ export async function createPriceList(data: z.infer<typeof PriceListSchema>) {
         revalidatePath('/dashboard/settings/pricing')
         return { success: true, data: priceList }
     } catch (error) {
-        console.error('Failed to create price list:', error)
+        logger.error('Failed to create price list', { error })
         return { success: false, error: 'Failed to create price list' }
     }
 }
@@ -124,7 +124,7 @@ export async function getPriceLists() {
         })
         return { success: true, data: priceLists }
     } catch (error) {
-        console.error('Failed to fetch price lists:', error)
+        logger.error('Failed to fetch price lists', { error })
         return { success: false, error: 'Failed to fetch price lists' }
     }
 }
@@ -145,7 +145,7 @@ export async function getPriceList(id: string) {
         })
         return { success: true, data: priceList }
     } catch (error) {
-        console.error('Failed to fetch price list:', error)
+        logger.error('Failed to fetch price list', { error })
         return { success: false, error: 'Failed to fetch price list' }
     }
 }
@@ -179,7 +179,7 @@ export async function upsertPriceListItem(priceListId: string, serviceItemId: st
         revalidatePath(`/dashboard/settings/pricing/${priceListId}`)
         return { success: true, data: item }
     } catch (error) {
-        console.error('Failed to upsert price list item:', error)
+        logger.error('Failed to upsert price list item', { error })
         return { success: false, error: 'Failed to upsert price list item' }
     }
 }

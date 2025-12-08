@@ -5,6 +5,7 @@ import { Plus, Edit, Trash2, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { deleteTemplate } from "@/app/actions/templates"
 import { TemplateStructure } from "@/lib/reporting/engine"
+import { safeJsonParse } from "@/lib/utils"
 
 export default async function TemplatesPage() {
     const templates = await prisma.reportTemplate.findMany({
@@ -78,9 +79,7 @@ export default async function TemplatesPage() {
                                             </span>
                                             <div>
                                                 <span className="font-medium">
-                                                    {typeof template.checklistItems === 'string'
-                                                        ? JSON.parse(template.checklistItems).length
-                                                        : 0} checklist items
+                                                    {safeJsonParse<unknown[]>(template.checklistItems, []).length} checklist items
                                                 </span>
                                             </div>
                                         </>

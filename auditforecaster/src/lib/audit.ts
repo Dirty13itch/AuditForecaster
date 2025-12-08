@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { headers } from "next/headers"
-
 import { Prisma } from "@prisma/client"
+import { logger } from "@/lib/logger"
 
 interface AuditLogParams {
     entityType: string
@@ -46,7 +46,7 @@ export async function logAudit({ entityType, entityId, action, changes, tx, acto
             }
         })
     } catch (error) {
-        console.error('Failed to write audit log:', error)
+        logger.error('Failed to write audit log', { error, entityType, entityId, action })
         // We do NOT throw here, to prevent blocking the main action if logging fails
     }
 }

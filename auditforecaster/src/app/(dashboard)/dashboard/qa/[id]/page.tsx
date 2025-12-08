@@ -8,6 +8,7 @@ import { ArrowLeft, CheckCircle } from "lucide-react"
 import Image from "next/image"
 import { approveJob } from "@/app/actions/qa"
 import { RejectJobDialog } from "@/components/reject-job-dialog"
+import { safeJsonParse } from "@/lib/utils"
 
 export default async function QAReviewPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -33,7 +34,7 @@ export default async function QAReviewPage({ params }: { params: Promise<{ id: s
         notFound()
     }
 
-    const inspectionData = inspection.data ? JSON.parse(inspection.data) : {}
+    const inspectionData = safeJsonParse(inspection.data, {})
 
     return (
         <div className="space-y-6">

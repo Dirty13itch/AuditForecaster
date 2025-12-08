@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { logger } from "@/lib/logger"
 import { Redis } from '@upstash/redis';
+import { auth } from "@/auth"
 
 export type SystemHealth = {
     database: 'healthy' | 'unhealthy';
@@ -17,6 +18,12 @@ export type SystemHealth = {
 };
 
 export async function checkSystemHealth(): Promise<SystemHealth> {
+    // Require admin authentication to view system health
+    const session = await auth()
+    if (!session?.user || session.user.role !== 'ADMIN') {
+        throw new Error("Unauthorized")
+    }
+
     // 1. Check Database
     let dbStatus: 'healthy' | 'unhealthy' = 'unhealthy';
     try {

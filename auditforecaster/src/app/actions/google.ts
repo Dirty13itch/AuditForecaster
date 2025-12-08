@@ -30,7 +30,7 @@ export async function enableCalendarSync(calendarId: string) {
         revalidatePath('/dashboard/admin/integrations')
         return { success: true }
     } catch (error) {
-        console.error('Failed to enable sync:', error)
+        logger.error('Failed to enable calendar sync', { error })
         return { success: false, error: 'Failed to enable sync' }
     }
 }

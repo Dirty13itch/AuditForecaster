@@ -5,8 +5,14 @@ import { SubcontractorSchema, SubcontractorInput } from "@/lib/schemas"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { logger } from "@/lib/logger"
+import { auth } from "@/auth"
 
 export async function createSubcontractor(data: SubcontractorInput) {
+    const session = await auth()
+    if (!session?.user) {
+        return { success: false, message: "Unauthorized" }
+    }
+
     try {
         const validated = SubcontractorSchema.parse(data)
 
@@ -26,6 +32,11 @@ export async function createSubcontractor(data: SubcontractorInput) {
 }
 
 export async function updateSubcontractor(id: string, data: SubcontractorInput) {
+    const session = await auth()
+    if (!session?.user) {
+        return { success: false, message: "Unauthorized" }
+    }
+
     try {
         const validated = SubcontractorSchema.parse(data)
 
@@ -46,6 +57,11 @@ export async function updateSubcontractor(id: string, data: SubcontractorInput) 
 }
 
 export async function deleteSubcontractor(id: string) {
+    const session = await auth()
+    if (!session?.user) {
+        return { success: false, message: "Unauthorized" }
+    }
+
     try {
         await prisma.subcontractor.delete({
             where: { id },

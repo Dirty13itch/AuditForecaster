@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2 } from "lucide-react"
 import { Metadata } from "next"
+import { safeJsonParse } from "@/lib/utils"
 
 export const metadata: Metadata = {
     title: "QA Dashboard | AuditForecaster",
@@ -43,7 +44,7 @@ export default async function QADashboardPage() {
             <div className="grid gap-4">
                 {jobsToReview.map((job) => {
                     const inspection = job.inspections[0]
-                    const inspectionData = inspection?.data ? JSON.parse(inspection.data) : null
+                    const inspectionData = safeJsonParse<{ cfm50?: number }>(inspection?.data, null)
                     return (
                         <Link href={`/dashboard/qa/${job.id}`} key={job.id}>
                             <Card className="hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-l-blue-500">

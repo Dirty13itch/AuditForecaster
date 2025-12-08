@@ -96,10 +96,9 @@ export async function getAnalyticsData() {
     ])
 
     const duration = performance.now() - startTime
-    if (duration > 1000) {
+    // Only log slow queries in development - use structured logging in production
+    if (process.env.NODE_ENV === 'development' && duration > 1000) {
         console.warn(`[Performance] getAnalyticsData took ${duration.toFixed(2)}ms`)
-    } else {
-        console.log(`[Performance] getAnalyticsData took ${duration.toFixed(2)}ms`)
     }
 
     // Process Revenue Calculations (Sequential due to pricing logic)

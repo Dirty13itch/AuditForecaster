@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Save } from "lucide-react"
 import { InspectionForm } from "@/components/inspection-form"
+import { safeJsonParse } from "@/lib/utils"
 
 export default async function InspectionPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -31,8 +32,8 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
     }
 
     const inspection = job.inspections[0]
-    const inspectionData = inspection?.data ? JSON.parse(inspection.data) : {}
-    const checklist = inspection?.checklist ? JSON.parse(inspection.checklist) : []
+    const inspectionData = safeJsonParse(inspection?.data, {})
+    const checklist = safeJsonParse(inspection?.checklist, [])
 
     return (
         <div className="space-y-6 max-w-3xl mx-auto">
@@ -70,7 +71,7 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
                 templates={templates.map(t => ({
                     id: t.id,
                     name: t.name,
-                    checklistItems: typeof t.checklistItems === 'string' ? JSON.parse(t.checklistItems) : []
+                    checklistItems: safeJsonParse(t.checklistItems, [])
                 }))}
             />
         </div>

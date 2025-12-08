@@ -148,6 +148,9 @@ export async function getRoutes(date?: Date) {
 }
 
 export async function getRouteDetails(id: string) {
+    const session = await auth()
+    if (!session?.user) throw new Error("Unauthorized")
+
     return prisma.route.findUnique({
         where: { id },
         include: {

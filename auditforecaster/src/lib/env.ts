@@ -18,7 +18,12 @@ const envSchema = z.object({
     // Sentry (Optional)
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
 
-    // Rate Limiting (Optional)
+    // Redis for BullMQ queues (Optional - for background job processing)
+    REDIS_HOST: z.string().optional(),
+    REDIS_PORT: z.string().regex(/^\d+$/).optional(),
+    REDIS_PASSWORD: z.string().optional(),
+
+    // Upstash Redis for rate limiting (Optional)
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 })
@@ -33,6 +38,9 @@ const processEnv = {
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    REDIS_HOST: process.env.REDIS_HOST,
+    REDIS_PORT: process.env.REDIS_PORT,
+    REDIS_PASSWORD: process.env.REDIS_PASSWORD,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
 }

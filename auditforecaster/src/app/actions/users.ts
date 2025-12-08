@@ -44,9 +44,11 @@ export async function createUser(_prevState: unknown, formData: FormData) {
             return { message: 'User with this email already exists' }
         }
 
-        const passwordHash = validatedFields.password
-            ? await bcrypt.hash(validatedFields.password, 10)
-            : await bcrypt.hash('password123', 10) // Default password if not provided
+        // Require password for new users - no weak defaults
+        if (!validatedFields.password) {
+            return { message: 'Password is required for new users' }
+        }
+        const passwordHash = await bcrypt.hash(validatedFields.password, 10)
 
         await prisma.user.create({
             data: {
@@ -111,7 +113,7 @@ export async function deleteUser(id: string) {
         revalidatePath('/dashboard/team/users')
         return { message: 'User deleted successfully' }
     } catch (e: unknown) {
-        console.error(e)
+        logger.error('Failed to delete user', { error: e })
         return { message: e instanceof Error ? e.message : 'Failed to delete user' }
     }
 }

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { validateApiKey } from "@/lib/api-auth"
 import { logAudit } from "@/lib/audit"
+import { logger } from "@/lib/logger"
+import { safeParseInt } from "@/lib/utils"
 import { z } from "zod"
 
 // Schema for Job Creation via API
@@ -23,8 +25,8 @@ export async function GET(request: Request) {
     // For now, we return all jobs (Admin level key) or we could filter.
     // Let's implement a simple limit/offset
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const limit = Math.min(safeParseInt(searchParams.get('limit'), 10), 50)
+    const offset = Math.max(0, safeParseInt(searchParams.get('offset'), 0))
 
     const jobs = await prisma.job.findMany({
         take: limit,
@@ -74,6 +76,11 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ data: job }, { status: 201 })
     } catch (error) {
-        return NextResponse.json({ error: 'Invalid Request', details: error }, { status: 400 })
+        // Don't leak internal error details - log them instead
+        logger.error('API /v1/jobs POST error', { error })
+        const message = error instanceof z.ZodError
+            ? 'Validation failed: ' + error.errors.map(e => e.message).join(', ')
+            : 'Invalid request'
+        return NextResponse.json({ error: message }, { status: 400 })
     }
 }

@@ -1,8 +1,13 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { writeFile } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
+import { logger } from "@/lib/logger";
+
+// Allowed file types for builder plans
+const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 export async function POST(req: Request) {
     try {
@@ -21,6 +26,22 @@ export async function POST(req: Request) {
             return new NextResponse("Missing required fields", { status: 400 });
         }
 
+        // Validate builderId format (UUID only - prevents path traversal)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(builderId)) {
+            return new NextResponse("Invalid builder ID format", { status: 400 });
+        }
+
+        // Validate file type
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            return new NextResponse(`Invalid file type. Allowed: PDF, JPEG, PNG, WebP`, { status: 400 });
+        }
+
+        // Validate file size
+        if (file.size > MAX_FILE_SIZE) {
+            return new NextResponse(`File too large. Maximum size is 50MB`, { status: 400 });
+        }
+
         // In a real production app with Unraid, we might save to a mounted volume
         // For now, we'll simulate saving to a public uploads folder or similar
         // NOTE: In production Docker, ensure /app/public/uploads is mounted/writable
@@ -28,9 +49,11 @@ export async function POST(req: Request) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
-        // Create unique filename
+        // Create unique filename - sanitize original name to prevent path traversal
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const filename = file.name.replace(/\.[^/.]+$/, "") + '-' + uniqueSuffix + '.' + file.name.split('.').pop();
+        const originalName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const extension = (file.name.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '');
+        const filename = `${originalName}-${uniqueSuffix}.${extension}`;
 
         // Ensure uploads directory exists (in a real app, check/create on startup)
         // For this implementation, we'll assume a 'uploads' folder in public or use a relative path
@@ -38,20 +61,13 @@ export async function POST(req: Request) {
         const uploadDir = join(process.cwd(), "public", "uploads");
         const filepath = join(uploadDir, filename);
 
-        // Write file (ensure directory exists in production setup!)
-        // For safety in this demo, we might skip actual FS write if dir doesn't exist and just save DB record
-        // But let's try to write if possible, or catch error
-
+        // Ensure upload directory exists and write file
         try {
+            await mkdir(uploadDir, { recursive: true });
             await writeFile(filepath, buffer);
         } catch (e) {
-            console.error("Failed to write file to disk:", e);
-            // Fallback or error? For now, let's proceed to create DB record as if it worked
-            // or return error. Let's return error to be safe.
-            // return new NextResponse("Failed to save file", { status: 500 });
-
-            // Actually, for the purpose of this task, let's just mock the URL if FS fails
-            // so the UI doesn't break during demo if folder is missing
+            logger.error("Failed to write file to disk", { error: e, filepath });
+            return new NextResponse("Failed to save file", { status: 500 });
         }
 
         const plan = await prisma.plan.create({
@@ -65,7 +81,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json(plan);
     } catch (error) {
-        console.error("Upload error:", error);
+        logger.error("Plan upload error", { error });
         return new NextResponse("Internal Error", { status: 500 });
     }
 }

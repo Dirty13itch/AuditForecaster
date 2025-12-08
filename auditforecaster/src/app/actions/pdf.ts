@@ -56,7 +56,7 @@ export async function generatePDF(jobId: string) {
             type: 'PDF',
             id: jobId,
             cookies: puppeteerCookies,
-            userEmail: session.user.email || 'notifications@ulrichenergy.com', // Fallback
+            userEmail: session.user.email!, // User must have email to be authenticated
             baseUrl
         });
 
@@ -112,7 +112,7 @@ export async function generateInvoicePDF(invoiceId: string) {
             type: 'INVOICE',
             id: invoiceId,
             cookies: puppeteerCookies,
-            userEmail: session.user.email || 'notifications@ulrichenergy.com',
+            userEmail: session.user.email!, // User must have email to be authenticated
             baseUrl
         });
 

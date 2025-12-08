@@ -376,6 +376,7 @@ model Job {
   taxCredit   TaxCredit?
   expenses    Expense[]
   invoiceItems InvoiceItem[]
+  mileageLogs  MileageLog[]
 
   payoutId      String?
   payout        Payout?   @relation(fields: [payoutId], references: [id])
@@ -525,10 +526,15 @@ model MileageLog {
   vehicleId String
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
 
+  // Link to Job for profitability calculations
+  jobId     String?
+  job       Job?    @relation(fields: [jobId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([vehicleId])
+  @@index([jobId])
 }
 
 model Subcontractor {

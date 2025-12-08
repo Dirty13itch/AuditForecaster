@@ -3,6 +3,7 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import exifr from 'exifr'
 
 export async function POST(request: NextRequest) {
@@ -21,6 +22,12 @@ export async function POST(request: NextRequest) {
 
         if (!file || !inspectionId) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+        }
+
+        // Validate inspectionId format (UUID only - prevents path traversal)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(inspectionId)) {
+            return NextResponse.json({ error: 'Invalid inspection ID format' }, { status: 400 })
         }
 
         // Validate file type
@@ -63,7 +70,7 @@ export async function POST(request: NextRequest) {
                 takenAt = exif.DateTimeOriginal || exif.CreateDate
             }
         } catch (e) {
-            console.warn('Failed to extract EXIF:', e)
+            logger.warn('Failed to extract EXIF', { error: e })
         }
 
         // Create database record
@@ -111,7 +118,7 @@ export async function POST(request: NextRequest) {
                 await uploadPhotoToGoogle(albumId!, buffer, caption || undefined, filename)
             }
         } catch (e) {
-            console.error('Google Photos Backup failed:', e)
+            logger.error('Google Photos Backup failed', { error: e })
             // Don't fail the request, just log it
         }
 
@@ -129,7 +136,7 @@ export async function POST(request: NextRequest) {
         })
 
     } catch (error) {
-        console.error('Upload error:', error)
+        logger.error('Upload error', { error })
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Upload failed' },
             { status: 500 }
@@ -152,13 +159,34 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Photo ID required' }, { status: 400 })
         }
 
-        // Get photo to find file path
+        // Get photo with ownership chain for authorization
         const photo = await prisma.photo.findUnique({
-            where: { id: photoId }
+            where: { id: photoId },
+            include: {
+                inspection: {
+                    include: {
+                        job: {
+                            select: {
+                                inspectorId: true,
+                                builderId: true
+                            }
+                        }
+                    }
+                }
+            }
         })
 
         if (!photo) {
             return NextResponse.json({ error: 'Photo not found' }, { status: 404 })
+        }
+
+        // Verify ownership: user must be admin, the inspector who took it, or the builder
+        const isAdmin = session.user?.role === 'ADMIN'
+        const isInspector = photo.inspection?.job?.inspectorId === session.user?.id
+        const isBuilder = session.user?.builderId && photo.inspection?.job?.builderId === session.user?.builderId
+
+        if (!isAdmin && !isInspector && !isBuilder) {
+            return NextResponse.json({ error: 'Forbidden: You do not have permission to delete this photo' }, { status: 403 })
         }
 
         // Delete from database
@@ -173,7 +201,7 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ success: true })
 
     } catch (error) {
-        console.error('Delete error:', error)
+        logger.error('Delete error', { error })
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Delete failed' },
             { status: 500 }

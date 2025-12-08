@@ -7,6 +7,7 @@ import type { User } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { authConfig } from "./auth.config"
 import { env } from "@/lib/env"
+import { logger } from "@/lib/logger"
 
 async function getUser(email: string): Promise<User | undefined> {
     try {
@@ -15,7 +16,7 @@ async function getUser(email: string): Promise<User | undefined> {
         });
         return user || undefined;
     } catch (error) {
-        console.error('Failed to fetch user:', error);
+        logger.error('Failed to fetch user', { error, email });
         throw new Error('Failed to fetch user.');
     }
 }

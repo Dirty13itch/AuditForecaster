@@ -7,6 +7,7 @@ import { auth } from "@/auth"
 import { sendInspectionCompletedEmail } from "@/lib/email"
 import { z } from "zod"
 import { logger } from "@/lib/logger"
+import { safeJsonParse, safeParseFloat } from "@/lib/utils"
 
 const InspectionSchema = z.object({
     jobId: z.string().min(1, "Job ID is required"),
@@ -39,10 +40,13 @@ export async function updateInspection(formData: FormData): Promise<never> {
         const fields = validatedFields.data
 
         // Parse and calculate
-        const houseVolume = fields.houseVolume ? parseFloat(fields.houseVolume) : null
-        const checklist = fields.checklist ? JSON.parse(fields.checklist) : null
+        const houseVolume = fields.houseVolume ? safeParseFloat(fields.houseVolume, 0) : null
+        const checklist = safeJsonParse(fields.checklist, null)
 
-        const cfm50Val = parseFloat(fields.cfm50)
+        const cfm50Val = safeParseFloat(fields.cfm50, 0)
+        if (cfm50Val <= 0) {
+            throw new Error('Invalid CFM50 value')
+        }
         let ach50: number | null = null
         let compliant: boolean | undefined = undefined
         let margin: number | undefined = undefined
@@ -102,18 +106,21 @@ export async function updateInspection(formData: FormData): Promise<never> {
         })
 
         // Send notification (non-blocking)
-        try {
-            const session = await auth()
-            const inspectorName = session?.user?.name || 'Unknown Inspector'
-            await sendInspectionCompletedEmail(
-                'admin@ulrichenergy.com',
-                `${updatedJob.streetAddress}, ${updatedJob.city}`,
-                inspectorName,
-                `${process.env.NEXTAUTH_URL}/dashboard/jobs/${fields.jobId}`
-            )
-        } catch (error) {
-            logger.error('Failed to send notification', { error })
-            // Don't fail the request if email fails
+        const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL
+        if (adminEmail) {
+            try {
+                const currentSession = await auth()
+                const inspectorName = currentSession?.user?.name || 'Unknown Inspector'
+                await sendInspectionCompletedEmail(
+                    adminEmail,
+                    `${updatedJob.streetAddress}, ${updatedJob.city}`,
+                    inspectorName,
+                    `${process.env.NEXTAUTH_URL}/dashboard/jobs/${fields.jobId}`
+                )
+            } catch (error) {
+                logger.error('Failed to send notification', { error })
+                // Don't fail the request if email fails
+            }
         }
 
         // Revalidate and redirect

@@ -4,8 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { mapToEkotropeProject } from '@/lib/integrations/ekotrope'
 import { revalidatePath } from 'next/cache'
 import { logger } from "@/lib/logger"
+import { auth } from "@/auth"
 
 export async function syncToEkotrope(inspectionId: string) {
+    const session = await auth()
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' }
+    }
+
     try {
         // 1. Fetch Inspection and related data
         const inspection = await prisma.inspection.findUnique({

@@ -1,6 +1,20 @@
 import { prisma } from "@/lib/prisma"
 import { headers } from "next/headers"
+import crypto from "crypto"
+import { logger } from "@/lib/logger"
 
+/**
+ * Hash an API key using SHA-256 for storage comparison.
+ * API keys are hashed for security - we never store them in plaintext.
+ */
+export function hashApiKey(key: string): string {
+    return crypto.createHash('sha256').update(key).digest('hex')
+}
+
+/**
+ * Validate an API key from the Authorization header.
+ * Expected format: "Bearer sk_live_xxxxx" or "Bearer sk_test_xxxxx"
+ */
 export async function validateApiKey(requiredScope?: string) {
     const headersList = await headers()
     const authHeader = headersList.get('authorization')
@@ -9,16 +23,16 @@ export async function validateApiKey(requiredScope?: string) {
         return null
     }
 
-    const keyHash = authHeader.split(' ')[1]
+    const rawKey = authHeader.split(' ')[1]
 
-    // In a real production app, we would hash the incoming key before comparing
-    // For this implementation, we assume the header contains the hash (or we compare direct for simplicity if not hashing on client side)
-    // Ideally: Client sends 'sk_live_...', we hash it -> compare with DB hash.
-    // Here we will assume direct comparison for simplicity of the prototype, 
-    // BUT to be "Apex" standard, we should treat the DB value as a hash.
+    // Validate key format
+    if (!rawKey || (!rawKey.startsWith('sk_live_') && !rawKey.startsWith('sk_test_'))) {
+        logger.warn('Invalid API key format', { keyPrefix: rawKey?.substring(0, 8) })
+        return null
+    }
 
-    // Let's assume the DB stores the key directly for now to avoid complexity of crypto in this step,
-    // or better: we just query by keyHash.
+    // Hash the key to compare with stored hash
+    const keyHash = hashApiKey(rawKey)
 
     const apiKey = await prisma.apiKey.findUnique({
         where: { keyHash }
