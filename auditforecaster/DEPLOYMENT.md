@@ -31,22 +31,59 @@ Copy the `docker-compose.prod.yml` file to this directory and rename it to `dock
 Create a `.env` file in the same directory with your production secrets:
 
 ```bash
-# Database Password
+# ===========================================
+# REQUIRED - Application will fail without these
+# ===========================================
+
+# Database Password (use a strong random password)
 POSTGRES_PASSWORD=secure_random_password_here
 
-# App URL (Your domain or IP)
+# App URL (Your domain or IP - must match where app is accessed)
 NEXTAUTH_URL=https://audit.yourdomain.com
 
 # Auth Secret (Generate with: openssl rand -base64 32)
 NEXTAUTH_SECRET=generate_a_long_secret_string
 
-# Email (Optional)
+# ===========================================
+# EMAIL - Recommended for production
+# ===========================================
 RESEND_API_KEY=re_123...
-EMAIL_FROM=noreply@yourdomain.com
+EMAIL_FROM="Your Company <noreply@yourdomain.com>"
+ADMIN_NOTIFICATION_EMAIL=admin@yourdomain.com
 
-# Rate Limiting (Optional - Recommended for Production)
-# UPSTASH_REDIS_REST_URL=https://...
-# UPSTASH_REDIS_REST_TOKEN=...
+# ===========================================
+# MONITORING - Recommended for production
+# ===========================================
+# Sentry for error tracking
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@sentry.io/xxx
+
+# OpenTelemetry for distributed tracing (optional)
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
+# OTEL_SERVICE_NAME=auditforecaster
+
+# ===========================================
+# RATE LIMITING - Recommended for production
+# ===========================================
+# Upstash Redis (for serverless rate limiting)
+UPSTASH_REDIS_REST_URL=https://...
+UPSTASH_REDIS_REST_TOKEN=...
+
+# ===========================================
+# INTEGRATIONS - As needed
+# ===========================================
+# Google OAuth (for Google Calendar sync)
+GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=xxx
+
+# Webhook verification secrets
+SUPPLYPRO_WEBHOOK_SECRET=your_webhook_secret
+GOOGLE_CALENDAR_WEBHOOK_TOKEN=your_channel_token
+
+# ===========================================
+# SECURITY - For testing environments only
+# ===========================================
+# NEVER enable in production!
+# ENABLE_E2E_AUTH_BYPASS=false
 ```
 
 ### Step 3.5: Performance Optimization (Recommended)
