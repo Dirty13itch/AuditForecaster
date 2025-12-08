@@ -13,6 +13,23 @@ interface InspectionData {
     notes?: string
 }
 
+// Database checklist items may not have id field - transform to add it
+interface RawChecklistItem {
+    id?: string
+    label: string
+    status: 'PASS' | 'FAIL' | 'NA' | null
+    note?: string
+}
+
+function normalizeChecklist(items: RawChecklistItem[]): ChecklistItem[] {
+    return items.map((item, index) => ({
+        id: item.id || `item-${index}`,
+        label: item.label,
+        status: item.status,
+        note: item.note || ''
+    }))
+}
+
 export default async function InspectionPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
 
@@ -41,7 +58,8 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
 
     const inspection = job.inspections[0]
     const inspectionData = safeJsonParse<InspectionData>(inspection?.data, {})
-    const checklist = safeJsonParse<ChecklistItem[]>(inspection?.checklist, [])
+    const rawChecklist = safeJsonParse<RawChecklistItem[]>(inspection?.checklist, [])
+    const checklist = normalizeChecklist(rawChecklist)
 
     return (
         <div className="space-y-6 max-w-3xl mx-auto">
