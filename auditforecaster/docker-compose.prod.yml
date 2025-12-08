@@ -1,43 +1,75 @@
-# Docker Compose for Production Deployment
-# IMPORTANT: Create a .env file with the following variables before deploying:
-# - POSTGRES_PASSWORD: Strong random password for database
-# - NEXTAUTH_SECRET: Strong random string (openssl rand -base64 32)
-# - NEXTAUTH_URL: Your production URL (e.g., https://audit.yourcompany.com)
-# - SUPPLYPRO_WEBHOOK_SECRET: Webhook secret for SupplyPro integration
-# - GOOGLE_CALENDAR_WEBHOOK_TOKEN: Token for Google Calendar webhooks
+# =============================================================================
+# AuditForecaster Production Stack
+# =============================================================================
+# Complete production deployment with:
+# - Application (Next.js)
+# - PostgreSQL database with automated backups
+# - Redis for queues and caching
+# - Nginx Proxy Manager for SSL/HTTPS
+# - Uptime Kuma for monitoring
+#
+# SETUP:
+# 1. Copy this file to your server
+# 2. Create .env file (see .env.example)
+# 3. Run: docker compose up -d
+# =============================================================================
 
 version: '3.8'
 
 services:
+  # ===========================================================================
+  # CORE APPLICATION
+  # ===========================================================================
   app:
     container_name: auditforecaster-app
-    image: auditforecaster:latest
+    image: ghcr.io/dirty13itch/auditforecaster:latest
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - DATABASE_URL=postgresql://auditforecaster:${POSTGRES_PASSWORD}@postgres:5432/auditforecaster
       - NEXTAUTH_URL=${NEXTAUTH_URL}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NODE_ENV=production
+      # Redis for BullMQ queues
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      # Optional: Monitoring
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Email
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-}
+      - ADMIN_NOTIFICATION_EMAIL=${ADMIN_NOTIFICATION_EMAIL:-}
+      # Monitoring
       - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
-      # Optional: Integrations
+      # Rate limiting (Upstash - optional if using local Redis)
+      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL:-}
+      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-}
+      # Google OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      # Webhooks
       - SUPPLYPRO_WEBHOOK_SECRET=${SUPPLYPRO_WEBHOOK_SECRET:-}
       - GOOGLE_CALENDAR_WEBHOOK_TOKEN=${GOOGLE_CALENDAR_WEBHOOK_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
-      - /mnt/user/appdata/auditforecaster/uploads:/app/public/uploads
+      - uploads:/app/public/uploads
     networks:
       - audit-net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
+  # ===========================================================================
+  # DATABASE
+  # ===========================================================================
   postgres:
     image: postgres:16-alpine
     container_name: auditforecaster-db
@@ -47,24 +79,168 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: auditforecaster
     volumes:
-      - /mnt/user/appdata/auditforecaster/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - audit-net
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U auditforecaster" ]
+      test: ["CMD-SHELL", "pg_isready -U auditforecaster"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ===========================================================================
+  # DATABASE BACKUPS (Daily, keeps 30 days)
+  # ===========================================================================
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    container_name: auditforecaster-backup
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=auditforecaster
+      - POSTGRES_USER=auditforecaster
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=30
+      - BACKUP_KEEP_WEEKS=4
+      - BACKUP_KEEP_MONTHS=6
+      - HEALTHCHECK_PORT=8080
+    volumes:
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - audit-net
 
+  # ===========================================================================
+  # REDIS (Queues & Caching)
+  # ===========================================================================
   redis:
     image: redis:7-alpine
     container_name: auditforecaster-redis
     restart: unless-stopped
+    command: redis-server --appendonly yes
     volumes:
-      - /mnt/user/appdata/auditforecaster/redis:/data
+      - redis_data:/data
+    networks:
+      - audit-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # REVERSE PROXY (Nginx Proxy Manager)
+  # Provides: SSL certificates, HTTPS, domain routing
+  # Access at: http://YOUR_IP:81 (admin panel)
+  # Default login: admin@example.com / changeme
+  # ===========================================================================
+  nginx-proxy:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: auditforecaster-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS
+      - "81:81"      # Admin panel
+    environment:
+      - DISABLE_IPV6=true
+    volumes:
+      - nginx_data:/data
+      - nginx_letsencrypt:/etc/letsencrypt
     networks:
       - audit-net
 
+  # ===========================================================================
+  # UPTIME MONITORING (Uptime Kuma)
+  # Access at: http://YOUR_IP:3001
+  # ===========================================================================
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: auditforecaster-monitor
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_kuma:/app/data
+    networks:
+      - audit-net
+
+  # ===========================================================================
+  # AUTO-UPDATER (Watchtower) - Optional
+  # Automatically pulls new images and restarts containers
+  # ===========================================================================
+  watchtower:
+    image: containrrr/watchtower
+    container_name: auditforecaster-watchtower
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=86400  # Check daily
+      - WATCHTOWER_LABEL_ENABLE=true    # Only update labeled containers
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - audit-net
+
+# =============================================================================
+# VOLUMES (Persistent Data)
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/mnt/user/appdata}/auditforecaster/postgres
+
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/mnt/user/appdata}/auditforecaster/redis
+
+  uploads:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/mnt/user/appdata}/auditforecaster/uploads
+
+  backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/mnt/user/appdata}/auditforecaster/backups
+
+  nginx_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/mnt/user/appdata}/auditforecaster/nginx/data
+
+  nginx_letsencrypt:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/mnt/user/appdata}/auditforecaster/nginx/letsencrypt
+
+  uptime_kuma:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/mnt/user/appdata}/auditforecaster/uptime-kuma
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
 networks:
   audit-net:
     driver: bridge

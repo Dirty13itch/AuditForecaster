@@ -1,141 +1,341 @@
-# Deployment Guide
+# AuditForecaster Deployment Guide
 
-This guide explains how to deploy AuditForecaster to a production environment (Unraid, VPS, or any Docker-compatible server).
+Complete guide to deploy AuditForecaster on Unraid or any Docker-compatible server.
 
-## Prerequisites
-- A server with Docker and Docker Compose installed.
-- Access to the GitHub repository.
-- A GitHub Personal Access Token (PAT) with `read:packages` scope (if the repo is private).
+## What's Included
 
-## 1. Automated Build (CI/CD)
-Every time you push to the `main` branch, GitHub Actions will automatically:
-1.  Run tests.
-2.  Build a Docker image.
-3.  Push the image to GitHub Container Registry (GHCR).
+The production stack includes:
+- **Application**: Next.js app with automatic migrations
+- **PostgreSQL**: Database with daily automated backups
+- **Redis**: Queue processing and caching
+- **Nginx Proxy Manager**: SSL/HTTPS with Let's Encrypt
+- **Uptime Kuma**: Health monitoring and alerts
+- **Watchtower**: Automatic container updates
 
-Image URL: `ghcr.io/dirty13itch/auditforecaster:latest`
+## Quick Start (5 Minutes)
 
-## 2. Server Setup (Unraid / Docker)
+### 1. SSH into your Unraid server
 
-### Step 1: Create Project Directory
-On your server, create a folder for the project:
+```bash
+ssh root@YOUR_UNRAID_IP
+```
+
+### 2. Create project directory
+
 ```bash
 mkdir -p /mnt/user/appdata/auditforecaster
 cd /mnt/user/appdata/auditforecaster
 ```
 
-### Step 2: Download Configuration
-Copy the `docker-compose.prod.yml` file to this directory and rename it to `docker-compose.yml`.
-
-### Step 3: Configure Environment (.env)
-Create a `.env` file in the same directory with your production secrets:
+### 3. Download configuration files
 
 ```bash
-# ===========================================
-# REQUIRED - Application will fail without these
-# ===========================================
-
-# Database Password (use a strong random password)
-POSTGRES_PASSWORD=secure_random_password_here
-
-# App URL (Your domain or IP - must match where app is accessed)
-NEXTAUTH_URL=https://audit.yourdomain.com
-
-# Auth Secret (Generate with: openssl rand -base64 32)
-NEXTAUTH_SECRET=generate_a_long_secret_string
-
-# ===========================================
-# EMAIL - Recommended for production
-# ===========================================
-RESEND_API_KEY=re_123...
-EMAIL_FROM="Ulrich Energy Auditing <notifications@ulrichenergyauditing.com>"
-ADMIN_NOTIFICATION_EMAIL=shaun.ulrich@ulrichenergyauditing.com
-
-# ===========================================
-# MONITORING - Recommended for production
-# ===========================================
-# Sentry for error tracking
-NEXT_PUBLIC_SENTRY_DSN=https://xxx@sentry.io/xxx
-
-# OpenTelemetry for distributed tracing (optional)
-# OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
-# OTEL_SERVICE_NAME=auditforecaster
-
-# ===========================================
-# RATE LIMITING - Recommended for production
-# ===========================================
-# Upstash Redis (for serverless rate limiting)
-UPSTASH_REDIS_REST_URL=https://...
-UPSTASH_REDIS_REST_TOKEN=...
-
-# ===========================================
-# INTEGRATIONS - As needed
-# ===========================================
-# Google OAuth (for Google Calendar sync)
-# Get credentials from Google Cloud Console: https://console.cloud.google.com
-# Project owner: shaun.ulrich@ulrichenergyauditing.com
-GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=xxx
-
-# Webhook verification secrets
-SUPPLYPRO_WEBHOOK_SECRET=your_webhook_secret
-GOOGLE_CALENDAR_WEBHOOK_TOKEN=your_channel_token
-
-# ===========================================
-# SECURITY - For testing environments only
-# ===========================================
-# NEVER enable in production!
-# ENABLE_E2E_AUTH_BYPASS=false
+# Download docker-compose and env template
+curl -O https://raw.githubusercontent.com/Dirty13itch/AuditForecaster/main/auditforecaster/docker-compose.prod.yml
+curl -O https://raw.githubusercontent.com/Dirty13itch/AuditForecaster/main/auditforecaster/.env.example
+curl -O https://raw.githubusercontent.com/Dirty13itch/AuditForecaster/main/auditforecaster/scripts/setup-unraid.sh
 ```
 
-### Step 3.5: Performance Optimization (Recommended)
-For best image optimization performance in production, it is recommended to install `sharp`:
-```bash
-npm install sharp
-```
-(This will be included in the next build).
-
-### Step 4: Login to Registry (If Private)
-If your repository is private, you need to authenticate Docker to pull the image:
-```bash
-echo "YOUR_GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-```
-
-### Step 5: Start the Application
-Run the following command to start the app and database:
-```bash
-docker compose up -d
-```
-
-The application will be available at `http://<server-ip>:3000`.
-
-## 3. Database Management
-
-### Backups
-To backup the database:
-```bash
-docker compose exec db pg_dump -U postgres auditforecaster > backup.sql
-```
-
-### Restoring
-To restore a backup:
-```bash
-cat backup.sql | docker compose exec -T db psql -U postgres auditforecaster
-```
-
-### Migrations
-The application attempts to apply migrations on startup. If you need to run them manually:
-```bash
-docker compose exec app npx prisma migrate deploy
-```
-
-## 4. Updates
-To update to the latest version after pushing to GitHub:
+### 4. Run setup script
 
 ```bash
-# Pull the latest image
-docker compose pull
-
-# Restart containers
-docker compose up -d
+chmod +x setup-unraid.sh
+./setup-unraid.sh
 ```
+
+The script will:
+- Create all necessary directories
+- Generate secure passwords and secrets
+- Pull Docker images
+- Start all services
+
+### 5. Configure your domain
+
+1. Open Nginx Proxy Manager: `http://YOUR_IP:81`
+2. Login with: `admin@example.com` / `changeme`
+3. Change the default password
+4. Add a Proxy Host:
+   - Domain: `audit.ulrichenergyauditing.com`
+   - Forward to: `app:3000`
+   - Enable SSL with Let's Encrypt
+
+---
+
+## Manual Setup
+
+If you prefer manual setup or the script doesn't work:
+
+### Step 1: Create directories
+
+```bash
+mkdir -p /mnt/user/appdata/auditforecaster/{postgres,redis,uploads,backups,nginx/data,nginx/letsencrypt,uptime-kuma}
+```
+
+### Step 2: Create .env file
+
+```bash
+cp .env.example .env
+nano .env  # Edit with your values
+```
+
+**Required values:**
+```bash
+# Generate these with: openssl rand -base64 32
+POSTGRES_PASSWORD=your_secure_password
+NEXTAUTH_SECRET=your_32_char_secret
+NEXTAUTH_URL=https://audit.ulrichenergyauditing.com
+```
+
+### Step 3: Start services
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+## Environment Variables Reference
+
+### Required
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `POSTGRES_PASSWORD` | Database password | `openssl rand -base64 24` |
+| `NEXTAUTH_URL` | Public URL of app | `https://audit.ulrichenergyauditing.com` |
+| `NEXTAUTH_SECRET` | Auth encryption key | `openssl rand -base64 32` |
+
+### Email (Recommended)
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `RESEND_API_KEY` | Resend.com API key | `re_xxxxx` |
+| `EMAIL_FROM` | From address | `"Ulrich Energy <noreply@ulrichenergyauditing.com>"` |
+| `ADMIN_NOTIFICATION_EMAIL` | Admin notifications | `shaun.ulrich@ulrichenergyauditing.com` |
+
+### Google Integration
+
+| Variable | Description | How to Get |
+|----------|-------------|------------|
+| `GOOGLE_CLIENT_ID` | OAuth client ID | [Google Cloud Console](https://console.cloud.google.com) |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret | Same as above |
+
+Project owner: `shaun.ulrich@ulrichenergyauditing.com`
+
+### Monitoring
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SENTRY_DSN` | Sentry error tracking DSN |
+
+### Webhooks
+
+| Variable | Description |
+|----------|-------------|
+| `SUPPLYPRO_WEBHOOK_SECRET` | SupplyPro signature verification |
+| `GOOGLE_CALENDAR_WEBHOOK_TOKEN` | Calendar push notifications |
+
+---
+
+## Access Points
+
+After deployment, access these URLs (replace with your server IP):
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **App** | http://IP:3000 | Main application |
+| **Nginx Admin** | http://IP:81 | SSL/proxy configuration |
+| **Uptime Kuma** | http://IP:3001 | Monitoring dashboard |
+
+---
+
+## Setting Up SSL (HTTPS)
+
+1. **Open Nginx Proxy Manager**: http://YOUR_IP:81
+
+2. **Login**: `admin@example.com` / `changeme`
+
+3. **Add Proxy Host**:
+   - Domain Names: `audit.ulrichenergyauditing.com`
+   - Scheme: `http`
+   - Forward Hostname/IP: `app`
+   - Forward Port: `3000`
+   - Enable: "Block Common Exploits"
+
+4. **SSL Tab**:
+   - Request new SSL Certificate
+   - Enable "Force SSL"
+   - Enable "HTTP/2 Support"
+   - Agree to Let's Encrypt terms
+
+5. **Update .env**:
+   ```bash
+   NEXTAUTH_URL=https://audit.ulrichenergyauditing.com
+   ```
+
+6. **Restart app**:
+   ```bash
+   docker compose -f docker-compose.prod.yml restart app
+   ```
+
+---
+
+## Setting Up Monitoring
+
+1. **Open Uptime Kuma**: http://YOUR_IP:3001
+
+2. **Create account** on first visit
+
+3. **Add monitors**:
+   - **App Health**: `http://app:3000/api/health` (HTTP)
+   - **Database**: `postgres:5432` (TCP)
+   - **Redis**: `redis:6379` (TCP)
+
+4. **Set up notifications** (optional):
+   - Email, Slack, Discord, etc.
+
+---
+
+## Database Management
+
+### View Backups
+```bash
+ls -la /mnt/user/appdata/auditforecaster/backups/
+```
+
+### Manual Backup
+```bash
+docker exec auditforecaster-db pg_dump -U auditforecaster auditforecaster > backup-$(date +%Y%m%d).sql
+```
+
+### Restore from Backup
+```bash
+# Stop the app first
+docker compose -f docker-compose.prod.yml stop app
+
+# Restore
+cat backup.sql | docker exec -i auditforecaster-db psql -U auditforecaster auditforecaster
+
+# Start the app
+docker compose -f docker-compose.prod.yml start app
+```
+
+### Run Migrations Manually
+```bash
+docker exec auditforecaster-app npx prisma migrate deploy
+```
+
+---
+
+## Updating
+
+### Automatic Updates (via Watchtower)
+Updates happen automatically every 24 hours for the app container.
+
+### Manual Update
+```bash
+cd /mnt/user/appdata/auditforecaster
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+## Troubleshooting
+
+### View Logs
+```bash
+# All services
+docker compose -f docker-compose.prod.yml logs -f
+
+# Specific service
+docker compose -f docker-compose.prod.yml logs -f app
+```
+
+### Check Health
+```bash
+curl http://localhost:3000/api/health
+```
+
+### Restart Services
+```bash
+# Restart everything
+docker compose -f docker-compose.prod.yml restart
+
+# Restart just the app
+docker compose -f docker-compose.prod.yml restart app
+```
+
+### Database Connection Issues
+```bash
+# Check if database is running
+docker exec auditforecaster-db pg_isready -U auditforecaster
+
+# Check database logs
+docker logs auditforecaster-db
+```
+
+### Container Not Starting
+```bash
+# Check container status
+docker compose -f docker-compose.prod.yml ps
+
+# Check why it failed
+docker logs auditforecaster-app
+```
+
+---
+
+## Security Checklist
+
+- [ ] Changed Nginx Proxy Manager default password
+- [ ] Set strong POSTGRES_PASSWORD
+- [ ] Set strong NEXTAUTH_SECRET (32+ chars)
+- [ ] SSL/HTTPS enabled via Nginx Proxy Manager
+- [ ] Firewall configured (only 80, 443 exposed)
+- [ ] ENABLE_E2E_AUTH_BYPASS is NOT set
+- [ ] Regular backups verified working
+
+---
+
+## Architecture Overview
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │            Unraid Server                 │
+                    │                                          │
+   Internet ───────►│  ┌─────────────────────────────────┐   │
+                    │  │    Nginx Proxy Manager          │   │
+                    │  │    (SSL/HTTPS - Port 80/443)    │   │
+                    │  └─────────────┬───────────────────┘   │
+                    │                │                        │
+                    │                ▼                        │
+                    │  ┌─────────────────────────────────┐   │
+                    │  │    AuditForecaster App          │   │
+                    │  │    (Next.js - Port 3000)        │   │
+                    │  └─────────┬───────────┬───────────┘   │
+                    │            │           │                │
+                    │            ▼           ▼                │
+                    │  ┌─────────────┐ ┌─────────────┐       │
+                    │  │  PostgreSQL │ │    Redis    │       │
+                    │  │  (Database) │ │   (Cache)   │       │
+                    │  └──────┬──────┘ └─────────────┘       │
+                    │         │                               │
+                    │         ▼                               │
+                    │  ┌─────────────┐                       │
+                    │  │   Backup    │                       │
+                    │  │  (Daily)    │                       │
+                    │  └─────────────┘                       │
+                    │                                          │
+                    │  ┌─────────────┐ ┌─────────────┐       │
+                    │  │Uptime Kuma │ │ Watchtower  │       │
+                    │  │(Monitoring) │ │ (Updates)   │       │
+                    │  └─────────────┘ └─────────────┘       │
+                    └─────────────────────────────────────────┘
+```
+
+---
+
+## Support
+
+- **Issues**: https://github.com/Dirty13itch/AuditForecaster/issues
+- **Email**: shaun.ulrich@ulrichenergyauditing.com
