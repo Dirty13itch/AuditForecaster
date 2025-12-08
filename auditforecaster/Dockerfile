@@ -72,7 +72,7 @@ set -e
 echo "Waiting for database..."
 MAX_RETRIES=30
 RETRY_COUNT=0
-until npx prisma db execute --stdin <<< "SELECT 1" 2>/dev/null || [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; do
+until echo "SELECT 1" | npx prisma db execute --stdin 2>/dev/null || [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; do
     RETRY_COUNT=\$((RETRY_COUNT + 1))
     echo "Database not ready, retry \$RETRY_COUNT/\$MAX_RETRIES..."
     sleep 2
