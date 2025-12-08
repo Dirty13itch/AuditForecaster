@@ -25,8 +25,8 @@ services:
       dockerfile: Dockerfile
     image: auditforecaster:latest
     restart: unless-stopped
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://auditforecaster:${POSTGRES_PASSWORD}@postgres:5432/auditforecaster
       - NEXTAUTH_URL=${NEXTAUTH_URL}
@@ -143,9 +143,9 @@ services:
     container_name: auditforecaster-proxy
     restart: unless-stopped
     ports:
-      - "80:80"      # HTTP
-      - "443:443"    # HTTPS
-      - "81:81"      # Admin panel
+      - "8080:80"    # HTTP (8080 to avoid Unraid conflict)
+      - "8443:443"   # HTTPS
+      - "8181:81"    # Admin panel
     environment:
       - DISABLE_IPV6=true
     volumes:
