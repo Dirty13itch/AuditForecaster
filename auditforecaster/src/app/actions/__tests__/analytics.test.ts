@@ -36,7 +36,7 @@ describe('Analytics Server Actions', () => {
     })
 
     describe('getAnalyticsData', () => {
-        it.skip('should aggregate metrics correctly', async () => {
+        it('should aggregate metrics correctly', async () => {
             // Mock Current Revenue (Invoices)
             vi.mocked(prisma.invoice.aggregate).mockResolvedValueOnce({
                 _sum: { totalAmount: 5000 }
@@ -87,9 +87,9 @@ describe('Analytics Server Actions', () => {
             expect(result.dailyTrend.length).toBeGreaterThan(0)
         })
 
-        it.skip('should throw forbidden if not admin', async () => {
+        it('should throw forbidden if not admin', async () => {
             vi.mocked(auth).mockResolvedValue({ user: { id: 'u1', role: 'INSPECTOR' } } as any)
-            await expect(getAnalyticsData()).rejects.toThrow('Forbidden')
+            await expect(getAnalyticsData()).rejects.toThrow('Forbidden: Insufficient permissions')
         })
     })
 })

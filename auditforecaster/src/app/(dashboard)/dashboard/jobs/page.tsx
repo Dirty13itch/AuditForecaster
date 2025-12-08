@@ -6,16 +6,21 @@ import { JobFilters } from "@/components/jobs/job-filters"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 
+const DEFAULT_PAGE_SIZE = 50
+
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>
+  searchParams: Promise<{ q?: string; status?: string; page?: string; limit?: string }>
 }) {
   const session = await auth()
   if (!session) redirect('/login')
 
-  const query = (await searchParams).q || ""
-  const status = (await searchParams).status || "ALL"
+  const params = await searchParams
+  const query = params.q || ""
+  const status = params.status || "ALL"
+  const page = Math.max(1, parseInt(params.page || '1') || 1)
+  const limit = Math.min(100, Math.max(1, parseInt(params.limit || String(DEFAULT_PAGE_SIZE)) || DEFAULT_PAGE_SIZE))
 
   const where: Record<string, unknown> = {}
 
@@ -38,6 +43,11 @@ export default async function JobsPage({
     where.status = status
   }
 
+  // Get total count for pagination
+  const totalCount = await prisma.job.count({ where })
+  const totalPages = Math.ceil(totalCount / limit)
+  const skip = (page - 1) * limit
+
   const jobs = await prisma.job.findMany({
     where,
     include: {
@@ -55,6 +65,8 @@ export default async function JobsPage({
     orderBy: {
       createdAt: 'desc',
     },
+    take: limit,
+    skip: skip,
   })
 
   const builders = await prisma.builder.findMany()

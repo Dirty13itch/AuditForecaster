@@ -17,19 +17,42 @@ type SendEmailParams = {
     }[]
 }
 
+// Sanitize email headers to prevent header injection attacks
+function sanitizeEmailHeader(value: string): string {
+    // Remove any newlines, carriage returns that could inject headers
+    return value.replace(/[\r\n]/g, '').trim()
+}
+
+function validateEmail(email: string): boolean {
+    // Basic email validation - no newlines, has @ symbol
+    return /^[^\r\n@]+@[^\r\n@]+\.[^\r\n@]+$/.test(email)
+}
+
 export async function sendEmail({ to, subject, body, attachments = [] }: SendEmailParams) {
     const session = await auth()
 
     if (!session?.user?.id) throw new Error('Unauthorized')
+
+    // Validate and sanitize email parameters to prevent header injection
+    if (!validateEmail(to)) {
+        throw new Error('Invalid recipient email address')
+    }
+    const sanitizedTo = sanitizeEmailHeader(to)
+    const sanitizedSubject = sanitizeEmailHeader(subject)
+    const sanitizedFrom = session.user.email ? sanitizeEmailHeader(session.user.email) : ''
+
+    if (!sanitizedFrom || !validateEmail(sanitizedFrom)) {
+        throw new Error('Invalid sender email address')
+    }
 
     const client = await getGmailClient()
 
     // Construct email in RFC 2822 format
     const boundary = 'foo_bar_baz'
     const messageParts = [
-        `From: "AuditForecaster" <${session.user.email}>`,
-        `To: ${to}`,
-        `Subject: ${subject}`,
+        `From: "AuditForecaster" <${sanitizedFrom}>`,
+        `To: ${sanitizedTo}`,
+        `Subject: ${sanitizedSubject}`,
         `MIME-Version: 1.0`,
         `Content-Type: multipart/mixed; boundary="${boundary}"`,
         '',

@@ -174,10 +174,31 @@ export class SyncEngine {
 
 export const syncEngine = new SyncEngine();
 
-// Auto-start sync when coming online
-if (typeof window !== 'undefined') {
-    window.addEventListener('online', () => {
-        console.log('[SyncEngine] Online detected, triggering sync...');
+// Track if listener is already added to prevent duplicates
+let onlineListenerAdded = false;
+
+/**
+ * Initialize the sync engine's event listeners.
+ * Call this from a React component/hook with proper cleanup.
+ */
+export function initSyncEngineListeners(): () => void {
+    if (typeof window === 'undefined' || onlineListenerAdded) {
+        return () => {}; // No-op cleanup
+    }
+
+    const handleOnline = () => {
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[SyncEngine] Online detected, triggering sync...');
+        }
         syncEngine.triggerSync();
-    });
+    };
+
+    window.addEventListener('online', handleOnline);
+    onlineListenerAdded = true;
+
+    // Return cleanup function
+    return () => {
+        window.removeEventListener('online', handleOnline);
+        onlineListenerAdded = false;
+    };
 }

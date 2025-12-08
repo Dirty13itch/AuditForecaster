@@ -74,6 +74,11 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ data: job }, { status: 201 })
     } catch (error) {
-        return NextResponse.json({ error: 'Invalid Request', details: error }, { status: 400 })
+        // Don't leak internal error details - log them instead
+        console.error('API /v1/jobs POST error:', error)
+        const message = error instanceof z.ZodError
+            ? 'Validation failed: ' + error.errors.map(e => e.message).join(', ')
+            : 'Invalid request'
+        return NextResponse.json({ error: message }, { status: 400 })
     }
 }

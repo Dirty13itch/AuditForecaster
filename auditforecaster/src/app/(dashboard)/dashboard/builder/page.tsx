@@ -8,7 +8,6 @@ export default async function BuilderDashboard() {
     const session = await auth();
     const user = session?.user;
     const builderId = user?.builderId;
-    console.log('Builder Dashboard Session:', JSON.stringify(session, null, 2));
 
     if (!builderId) {
         return (

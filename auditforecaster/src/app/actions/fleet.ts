@@ -6,6 +6,7 @@ import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
 import { logger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
+import { safeParseInt } from "@/lib/utils"
 
 export async function addMaintenanceLog(data: {
     vehicleId: string
@@ -52,13 +53,21 @@ export async function createVehicle(_prevState: unknown, formData: FormData) {
         const name = formData.get('name') as string
         const make = formData.get('make') as string
         const model = formData.get('model') as string
-        const year = parseInt(formData.get('year') as string)
+        const yearStr = formData.get('year') as string
         const licensePlate = formData.get('licensePlate') as string
-        const mileage = parseInt(formData.get('mileage') as string)
+        const mileageStr = formData.get('mileage') as string
         const status = formData.get('status') as string
 
-        if (!name || !make || !model || !year || !licensePlate || !status) {
-            throw new Error("Missing required fields")
+        // Validate required fields
+        if (!name || !make || !model || !yearStr || !licensePlate || !status) {
+            return { message: "Missing required fields" }
+        }
+
+        const year = safeParseInt(yearStr, 0)
+        const mileage = safeParseInt(mileageStr, 0)
+
+        if (year < 1900 || year > new Date().getFullYear() + 1) {
+            return { message: "Invalid year" }
         }
 
         const vehicle = await prisma.vehicle.create({
@@ -96,18 +105,26 @@ export async function updateVehicle(id: string, _prevState: unknown, formData: F
         const name = formData.get('name') as string
         const make = formData.get('make') as string
         const model = formData.get('model') as string
-        const year = parseInt(formData.get('year') as string)
+        const yearStr = formData.get('year') as string
         const licensePlate = formData.get('licensePlate') as string
-        const mileage = parseInt(formData.get('mileage') as string)
+        const mileageStr = formData.get('mileage') as string
         const status = formData.get('status') as string
 
         const data: Prisma.VehicleUpdateInput = {}
         if (name) data.name = name
         if (make) data.make = make
         if (model) data.model = model
-        if (year) data.year = year
+        if (yearStr) {
+            const year = safeParseInt(yearStr, 0)
+            if (year >= 1900 && year <= new Date().getFullYear() + 1) {
+                data.year = year
+            }
+        }
         if (licensePlate) data.licensePlate = licensePlate
-        if (mileage) data.mileage = mileage
+        if (mileageStr) {
+            const mileage = safeParseInt(mileageStr, 0)
+            if (mileage >= 0) data.mileage = mileage
+        }
         if (status) data.status = status
 
         await prisma.vehicle.update({

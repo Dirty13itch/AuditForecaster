@@ -30,10 +30,7 @@ function LoginForm() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <form action={(formData) => {
-                    console.log('Form action triggered on client');
-                    dispatch(formData);
-                }} className="space-y-4">
+                <form action={dispatch} className="space-y-4">
                     <input type="hidden" name="callbackUrl" value={callbackUrl} />
                     <div className="space-y-2">
                         <Label htmlFor="email">Email</Label>
