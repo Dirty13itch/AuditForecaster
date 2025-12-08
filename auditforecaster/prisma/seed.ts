@@ -365,8 +365,7 @@ async function main() {
                 endLocation: 'Site A',
                 purpose: 'PENDING',
                 status: 'PENDING',
-                vehicleId: vehicle.id,
-                userId: inspector1.id
+                vehicleId: vehicle.id
             },
             {
                 date: new Date(new Date().setDate(new Date().getDate() - 1)),
@@ -375,27 +374,23 @@ async function main() {
                 endLocation: 'Home',
                 purpose: 'PENDING',
                 status: 'PENDING',
-                vehicleId: vehicle.id,
-                userId: inspector1.id
+                vehicleId: vehicle.id
             }
         ]
 
         for (const log of mileageLogs) {
-            // Check if exists (fuzzy check by date and distance)
+            // Check if exists (fuzzy check by date, distance, and vehicle)
             const existing = await prisma.mileageLog.findFirst({
                 where: {
                     date: log.date,
                     distance: log.distance,
-                    userId: log.userId
+                    vehicleId: log.vehicleId
                 }
             })
 
             if (!existing) {
                 await prisma.mileageLog.create({
-                    data: {
-                        ...log,
-                        status: 'PENDING' // Ensure status is set
-                    }
+                    data: log
                 })
             }
         }
