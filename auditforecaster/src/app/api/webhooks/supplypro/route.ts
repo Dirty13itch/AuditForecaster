@@ -2,10 +2,47 @@ import { prisma } from '@/lib/prisma';
 import { SupplyProWebhookSchema, normalizeBuilderName } from '@/lib/integrations/supplypro';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import crypto from 'crypto';
+
+// Verify webhook signature using HMAC-SHA256
+function verifyWebhookSignature(payload: string, signature: string | null, secret: string): boolean {
+    if (!signature || !secret) return false;
+    const expectedSignature = crypto
+        .createHmac('sha256', secret)
+        .update(payload)
+        .digest('hex');
+    // Use timing-safe comparison to prevent timing attacks
+    try {
+        return crypto.timingSafeEqual(
+            Buffer.from(signature),
+            Buffer.from(expectedSignature)
+        );
+    } catch {
+        return false;
+    }
+}
 
 export async function POST(req: Request) {
     const bodyText = await req.text();
     let bodyJson: unknown;
+
+    // Authenticate webhook request
+    const webhookSecret = process.env.SUPPLYPRO_WEBHOOK_SECRET;
+    const signature = req.headers.get('x-supplypro-signature');
+
+    // If webhook secret is configured, require valid signature
+    if (webhookSecret) {
+        if (!verifyWebhookSignature(bodyText, signature, webhookSecret)) {
+            logger.warn('SupplyPro webhook signature verification failed', {
+                hasSignature: !!signature,
+                ipAddress: req.headers.get('x-forwarded-for') || 'unknown'
+            });
+            return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+        }
+    } else {
+        // Log warning if webhook secret is not configured (not secure)
+        logger.warn('SUPPLYPRO_WEBHOOK_SECRET not configured - webhook authentication disabled');
+    }
 
     try {
         bodyJson = JSON.parse(bodyText);

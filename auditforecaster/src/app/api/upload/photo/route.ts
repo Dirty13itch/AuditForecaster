@@ -153,13 +153,34 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Photo ID required' }, { status: 400 })
         }
 
-        // Get photo to find file path
+        // Get photo with ownership chain for authorization
         const photo = await prisma.photo.findUnique({
-            where: { id: photoId }
+            where: { id: photoId },
+            include: {
+                inspection: {
+                    include: {
+                        job: {
+                            select: {
+                                inspectorId: true,
+                                builderId: true
+                            }
+                        }
+                    }
+                }
+            }
         })
 
         if (!photo) {
             return NextResponse.json({ error: 'Photo not found' }, { status: 404 })
+        }
+
+        // Verify ownership: user must be admin, the inspector who took it, or the builder
+        const isAdmin = session.user?.role === 'ADMIN'
+        const isInspector = photo.inspection?.job?.inspectorId === session.user?.id
+        const isBuilder = session.user?.builderId && photo.inspection?.job?.builderId === session.user?.builderId
+
+        if (!isAdmin && !isInspector && !isBuilder) {
+            return NextResponse.json({ error: 'Forbidden: You do not have permission to delete this photo' }, { status: 403 })
         }
 
         // Delete from database

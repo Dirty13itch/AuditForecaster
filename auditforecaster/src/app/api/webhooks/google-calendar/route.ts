@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     const channelId = req.headers.get('x-goog-channel-id')
     const resourceState = req.headers.get('x-goog-resource-state')
     const resourceId = req.headers.get('x-goog-resource-id')
+    const channelToken = req.headers.get('x-goog-channel-token')
 
     logger.info('Received Google Calendar Webhook', { channelId, resourceState, resourceId })
 
@@ -16,12 +17,23 @@ export async function POST(req: NextRequest) {
 
     // 1. Verify Channel ID format: auditforecaster-{userId}
     if (!channelId.startsWith('auditforecaster-')) {
+        logger.warn('Invalid channel ID format', { channelId })
         return NextResponse.json({ error: 'Invalid channel ID' }, { status: 400 })
     }
 
     const userId = channelId.replace('auditforecaster-', '')
 
-    // 2. Handle Sync
+    // 2. Verify channel token if configured (should match what we set when creating the watch)
+    const expectedToken = process.env.GOOGLE_CALENDAR_WEBHOOK_TOKEN
+    if (expectedToken && channelToken !== expectedToken) {
+        logger.warn('Google Calendar webhook token mismatch', {
+            userId,
+            hasToken: !!channelToken
+        })
+        return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    }
+
+    // 3. Handle Sync
     if (resourceState === 'sync') {
         logger.info(`Initial sync ping for user ${userId}`)
         return NextResponse.json({ status: 'ok' })
