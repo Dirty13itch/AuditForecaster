@@ -8,6 +8,10 @@ const getResend = () => {
     return null;
 };
 
+// Default from address - should be overridden via EMAIL_FROM env var
+const DEFAULT_FROM = 'Audit Forecaster <notifications@auditforecaster.com>';
+const getFromAddress = () => process.env.EMAIL_FROM || DEFAULT_FROM;
+
 export async function sendInspectionCompletedEmail(
     to: string,
     jobAddress: string,
@@ -22,7 +26,7 @@ export async function sendInspectionCompletedEmail(
 
     try {
         const data = await resend.emails.send({
-            from: 'Ulrich Energy <notifications@ulrichenergy.com>', // Update with verified domain
+            from: getFromAddress(),
             to: [to],
             subject: `Inspection Completed: ${jobAddress}`,
             html: `
@@ -58,7 +62,7 @@ export async function sendQARejectionEmail(
 
     try {
         const data = await resend.emails.send({
-            from: 'Ulrich Energy <notifications@ulrichenergy.com>',
+            from: getFromAddress(),
             to: [to],
             subject: `Action Required: Inspection Rejected for ${jobAddress}`,
             html: `
@@ -95,7 +99,7 @@ export async function sendEmailWithAttachment(
 
     try {
         const data = await resend.emails.send({
-            from: 'Ulrich Energy <notifications@ulrichenergy.com>',
+            from: getFromAddress(),
             to: [to],
             subject,
             html,

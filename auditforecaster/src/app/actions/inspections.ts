@@ -106,19 +106,21 @@ export async function updateInspection(formData: FormData): Promise<never> {
         })
 
         // Send notification (non-blocking)
-        try {
-            const currentSession = await auth()
-            const inspectorName = currentSession?.user?.name || 'Unknown Inspector'
-            const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@example.com'
-            await sendInspectionCompletedEmail(
-                adminEmail,
-                `${updatedJob.streetAddress}, ${updatedJob.city}`,
-                inspectorName,
-                `${process.env.NEXTAUTH_URL}/dashboard/jobs/${fields.jobId}`
-            )
-        } catch (error) {
-            logger.error('Failed to send notification', { error })
-            // Don't fail the request if email fails
+        const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL
+        if (adminEmail) {
+            try {
+                const currentSession = await auth()
+                const inspectorName = currentSession?.user?.name || 'Unknown Inspector'
+                await sendInspectionCompletedEmail(
+                    adminEmail,
+                    `${updatedJob.streetAddress}, ${updatedJob.city}`,
+                    inspectorName,
+                    `${process.env.NEXTAUTH_URL}/dashboard/jobs/${fields.jobId}`
+                )
+            } catch (error) {
+                logger.error('Failed to send notification', { error })
+                // Don't fail the request if email fails
+            }
         }
 
         // Revalidate and redirect
