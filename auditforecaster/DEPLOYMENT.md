@@ -48,8 +48,8 @@ NEXTAUTH_SECRET=generate_a_long_secret_string
 # EMAIL - Recommended for production
 # ===========================================
 RESEND_API_KEY=re_123...
-EMAIL_FROM="Your Company <noreply@yourdomain.com>"
-ADMIN_NOTIFICATION_EMAIL=admin@yourdomain.com
+EMAIL_FROM="Ulrich Energy Auditing <notifications@ulrichenergyauditing.com>"
+ADMIN_NOTIFICATION_EMAIL=shaun.ulrich@ulrichenergyauditing.com
 
 # ===========================================
 # MONITORING - Recommended for production
@@ -72,6 +72,8 @@ UPSTASH_REDIS_REST_TOKEN=...
 # INTEGRATIONS - As needed
 # ===========================================
 # Google OAuth (for Google Calendar sync)
+# Get credentials from Google Cloud Console: https://console.cloud.google.com
+# Project owner: shaun.ulrich@ulrichenergyauditing.com
 GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=xxx
 
