@@ -14,15 +14,16 @@
 # 3. Run: docker compose up -d
 # =============================================================================
 
-version: '3.8'
-
 services:
   # ===========================================================================
   # CORE APPLICATION
   # ===========================================================================
   app:
     container_name: auditforecaster-app
-    image: ghcr.io/dirty13itch/auditforecaster:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: auditforecaster:latest
     restart: unless-stopped
     expose:
       - "3000"
