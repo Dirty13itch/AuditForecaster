@@ -5,6 +5,13 @@ import { Save } from "lucide-react"
 import { InspectionForm } from "@/components/inspection-form"
 import { safeJsonParse } from "@/lib/utils"
 
+interface InspectionData {
+    cfm50?: number
+    houseVolume?: number
+    ach50?: number
+    notes?: string
+}
+
 export default async function InspectionPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
 
@@ -32,8 +39,8 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
     }
 
     const inspection = job.inspections[0]
-    const inspectionData = safeJsonParse<Record<string, unknown>>(inspection?.data, {})
-    const checklist = safeJsonParse(inspection?.checklist, [])
+    const inspectionData = safeJsonParse<InspectionData>(inspection?.data, {})
+    const checklist = safeJsonParse<unknown[]>(inspection?.checklist, [])
 
     return (
         <div className="space-y-6 max-w-3xl mx-auto">
