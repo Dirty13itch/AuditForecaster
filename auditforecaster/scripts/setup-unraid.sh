@@ -55,20 +55,20 @@ if [ ! -f ".env" ]; then
         # Generate secrets
         echo -e "${BLUE}Generating secure secrets...${NC}"
 
-        # Generate POSTGRES_PASSWORD
-        POSTGRES_PWD=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 32)
-        sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$POSTGRES_PWD/" .env
+        # Generate POSTGRES_PASSWORD (alphanumeric only to avoid escaping issues)
+        POSTGRES_PWD=$(openssl rand -hex 16)
+        sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PWD|" .env
 
-        # Generate NEXTAUTH_SECRET
-        NEXTAUTH_SECRET=$(openssl rand -base64 32)
-        sed -i "s/NEXTAUTH_SECRET=.*/NEXTAUTH_SECRET=$NEXTAUTH_SECRET/" .env
+        # Generate NEXTAUTH_SECRET (alphanumeric only to avoid sed delimiter issues)
+        NEXTAUTH_SECRET=$(openssl rand -hex 32)
+        sed -i "s|NEXTAUTH_SECRET=.*|NEXTAUTH_SECRET=$NEXTAUTH_SECRET|" .env
 
         # Generate webhook secrets
         SUPPLYPRO_SECRET=$(openssl rand -hex 32)
-        sed -i "s/SUPPLYPRO_WEBHOOK_SECRET=.*/SUPPLYPRO_WEBHOOK_SECRET=$SUPPLYPRO_SECRET/" .env
+        sed -i "s|SUPPLYPRO_WEBHOOK_SECRET=.*|SUPPLYPRO_WEBHOOK_SECRET=$SUPPLYPRO_SECRET|" .env
 
         GCAL_TOKEN=$(openssl rand -hex 32)
-        sed -i "s/GOOGLE_CALENDAR_WEBHOOK_TOKEN=.*/GOOGLE_CALENDAR_WEBHOOK_TOKEN=$GCAL_TOKEN/" .env
+        sed -i "s|GOOGLE_CALENDAR_WEBHOOK_TOKEN=.*|GOOGLE_CALENDAR_WEBHOOK_TOKEN=$GCAL_TOKEN|" .env
 
         echo -e "${GREEN}Secrets generated!${NC}"
         echo -e "${YELLOW}IMPORTANT: Edit .env to set:${NC}"
