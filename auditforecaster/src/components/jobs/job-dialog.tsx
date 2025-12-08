@@ -49,9 +49,7 @@ export function JobDialog({ builders, inspectors }: JobDialogProps) {
 
     async function onSubmit(data: JobInput) {
         try {
-            console.log('JobDialog: Enqueuing job...')
             await engine.enqueue('CREATE', 'job', data)
-            console.log('JobDialog: Job enqueued successfully')
 
             toast({
                 title: "Scheduled",

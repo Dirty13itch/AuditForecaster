@@ -7,7 +7,7 @@ import {
     markPhotoSynced,
     MutationQueueItem
 } from './offline-storage';
-// import { EquipmentClientInput, JobInput } from '@/lib/schemas';
+import { logger } from '@/lib/logger';
 
 // Adapters moved to sync-actions.ts
 
@@ -75,13 +75,13 @@ export class SyncEngine {
             const action = ACTION_MAP[actionKey];
 
             if (!action) {
-                console.error(`[SyncEngine] No action found for ${actionKey}`);
+                logger.error(`[SyncEngine] No action found for ${actionKey}`);
                 await removeMutation(item.id);
                 continue;
             }
 
             try {
-                console.log(`[SyncEngine] Processing ${actionKey} (${item.id})`);
+                logger.debug(`[SyncEngine] Processing ${actionKey} (${item.id})`);
 
                 // Execute Server Action
                 const result = await action(item.payload);
@@ -89,10 +89,10 @@ export class SyncEngine {
                 if (result.success) {
                     // Success! Remove from queue
                     await removeMutation(item.id);
-                    console.log(`[SyncEngine] Synced ${item.id}`);
+                    logger.debug(`[SyncEngine] Synced ${item.id}`);
                 } else {
                     // Server returned failure
-                    console.error(`[SyncEngine] Server error for ${item.id}:`, result.message);
+                    logger.error(`[SyncEngine] Server error for ${item.id}: ${result.message}`);
 
                     if (isV2) {
                         // V2: Handle Retries
@@ -100,7 +100,7 @@ export class SyncEngine {
                             item.retryCount++;
                             item.error = result.message;
                             await enqueueMutation(item); // Update in DB
-                            console.log(`[SyncEngine] Retrying ${item.id} (Attempt ${item.retryCount}/3)`);
+                            logger.info(`[SyncEngine] Retrying ${item.id} (Attempt ${item.retryCount}/3)`);
 
                             // Exponential Backoff: 1s, 2s, 4s
                             const delay = Math.pow(2, item.retryCount) * 1000;
@@ -111,7 +111,7 @@ export class SyncEngine {
                             break;
                         } else {
                             // Max retries reached
-                            console.error(`[SyncEngine] Max retries reached for ${item.id}. Moving to DLQ.`);
+                            logger.error(`[SyncEngine] Max retries reached for ${item.id}. Moving to DLQ.`);
                             await addFailedMutation(item);
                             await removeMutation(item.id);
                         }
@@ -121,7 +121,7 @@ export class SyncEngine {
                 }
 
             } catch (error) {
-                console.error(`[SyncEngine] Network/System error for ${item.id}:`, error);
+                logger.error(`[SyncEngine] Network/System error for ${item.id}`, { error });
 
                 if (isV2) {
                     if (item.retryCount < 3) {
@@ -143,8 +143,8 @@ export class SyncEngine {
         const photos = await getAllUnsyncedPhotos();
         if (photos.length === 0) return;
 
-        console.log(`[SyncEngine] Syncing ${photos.length} photos...`);
-        
+        logger.info(`[SyncEngine] Syncing ${photos.length} photos...`);
+
         // Import action dynamically
         const { uploadPhoto } = await import('@/app/actions/photos');
 
@@ -161,12 +161,12 @@ export class SyncEngine {
 
                 if (result.success) {
                     await markPhotoSynced(photo.id);
-                    console.log(`[SyncEngine] Synced photo ${photo.id}`);
+                    logger.debug(`[SyncEngine] Synced photo ${photo.id}`);
                 } else {
-                    console.error(`[SyncEngine] Failed to sync photo ${photo.id}:`, result.error);
+                    logger.error(`[SyncEngine] Failed to sync photo ${photo.id}: ${result.error}`);
                 }
             } catch (error) {
-                console.error(`[SyncEngine] Error syncing photo ${photo.id}:`, error);
+                logger.error(`[SyncEngine] Error syncing photo ${photo.id}`, { error });
             }
         }
     }
@@ -187,9 +187,7 @@ export function initSyncEngineListeners(): () => void {
     }
 
     const handleOnline = () => {
-        if (process.env.NODE_ENV === 'development') {
-            console.log('[SyncEngine] Online detected, triggering sync...');
-        }
+        logger.debug('[SyncEngine] Online detected, triggering sync...');
         syncEngine.triggerSync();
     };
 

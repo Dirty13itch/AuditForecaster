@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 
 // Schema for SupplyPro Order (based on typical construction ERPs)
 export const SupplyProOrderSchema = z.object({
@@ -32,13 +33,13 @@ export class SupplyProClient {
      */
     async fetchNewOrders(startDate: Date): Promise<SupplyProOrder[]> {
         if (!this.apiKey) {
-            console.warn('SupplyPro Sync Skipped: No API Key');
+            logger.warn('SupplyPro Sync Skipped: No API Key');
             return [];
         }
 
         // Mock Implementation
         // In reality, this would be an axios/fetch call
-        console.log(`Fetching SupplyPro orders since ${startDate.toISOString()}`);
+        logger.info(`Fetching SupplyPro orders since ${startDate.toISOString()}`);
         return [];
     }
 

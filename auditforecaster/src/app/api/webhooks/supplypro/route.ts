@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { SupplyProWebhookSchema, normalizeBuilderName } from '@/lib/integrations/supplypro';
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: Request) {
     const bodyText = await req.text();
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, jobId: job.id });
 
     } catch (error: unknown) {
-        console.error('SupplyPro Webhook Error:', error);
+        logger.error('SupplyPro Webhook Error', { error });
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
         // Log System Error

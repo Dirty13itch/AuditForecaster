@@ -10,13 +10,6 @@ export default auth(async (req) => {
     const isOnDashboard = req.nextUrl.pathname.startsWith('/dashboard');
     const isRoot = req.nextUrl.pathname === '/';
 
-    console.log('Middleware:', {
-        path: req.nextUrl.pathname,
-        isLoggedIn,
-        mockAuth: process.env.MOCK_AUTH_FOR_E2E,
-        auth: req.auth
-    });
-
     // Initialize response
     let response = NextResponse.next();
 

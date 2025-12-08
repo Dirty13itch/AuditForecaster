@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { JobSchema, EquipmentClientSchema } from '@/lib/schemas';
 import { getCoordinates } from '@/lib/geocoding';
 import { logAudit } from '@/lib/audit';
+import { logger } from '@/lib/logger';
+import { safeJsonParse, safeParseFloat } from '@/lib/utils';
 import { z } from 'zod';
 import { addYears } from 'date-fns';
 
@@ -36,7 +38,7 @@ export const syncWorker = new Worker(
     WORKER_NAME,
     async (job: Job<SyncJobData>) => {
         const { mutations, userId } = job.data;
-        console.log(`[SyncWorker] Processing job ${job.id} for user ${userId} with ${mutations.length} mutations`);
+        logger.info(`[SyncWorker] Processing job ${job.id} for user ${userId} with ${mutations.length} mutations`);
 
         const results = [];
 
@@ -64,7 +66,7 @@ export const syncWorker = new Worker(
                 }
                 results.push({ id, status: 'COMPLETED', result });
             } catch (error) {
-                console.error(`[SyncWorker] Mutation ${id} failed:`, error);
+                logger.error(`[SyncWorker] Mutation ${id} failed`, { error });
                 results.push({ id, status: 'FAILED', error: String(error) });
             }
         }
@@ -119,9 +121,9 @@ async function handleUpdateInspection(payload: unknown) {
     const validated = InspectionWorkerSchema.parse(payload);
     const fields = validated;
 
-    const houseVolume = fields.houseVolume ? parseFloat(fields.houseVolume) : null;
-    const checklist = fields.checklist ? JSON.parse(fields.checklist) : null;
-    const cfm50Val = parseFloat(fields.cfm50);
+    const houseVolume = fields.houseVolume ? safeParseFloat(fields.houseVolume, 0) : null;
+    const checklist = safeJsonParse(fields.checklist, null);
+    const cfm50Val = safeParseFloat(fields.cfm50, 0);
 
     let ach50: number | null = null;
     let compliant: boolean | undefined = undefined;
@@ -237,9 +239,9 @@ async function handleUpdateEquipment(payload: unknown, userId: string) {
 }
 
 syncWorker.on('completed', (job: Job) => {
-    console.log(`[SyncWorker] Job ${job.id} completed`);
+    logger.info(`[SyncWorker] Job ${job.id} completed`);
 });
 
 syncWorker.on('failed', (job: Job | undefined, err: Error) => {
-    console.error(`[SyncWorker] Job ${job?.id} failed: ${err.message}`);
+    logger.error(`[SyncWorker] Job ${job?.id} failed: ${err.message}`);
 });
