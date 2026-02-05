@@ -7,10 +7,19 @@ import { z } from "zod"
 import { logger } from "@/lib/logger"
 import { auth } from "@/auth"
 
-export async function createSubcontractor(data: SubcontractorInput) {
+async function requireAdmin() {
     const session = await auth()
-    if (!session?.user) {
-        return { success: false, message: "Unauthorized" }
+    const role = (session?.user as { role?: string })?.role
+    if (role !== 'ADMIN') {
+        return null
+    }
+    return session
+}
+
+export async function createSubcontractor(data: SubcontractorInput) {
+    const session = await requireAdmin()
+    if (!session) {
+        return { success: false, message: "Unauthorized: Admin access required" }
     }
 
     try {
@@ -32,9 +41,9 @@ export async function createSubcontractor(data: SubcontractorInput) {
 }
 
 export async function updateSubcontractor(id: string, data: SubcontractorInput) {
-    const session = await auth()
-    if (!session?.user) {
-        return { success: false, message: "Unauthorized" }
+    const session = await requireAdmin()
+    if (!session) {
+        return { success: false, message: "Unauthorized: Admin access required" }
     }
 
     try {
@@ -57,9 +66,9 @@ export async function updateSubcontractor(id: string, data: SubcontractorInput) 
 }
 
 export async function deleteSubcontractor(id: string) {
-    const session = await auth()
-    if (!session?.user) {
-        return { success: false, message: "Unauthorized" }
+    const session = await requireAdmin()
+    if (!session) {
+        return { success: false, message: "Unauthorized: Admin access required" }
     }
 
     try {

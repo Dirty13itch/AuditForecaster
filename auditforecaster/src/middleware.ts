@@ -13,9 +13,12 @@ export default auth(async (req) => {
     // Initialize response
     let response = NextResponse.next();
 
-    // Bypass Auth for E2E Tests (ONLY in test environment with explicit flag)
-    // This is safe because ENABLE_E2E_AUTH_BYPASS must be explicitly set
-    if (process.env.ENABLE_E2E_AUTH_BYPASS === 'true' && req.headers.get('x-e2e-bypass-auth') === 'true') {
+    // Bypass Auth for E2E Tests (ONLY in non-production environments)
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        process.env.ENABLE_E2E_AUTH_BYPASS === 'true' &&
+        req.headers.get('x-e2e-bypass-auth') === 'true'
+    ) {
         return response;
     }
 

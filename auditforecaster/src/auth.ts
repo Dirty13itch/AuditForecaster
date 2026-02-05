@@ -94,10 +94,12 @@ const nextAuthResult = NextAuth({
 
 export const { handlers, signIn, signOut } = nextAuthResult
 
-// Wrap auth to support E2E mocking
-// Wrap auth to support E2E mocking
+// Wrap auth to support E2E mocking (ONLY in non-production environments)
 export const auth = async (...args: any[]) => {
-    if (process.env.MOCK_AUTH_FOR_E2E === 'true') {
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        process.env.MOCK_AUTH_FOR_E2E === 'true'
+    ) {
         return {
             user: {
                 name: 'E2E Admin',

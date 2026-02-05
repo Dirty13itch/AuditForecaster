@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-// import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
@@ -9,7 +9,6 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
-  swcMinify: true,
   workboxOptions: {
     disableDevLogs: true,
   },
@@ -20,11 +19,25 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
 
   // Enable standalone output for Docker
   output: 'standalone',
+
+  // Optimize barrel export imports for heavy libraries
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'recharts',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-select',
+      '@radix-ui/react-tabs',
+      'date-fns',
+      'framer-motion',
+    ],
+  },
 
   // Security headers for production
   async headers() {
@@ -42,7 +55,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'X-Frame-Options',
-            value: 'SAMEORIGIN'
+            value: 'DENY'
           },
           {
             key: 'X-Content-Type-Options',
@@ -73,4 +86,17 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+const sentryConfig = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+};
+
+// Only apply Sentry wrapper if DSN is configured
+const pwaConfig = withPWA(nextConfig);
+export default process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(pwaConfig, sentryConfig)
+  : pwaConfig;

@@ -42,6 +42,15 @@ export async function validateApiKey(requiredScope?: string) {
         return null
     }
 
+    // Check expiration if the field exists on the model
+    if ('expiresAt' in apiKey && apiKey.expiresAt) {
+        const expiresAt = apiKey.expiresAt as Date
+        if (expiresAt < new Date()) {
+            logger.warn('Expired API key used', { keyId: apiKey.id })
+            return null
+        }
+    }
+
     // Check Scope
     if (requiredScope && !apiKey.scopes.includes(requiredScope)) {
         return null

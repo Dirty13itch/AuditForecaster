@@ -23,14 +23,19 @@ export async function POST(req: NextRequest) {
 
     const userId = channelId.replace('auditforecaster-', '')
 
-    // 2. Verify channel token if configured (should match what we set when creating the watch)
+    // 2. Verify channel token (required in production)
     const expectedToken = process.env.GOOGLE_CALENDAR_WEBHOOK_TOKEN
-    if (expectedToken && channelToken !== expectedToken) {
-        logger.warn('Google Calendar webhook token mismatch', {
-            userId,
-            hasToken: !!channelToken
-        })
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    if (expectedToken) {
+        if (channelToken !== expectedToken) {
+            logger.warn('Google Calendar webhook token mismatch', {
+                userId,
+                hasToken: !!channelToken
+            })
+            return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+        }
+    } else if (process.env.NODE_ENV === 'production') {
+        logger.warn('GOOGLE_CALENDAR_WEBHOOK_TOKEN not configured in production')
+        return NextResponse.json({ error: 'Webhook token not configured' }, { status: 503 })
     }
 
     // 3. Handle Sync

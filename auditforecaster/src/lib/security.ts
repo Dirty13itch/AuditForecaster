@@ -43,6 +43,18 @@ export const rateLimiters = {
 // Fallback In-Memory Limiter (if Redis is down or not configured)
 const memoryStore = new Map<string, { count: number; lastReset: number }>();
 const MEMORY_WINDOW = 10000; // 10s
+const MEMORY_STORE_MAX_ENTRIES = 10000;
+
+function cleanupMemoryStore() {
+    if (memoryStore.size <= MEMORY_STORE_MAX_ENTRIES) return;
+
+    const now = Date.now();
+    for (const [key, record] of memoryStore) {
+        if (now - record.lastReset > MEMORY_WINDOW) {
+            memoryStore.delete(key);
+        }
+    }
+}
 
 export async function checkRateLimit(identifier: string, type: 'public' | 'authenticated' | 'core' = 'core') {
     // 0. Bypass in Development/Test
@@ -72,6 +84,9 @@ export async function checkRateLimit(identifier: string, type: 'public' | 'authe
 
     record.count++;
     memoryStore.set(identifier, record);
+
+    // 3. Prevent memory leak: clean up stale entries when map grows too large
+    cleanupMemoryStore();
 
     const limits = { public: 5, authenticated: 20, core: 100 };
     const limit = limits[type];

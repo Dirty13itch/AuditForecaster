@@ -511,6 +511,8 @@ model Expense {
 
   @@index([userId])
   @@index([jobId])
+  @@index([status])
+  @@index([date])
 }
 
 model MileageLog {
@@ -535,6 +537,7 @@ model MileageLog {
 
   @@index([vehicleId])
   @@index([jobId])
+  @@index([status])
 }
 
 model Subcontractor {
@@ -605,6 +608,8 @@ model Invoice {
 
   @@index([builderId])
   @@index([status])
+  @@index([date])
+  @@index([deletedAt])
 }
 
 model InvoiceItem {
@@ -639,6 +644,7 @@ model SystemLog {
 
   @@index([level])
   @@index([createdAt])
+  @@index([userId])
 }
 
 model ApiKey {
@@ -693,6 +699,9 @@ model Payout {
   updatedAt   DateTime  @updatedAt
 
   @@index([userId])
+  @@index([status])
+  @@index([periodStart])
+  @@index([periodEnd])
 }
 
 model Route {
@@ -712,6 +721,7 @@ model Route {
 
   @@index([driverId])
   @@index([date])
+  @@index([status])
 }
 
 model RouteStop {

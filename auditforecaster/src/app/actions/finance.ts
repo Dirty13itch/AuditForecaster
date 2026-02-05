@@ -20,11 +20,11 @@ export async function classifyMileageLog(id: string, type: 'BUSINESS' | 'PERSONA
 
     try {
         await prisma.mileageLog.update({
-            where: { 
+            where: {
                 id,
                 vehicle: { assignedTo: session.user.id } // Ensure ownership
             },
-            data: { 
+            data: {
                 purpose: type,
                 status: 'CLASSIFIED'
             }
@@ -51,34 +51,56 @@ export async function autoClassifyLogs() {
             }
         })
 
-        let classifiedCount = 0
-
         // Mock Work Hours (9 AM - 5 PM)
         // In a real app, this would come from User settings
         const WORK_START = 9
         const WORK_END = 17
 
+        // Classify logs and batch updates in a transaction
+        const businessIds: string[] = []
+        const personalIds: string[] = []
+
         for (const log of logs) {
             const hour = new Date(log.date).getHours()
-            let purpose = ''
 
             if (hour >= WORK_START && hour < WORK_END) {
-                purpose = 'BUSINESS'
+                businessIds.push(log.id)
             } else {
-                purpose = 'PERSONAL'
+                personalIds.push(log.id)
             }
+        }
 
-            if (purpose) {
-                await prisma.mileageLog.update({
-                    where: { id: log.id },
-                    data: { 
-                        purpose,
+        const operations = []
+
+        if (businessIds.length > 0) {
+            operations.push(
+                prisma.mileageLog.updateMany({
+                    where: { id: { in: businessIds } },
+                    data: {
+                        purpose: 'BUSINESS',
                         status: 'CLASSIFIED'
                     }
                 })
-                classifiedCount++
-            }
+            )
         }
+
+        if (personalIds.length > 0) {
+            operations.push(
+                prisma.mileageLog.updateMany({
+                    where: { id: { in: personalIds } },
+                    data: {
+                        purpose: 'PERSONAL',
+                        status: 'CLASSIFIED'
+                    }
+                })
+            )
+        }
+
+        if (operations.length > 0) {
+            await prisma.$transaction(operations)
+        }
+
+        const classifiedCount = businessIds.length + personalIds.length
 
         revalidatePath('/dashboard/finance')
         return { success: true, count: classifiedCount }

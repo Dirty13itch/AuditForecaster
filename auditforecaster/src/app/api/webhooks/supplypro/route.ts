@@ -42,6 +42,10 @@ export async function POST(req: Request) {
     } else {
         // Log warning if webhook secret is not configured (not secure)
         logger.warn('SUPPLYPRO_WEBHOOK_SECRET not configured - webhook authentication disabled');
+        // Fail closed in production: do not process unauthenticated webhooks
+        if (process.env.NODE_ENV === 'production') {
+            return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+        }
     }
 
     try {

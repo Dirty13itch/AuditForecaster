@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { auth } from "@/auth"
 import { sendInspectionCompletedEmail } from "@/lib/email"
 import { z } from "zod"
@@ -76,33 +77,35 @@ export async function updateInspection(formData: FormData): Promise<never> {
             orderBy: { createdAt: 'desc' }
         })
 
-        // Save inspection
-        if (existingInspection) {
-            await prisma.inspection.update({
-                where: { id: existingInspection.id },
-                data: {
-                    data: JSON.stringify(inspectionData),
-                    checklist: JSON.stringify(checklist),
-                    signatureUrl: fields.signature,
-                }
-            })
-        } else {
-            await prisma.inspection.create({
-                data: {
-                    jobId: fields.jobId,
-                    type: 'BLOWER_DOOR',
-                    data: JSON.stringify(inspectionData),
-                    checklist: JSON.stringify(checklist),
-                    signatureUrl: fields.signature,
-                }
-            })
-        }
+        // Save inspection and update job in a transaction
+        const updatedJob = await prisma.$transaction(async (tx) => {
+            if (existingInspection) {
+                await tx.inspection.update({
+                    where: { id: existingInspection.id },
+                    data: {
+                        data: JSON.stringify(inspectionData),
+                        checklist: JSON.stringify(checklist),
+                        signatureUrl: fields.signature,
+                    }
+                })
+            } else {
+                await tx.inspection.create({
+                    data: {
+                        jobId: fields.jobId,
+                        type: 'BLOWER_DOOR',
+                        data: JSON.stringify(inspectionData),
+                        checklist: JSON.stringify(checklist),
+                        signatureUrl: fields.signature,
+                    }
+                })
+            }
 
-        // Update job status
-        const updatedJob = await prisma.job.update({
-            where: { id: fields.jobId },
-            data: { status: 'COMPLETED' },
-            include: { builder: true }
+            // Update job status
+            return tx.job.update({
+                where: { id: fields.jobId },
+                data: { status: 'COMPLETED' },
+                include: { builder: true }
+            })
         })
 
         // Send notification (non-blocking)
@@ -129,13 +132,13 @@ export async function updateInspection(formData: FormData): Promise<never> {
         redirect(`/dashboard/jobs/${fields.jobId}`)
 
     } catch (error) {
-        // Log error for debugging
-        logger.error('updateInspection error', { error })
-
         // Re-throw redirect errors (they're expected)
-        if (error instanceof Error && error.message === 'NEXT_REDIRECT') {
+        if (isRedirectError(error)) {
             throw error
         }
+
+        // Log error for debugging
+        logger.error('updateInspection error', { error })
 
         // For all other errors, throw with user-friendly message
         const message = error instanceof Error ? error.message : 'Failed to save inspection. Please try again.'
@@ -150,29 +153,38 @@ export async function createReinspection(jobId: string): Promise<never> {
             throw new Error('You must be logged in to create a reinspection')
         }
 
-        const newInspection = await prisma.inspection.create({
-            data: {
-                jobId,
-                type: 'BLOWER_DOOR',
-                data: '{}',
-                checklist: '[]',
-            }
-        })
+        const role = (session.user as { role?: string })?.role
+        if (role !== 'ADMIN' && role !== 'INSPECTOR') {
+            throw new Error('Unauthorized: Only admins and inspectors can create reinspections')
+        }
 
-        await prisma.job.update({
-            where: { id: jobId },
-            data: { status: 'IN_PROGRESS' }
+        const newInspection = await prisma.$transaction(async (tx) => {
+            const inspection = await tx.inspection.create({
+                data: {
+                    jobId,
+                    type: 'BLOWER_DOOR',
+                    data: '{}',
+                    checklist: '[]',
+                }
+            })
+
+            await tx.job.update({
+                where: { id: jobId },
+                data: { status: 'IN_PROGRESS' }
+            })
+
+            return inspection
         })
 
         redirect(`/dashboard/inspections/${newInspection.id}`)
 
     } catch (error) {
-        logger.error('createReinspection error', { error })
-
         // Re-throw redirect errors
-        if (error instanceof Error && error.message === 'NEXT_REDIRECT') {
+        if (isRedirectError(error)) {
             throw error
         }
+
+        logger.error('createReinspection error', { error })
 
         const message = error instanceof Error ? error.message : 'Failed to create reinspection'
         throw new Error(message)

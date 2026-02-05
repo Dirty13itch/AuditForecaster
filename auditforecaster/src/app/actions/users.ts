@@ -11,7 +11,7 @@ const UserSchema = z.object({
     name: z.string().min(1, "Name is required"),
     email: z.string().email("Invalid email address"),
     role: z.enum(["ADMIN", "INSPECTOR", "QA"]),
-    password: z.string().min(6, "Password must be at least 6 characters").optional(),
+    password: z.string().min(8, "Password must be at least 8 characters").optional(),
 })
 
 async function checkAdmin() {
@@ -20,6 +20,7 @@ async function checkAdmin() {
     if (role !== 'ADMIN') {
         throw new Error('Unauthorized: Admin access required')
     }
+    return session
 }
 
 export async function createUser(_prevState: unknown, formData: FormData) {
@@ -48,7 +49,7 @@ export async function createUser(_prevState: unknown, formData: FormData) {
         if (!validatedFields.password) {
             return { message: 'Password is required for new users' }
         }
-        const passwordHash = await bcrypt.hash(validatedFields.password, 10)
+        const passwordHash = await bcrypt.hash(validatedFields.password, 12)
 
         await prisma.user.create({
             data: {
@@ -87,7 +88,7 @@ export async function updateUser(id: string, _prevState: unknown, formData: Form
         }
 
         if (validatedFields.password) {
-            updateData.passwordHash = await bcrypt.hash(validatedFields.password, 10)
+            updateData.passwordHash = await bcrypt.hash(validatedFields.password, 12)
         }
 
         await prisma.user.update({
@@ -98,14 +99,31 @@ export async function updateUser(id: string, _prevState: unknown, formData: Form
         revalidatePath('/dashboard/team/users')
         return { message: 'User updated successfully' }
     } catch (e: unknown) {
-        logger.error('Failed to create user', { error: e })
+        logger.error('Failed to update user', { error: e })
         return { message: e instanceof Error ? e.message : 'Failed to update user' }
     }
 }
 
 export async function deleteUser(id: string) {
     try {
-        await checkAdmin()
+        const session = await checkAdmin()
+
+        // Prevent self-deletion
+        if (session?.user?.id === id) {
+            return { message: 'You cannot delete your own account' }
+        }
+
+        // Check for active jobs assigned to this user
+        const activeJobs = await prisma.job.findFirst({
+            where: {
+                inspectorId: id,
+                status: { in: ['PENDING', 'IN_PROGRESS', 'ASSIGNED'] }
+            }
+        })
+
+        if (activeJobs) {
+            return { message: 'Cannot delete user with active jobs. Please reassign or complete their jobs first.' }
+        }
 
         await prisma.user.delete({
             where: { id }

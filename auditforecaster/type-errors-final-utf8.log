@@ -1,5 +1,0 @@
-﻿prisma/seed.ts(181,28): error TS2532: Object is possibly 'undefined'.
-prisma/seed.ts(191,28): error TS2532: Object is possibly 'undefined'.
-prisma/seed.ts(202,28): error TS2532: Object is possibly 'undefined'.
-prisma/seed.ts(213,28): error TS2532: Object is possibly 'undefined'.
-prisma/seed.ts(224,28): error TS2532: Object is possibly 'undefined'.

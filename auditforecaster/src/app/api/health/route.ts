@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { access, constants, writeFile, unlink } from 'fs/promises'
@@ -16,7 +16,7 @@ type CheckResult = {
 type HealthResponse = {
     status: 'healthy' | 'degraded' | 'unhealthy'
     timestamp: string
-    checks: {
+    checks?: {
         database: CheckResult
         redis: CheckResult
         filesystem: CheckResult
@@ -87,16 +87,11 @@ async function checkFilesystem(): Promise<CheckResult> {
     const start = Date.now()
 
     try {
-        // Check if directory is accessible and writable
         await access(uploadDir, constants.W_OK)
-
-        // Test write capability
         await writeFile(testFile, 'health-check')
         await unlink(testFile)
-
         return { status: 'ok', latencyMs: Date.now() - start }
     } catch (error) {
-        // If directory doesn't exist, that's okay - it'll be created on first upload
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
             return { status: 'ok', latencyMs: Date.now() - start, message: 'Upload dir will be created on demand' }
         }
@@ -109,10 +104,14 @@ async function checkFilesystem(): Promise<CheckResult> {
     }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     const startTime = Date.now()
 
-    // Run all checks in parallel for speed
+    // Check if request is authenticated for detailed info
+    const authHeader = req.headers.get('authorization')
+    const healthSecret = process.env.HEALTH_SECRET
+    const isAuthenticated = healthSecret ? authHeader === `Bearer ${healthSecret}` : false
+
     const [database, redis, filesystem] = await Promise.all([
         checkDatabase(),
         checkRedis(),
@@ -122,7 +121,6 @@ export async function GET() {
     const checks = { database, redis, filesystem }
     const totalLatencyMs = Date.now() - startTime
 
-    // Determine overall status
     const criticalFailed = database.status === 'error'
     const nonCriticalFailed = redis.status === 'error' || filesystem.status === 'error'
 
@@ -133,16 +131,18 @@ export async function GET() {
         status = 'degraded'
     }
 
+    // Only include detailed check info for authenticated requests
     const response: HealthResponse = {
         status,
         timestamp: new Date().toISOString(),
-        checks,
         totalLatencyMs,
         version: process.env.npm_package_version || '1.0.0',
     }
 
-    // Return 503 for unhealthy (critical failure), 200 for healthy/degraded
-    const httpStatus = status === 'unhealthy' ? 503 : 200
+    if (isAuthenticated) {
+        response.checks = checks
+    }
 
+    const httpStatus = status === 'unhealthy' ? 503 : 200
     return NextResponse.json(response, { status: httpStatus })
 }
