@@ -118,7 +118,7 @@ curl https://your-domain.com/api/health
 
 # Set up automated daily backups (cron)
 # Add to crontab -e:
-# 0 2 * * * /path/to/auditforecaster/scripts/backup.sh
+# 0 2 * * * /path/to/fieldinspect/scripts/backup.sh
 ```
 
 ### Restore from Backup

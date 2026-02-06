@@ -37,7 +37,7 @@ test.describe('Critical User Flows', () => {
         } else {
             expect(response.ok()).toBeTruthy();
             const text = await response.text();
-            expect(text).toContain('auditforecaster_');
+            expect(text).toContain('fieldinspect_');
         }
     });
 });

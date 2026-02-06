@@ -15,7 +15,7 @@ export async function watchCalendar(userId: string, calendarId: string) {
         try {
             await client.channels.stop({
                 requestBody: {
-                    id: `auditforecaster-${userId}`,
+                    id: `fieldinspect-${userId}`,
                     resourceId: user.watchResourceId,
                 },
             })
@@ -28,7 +28,7 @@ export async function watchCalendar(userId: string, calendarId: string) {
     const response = await client.events.watch({
         calendarId,
         requestBody: {
-            id: `auditforecaster-${userId}`, // Unique Channel ID
+            id: `fieldinspect-${userId}`, // Unique Channel ID
             type: 'web_hook',
             address: CALENDAR_WEBHOOK_URL,
             params: {

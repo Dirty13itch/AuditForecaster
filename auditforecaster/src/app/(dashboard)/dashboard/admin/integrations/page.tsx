@@ -3,7 +3,7 @@ import { IntegrationsForm } from './integrations-form'
 import { getSyncStatus } from '@/app/actions/google'
 
 export const metadata: Metadata = {
-    title: 'Integrations | AuditForecaster',
+    title: 'Integrations | Field Inspect',
     description: 'Manage Google Workspace integrations',
 }
 

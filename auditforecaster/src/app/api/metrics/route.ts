@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger';
 import { apiLimiter } from '@/lib/rate-limit';
 
 // Initialize default metrics collection
-collectDefaultMetrics({ prefix: 'auditforecaster_' });
+collectDefaultMetrics({ prefix: 'fieldinspect_' });
 
 export async function GET(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for') || 'unknown'

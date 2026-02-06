@@ -1,7 +1,7 @@
 # Accessibility Guidelines
 
 ## Overview
-This document outlines accessibility standards and best practices for the AuditForecaster application.
+This document outlines accessibility standards and best practices for the Field Inspect application.
 
 ## Target Standard
 **WCAG 2.1 Level AA Compliance**
@@ -150,7 +150,7 @@ npm run build
 ### Missing Alt Text
 ```diff
 - <img src="/logo.png" />
-+ <img src="/logo.png" alt="AuditForecaster Logo" />
++ <img src="/logo.png" alt="Field Inspect Logo" />
 ```
 
 ### Icon-Only Buttons

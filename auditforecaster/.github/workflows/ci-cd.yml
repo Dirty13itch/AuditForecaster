@@ -58,7 +58,7 @@ jobs:
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
-          POSTGRES_DB: auditforecaster_test
+          POSTGRES_DB: fieldinspect_test
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -68,7 +68,7 @@ jobs:
           - 5432:5432
     
     env:
-      DATABASE_URL: postgresql://test:test@localhost:5432/auditforecaster_test
+      DATABASE_URL: postgresql://test:test@localhost:5432/fieldinspect_test
       NEXTAUTH_URL: http://localhost:3000
       NEXTAUTH_SECRET: test-secret-key-for-ci-cd-pipeline
       NODE_ENV: test

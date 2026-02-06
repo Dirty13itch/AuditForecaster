@@ -44,7 +44,7 @@ Description: ${data.description || 'No description provided.'}
 
 Please address this issue as soon as possible.
 
-- AuditForecaster Team
+- Field Inspect Team
       `
 
             // Fire and forget email to not block UI

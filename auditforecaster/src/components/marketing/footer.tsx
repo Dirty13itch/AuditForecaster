@@ -6,7 +6,7 @@ export function Footer() {
             <div className="container mx-auto px-4">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="text-gray-400 text-sm">
-                        © 2025 AuditForecaster. All rights reserved.
+                        © 2025 Field Inspect. All rights reserved.
                     </div>
                     <div className="flex items-center gap-6">
                         <Link href="/legal/terms" className="text-gray-400 hover:text-white text-sm transition-colors">

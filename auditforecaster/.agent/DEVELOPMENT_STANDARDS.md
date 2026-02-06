@@ -1,4 +1,4 @@
-# AuditForecaster Development Standards
+# Field Inspect Development Standards
 
 ## Core Philosophy
 

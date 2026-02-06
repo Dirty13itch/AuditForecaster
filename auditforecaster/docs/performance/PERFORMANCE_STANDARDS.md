@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines performance targets, monitoring strategies, and optimization guidelines for AuditForecaster.
+This document defines performance targets, monitoring strategies, and optimization guidelines for Field Inspect.
 
 ---
 

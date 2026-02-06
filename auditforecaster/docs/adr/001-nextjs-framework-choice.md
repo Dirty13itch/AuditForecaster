@@ -6,13 +6,13 @@
 
 **Deciders:** Development Team
 
-**Technical Story:** Framework selection for AuditForecaster SaaS platform
+**Technical Story:** Framework selection for Field Inspect SaaS platform
 
 ---
 
 ## Context and Problem Statement
 
-AuditForecaster requires a modern, performant web framework that supports:
+Field Inspect requires a modern, performant web framework that supports:
 - Server-side rendering for SEO and performance
 - Progressive Web App (PWA) capabilities for offline field work
 - TypeScript for type safety

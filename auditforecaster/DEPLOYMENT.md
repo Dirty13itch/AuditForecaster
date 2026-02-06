@@ -1,6 +1,6 @@
-# AuditForecaster Deployment Guide
+# Field Inspect Deployment Guide
 
-Complete guide to deploy AuditForecaster on Unraid or any Docker-compatible server.
+Complete guide to deploy Field Inspect on Unraid or any Docker-compatible server.
 
 ## What's Included
 
@@ -23,8 +23,8 @@ ssh root@YOUR_UNRAID_IP
 ### 2. Create project directory
 
 ```bash
-mkdir -p /mnt/user/appdata/auditforecaster
-cd /mnt/user/appdata/auditforecaster
+mkdir -p /mnt/user/appdata/fieldinspect
+cd /mnt/user/appdata/fieldinspect
 ```
 
 ### 3. Download configuration files
@@ -68,7 +68,7 @@ If you prefer manual setup or the script doesn't work:
 ### Step 1: Create directories
 
 ```bash
-mkdir -p /mnt/user/appdata/auditforecaster/{postgres,redis,uploads,backups,nginx/data,nginx/letsencrypt,uptime-kuma}
+mkdir -p /mnt/user/appdata/fieldinspect/{postgres,redis,uploads,backups,nginx/data,nginx/letsencrypt,uptime-kuma}
 ```
 
 ### Step 2: Create .env file
@@ -199,12 +199,12 @@ After deployment, access these URLs (replace with your server IP):
 
 ### View Backups
 ```bash
-ls -la /mnt/user/appdata/auditforecaster/backups/
+ls -la /mnt/user/appdata/fieldinspect/backups/
 ```
 
 ### Manual Backup
 ```bash
-docker exec auditforecaster-db pg_dump -U auditforecaster auditforecaster > backup-$(date +%Y%m%d).sql
+docker exec fieldinspect-db pg_dump -U fieldinspect fieldinspect > backup-$(date +%Y%m%d).sql
 ```
 
 ### Restore from Backup
@@ -213,7 +213,7 @@ docker exec auditforecaster-db pg_dump -U auditforecaster auditforecaster > back
 docker compose -f docker-compose.prod.yml stop app
 
 # Restore
-cat backup.sql | docker exec -i auditforecaster-db psql -U auditforecaster auditforecaster
+cat backup.sql | docker exec -i fieldinspect-db psql -U fieldinspect fieldinspect
 
 # Start the app
 docker compose -f docker-compose.prod.yml start app
@@ -221,7 +221,7 @@ docker compose -f docker-compose.prod.yml start app
 
 ### Run Migrations Manually
 ```bash
-docker exec auditforecaster-app npx prisma migrate deploy
+docker exec fieldinspect-app npx prisma migrate deploy
 ```
 
 ---
@@ -233,7 +233,7 @@ Updates happen automatically every 24 hours for the app container.
 
 ### Manual Update
 ```bash
-cd /mnt/user/appdata/auditforecaster
+cd /mnt/user/appdata/fieldinspect
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
@@ -268,10 +268,10 @@ docker compose -f docker-compose.prod.yml restart app
 ### Database Connection Issues
 ```bash
 # Check if database is running
-docker exec auditforecaster-db pg_isready -U auditforecaster
+docker exec fieldinspect-db pg_isready -U fieldinspect
 
 # Check database logs
-docker logs auditforecaster-db
+docker logs fieldinspect-db
 ```
 
 ### Container Not Starting
@@ -280,7 +280,7 @@ docker logs auditforecaster-db
 docker compose -f docker-compose.prod.yml ps
 
 # Check why it failed
-docker logs auditforecaster-app
+docker logs fieldinspect-app
 ```
 
 ---
@@ -310,7 +310,7 @@ docker logs auditforecaster-app
                     │                │                        │
                     │                ▼                        │
                     │  ┌─────────────────────────────────┐   │
-                    │  │    AuditForecaster App          │   │
+                    │  │    Field Inspect App          │   │
                     │  │    (Next.js - Port 3000)        │   │
                     │  └─────────┬───────────┬───────────┘   │
                     │            │           │                │

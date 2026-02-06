@@ -19,7 +19,7 @@ interface AssetQRCodeProps {
 
 export function AssetQRCode({ assetId, name, serialNumber }: AssetQRCodeProps) {
     // In a real app, this would point to the asset's public URL or deep link
-    const qrValue = `https://auditforecaster.app/assets/${assetId}`
+    const qrValue = `https://fieldinspect.app/assets/${assetId}`
 
     const handlePrint = () => {
         const printWindow = window.open('', '', 'width=600,height=600')

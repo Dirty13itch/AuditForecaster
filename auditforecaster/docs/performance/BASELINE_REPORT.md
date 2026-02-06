@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document establishes the initial performance baselines for the AuditForecaster application. These metrics serve as the reference point for future optimizations and regression testing.
+This document establishes the initial performance baselines for the Field Inspect application. These metrics serve as the reference point for future optimizations and regression testing.
 
 **Date:** November 24, 2025
 **Version:** 1.0.0

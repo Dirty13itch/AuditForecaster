@@ -3,18 +3,18 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: auditforecaster-db
+    container_name: fieldinspect-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: auditforecaster
+      POSTGRES_USER: fieldinspect
       POSTGRES_PASSWORD: dev_password_change_in_production
-      POSTGRES_DB: auditforecaster
+      POSTGRES_DB: fieldinspect
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U auditforecaster"]
+      test: ["CMD-SHELL", "pg_isready -U fieldinspect"]
       interval: 10s
       timeout: 5s
       retries: 5

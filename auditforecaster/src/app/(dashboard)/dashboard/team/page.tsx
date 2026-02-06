@@ -4,7 +4,7 @@ import { Users, UserCheck } from "lucide-react"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-    title: "Team Management | AuditForecaster",
+    title: "Team Management | Field Inspect",
     description: "Manage inspectors and user accounts.",
 }
 

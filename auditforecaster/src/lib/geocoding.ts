@@ -7,7 +7,7 @@ export async function getCoordinates(address: string): Promise<{ lat: number; ln
             `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`,
             {
                 headers: {
-                    'User-Agent': 'AuditForecaster/1.0', // Required by Nominatim
+                    'User-Agent': 'FieldInspect/1.0', // Required by Nominatim
                 },
                 signal: AbortSignal.timeout(5000)
             }

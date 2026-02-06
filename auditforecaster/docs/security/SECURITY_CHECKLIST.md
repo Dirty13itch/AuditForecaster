@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines security standards, checklists, and compliance requirements for AuditForecaster.
+This document outlines security standards, checklists, and compliance requirements for Field Inspect.
 
 ---
 

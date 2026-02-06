@@ -3,7 +3,7 @@ import { EquipmentDialog } from '@/components/assets/equipment-dialog';
 import { EquipmentGrid } from '@/components/assets/equipment-grid';
 
 export const metadata = {
-    title: 'Equipment | AuditForecaster',
+    title: 'Equipment | Field Inspect',
     description: 'Manage equipment inventory',
 };
 

@@ -9,7 +9,7 @@ import { MileageSwipe } from "@/components/finance/mileage-swipe";
 import { AutoClassifyButton } from "@/components/finance/auto-classify-button";
 
 export const metadata: Metadata = {
-    title: "Finances | AuditForecaster",
+    title: "Finances | Field Inspect",
     description: "Track expenses, mileage, and financial reports.",
 };
 

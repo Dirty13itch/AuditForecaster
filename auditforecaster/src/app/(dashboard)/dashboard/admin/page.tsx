@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "Admin Dashboard | AuditForecaster",
+    title: "Admin Dashboard | Field Inspect",
     description: "Overview of company expenses, mileage, and compliance.",
 };
 

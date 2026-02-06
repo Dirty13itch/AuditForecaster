@@ -20,7 +20,7 @@ export default async function EquipmentQRCodePage({ params }: { params: Promise<
 
     // The data encoded in the QR code. 
     // Ideally this is a URL to the check-in/out page for this item.
-    // e.g., https://app.auditforecaster.com/dashboard/assets/equipment/scan?id=...
+    // e.g., https://app.fieldinspect.com/dashboard/assets/equipment/scan?id=...
     // For local dev, we'll just encode the ID.
     const qrData = JSON.stringify({ id: equipment.id, type: 'EQUIPMENT' })
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`

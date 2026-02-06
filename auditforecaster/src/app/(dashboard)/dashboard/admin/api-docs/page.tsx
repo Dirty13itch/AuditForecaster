@@ -13,7 +13,7 @@ export default async function ApiDocsPage() {
           API Documentation
         </h1>
         <p className="text-gray-400 mt-1">
-          REST API reference for external integrations with AuditForecaster.
+          REST API reference for external integrations with Field Inspect.
         </p>
       </div>
 
@@ -587,7 +587,7 @@ curl "https://your-domain.com/api/health" \\
             with monitoring tools such as Prometheus, Grafana, or Datadog.
             All default Node.js metrics are collected with the{" "}
             <code className="rounded bg-white/10 px-1.5 py-0.5 text-sm text-blue-300">
-              auditforecaster_
+              fieldinspect_
             </code>{" "}
             prefix.
           </p>
@@ -612,13 +612,13 @@ curl "https://your-domain.com/api/health" \\
               200 OK &mdash; Content-Type: text/plain (Prometheus exposition format)
             </p>
             <pre className="rounded-lg bg-gray-900 border border-white/10 p-4 text-sm text-gray-300 overflow-x-auto">
-{`# HELP auditforecaster_process_cpu_user_seconds_total Total user CPU time spent in seconds.
-# TYPE auditforecaster_process_cpu_user_seconds_total counter
-auditforecaster_process_cpu_user_seconds_total 0.25
+{`# HELP fieldinspect_process_cpu_user_seconds_total Total user CPU time spent in seconds.
+# TYPE fieldinspect_process_cpu_user_seconds_total counter
+fieldinspect_process_cpu_user_seconds_total 0.25
 
-# HELP auditforecaster_nodejs_heap_size_total_bytes Process heap size from Node.js in bytes.
-# TYPE auditforecaster_nodejs_heap_size_total_bytes gauge
-auditforecaster_nodejs_heap_size_total_bytes 5.2e+07`}
+# HELP fieldinspect_nodejs_heap_size_total_bytes Process heap size from Node.js in bytes.
+# TYPE fieldinspect_nodejs_heap_size_total_bytes gauge
+fieldinspect_nodejs_heap_size_total_bytes 5.2e+07`}
             </pre>
           </div>
 
@@ -640,7 +640,7 @@ auditforecaster_nodejs_heap_size_total_bytes 5.2e+07`}
           6. Webhooks
         </h2>
         <p className="text-gray-300">
-          AuditForecaster receives inbound webhooks from external services.
+          Field Inspect receives inbound webhooks from external services.
           These endpoints are not called by API consumers directly but are
           registered with third-party platforms.
         </p>
@@ -847,7 +847,7 @@ curl -X POST "https://your-domain.com/api/webhooks/supplypro" \\
               </code>{" "}
               header must follow the format{" "}
               <code className="rounded bg-white/10 px-1.5 py-0.5 text-blue-300">
-                auditforecaster-&#123;userId&#125;
+                fieldinspect-&#123;userId&#125;
               </code>
               . In production, the endpoint returns{" "}
               <code className="rounded bg-white/10 px-1.5 py-0.5 text-blue-300">503</code>{" "}
@@ -872,7 +872,7 @@ curl -X POST "https://your-domain.com/api/webhooks/supplypro" \\
                     </td>
                     <td className="py-2">
                       Channel ID in format{" "}
-                      <code className="text-blue-300">auditforecaster-&#123;userId&#125;</code>
+                      <code className="text-blue-300">fieldinspect-&#123;userId&#125;</code>
                     </td>
                   </tr>
                   <tr className="border-b border-white/5">

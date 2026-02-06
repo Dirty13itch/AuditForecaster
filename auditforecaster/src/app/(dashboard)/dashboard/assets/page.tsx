@@ -4,7 +4,7 @@ import { Truck, Wrench } from "lucide-react"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-    title: "Assets Management | AuditForecaster",
+    title: "Assets Management | Field Inspect",
     description: "Manage equipment and fleet vehicles.",
 }
 

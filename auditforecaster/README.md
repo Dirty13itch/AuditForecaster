@@ -1,4 +1,4 @@
-# AuditForecaster
+# Field Inspect
 
 > **Production-ready** SaaS platform for energy audit management
 
@@ -50,7 +50,7 @@ Create a `.env.local` file with the following variables:
 
 ```bash
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/auditforecaster"
+DATABASE_URL="postgresql://user:password@localhost:5432/fieldinspect"
 
 # NextAuth
 NEXTAUTH_URL="http://localhost:3000"
@@ -210,14 +210,14 @@ We have optimized the deployment pipeline for Unraid using Docker Compose.
 
 ```bash
 # Build image
-docker build -t auditforecaster .
+docker build -t fieldinspect .
 
 # Run container
 docker run -p 3000:3000 \
   -e DATABASE_URL="..." \
   -e NEXTAUTH_URL="..." \
   -e NEXTAUTH_SECRET="..." \
-  auditforecaster
+  fieldinspect
 ```
 
 ---

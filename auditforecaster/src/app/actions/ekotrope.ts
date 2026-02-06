@@ -38,7 +38,7 @@ export async function syncToEkotrope(inspectionId: string) {
 
         // 3. Map Data
         // In a real app, we'd fetch the inspector's name too
-        const payload = mapToEkotropeProject(inspection.job, inspection, 'AuditForecaster User')
+        const payload = mapToEkotropeProject(inspection.job, inspection, 'Field Inspect User')
 
         // 4. Send to Ekotrope API
         // MOCK IMPLEMENTATION for now

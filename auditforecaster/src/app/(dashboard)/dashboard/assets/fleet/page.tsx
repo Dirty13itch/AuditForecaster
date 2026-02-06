@@ -3,7 +3,7 @@ import { VehicleGrid } from '@/components/assets/fleet/vehicle-grid';
 import { VehicleDialog } from '@/components/assets/fleet/vehicle-dialog';
 
 export const metadata = {
-    title: 'Fleet | AuditForecaster',
+    title: 'Fleet | Field Inspect',
     description: 'Manage vehicle fleet',
 };
 

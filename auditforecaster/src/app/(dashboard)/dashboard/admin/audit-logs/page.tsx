@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { AuditLogViewer } from "@/components/audit-log-viewer";
 
 export const metadata: Metadata = {
-    title: "Audit Logs | AuditForecaster",
+    title: "Audit Logs | Field Inspect",
     description: "View and filter the audit trail of all system changes.",
 };
 

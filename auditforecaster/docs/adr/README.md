@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-This directory contains all Architecture Decision Records (ADRs) for AuditForecaster.
+This directory contains all Architecture Decision Records (ADRs) for Field Inspect.
 
 ## What is an ADR?
 

@@ -12,7 +12,7 @@
 
 ## Context and Problem Statement
 
-AuditForecaster requires production-grade logging that enables:
+Field Inspect requires production-grade logging that enables:
 - Debugging production issues
 - Performance monitoring
 - Security audit trails

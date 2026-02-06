@@ -63,7 +63,7 @@ NODE_ENV=production
 #### Option A: Neon (Recommended - Free Tier Available)
 1. Go to https://neon.tech
 2. Create account
-3. Create project: "auditforecaster-prod"
+3. Create project: "fieldinspect-prod"
 4. Copy connection string
 5. Paste as `DATABASE_URL` in Vercel
 
@@ -179,7 +179,7 @@ To enable GitHub Actions auto-deployment:
    # If using a server with cron access:
    crontab -e
    # Add daily backup at 2 AM:
-   0 2 * * * /path/to/auditforecaster/scripts/backup.sh
+   0 2 * * * /path/to/fieldinspect/scripts/backup.sh
    ```
 
 ---

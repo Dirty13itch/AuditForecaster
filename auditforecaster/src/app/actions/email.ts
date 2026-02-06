@@ -50,7 +50,7 @@ export async function sendEmail({ to, subject, body, attachments = [] }: SendEma
     // Construct email in RFC 2822 format
     const boundary = 'foo_bar_baz'
     const messageParts = [
-        `From: "AuditForecaster" <${sanitizedFrom}>`,
+        `From: "Field Inspect" <${sanitizedFrom}>`,
         `To: ${sanitizedTo}`,
         `Subject: ${sanitizedSubject}`,
         `MIME-Version: 1.0`,

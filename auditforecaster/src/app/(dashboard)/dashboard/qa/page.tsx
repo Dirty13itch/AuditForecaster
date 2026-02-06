@@ -7,7 +7,7 @@ import { Metadata } from "next"
 import { safeJsonParse } from "@/lib/utils"
 
 export const metadata: Metadata = {
-    title: "QA Dashboard | AuditForecaster",
+    title: "QA Dashboard | Field Inspect",
     description: "Quality assurance review for completed jobs.",
 }
 

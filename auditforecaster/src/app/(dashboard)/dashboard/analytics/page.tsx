@@ -6,7 +6,7 @@ import { DollarSign, Activity, Users, CheckCircle } from "lucide-react"
 import { ScenarioBuilder } from "@/components/analytics/scenario-builder"
 
 export const metadata = {
-    title: 'Analytics | AuditForecaster',
+    title: 'Analytics | Field Inspect',
 }
 
 export default async function AnalyticsPage() {

@@ -6,13 +6,13 @@
 
 **Deciders:** Development Team
 
-**Technical Story:** Database access layer selection for AuditForecaster
+**Technical Story:** Database access layer selection for Field Inspect
 
 ---
 
 ## Context and Problem Statement
 
-AuditForecaster needs a robust database access solution that provides:
+Field Inspect needs a robust database access solution that provides:
 - Type-safe database queries
 - Schema migration management
 - Support for PostgreSQL

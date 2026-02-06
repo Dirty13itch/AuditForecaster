@@ -24,7 +24,7 @@ export interface LocalInspection {
 }
 
 /**
- * IndexedDB database for AuditForecaster field inspector app
+ * IndexedDB database for Field Inspect field inspector app
  * Enables offline-first PWA functionality
  */
 export class FieldInspectorDB extends Dexie {

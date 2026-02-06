@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, Circle, Clock, AlertCircle, Terminal } from "lucide-react";
 
 export const metadata = {
-    title: 'Development Progress | AuditForecaster',
+    title: 'Development Progress | Field Inspect',
     description: 'Track development progress and feature status',
 };
 

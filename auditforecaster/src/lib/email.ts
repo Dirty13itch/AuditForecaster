@@ -9,7 +9,7 @@ const getResend = () => {
 };
 
 // Default from address - should be overridden via EMAIL_FROM env var
-const DEFAULT_FROM = 'Audit Forecaster <notifications@auditforecaster.com>';
+const DEFAULT_FROM = 'Field Inspect <notifications@auditforecaster.com>';
 const getFromAddress = () => process.env.EMAIL_FROM || DEFAULT_FROM;
 
 export async function sendInspectionCompletedEmail(

@@ -2,7 +2,7 @@
 
 ## Overview
 
-AuditForecaster follows the testing pyramid strategy with a focus on fast, reliable tests that provide confidence in the codebase.
+Field Inspect follows the testing pyramid strategy with a focus on fast, reliable tests that provide confidence in the codebase.
 
 ---
 

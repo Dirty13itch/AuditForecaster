@@ -15,13 +15,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Missing headers' }, { status: 400 })
     }
 
-    // 1. Verify Channel ID format: auditforecaster-{userId}
-    if (!channelId.startsWith('auditforecaster-')) {
+    // 1. Verify Channel ID format: fieldinspect-{userId}
+    if (!channelId.startsWith('fieldinspect-')) {
         logger.warn('Invalid channel ID format', { channelId })
         return NextResponse.json({ error: 'Invalid channel ID' }, { status: 400 })
     }
 
-    const userId = channelId.replace('auditforecaster-', '')
+    const userId = channelId.replace('fieldinspect-', '')
 
     // 2. Verify channel token (required in production)
     const expectedToken = process.env.GOOGLE_CALENDAR_WEBHOOK_TOKEN

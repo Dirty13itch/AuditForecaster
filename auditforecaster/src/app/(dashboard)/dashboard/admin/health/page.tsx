@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Activity, Database, Server } from "lucide-react";
 
 export const metadata = {
-    title: 'System Health | AuditForecaster',
+    title: 'System Health | Field Inspect',
 };
 
 export default async function HealthPage() {

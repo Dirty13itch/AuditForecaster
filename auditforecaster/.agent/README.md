@@ -1,6 +1,6 @@
-# AuditForecaster Agent Configuration
+# Field Inspect Agent Configuration
 
-This directory contains configuration, workflows, and standards for the AuditForecaster project.
+This directory contains configuration, workflows, and standards for the Field Inspect project.
 
 ## 📋 Key Documents
 

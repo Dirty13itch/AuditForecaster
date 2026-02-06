@@ -1,8 +1,8 @@
-# AuditForecaster Code Standards
+# Field Inspect Code Standards
 
 ## Purpose
 
-This document defines the coding standards and best practices for the AuditForecaster project to ensure consistency, maintainability, and quality across the codebase.
+This document defines the coding standards and best practices for the Field Inspect project to ensure consistency, maintainability, and quality across the codebase.
 
 ---
 

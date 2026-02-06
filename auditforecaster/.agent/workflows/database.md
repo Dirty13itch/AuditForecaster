@@ -39,7 +39,7 @@ npx prisma db seed
 Create a backup of the current database:
 
 ```bash
-docker exec auditforecaster-db pg_dump -U auditforecaster auditforecaster > backup_$(date +%Y%m%d_%H%M%S).sql
+docker exec fieldinspect-db pg_dump -U fieldinspect fieldinspect > backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 ## Restore Database
@@ -47,7 +47,7 @@ docker exec auditforecaster-db pg_dump -U auditforecaster auditforecaster > back
 Restore from a backup file:
 
 ```bash
-docker exec -i auditforecaster-db psql -U auditforecaster auditforecaster < backup_file.sql
+docker exec -i fieldinspect-db psql -U fieldinspect fieldinspect < backup_file.sql
 ```
 
 ## Reset Database (Development Only)
@@ -73,5 +73,5 @@ docker-compose logs -f postgres
 ## Access Database CLI
 
 ```bash
-docker exec -it auditforecaster-db psql -U auditforecaster auditforecaster
+docker exec -it fieldinspect-db psql -U fieldinspect fieldinspect
 ```

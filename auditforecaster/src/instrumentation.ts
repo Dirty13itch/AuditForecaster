@@ -29,7 +29,7 @@ export async function register() {
 
         const sdk = new NodeSDK({
             resource: new Resource({
-                'service.name': process.env.OTEL_SERVICE_NAME || 'auditforecaster',
+                'service.name': process.env.OTEL_SERVICE_NAME || 'fieldinspect',
                 'service.version': process.env.npm_package_version || '0.1.0',
                 'deployment.environment': process.env.NODE_ENV || 'development',
             }),

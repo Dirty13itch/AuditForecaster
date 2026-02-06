@@ -1,4 +1,4 @@
-# 🐳 Deploying AuditForecaster to Unraid
+# 🐳 Deploying Field Inspect to Unraid
 
 This guide assumes you will build the Docker image directly on your Unraid server (or a machine with Docker) and then run it.
 
@@ -15,17 +15,17 @@ This guide assumes you will build the Docker image directly on your Unraid serve
 ### Option A: Via Git (Recommended)
 If you have pushed your code to GitHub:
 1.  SSH into your Unraid server.
-2.  Navigate to your app directory (e.g., `/mnt/user/appdata/auditforecaster-source`).
+2.  Navigate to your app directory (e.g., `/mnt/user/appdata/fieldinspect-source`).
 3.  Clone/Pull the repo:
     ```bash
-    git clone https://github.com/your-username/auditforecaster.git .
+    git clone https://github.com/your-username/fieldinspect.git .
     # OR if already cloned
     git pull origin main
     ```
 
 ### Option B: Manual Copy
 Copy the entire project folder from your computer to your Unraid server using SMB (Network Share).
-*   Destination: `\\TOWER\appdata\auditforecaster-source` (or similar).
+*   Destination: `\\TOWER\appdata\fieldinspect-source` (or similar).
 
 ---
 
@@ -35,7 +35,7 @@ Copy the entire project folder from your computer to your Unraid server using SM
 2.  Copy the contents from `.env.production.example`.
 3.  **CRITICAL**: Fill in the real values.
     *   `DATABASE_URL`: Point to your Postgres container.
-        *   Example: `postgresql://user:dev_password_change_in_production@192.168.1.10:5432/auditforecaster?schema=public`
+        *   Example: `postgresql://user:dev_password_change_in_production@192.168.1.10:5432/fieldinspect?schema=public`
         *   **Note**: Use the Unraid server's IP, not `localhost`.
     *   `NEXTAUTH_SECRET`: Generate one with `openssl rand -base64 32`.
     *   `NEXTAUTH_URL`: `http://192.168.1.10:3000` (or your domain).
@@ -48,7 +48,7 @@ Copy the entire project folder from your computer to your Unraid server using SM
 Run this command inside the source folder on Unraid:
 
 ```bash
-docker build -t auditforecaster:latest .
+docker build -t fieldinspect:latest .
 ```
 
 *This may take a few minutes.*
@@ -63,19 +63,19 @@ You can run it via command line or use the Unraid GUI (Add Container).
 
 ```bash
 docker run -d \
-  --name auditforecaster \
+  --name fieldinspect \
   --restart unless-stopped \
   -p 3000:3000 \
   --env-file .env.production \
-  -v /mnt/user/appdata/auditforecaster/uploads:/app/public/uploads \
-  auditforecaster:latest
+  -v /mnt/user/appdata/fieldinspect/uploads:/app/public/uploads \
+  fieldinspect:latest
 ```
 
 ### Option B: Unraid GUI (Add Container)
 
 1.  Go to **Docker** tab > **Add Container**.
-2.  **Name**: auditforecaster
-3.  **Repository**: auditforecaster:latest
+2.  **Name**: fieldinspect
+3.  **Repository**: fieldinspect:latest
 4.  **Network Type**: Bridge (or your custom network).
 5.  **WebUI**: `http://[IP]:[PORT:3000]`
 6.  **Port Mapping**:
@@ -83,7 +83,7 @@ docker run -d \
     *   Host Port: `3000` (or change if taken)
 7.  **Volume Mapping** (for photos/uploads):
     *   Container Path: `/app/public/uploads`
-    *   Host Path: `/mnt/user/appdata/auditforecaster/uploads`
+    *   Host Path: `/mnt/user/appdata/fieldinspect/uploads`
 8.  **Environment Variables**:
     *   Add variables manually OR pass the `.env` file if Unraid supports it (usually manual entry is safer in GUI).
     *   Key: `DATABASE_URL`, Value: `...`
@@ -107,4 +107,4 @@ The first time you deploy, you need to create the database tables.
 ## Troubleshooting
 
 *   **Database Connection Error**: Ensure `DATABASE_URL` uses the Unraid IP (e.g., `192.168.1.10`), NOT `localhost` or `127.0.0.1`, because `localhost` inside the container refers to the container itself.
-*   **Permission Denied (Uploads)**: Run `chown -R 1001:1001 /mnt/user/appdata/auditforecaster/uploads` on the host to match the `nextjs` user ID.
+*   **Permission Denied (Uploads)**: Run `chown -R 1001:1001 /mnt/user/appdata/fieldinspect/uploads` on the host to match the `nextjs` user ID.

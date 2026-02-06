@@ -8,7 +8,7 @@ import { ClipboardCheck, Calendar, User } from "lucide-react"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-    title: "Inspections | AuditForecaster",
+    title: "Inspections | Field Inspect",
     description: "View and manage energy audit inspections.",
 }
 

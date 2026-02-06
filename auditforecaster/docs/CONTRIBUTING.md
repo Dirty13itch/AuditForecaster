@@ -2,7 +2,7 @@
 
 ## Welcome!
 
-Thank you for contributing to AuditForecaster! This document provides guidelines for contributing to the project.
+Thank you for contributing to Field Inspect! This document provides guidelines for contributing to the project.
 
 ---
 
@@ -298,6 +298,6 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ---
 
-Thank you for contributing to AuditForecaster! 🚀
+Thank you for contributing to Field Inspect! 🚀
 
 *Last updated: 2025-11-24*

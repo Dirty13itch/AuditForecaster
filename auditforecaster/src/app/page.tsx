@@ -6,15 +6,15 @@ import { Button } from "@/components/ui/button"
 import { ArrowRight, BarChart3, Calendar, Shield, Zap, Users, Smartphone } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "AuditForecaster | The Future of Energy Auditing",
+  title: "Field Inspect | The Future of Energy Auditing",
   description: "Enterprise-grade platform for energy raters. Manage fleets, schedule jobs, and analyze performance with AI-driven insights.",
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://auditforecaster.com",
-    title: "AuditForecaster | The Future of Energy Auditing",
+    url: "https://fieldinspect.com",
+    title: "Field Inspect | The Future of Energy Auditing",
     description: "Enterprise-grade platform for energy raters.",
-    siteName: "AuditForecaster",
+    siteName: "Field Inspect",
   },
 }
 
@@ -108,7 +108,7 @@ export default function LandingPage() {
           <div className="container mx-auto px-4 relative z-10 text-center">
             <h2 className="text-4xl font-bold mb-6">Ready to transform your business?</h2>
             <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
-              Join the leading energy rating companies who trust AuditForecaster to power their operations.
+              Join the leading energy rating companies who trust Field Inspect to power their operations.
             </p>
             <Link href="/login">
               <Button size="lg" className="bg-white text-black hover:bg-gray-200 h-12 px-8 text-lg font-semibold">

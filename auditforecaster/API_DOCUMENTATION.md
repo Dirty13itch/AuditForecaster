@@ -1,6 +1,6 @@
 # Server Actions API Documentation
 
-> Complete API reference for all server actions in AuditForecaster
+> Complete API reference for all server actions in Field Inspect
 
 **Base Path**: `src/app/actions/`
 

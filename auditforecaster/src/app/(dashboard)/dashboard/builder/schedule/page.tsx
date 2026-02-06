@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 
 export const metadata = {
-    title: 'Builder Schedule | AuditForecaster',
+    title: 'Builder Schedule | Field Inspect',
     description: 'View and manage builder job schedule',
 };
 

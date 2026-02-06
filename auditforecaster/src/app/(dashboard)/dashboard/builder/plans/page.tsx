@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 
 export const metadata = {
-    title: 'Builder Plans | AuditForecaster',
+    title: 'Builder Plans | Field Inspect',
     description: 'View and upload builder plans',
 };
 

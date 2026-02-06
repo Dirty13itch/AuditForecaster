@@ -9,8 +9,8 @@
 
 On your Unraid server, you need:
 - ✅ Docker installed (standard on Unraid)
-- ✅ PostgreSQL database (existing `auditforecaster-db` container)
-- ✅ Network bridge configured (`auditforecaster-network` recommended)
+- ✅ PostgreSQL database (existing `fieldinspect-db` container)
+- ✅ Network bridge configured (`fieldinspect-network` recommended)
 
 ---
 
@@ -79,13 +79,13 @@ Run these commands in PowerShell from your project root:
 
 ```powershell
 # 1. Build the image
-docker build -t auditforecaster:latest .
+docker build -t fieldinspect:latest .
 
 # 2. Save image to a tar file
-docker save -o auditforecaster.tar auditforecaster:latest
+docker save -o fieldinspect.tar fieldinspect:latest
 
 # 3. Transfer to Unraid (replace IP)
-scp auditforecaster.tar root@192.168.1.244:/mnt/user/appdata/auditforecaster/
+scp fieldinspect.tar root@192.168.1.244:/mnt/user/appdata/fieldinspect/
 ```
 
 ---
@@ -96,13 +96,13 @@ SSH into your Unraid server (`ssh root@192.168.1.244`) and run:
 
 ### 1. Load the Image
 ```bash
-docker load -i /mnt/user/appdata/auditforecaster/auditforecaster.tar
+docker load -i /mnt/user/appdata/fieldinspect/fieldinspect.tar
 ```
 
 ### 2. Create Environment File
 ```bash
-cat > /mnt/user/appdata/auditforecaster/.env.production << 'EOF'
-DATABASE_URL=postgresql://auditforecaster:dev_password_change_in_production@192.168.1.244:5432/auditforecaster
+cat > /mnt/user/appdata/fieldinspect/.env.production << 'EOF'
+DATABASE_URL=postgresql://fieldinspect:dev_password_change_in_production@192.168.1.244:5432/fieldinspect
 NEXTAUTH_URL=http://192.168.1.244:3000
 NEXTAUTH_SECRET=$(openssl rand -base64 32)
 AUTH_TRUST_HOST=true
@@ -112,21 +112,21 @@ EOF
 
 ### 3. Run with Docker Compose (Recommended)
 
-Create `docker-compose.yml` in `/mnt/user/appdata/auditforecaster/`:
+Create `docker-compose.yml` in `/mnt/user/appdata/fieldinspect/`:
 
 ```yaml
 version: '3.8'
 
 services:
   app:
-    image: auditforecaster:latest
-    container_name: auditforecaster-ui
+    image: fieldinspect:latest
+    container_name: fieldinspect-ui
     ports:
       - "3000:3000"
     env_file:
       - .env.production
     volumes:
-      - /mnt/user/appdata/auditforecaster/uploads:/app/public/uploads
+      - /mnt/user/appdata/fieldinspect/uploads:/app/public/uploads
     depends_on:
       - db
     restart: unless-stopped
@@ -135,13 +135,13 @@ services:
 
   db:
     image: postgres:14-alpine
-    container_name: auditforecaster-db
+    container_name: fieldinspect-db
     environment:
-      POSTGRES_USER: auditforecaster
+      POSTGRES_USER: fieldinspect
       POSTGRES_PASSWORD: dev_password_change_in_production
-      POSTGRES_DB: auditforecaster
+      POSTGRES_DB: fieldinspect
     volumes:
-      - /mnt/user/appdata/auditforecaster/database:/var/lib/postgresql/data
+      - /mnt/user/appdata/fieldinspect/database:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
       - default
@@ -153,7 +153,7 @@ networks:
 
 ### 4. Start the Stack
 ```bash
-cd /mnt/user/appdata/auditforecaster/
+cd /mnt/user/appdata/fieldinspect/
 docker-compose up -d
 ```
 
@@ -164,14 +164,14 @@ docker-compose up -d
 **Crucial Step**: The database needs to be synced with your schema.
 
 ```bash
-docker exec -it auditforecaster-ui npx prisma migrate deploy
+docker exec -it fieldinspect-ui npx prisma migrate deploy
 ```
 
 ---
 
 ## Step 5: Verification
 
-1. **Check Logs**: `docker logs -f auditforecaster-ui`
+1. **Check Logs**: `docker logs -f fieldinspect-ui`
 2. **Health Check**: `curl http://192.168.1.244:3000/api/health`
 3. **Browser**: Open `http://192.168.1.244:3000`
 
@@ -182,8 +182,8 @@ docker exec -it auditforecaster-ui npx prisma migrate deploy
 - **Permission Denied on Uploads**:
   If file uploads fail, fix permissions on the host folder:
   ```bash
-  chown -R 1001:1001 /mnt/user/appdata/auditforecaster/uploads
+  chown -R 1001:1001 /mnt/user/appdata/fieldinspect/uploads
   ```
 
 - **Database Connection Error**:
-  Ensure `DATABASE_URL` uses the correct IP or container name (`auditforecaster-db`) if on the same Docker network.
+  Ensure `DATABASE_URL` uses the correct IP or container name (`fieldinspect-db`) if on the same Docker network.

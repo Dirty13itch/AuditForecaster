@@ -10,7 +10,7 @@ import { SubcontractorActions } from "@/components/contractors/subcontractor-act
 import { SubcontractorInput } from "@/lib/schemas";
 
 export const metadata: Metadata = {
-    title: "Subcontractors | AuditForecaster",
+    title: "Subcontractors | Field Inspect",
     description: "Manage subcontractors and compliance documents.",
 };
 

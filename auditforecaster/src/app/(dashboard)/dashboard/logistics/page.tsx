@@ -4,7 +4,7 @@ import { Map, Car, ArrowRight } from "lucide-react"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-    title: "Logistics Dashboard | AuditForecaster",
+    title: "Logistics Dashboard | Field Inspect",
     description: "Manage fleet mileage and route planning",
 }
 

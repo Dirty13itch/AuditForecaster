@@ -1,6 +1,6 @@
 # Snyk Security Setup Guide
 
-This guide details how to configure Snyk for automated vulnerability scanning in the AuditForecaster CI/CD pipeline.
+This guide details how to configure Snyk for automated vulnerability scanning in the Field Inspect CI/CD pipeline.
 
 ## 1. Why Snyk?
 Snyk scans our dependencies (`node_modules`) and code for known security vulnerabilities. It is integrated into our GitHub Actions workflow (`.github/workflows/security.yml`) but requires an API token to function.
