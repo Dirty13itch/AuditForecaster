@@ -2,8 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createActionItem, getActionItems, updateActionItemStatus } from '../action-items'
 import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
-import { auth } from '@/auth'
 import { mockReset } from 'vitest-mock-extended'
+
+// Mock @/auth - required for auth() calls in server actions
+vi.mock('@/auth', () => ({
+    auth: vi.fn()
+}))
+
+import { auth } from '@/auth'
 
 vi.mock('next/cache', () => ({
     revalidatePath: vi.fn()
@@ -108,11 +114,12 @@ describe('action-items actions', () => {
 
     describe('updateActionItemStatus', () => {
         it('should update status', async () => {
-            await updateActionItemStatus('item-1', 'COMPLETED')
+            const validId = 'cm000000000000000000item1'
+            await updateActionItemStatus(validId, 'RESOLVED')
 
             expect(prisma.actionItem.update).toHaveBeenCalledWith({
-                where: { id: 'item-1' },
-                data: { status: 'COMPLETED' }
+                where: { id: validId },
+                data: { status: 'RESOLVED' }
             })
         })
     })

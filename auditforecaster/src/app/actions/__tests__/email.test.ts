@@ -136,9 +136,8 @@ describe('email actions', () => {
 
             const result = await sendInvoiceEmail('job-1')
 
-            expect(result).toEqual({ success: true })
+            expect(result).toEqual({ success: true, message: 'Invoice email queued' })
             expect(generateInvoicePDF).toHaveBeenCalledWith('invoice-1')
-            expect(mockGmailClient.users.messages.send).toHaveBeenCalled()
         })
 
         it('should fail if job not found', async () => {
@@ -166,7 +165,7 @@ describe('email actions', () => {
 
             const result = await sendInvoiceEmail('job-1')
 
-            expect(result).toEqual({ error: 'Failed to generate PDF attachment' })
+            expect(result).toEqual({ error: 'Failed to queue invoice generation' })
             expect(logger.error).toHaveBeenCalled()
         })
 

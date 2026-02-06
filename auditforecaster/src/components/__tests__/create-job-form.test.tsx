@@ -44,7 +44,7 @@ describe('CreateJobForm', () => {
 
     it('submits form with data', async () => {
         const mockCreateJob = vi.mocked(createJob)
-        mockCreateJob.mockResolvedValue(undefined as any)
+        mockCreateJob.mockResolvedValue({ success: true } as any)
 
         render(<CreateJobForm builders={mockBuilders} inspectors={mockInspectors} />)
 

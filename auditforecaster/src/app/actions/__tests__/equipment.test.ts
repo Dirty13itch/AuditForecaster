@@ -2,8 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createEquipment, updateEquipment, deleteEquipment } from '../equipment'
 import { prisma } from '@/lib/prisma'
 import { mockSession } from '@/test/mocks/auth'
-import { auth } from '@/auth'
 import { mockReset } from 'vitest-mock-extended'
+
+// Mock @/auth - required for auth() calls in server actions
+vi.mock('@/auth', () => ({
+    auth: vi.fn()
+}))
+
+import { auth } from '@/auth'
 
 // Mock dependencies
 vi.mock('next/cache', () => ({
@@ -59,9 +65,14 @@ describe('equipment actions', () => {
                 status: 'ACTIVE' as const
             }
 
-            // Mock P2002 error
-            const error = new Error('Unique constraint failed')
-                ; (error as any).code = 'P2002'
+            // Mock P2002 error - must match Prisma.PrismaClientKnownRequestError shape
+            // The source checks: error instanceof Prisma.PrismaClientKnownRequestError
+            // Import the actual error class for proper instanceof check
+            const { Prisma } = await import('@prisma/client')
+            const error = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+                code: 'P2002',
+                clientVersion: '5.0.0'
+            })
                 ; (prisma.equipment.create as any).mockRejectedValue(error)
 
             const result = await createEquipment(input)

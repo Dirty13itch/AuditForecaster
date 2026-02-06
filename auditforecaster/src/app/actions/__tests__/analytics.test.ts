@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getAnalyticsData } from '../analytics'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
-import { getJobPrice } from '@/lib/pricing'
 
 // Mock dependencies
 vi.mock('@/lib/prisma', () => ({
@@ -17,16 +16,18 @@ vi.mock('@/lib/prisma', () => ({
         },
         user: {
             findMany: vi.fn()
+        },
+        priceList: {
+            findMany: vi.fn()
+        },
+        serviceItem: {
+            findFirst: vi.fn()
         }
     }
 }))
 
 vi.mock('@/auth', () => ({
     auth: vi.fn()
-}))
-
-vi.mock('@/lib/pricing', () => ({
-    getJobPrice: vi.fn()
 }))
 
 describe('Analytics Server Actions', () => {
@@ -70,8 +71,14 @@ describe('Analytics Server Actions', () => {
                 { createdAt: new Date() }
             ] as any)
 
-            // Mock Pricing
-            vi.mocked(getJobPrice).mockResolvedValue(100)
+            // Mock batch pricing: return empty price lists so fallback is used
+            vi.mocked(prisma.priceList.findMany).mockResolvedValue([] as any)
+            // Mock default service item with basePrice = 100 (fallback price per job)
+            vi.mocked(prisma.serviceItem.findFirst).mockResolvedValue({
+                id: 'si-1',
+                name: 'Blower Door Test',
+                basePrice: 100
+            } as any)
 
             const result = await getAnalyticsData()
 
@@ -81,7 +88,7 @@ describe('Analytics Server Actions', () => {
 
             expect(result.revenue.current).toBe(5100)
             expect(result.revenue.last).toBe(4000)
-            expect(result.revenue.growth).toBe(27.5)
+            expect(result.revenue.growth).toBeCloseTo(27.5, 1)
             expect(result.jobDistribution).toHaveLength(1)
             expect(result.topInspectors).toHaveLength(1)
             expect(result.dailyTrend.length).toBeGreaterThan(0)

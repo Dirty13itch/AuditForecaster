@@ -13,6 +13,13 @@ vi.mock('@/lib/prisma', () => ({
     },
 }))
 
+// Mock auth - source calls requireAdmin() which uses auth()
+vi.mock('@/auth', () => ({
+    auth: vi.fn(),
+}))
+
+import { auth } from '@/auth'
+
 // Mock revalidatePath
 vi.mock('next/cache', () => ({
     revalidatePath: vi.fn(),
@@ -21,6 +28,7 @@ vi.mock('next/cache', () => ({
 describe('Contractor Actions', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        vi.mocked(auth).mockResolvedValue({ user: { role: 'ADMIN' } } as any)
     })
 
     it('should create a subcontractor', async () => {

@@ -4,17 +4,20 @@ import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 
-// Mock dependencies
-vi.mock('@/lib/prisma', () => ({
-    prisma: {
+// Mock dependencies - include $transaction for atomic operations
+vi.mock('@/lib/prisma', () => {
+    const prismaMock: any = {
         inspection: {
             create: vi.fn(),
         },
         job: {
             update: vi.fn(),
-        }
+        },
+        $transaction: vi.fn()
     }
-}))
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock))
+    return { prisma: prismaMock }
+})
 
 vi.mock('@/auth', () => ({
     auth: vi.fn(),
@@ -33,17 +36,24 @@ vi.mock('@/lib/email', () => ({
     sendInspectionCompletedEmail: vi.fn(),
 }))
 
+// Mock isRedirectError to prevent issues
+vi.mock('next/dist/client/components/redirect-error', () => ({
+    isRedirectError: vi.fn().mockReturnValue(false)
+}))
+
 describe('createReinspection', () => {
     const mockJobId = 'job-123'
     const mockUserId = 'user-123'
 
     beforeEach(() => {
         vi.clearAllMocks()
+        // Re-setup $transaction mock after clearAllMocks
+        vi.mocked(prisma.$transaction as any).mockImplementation(async (cb: any) => cb(prisma))
     })
 
     it('creates a new inspection and updates job status', async () => {
-        // Mock auth session
-        vi.mocked(auth).mockResolvedValue({ user: { id: mockUserId } } as any)
+        // Mock auth session - include role for RBAC check
+        vi.mocked(auth).mockResolvedValue({ user: { id: mockUserId, role: 'ADMIN' } } as any)
 
         // Mock prisma responses
         const mockNewInspection = { id: 'inspection-new' }
@@ -52,7 +62,7 @@ describe('createReinspection', () => {
 
         await createReinspection(mockJobId)
 
-        // Verify inspection creation
+        // Verify inspection creation (called via tx inside $transaction)
         expect(prisma.inspection.create).toHaveBeenCalledWith({
             data: {
                 jobId: mockJobId,

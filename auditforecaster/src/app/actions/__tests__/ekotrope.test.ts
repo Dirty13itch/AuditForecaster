@@ -17,6 +17,13 @@ vi.mock('@/lib/prisma', () => ({
     }
 }))
 
+// Mock @/auth - required for auth() calls in server actions
+vi.mock('@/auth', () => ({
+    auth: vi.fn()
+}))
+
+import { auth } from '@/auth'
+
 // Mock mapToEkotropeProject
 vi.mock('@/lib/integrations/ekotrope', () => ({
     mapToEkotropeProject: vi.fn().mockReturnValue({ mocked: 'payload' })
@@ -30,6 +37,7 @@ vi.mock('next/cache', () => ({
 describe('syncToEkotrope', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1', role: 'ADMIN' } } as any)
     })
 
     it('should return error if inspection not found', async () => {

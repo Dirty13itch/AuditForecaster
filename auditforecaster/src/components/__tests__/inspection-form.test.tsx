@@ -21,6 +21,20 @@ vi.mock('@/hooks/use-offline-sync', () => ({
     })
 }))
 
+vi.mock('@/hooks/use-task-claim', () => ({
+    useTaskClaim: () => ({
+        isClaimed: true,
+        claimedBy: null,
+        expiresAt: null
+    })
+}))
+
+vi.mock('@/lib/sync-engine', () => ({
+    syncEngine: {
+        enqueue: vi.fn()
+    }
+}))
+
 // Mock child components to avoid deep rendering issues
 vi.mock('@/components/photo-upload', () => ({
     PhotoUpload: () => <div data-testid="photo-upload">Photo Upload Component</div>

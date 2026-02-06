@@ -20,7 +20,7 @@ vi.mock('puppeteer', () => ({
 // Mock auth
 vi.mock('@/auth', () => ({
     auth: vi.fn().mockResolvedValue({
-        user: { id: 'test-user', role: 'ADMIN' }
+        user: { id: 'test-user', role: 'ADMIN', email: 'admin@test.com' }
     })
 }))
 
@@ -30,6 +30,13 @@ vi.mock('next/headers', () => ({
             { name: 'next-auth.session-token', value: 'mock-token' }
         ])
     })
+}))
+
+// Mock the report queue - source now enqueues instead of generating directly
+vi.mock('@/lib/queue', () => ({
+    reportQueue: {
+        add: vi.fn().mockResolvedValue({ id: 'queue-job-1' })
+    }
 }))
 
 describe('PDF Generation Server Action', () => {
@@ -85,13 +92,12 @@ describe('PDF Generation Server Action', () => {
         vi.clearAllMocks()
     })
 
-    it('should generate a PDF for a valid job', async () => {
+    it('should enqueue PDF generation for a valid job', async () => {
         const result = await generatePDF(testJobId)
 
+        // Source now enqueues to reportQueue instead of generating directly
         expect(result.success).toBe(true)
-        expect(result.pdf).toBeDefined()
-        expect(typeof result.pdf).toBe('string')
-        expect(result.filename).toContain('Report-PDF-TEST-001')
+        expect(result.message).toBeDefined()
     })
 
     it('should return error for non-existent job', async () => {

@@ -12,6 +12,9 @@ vi.mock('@/lib/prisma', () => ({
             create: vi.fn(),
             update: vi.fn(),
             delete: vi.fn()
+        },
+        job: {
+            findFirst: vi.fn()
         }
     }
 }))
@@ -99,6 +102,9 @@ describe('Users Server Actions', () => {
 
     describe('deleteUser', () => {
         it('should delete user successfully', async () => {
+            // Mock no active jobs for this user
+            vi.mocked(prisma.job.findFirst as any).mockResolvedValue(null)
+
             const result = await deleteUser('user-1')
 
             expect(result.message).toBe('User deleted successfully')

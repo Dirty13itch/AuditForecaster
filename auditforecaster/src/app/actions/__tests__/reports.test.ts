@@ -44,7 +44,7 @@ describe('Reports Actions', () => {
             const result = await saveReport(reportData)
 
             // Assert
-            expect(result).toEqual({ success: true })
+            expect(result).toEqual({ success: true, message: "Report saved successfully" })
             expect(prisma.savedReport.create).toHaveBeenCalledWith({
                 data: {
                     ...reportData,
@@ -53,13 +53,15 @@ describe('Reports Actions', () => {
             })
         })
 
-        it('should throw error when unauthenticated', async () => {
+        it('should return unauthorized when unauthenticated', async () => {
             // Arrange
             vi.mocked(auth).mockResolvedValue(null)
 
-            // Act & Assert
-            await expect(saveReport({ name: 'Test', config: {} }))
-                .rejects.toThrow('Unauthorized')
+            // Act
+            const result = await saveReport({ name: 'Test', config: {} })
+
+            // Assert - source returns error object, does not throw
+            expect(result).toEqual({ success: false, message: "Unauthorized" })
         })
     })
 
@@ -78,6 +80,7 @@ describe('Reports Actions', () => {
             expect(result).toEqual(mockReports)
             expect(prisma.savedReport.findMany).toHaveBeenCalledWith({
                 where: { userId: 'user-1' },
+                take: 50,
                 orderBy: { createdAt: 'desc' },
             })
         })
@@ -93,7 +96,7 @@ describe('Reports Actions', () => {
             const result = await deleteReport('report-1')
 
             // Assert
-            expect(result).toEqual({ success: true })
+            expect(result).toEqual({ success: true, message: "Report deleted successfully" })
             expect(prisma.savedReport.delete).toHaveBeenCalledWith({
                 where: { id: 'report-1', userId: 'user-1' },
             })

@@ -29,6 +29,7 @@ describe('Profitability Server Actions', () => {
                 id: 'job-1',
                 invoiceItems: [{ totalPrice: 1000 }],
                 expenses: [{ amount: 100 }],
+                mileageLogs: [],
                 payoutAmount: 600
             }
             vi.mocked(prisma.job.findUnique).mockResolvedValue(mockJob as any)
@@ -54,6 +55,7 @@ describe('Profitability Server Actions', () => {
                 id: 'job-1',
                 invoiceItems: [{ totalPrice: 1000 }],
                 expenses: [],
+                mileageLogs: [],
                 payoutAmount: null
             }
             vi.mocked(prisma.job.findUnique).mockResolvedValue(mockJob as any)
@@ -72,12 +74,14 @@ describe('Profitability Server Actions', () => {
                     id: 'job-1',
                     invoiceItems: [{ totalPrice: 1000 }],
                     expenses: [],
+                    mileageLogs: [],
                     payoutAmount: 700
                 },
                 {
                     id: 'job-2',
                     invoiceItems: [{ totalPrice: 2000 }],
                     expenses: [],
+                    mileageLogs: [],
                     payoutAmount: 1400
                 }
             ]

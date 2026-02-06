@@ -69,8 +69,7 @@ describe('fleet actions', () => {
 
             const result = await createVehicle(null, formData)
 
-            expect(result.message).toBe('Failed to create vehicle')
-            expect(logger.error).toHaveBeenCalled()
+            expect(result.message).toBe('Missing required fields')
         })
     })
 
