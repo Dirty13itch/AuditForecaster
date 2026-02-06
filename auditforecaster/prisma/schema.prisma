@@ -652,7 +652,10 @@ model ApiKey {
   id        String   @id @default(cuid())
   name      String   // e.g. "Zapier Integration"
   keyHash   String   @unique
-  scopes    String // JSON array of scopes: "READ_JOBS", "WRITE_JOBS"
+  // NOTE: SQLite does not support native arrays, so scopes are stored as a JSON-encoded string
+  // Application code must parse this as JSON array. Example: ["READ_JOBS", "WRITE_JOBS"]
+  // This loses database-level type safety but maintains compatibility with SQLite
+  scopes    String   // JSON array of scopes: ["READ_JOBS", "WRITE_JOBS"]
   lastUsed  DateTime?
   
   userId    String

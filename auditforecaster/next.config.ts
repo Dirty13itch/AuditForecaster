@@ -104,6 +104,15 @@ const sentryConfig = {
   automaticVercelMonitors: true,
 };
 
+// In production runtime, require Sentry DSN to ensure monitoring is enabled
+// Skip this check during build time (process.env.SKIP_ENV_VALIDATION) or in CI
+const isProductionBuild = process.env.NODE_ENV === 'production' && !process.env.SKIP_ENV_VALIDATION;
+if (isProductionBuild && !process.env.NEXT_PUBLIC_SENTRY_DSN) {
+  console.warn(
+    'WARNING: NEXT_PUBLIC_SENTRY_DSN is not set. Sentry monitoring and source maps will be disabled in production.'
+  );
+}
+
 // Only apply Sentry wrapper if DSN is configured
 const pwaConfig = withPWA(nextConfig);
 export default process.env.NEXT_PUBLIC_SENTRY_DSN
