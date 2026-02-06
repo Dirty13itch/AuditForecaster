@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -145,7 +145,7 @@ model SavedReport {
   id            String    @id @default(cuid())
   name          String
   description   String?
-  config        Json      // Stores selected columns, filters, sorting
+  config        String      // Stores selected columns, filters, sorting
   
   userId        String
   user          User      @relation(fields: [userId], references: [id])
@@ -410,8 +410,8 @@ model Inspection {
   // iAuditor Parity Fields
   score    Float?
   maxScore Float?
-  answers  Json? // Structured responses matching the template
-  metadata Json? // Device info, location, duration, etc.
+  answers  String? // Structured responses matching the template
+  metadata String? // Device info, location, duration, etc.
 
   data         String // Legacy: Was Json (keep for migration if needed, or deprecate)
   checklist    String? // Legacy: Was Json
@@ -458,8 +458,8 @@ model ReportTemplate {
   description String?
 
   // iAuditor Parity Fields
-  structure Json? // Full definition: pages, sections, items, logic
-  scoring   Json? // Scoring configuration: weights, max scores
+  structure String? // Full definition: pages, sections, items, logic
+  scoring   String? // Scoring configuration: weights, max scores
 
   checklistItems String? // Legacy: JSON definition (keep for migration)
   isDefault      Boolean @default(false)
@@ -638,7 +638,7 @@ model SystemLog {
   id        String   @id @default(cuid())
   level     String   // "INFO", "WARN", "ERROR"
   message   String
-  context   Json?
+  context   String?
   userId    String?
   createdAt DateTime @default(now())
 
@@ -651,7 +651,7 @@ model ApiKey {
   id        String   @id @default(cuid())
   name      String   // e.g. "Zapier Integration"
   keyHash   String   @unique
-  scopes    String[] // "READ_JOBS", "WRITE_JOBS"
+  scopes    String // JSON array of scopes: "READ_JOBS", "WRITE_JOBS"
   lastUsed  DateTime?
   
   userId    String
@@ -669,7 +669,7 @@ model AuditLog {
   entityId   String
   action     String   // "CREATE", "UPDATE", "DELETE"
   actorId    String   // User ID or API Key ID
-  changes    Json?    // { before: {}, after: {} }
+  changes    String?    // { before: {}, after: {} }
   ipAddress  String?
   
   createdAt  DateTime @default(now())
