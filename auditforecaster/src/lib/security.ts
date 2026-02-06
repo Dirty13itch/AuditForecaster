@@ -1,7 +1,6 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
-import { logger } from '@/lib/logger';
 
 // --- Rate Limiting ---
 
@@ -68,7 +67,7 @@ export async function checkRateLimit(identifier: string, type: 'public' | 'authe
             const { success, limit, remaining, reset } = await rateLimiters[type]!.limit(identifier);
             return { success, limit, remaining, reset };
         } catch (error) {
-            logger.error('Upstash rate limit failed (fail open)', { error });
+            console.error('Upstash rate limit failed (fail open)', error);
             // Fail Open: If security service is down, don't block users
         }
     }

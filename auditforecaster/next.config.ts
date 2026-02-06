@@ -26,6 +26,15 @@ const nextConfig: NextConfig = {
   output: 'standalone',
 
   // Optimize barrel export imports for heavy libraries
+  // Exclude OpenTelemetry + gRPC from webpack bundling (Node.js-only packages)
+  serverExternalPackages: [
+    '@opentelemetry/sdk-node',
+    '@opentelemetry/auto-instrumentations-node',
+    '@opentelemetry/exporter-trace-otlp-http',
+    '@opentelemetry/resources',
+    '@grpc/grpc-js',
+  ],
+
   experimental: {
     optimizePackageImports: [
       'lucide-react',

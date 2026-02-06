@@ -1,13 +1,25 @@
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+export async function register() {
+    // OpenTelemetry is only used in production with a configured OTLP endpoint.
+    // The @opentelemetry/sdk-node and @opentelemetry/auto-instrumentations-node
+    // packages have deep Node.js native module dependencies (stream, fs, net, etc.)
+    // that are incompatible with webpack bundling. In production, these are loaded
+    // via serverExternalPackages in next.config.ts.
+    //
+    // To enable: set OTEL_EXPORTER_OTLP_ENDPOINT env var and ensure
+    // serverExternalPackages includes all @opentelemetry/* packages.
+    if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+        return;
+    }
 
-export function register() {
-    // Only enable OpenTelemetry in production when endpoint is configured
-    const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    // Use eval to prevent webpack from following the import
+    const importModule = new Function('specifier', 'return import(specifier)');
 
-    if (process.env.NEXT_RUNTIME === 'nodejs' && otlpEndpoint) {
+    try {
+        const { NodeSDK } = await importModule('@opentelemetry/sdk-node');
+        const { getNodeAutoInstrumentations } = await importModule('@opentelemetry/auto-instrumentations-node');
+        const { OTLPTraceExporter } = await importModule('@opentelemetry/exporter-trace-otlp-http');
+        const { Resource } = await importModule('@opentelemetry/resources');
+
         const sdk = new NodeSDK({
             resource: new Resource({
                 'service.name': process.env.OTEL_SERVICE_NAME || 'auditforecaster',
@@ -15,11 +27,10 @@ export function register() {
                 'deployment.environment': process.env.NODE_ENV || 'development',
             }),
             traceExporter: new OTLPTraceExporter({
-                url: `${otlpEndpoint}/v1/traces`,
+                url: `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`,
             }),
             instrumentations: [
                 getNodeAutoInstrumentations({
-                    // Disable noisy instrumentations
                     '@opentelemetry/instrumentation-fs': { enabled: false },
                 }),
             ],
@@ -27,12 +38,15 @@ export function register() {
 
         sdk.start();
 
-        // Graceful shutdown
-        process.on('SIGTERM', () => {
-            sdk.shutdown()
-                .then(() => console.log('OpenTelemetry SDK shut down'))
-                .catch((error) => console.error('Error shutting down OpenTelemetry', error))
-                .finally(() => process.exit(0));
-        });
+        if (typeof process.on === 'function') {
+            process.on('SIGTERM', () => {
+                sdk.shutdown()
+                    .then(() => console.log('OpenTelemetry SDK shut down'))
+                    .catch((error: unknown) => console.error('Error shutting down OpenTelemetry', error))
+                    .finally(() => process.exit(0));
+            });
+        }
+    } catch (error) {
+        console.warn('Failed to initialize OpenTelemetry:', error);
     }
 }
