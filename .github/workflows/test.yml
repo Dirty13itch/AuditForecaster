@@ -1,0 +1,11 @@
+# This workflow has been consolidated into ci.yml.
+# See ci.yml for the full CI/CD pipeline (lint, typecheck, test, build, docker, deploy).
+# This file is kept as a placeholder to avoid confusion. It can be safely deleted.
+name: "Deprecated - see ci.yml"
+on: workflow_dispatch
+jobs:
+  deprecated:
+    name: "This workflow was consolidated into ci.yml"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow has been consolidated into ci.yml. Please use that instead."

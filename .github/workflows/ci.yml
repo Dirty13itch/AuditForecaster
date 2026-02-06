@@ -1,66 +1,238 @@
-name: CI
+# =============================================================================
+# Consolidated CI/CD Pipeline
+# =============================================================================
+# Single pipeline replacing previously separate ci.yml, ci-cd.yml, and test.yml.
+#
+# Job dependency chain:
+#   lint ──────┐
+#   typecheck ─┼──> build ──> docker ──┬──> deploy-staging  (develop only)
+#   test ──────┘         (push only)   └──> deploy-production (main only, manual approval)
+#
+# Environments:
+#   - staging:    auto-deploys on push to develop
+#   - production: deploys on push to main after manual approval
+#                 (configure required reviewers on the "production" environment
+#                  in GitHub repo Settings > Environments)
+# =============================================================================
+
+name: CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 defaults:
   run:
     working-directory: auditforecaster
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# -----------------------------------------------------------------------------
+# Jobs
+# -----------------------------------------------------------------------------
 jobs:
-  lint-and-typecheck:
-    name: Lint & Type Check
+  # ---------------------------------------------------------------------------
+  # 1. Lint
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: npm
           cache-dependency-path: auditforecaster/package-lock.json
+
       - run: npm ci
         env:
-          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+
       - run: npx prisma generate
+
       - run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # 2. Type Check
+  # ---------------------------------------------------------------------------
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: auditforecaster/package-lock.json
+
+      - run: npm ci
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+
+      - run: npx prisma generate
+
       - run: npm run type-check
 
+  # ---------------------------------------------------------------------------
+  # 3. Unit Tests (Vitest)
+  # ---------------------------------------------------------------------------
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: npm
           cache-dependency-path: auditforecaster/package-lock.json
+
       - run: npm ci
         env:
-          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+
       - run: npx prisma generate
+
       - run: npx vitest run --coverage
         env:
           NODE_ENV: test
 
+  # ---------------------------------------------------------------------------
+  # 4. Build (depends on lint + typecheck + test)
+  # ---------------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
+    needs: [lint, typecheck, test]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: npm
           cache-dependency-path: auditforecaster/package-lock.json
+
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: auditforecaster/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('auditforecaster/package-lock.json') }}-${{ hashFiles('auditforecaster/src/**') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('auditforecaster/package-lock.json') }}-
+            nextjs-${{ runner.os }}-
+
       - run: npm ci
         env:
-          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+
       - run: npx prisma generate
+
       - run: npm run build
         env:
-          SKIP_ENV_VALIDATION: 'true'
+          SKIP_ENV_VALIDATION: "true"
+
+  # ---------------------------------------------------------------------------
+  # 5. Docker Build & Push (only on push to main/develop)
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/auditforecaster
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: auditforecaster
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # 6. Deploy to Staging (only on push to develop)
+  # ---------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd ${{ secrets.STAGING_APP_DIR }}
+            docker compose pull app
+            docker compose up -d app
+            echo "Waiting for health check..."
+            sleep 30
+            docker compose ps app
+
+  # ---------------------------------------------------------------------------
+  # 7. Deploy to Production (only on push to main, requires manual approval)
+  #
+  #    Manual approval is enforced by the "production" environment.
+  #    Configure required reviewers in:
+  #    GitHub repo > Settings > Environments > production
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd ${{ secrets.PRODUCTION_APP_DIR }}
+            docker compose pull app
+            docker compose up -d app
+            echo "Waiting for health check..."
+            sleep 30
+            docker compose ps app

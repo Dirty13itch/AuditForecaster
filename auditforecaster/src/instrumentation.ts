@@ -1,4 +1,11 @@
 export async function register() {
+    // ---- Environment variable validation ----
+    // Runs once at server startup. In production, missing required vars will
+    // throw and prevent the server from accepting traffic with a broken config.
+    const { validateEnv } = await import('@/lib/env')
+    validateEnv()
+
+    // ---- OpenTelemetry ----
     // OpenTelemetry is only used in production with a configured OTLP endpoint.
     // The @opentelemetry/sdk-node and @opentelemetry/auto-instrumentations-node
     // packages have deep Node.js native module dependencies (stream, fs, net, etc.)

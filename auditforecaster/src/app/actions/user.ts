@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
 import { z } from "zod"
 import { hash, compare } from "bcryptjs"
+import type { ActionResult } from "@/lib/types"
 
 const ProfileSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -19,7 +20,7 @@ const PasswordSchema = z.object({
     newPassword: z.string().min(8, "Password must be at least 8 characters"),
 })
 
-export async function updateProfile(formData: FormData) {
+export async function updateProfile(formData: FormData): Promise<ActionResult> {
     const session = await auth()
     if (!session?.user?.id) throw new Error("Unauthorized")
 

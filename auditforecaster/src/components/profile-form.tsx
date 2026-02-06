@@ -25,14 +25,14 @@ export function ProfileForm({ name, email }: ProfileFormProps) {
         const formData = new FormData(event.currentTarget)
 
         try {
-            const result = await updateProfile(null, formData)
+            const result = await updateProfile(formData)
 
             toast({
                 title: result.message,
-                variant: result.message.includes('Failed') ? 'destructive' : 'default'
+                variant: result.success ? 'default' : 'destructive'
             })
 
-            if (!result.message.includes('Failed')) {
+            if (result.success) {
                 router.refresh()
             }
         } catch {
