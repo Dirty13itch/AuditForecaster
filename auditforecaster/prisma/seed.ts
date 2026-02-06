@@ -13,6 +13,10 @@ async function main() {
     // await prisma.user.deleteMany()
 
     // 2. Create Users
+    // SECURITY WARNING: This seed file uses a well-known password hash for "password123"
+    // This is intentional for local development and demo environments ONLY
+    // DO NOT run this seed in production environments
+    // Consider using environment-specific passwords or a secure password generation mechanism
     const demoPasswordHash = '$2b$12$bGE5158j3fx2JpEmQ41UBuIWDsxexOguKxCnt14E9Q1TNPDc9iwta' // bcrypt hash of "password123"
 
     const admin = await prisma.user.upsert({

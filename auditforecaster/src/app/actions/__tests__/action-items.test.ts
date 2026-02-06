@@ -5,10 +5,10 @@ import { mockSession } from '@/test/mocks/auth'
 import { mockReset } from 'vitest-mock-extended'
 
 // Mock @/auth - required for auth() calls in server actions
+// Note: Mock must be defined before import for proper hoisting
 vi.mock('@/auth', () => ({
     auth: vi.fn()
 }))
-
 import { auth } from '@/auth'
 
 vi.mock('next/cache', () => ({

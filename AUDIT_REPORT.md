@@ -39,7 +39,7 @@ AuditForecaster is a well-architected Next.js 15 SaaS platform for energy audit 
 
 | # | Finding | Location | Impact |
 |---|---------|----------|--------|
-| S1 | **E2E auth bypass has no `NODE_ENV` guard.** `MOCK_AUTH_FOR_E2E=true` returns hardcoded ADMIN session for every request. `ENABLE_E2E_AUTH_BYPASS=true` skips all middleware auth. Neither checks `NODE_ENV`. | `src/auth.ts:99-112`, `src/middleware.ts:16-19` | Full unauthenticated admin access if env var is set in production |
+| S1 | **[FIXED] E2E auth bypass now gated by `NODE_ENV`.** `MOCK_AUTH_FOR_E2E=true` and `ENABLE_E2E_AUTH_BYPASS=true` are only honored when `process.env.NODE_ENV !== 'production'`; in production these flags are ignored and auth is always enforced. | `src/auth.ts:99-112`, `src/middleware.ts:16-19` | ~~Full unauthenticated admin access if env var is set in production~~ **RESOLVED** |
 | S2 | **Password reset uses static `mock-token`.** The reset email contains a hardcoded token, making the feature either non-functional or exploitable. | `src/app/actions/auth.ts:60-73` | Anyone can reset any password if the token is accepted |
 | S3 | **Metrics endpoint is unauthenticated.** `/api/metrics` exposes Prometheus data (memory, event loop, custom metrics) to anyone. | `src/app/api/metrics/route.ts:8-20` | Information disclosure |
 | S4 | **Health endpoint leaks infrastructure details.** `/api/health` reveals database, Redis, filesystem status and latencies with no auth. | `src/app/api/health/route.ts:112-148` | Attacker can fingerprint infrastructure and detect outage windows |
