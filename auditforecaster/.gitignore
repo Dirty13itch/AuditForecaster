@@ -49,3 +49,4 @@ storybook-static
 # playwright
 /test-results/
 /playwright-report/
+prisma/dev.db
