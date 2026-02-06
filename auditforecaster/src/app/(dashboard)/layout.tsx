@@ -3,6 +3,7 @@ import { ToastProvider } from "@/components/ui/use-toast"
 import { MobileNav } from "@/components/mobile-nav"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AICopilot } from "@/components/ai-copilot"
+import { CommandPalette } from "@/components/command-palette"
 
 export default async function DashboardLayout({
     children,
@@ -45,6 +46,7 @@ export default async function DashboardLayout({
                 </main>
             </div>
             <AICopilot />
+            <CommandPalette />
         </ToastProvider>
     )
 }
