@@ -41,14 +41,14 @@ describe('invoices actions', () => {
 
     describe('getUninvoicedJobs', () => {
         it('should return jobs', async () => {
-            const mockJobs = [{ id: 'job-1', address: '123 Main' }]
+            const mockJobs = [{ id: 'cm0000000000000000000job1', address: '123 Main' }]
             vi.mocked(prisma.job.findMany).mockResolvedValue(mockJobs as any)
 
-            const result = await getUninvoicedJobs('builder-1')
+            const result = await getUninvoicedJobs('cm000000000000000builder1')
 
             expect(result).toEqual(mockJobs)
             expect(prisma.job.findMany).toHaveBeenCalledWith(expect.objectContaining({
-                where: expect.objectContaining({ builderId: 'builder-1' })
+                where: expect.objectContaining({ builderId: 'cm000000000000000builder1' })
             }))
         })
     })
@@ -57,7 +57,7 @@ describe('invoices actions', () => {
         it('should create invoice successfully', async () => {
             const mockJobs = [
                 {
-                    id: 'job-1',
+                    id: 'cm0000000000000000000job1',
                     address: '123 Main',
                     subdivision: {
                         priceLists: [{
@@ -71,16 +71,16 @@ describe('invoices actions', () => {
             ]
             vi.mocked(prisma.job.findMany).mockResolvedValue(mockJobs as any)
             vi.mocked(prisma.invoice.count).mockResolvedValue(0)
-            vi.mocked(prisma.invoice.create).mockResolvedValue({ id: 'inv-1' } as any)
+            vi.mocked(prisma.invoice.create).mockResolvedValue({ id: 'cm0000000000000000000inv1' } as any)
 
             const result = await createInvoice({
-                builderId: 'builder-1',
-                jobIds: ['job-1'],
+                builderId: 'cm000000000000000builder1',
+                jobIds: ['cm0000000000000000000job1'],
                 dueDate: new Date()
             })
 
             expect(result.success).toBe(true)
-            expect(result.invoiceId).toBe('inv-1')
+            expect(result.invoiceId).toBe('cm0000000000000000000inv1')
             expect(prisma.invoice.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({
                     totalAmount: 100,
@@ -100,8 +100,8 @@ describe('invoices actions', () => {
             vi.mocked(prisma.job.findMany).mockResolvedValue([])
 
             await expect(createInvoice({
-                builderId: 'builder-1',
-                jobIds: ['job-1'],
+                builderId: 'cm000000000000000builder1',
+                jobIds: ['cm0000000000000000000job1'],
                 dueDate: new Date()
             })).rejects.toThrow('No valid jobs found')
         })

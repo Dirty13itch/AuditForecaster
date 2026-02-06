@@ -32,7 +32,7 @@ describe('builders actions', () => {
             formData.set('email', 'test@example.com')
 
                 ; (prisma.builder.create as any).mockResolvedValue({
-                    id: '1',
+                    id: 'cm0000000000000000blder01',
                     name: 'Test Builder',
                     email: 'test@example.com',
                     phone: null,
@@ -76,7 +76,7 @@ describe('builders actions', () => {
             formData.set('name', 'Updated Builder')
 
                 ; (prisma.builder.update as any).mockResolvedValue({
-                    id: '1',
+                    id: 'cm0000000000000000blder01',
                     name: 'Updated Builder',
                     email: null,
                     phone: null,
@@ -85,11 +85,11 @@ describe('builders actions', () => {
                     updatedAt: new Date()
                 })
 
-            const result = await updateBuilder('1', null, formData)
+            const result = await updateBuilder('cm0000000000000000blder01', null, formData)
 
             expect(result.message).toBe('Builder updated successfully')
             expect(prisma.builder.update).toHaveBeenCalledWith({
-                where: { id: '1' },
+                where: { id: 'cm0000000000000000blder01' },
                 data: expect.objectContaining({
                     name: 'Updated Builder'
                 })
@@ -100,7 +100,7 @@ describe('builders actions', () => {
     describe('deleteBuilder', () => {
         it('should delete builder', async () => {
             ; (prisma.builder.delete as any).mockResolvedValue({
-                id: '1',
+                id: 'cm0000000000000000blder01',
                 name: 'Deleted Builder',
                 email: null,
                 phone: null,
@@ -109,11 +109,11 @@ describe('builders actions', () => {
                 updatedAt: new Date()
             })
 
-            const result = await deleteBuilder('1')
+            const result = await deleteBuilder('cm0000000000000000blder01')
 
             expect(result.message).toBe('Builder deleted successfully')
             expect(prisma.builder.delete).toHaveBeenCalledWith({
-                where: { id: '1' }
+                where: { id: 'cm0000000000000000blder01' }
             })
         })
     })

@@ -48,6 +48,7 @@ export async function getAnalyticsData() {
                 updatedAt: { gte: currentMonthStart },
                 invoiceItems: { none: {} }
             },
+            take: 5000,
             select: { builderId: true, subdivisionId: true }
         }),
         // 3. Last Month Revenue (Invoices)
@@ -66,6 +67,7 @@ export async function getAnalyticsData() {
                 updatedAt: { gte: lastMonthStart, lte: lastMonthEnd },
                 invoiceItems: { none: {} }
             },
+            take: 5000,
             select: { builderId: true, subdivisionId: true }
         }),
         // 5. Job Status Distribution
@@ -89,6 +91,7 @@ export async function getAnalyticsData() {
         // 7. Daily Trend
         prisma.job.findMany({
             where: { createdAt: { gte: thirtyDaysAgo } },
+            take: 5000,
             select: { createdAt: true }
         })
     ])
@@ -119,6 +122,7 @@ export async function getAnalyticsData() {
 
         const priceLists = await prisma.priceList.findMany({
             where: { OR: orConditions },
+            take: 5000,
             include: {
                 items: {
                     include: { serviceItem: true }

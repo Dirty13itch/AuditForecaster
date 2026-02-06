@@ -42,7 +42,9 @@ export async function generateDailyRoute(driverId: string, date: Date) {
                 lte: endOfDay
             },
             status: { not: 'CANCELED' }
-        }
+        },
+        take: 100,
+        orderBy: { createdAt: 'desc' }
     })
 
     if (jobs.length === 0) {

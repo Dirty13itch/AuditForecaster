@@ -20,6 +20,11 @@ export async function createInvoice(data: {
 
     const { builderId, jobIds, dueDate, notes } = data
 
+    assertValidId(builderId, 'Builder ID')
+    for (const jobId of jobIds) {
+        assertValidId(jobId, 'Job ID')
+    }
+
     // 1. Fetch jobs to calculate totals
     const jobs = await prisma.job.findMany({
         where: {
@@ -219,6 +224,8 @@ export async function deleteInvoice(id: string) {
 }
 
 export async function getUninvoicedJobs(builderId: string) {
+    assertValidId(builderId, 'Builder ID')
+
     const session = await auth()
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")

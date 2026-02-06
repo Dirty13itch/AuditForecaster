@@ -67,6 +67,7 @@ export async function getSubdivisions(builderId?: string) {
         const where = builderId ? { builderId } : {}
         const subdivisions = await prisma.subdivision.findMany({
             where,
+            take: 100,
             include: {
                 builder: true,
                 _count: {

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
+import { assertValidId } from "@/lib/utils"
 
 export async function getNotifications() {
     const session = await auth()
@@ -23,6 +24,8 @@ export async function getNotifications() {
 }
 
 export async function markAsRead(id: string) {
+    assertValidId(id, 'Notification ID')
+
     const session = await auth()
     if (!session?.user?.id) {
         return { success: false, error: 'Unauthorized' }
@@ -91,6 +94,8 @@ export async function createNotification(data: {
     type?: string
     link?: string
 }) {
+    assertValidId(data.userId, 'User ID')
+
     const session = await auth()
     if (!session?.user || session.user.role !== 'ADMIN') {
         return { success: false, error: 'Unauthorized: Admin access required' }
@@ -114,6 +119,8 @@ export async function createNotification(data: {
 }
 
 export async function deleteNotification(id: string) {
+    assertValidId(id, 'Notification ID')
+
     const session = await auth()
     if (!session?.user?.id) {
         return { success: false, error: 'Unauthorized' }

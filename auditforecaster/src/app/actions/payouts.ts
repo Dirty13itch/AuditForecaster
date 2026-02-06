@@ -3,8 +3,11 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
+import { assertValidId } from "@/lib/utils"
 
 export async function calculatePayout(userId: string, periodStart: Date, periodEnd: Date) {
+    assertValidId(userId, 'User ID')
+
     const session = await auth()
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
@@ -87,6 +90,11 @@ export async function calculatePayout(userId: string, periodStart: Date, periodE
 }
 
 export async function createPayout(userId: string, jobIds: string[], amount: number, periodStart: Date, periodEnd: Date) {
+    assertValidId(userId, 'User ID')
+    for (const jobId of jobIds) {
+        assertValidId(jobId, 'Job ID')
+    }
+
     const session = await auth()
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
@@ -125,6 +133,8 @@ export async function createPayout(userId: string, jobIds: string[], amount: num
 }
 
 export async function markPayoutAsPaid(payoutId: string) {
+    assertValidId(payoutId, 'Payout ID')
+
     const session = await auth()
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")

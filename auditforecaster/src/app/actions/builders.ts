@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { logger } from "@/lib/logger"
+import { assertValidId } from "@/lib/utils"
 
 const BuilderSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -50,6 +51,8 @@ export async function createBuilder(formData: FormData) {
 }
 
 export async function updateBuilder(id: string, prevState: unknown, formData: FormData) {
+    assertValidId(id, 'Builder ID')
+
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized")
     if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
@@ -86,6 +89,8 @@ export async function updateBuilder(id: string, prevState: unknown, formData: Fo
 }
 
 export async function deleteBuilder(id: string) {
+    assertValidId(id, 'Builder ID')
+
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized")
     if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")

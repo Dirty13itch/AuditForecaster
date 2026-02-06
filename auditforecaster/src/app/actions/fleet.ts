@@ -6,7 +6,7 @@ import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
 import { logger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
-import { safeParseInt } from "@/lib/utils"
+import { safeParseInt, assertValidId } from "@/lib/utils"
 
 export async function addMaintenanceLog(data: {
     vehicleId: string
@@ -16,6 +16,8 @@ export async function addMaintenanceLog(data: {
     description?: string
     mileage?: number
 }) {
+    assertValidId(data.vehicleId, 'Vehicle ID')
+
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized")
 
@@ -35,6 +37,8 @@ export async function addMaintenanceLog(data: {
 }
 
 export async function getVehicleDetails(id: string) {
+    assertValidId(id, 'Vehicle ID')
+
     return prisma.vehicle.findUnique({
         where: { id },
         include: {
@@ -98,6 +102,8 @@ export async function createVehicle(_prevState: unknown, formData: FormData) {
 }
 
 export async function updateVehicle(id: string, _prevState: unknown, formData: FormData) {
+    assertValidId(id, 'Vehicle ID')
+
     try {
         const session = await auth()
         if (!session?.user) throw new Error("Unauthorized")
@@ -148,6 +154,8 @@ export async function updateVehicle(id: string, _prevState: unknown, formData: F
 }
 
 export async function deleteVehicle(id: string) {
+    assertValidId(id, 'Vehicle ID')
+
     try {
         const session = await auth()
         if (!session?.user) throw new Error("Unauthorized")

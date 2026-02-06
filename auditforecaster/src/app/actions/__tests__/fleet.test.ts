@@ -36,7 +36,7 @@ describe('fleet actions', () => {
             formData.set('status', 'ACTIVE')
 
                 ; (prisma.vehicle.create as any).mockResolvedValue({
-                    id: '1',
+                    id: 'cm0000000000000000fleet01',
                     name: 'Test Truck',
                     make: 'Ford',
                     model: 'F-150',
@@ -85,7 +85,7 @@ describe('fleet actions', () => {
             formData.set('status', 'ACTIVE')
 
                 ; (prisma.vehicle.update as any).mockResolvedValue({
-                    id: '1',
+                    id: 'cm0000000000000000fleet01',
                     name: 'Updated Truck',
                     make: 'Ford',
                     model: 'F-150',
@@ -100,11 +100,11 @@ describe('fleet actions', () => {
                     updatedAt: new Date()
                 })
 
-            const result = await updateVehicle('1', null, formData)
+            const result = await updateVehicle('cm0000000000000000fleet01', null, formData)
 
             expect(result.message).toBe('Vehicle updated successfully')
             expect(prisma.vehicle.update).toHaveBeenCalledWith({
-                where: { id: '1' },
+                where: { id: 'cm0000000000000000fleet01' },
                 data: expect.objectContaining({
                     name: 'Updated Truck',
                     mileage: 2000
@@ -116,7 +116,7 @@ describe('fleet actions', () => {
     describe('deleteVehicle', () => {
         it('should delete vehicle', async () => {
             ; (prisma.vehicle.delete as any).mockResolvedValue({
-                id: '1',
+                id: 'cm0000000000000000fleet01',
                 name: 'Deleted Truck',
                 make: 'Ford',
                 model: 'F-150',
@@ -131,11 +131,11 @@ describe('fleet actions', () => {
                 updatedAt: new Date()
             })
 
-            const result = await deleteVehicle('1')
+            const result = await deleteVehicle('cm0000000000000000fleet01')
 
             expect(result.message).toBe('Vehicle deleted successfully')
             expect(prisma.vehicle.delete).toHaveBeenCalledWith({
-                where: { id: '1' }
+                where: { id: 'cm0000000000000000fleet01' }
             })
         })
     })

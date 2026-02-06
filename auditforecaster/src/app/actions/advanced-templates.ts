@@ -72,6 +72,7 @@ export async function getTemplatesForSelection() {
     if (!session) throw new Error("Unauthorized")
 
     const templates = await prisma.reportTemplate.findMany({
+        take: 100,
         select: {
             id: true,
             name: true,

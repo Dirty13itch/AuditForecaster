@@ -69,6 +69,7 @@ export async function getActionItems(inspectionId: string) {
 
     return await prisma.actionItem.findMany({
         where: { inspectionId },
+        take: 100,
         orderBy: { createdAt: 'desc' }
     })
 }

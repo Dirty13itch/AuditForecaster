@@ -77,6 +77,7 @@ export async function getServiceItems() {
 
     try {
         const items = await prisma.serviceItem.findMany({
+            take: 100,
             orderBy: { name: 'asc' }
         })
         return { success: true, data: items }
@@ -119,6 +120,7 @@ export async function getPriceLists() {
 
     try {
         const priceLists = await prisma.priceList.findMany({
+            take: 100,
             include: {
                 builder: true,
                 subdivision: true,

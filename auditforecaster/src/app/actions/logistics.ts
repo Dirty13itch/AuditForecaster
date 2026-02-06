@@ -51,11 +51,13 @@ export async function getTodaysRoute() {
                 not: 'COMPLETED'
             }
         },
+        take: 100,
         include: {
             subdivision: {
                 select: { name: true }
             }
-        }
+        },
+        orderBy: { createdAt: 'desc' }
     })
 
     if (jobs.length === 0) return []

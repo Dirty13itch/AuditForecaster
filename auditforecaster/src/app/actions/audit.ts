@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { Prisma } from "@prisma/client"
+import { assertValidId } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -135,6 +136,8 @@ export async function getEntityHistory(
     if (!entityType || !entityId) {
         throw new Error("entityType and entityId are required")
     }
+
+    assertValidId(entityId, 'Entity ID')
 
     const page = Math.max(options?.page ?? 1, 1)
     const pageSize = clampPageSize(options?.pageSize)
