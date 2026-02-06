@@ -41,10 +41,15 @@ export function mapToEkotropeProject(
     // This is a placeholder logic - in reality we'd parse the specific JSON structure of 'answers'
     let cfm50 = 0;
     if (inspection.answers) {
-        const answers = inspection.answers as Record<string, unknown>;
-        // Example: assuming we store it in a field named 'blower_door_cfm'
-        if (answers.blower_door_cfm) {
-            cfm50 = Number(answers.blower_door_cfm);
+        try {
+            const answers = (typeof inspection.answers === 'string'
+                ? JSON.parse(inspection.answers)
+                : inspection.answers) as Record<string, unknown>;
+            if (answers.blower_door_cfm) {
+                cfm50 = Number(answers.blower_door_cfm);
+            }
+        } catch {
+            // If answers is not valid JSON, skip extraction
         }
     }
 

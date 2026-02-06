@@ -19,7 +19,8 @@ const RejectJobSchema = z.object({
 
 export async function approveJob(formData: FormData) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'QA' && session.user.role !== 'ADMIN') throw new Error("QA access required")
 
     const result = ApproveJobSchema.safeParse({
         jobId: formData.get('jobId')
@@ -42,7 +43,8 @@ export async function approveJob(formData: FormData) {
 
 export async function rejectJob(formData: FormData) {
     const session = await auth()
-    if (!session) throw new Error("Unauthorized")
+    if (!session?.user) throw new Error("Unauthorized")
+    if (session.user.role !== 'QA' && session.user.role !== 'ADMIN') throw new Error("QA access required")
 
     const result = RejectJobSchema.safeParse({
         jobId: formData.get('jobId'),

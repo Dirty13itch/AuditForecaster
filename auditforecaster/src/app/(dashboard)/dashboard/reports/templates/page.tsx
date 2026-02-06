@@ -38,7 +38,9 @@ export default async function TemplatesPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {templates.map((template) => (
+                {templates.map((template) => {
+                    const parsedStructure = template.structure ? safeJsonParse<TemplateStructure | null>(template.structure, null) : null
+                    return (
                     <Card key={template.id} className={template.isDefault ? "border-blue-500 border-2" : ""}>
                         <CardHeader>
                             <div className="flex items-start justify-between">
@@ -56,18 +58,18 @@ export default async function TemplatesPage() {
                         <CardContent>
                             <div className="space-y-3">
                                 <div className="text-sm text-gray-600">
-                                    {template.structure ? (
+                                    {parsedStructure ? (
                                         <>
                                             <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium mb-2">
                                                 Advanced
                                             </span>
                                             <div>
                                                 <span className="font-medium">
-                                                    {(template.structure as unknown as TemplateStructure)?.pages?.length || 0} pages
+                                                    {parsedStructure.pages?.length || 0} pages
                                                 </span>
-                                                {(template.structure as unknown as TemplateStructure)?.logic?.length > 0 && (
+                                                {parsedStructure.logic?.length > 0 && (
                                                     <span className="ml-2 text-purple-600">
-                                                        • {(template.structure as unknown as TemplateStructure).logic.length} logic rules
+                                                        • {parsedStructure.logic.length} logic rules
                                                     </span>
                                                 )}
                                             </div>
@@ -110,7 +112,8 @@ export default async function TemplatesPage() {
                             </div>
                         </CardContent>
                     </Card>
-                ))}
+                    )
+                })}
 
                 {templates.length === 0 && (
                     <Card className="col-span-full">

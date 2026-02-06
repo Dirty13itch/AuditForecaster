@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 
 type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG";
 
@@ -38,7 +37,7 @@ class Logger {
                     data: {
                         level,
                         message,
-                        context: context as unknown as Prisma.InputJsonValue,
+                        context: context ? JSON.stringify(context) : null,
                         userId: context?.userId,
                     }
                 }).catch(err => console.error('Failed to write log to DB:', err));

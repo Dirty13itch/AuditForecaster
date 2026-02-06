@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
                 jobId,
                 reportTemplateId: templateId,
                 data: '{}',
-                answers: {},
+                answers: '{}',
                 score: 0,
             }
         })

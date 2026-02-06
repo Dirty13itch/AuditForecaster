@@ -20,8 +20,10 @@ vi.mock('@/auth', () => ({
 
 vi.mock('fs/promises', () => ({
     writeFile: vi.fn(),
+    mkdir: vi.fn(),
     default: {
         writeFile: vi.fn(),
+        mkdir: vi.fn(),
     }
 }))
 
@@ -70,7 +72,7 @@ describe('Plan Upload API', () => {
     })
 
     it('should create plan and return 200 on success', async () => {
-        vi.mocked(auth).mockResolvedValue({ user: { id: '1' } } as any)
+        vi.mocked(auth).mockResolvedValue({ user: { id: '1', role: 'ADMIN' } } as any)
         vi.mocked(prisma.plan.create).mockResolvedValue({ id: 'plan-1', title: 'Test Plan' } as any)
         vi.mocked(writeFile).mockResolvedValue(undefined)
 
@@ -82,7 +84,7 @@ describe('Plan Upload API', () => {
             size: 1024
         }
         formData.set('file', file)
-        formData.set('builderId', 'builder-1')
+        formData.set('builderId', '00000000-0000-0000-0000-000000000001')
         formData.set('title', 'Test Plan')
         formData.set('description', 'Test Description')
 
@@ -95,7 +97,7 @@ describe('Plan Upload API', () => {
         expect(prisma.plan.create).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({
                 title: 'Test Plan',
-                builderId: 'builder-1',
+                builderId: '00000000-0000-0000-0000-000000000001',
             }),
         }))
     })

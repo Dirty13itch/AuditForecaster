@@ -34,7 +34,7 @@ export default async function QAReviewPage({ params }: { params: Promise<{ id: s
         notFound()
     }
 
-    const inspectionData = safeJsonParse(inspection.data, {})
+    const inspectionData = safeJsonParse<{ cfm50?: number; notes?: string }>(inspection.data, {})
 
     return (
         <div className="space-y-6">

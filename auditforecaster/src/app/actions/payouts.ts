@@ -36,7 +36,8 @@ export async function calculatePayout(userId: string, periodStart: Date, periodE
                     }
                 }
             }
-        }
+        },
+        take: 500,
     })
 
     // Fetch user to get base rate

@@ -4,6 +4,7 @@ import { InspectionRunner } from '@/components/reporting/inspection-runner/runne
 import { WeatherWidget } from '@/components/weather-widget'
 import { redirect } from 'next/navigation'
 import { TemplateStructure } from '@/lib/reporting/engine'
+import { safeJsonParse } from '@/lib/utils'
 
 export default async function RunInspectionPage({ params }: { params: Promise<{ id: string }> }) {
     const session = await auth()
@@ -22,8 +23,8 @@ export default async function RunInspectionPage({ params }: { params: Promise<{ 
     if (!inspection) return <div>Inspection not found</div>
     if (!inspection.reportTemplate) return <div>Template not found</div>
 
-    // Parse template structure
-    const structure = inspection.reportTemplate.structure as unknown as TemplateStructure
+    // Parse template structure from JSON string
+    const structure = safeJsonParse<TemplateStructure>(inspection.reportTemplate.structure, { pages: [], logic: [] })
 
     // Capture for closure
     const jobId = inspection.jobId
@@ -38,7 +39,7 @@ export default async function RunInspectionPage({ params }: { params: Promise<{ 
         await prisma.inspection.update({
             where: { id },
             data: {
-                answers,
+                answers: typeof answers === 'string' ? answers : JSON.stringify(answers),
                 score,
                 status: 'COMPLETED'
             }
@@ -60,7 +61,7 @@ export default async function RunInspectionPage({ params }: { params: Promise<{ 
 
             <InspectionRunner
                 structure={structure}
-                initialAnswers={inspection.answers as any || {}}
+                initialAnswers={safeJsonParse(inspection.answers, {})}
                 inspectionId={inspection.id}
                 onComplete={handleComplete}
             />

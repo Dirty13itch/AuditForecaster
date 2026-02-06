@@ -89,8 +89,9 @@ export async function POST(req: Request) {
         // 1. Find or Create Builder
         // In a real scenario, we might want to be stricter here, but for auto-ingestion:
         const builderName = normalizeBuilderName(payload.builderName);
+        // SQLite doesn't support mode: 'insensitive', so we match exact name
         let builder = await prisma.builder.findFirst({
-            where: { name: { equals: builderName, mode: 'insensitive' } },
+            where: { name: builderName },
         });
 
         if (!builder) {

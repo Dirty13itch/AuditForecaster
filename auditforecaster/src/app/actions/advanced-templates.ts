@@ -22,8 +22,7 @@ export async function saveAdvancedTemplate(data: {
             data: {
                 name: data.name,
                 description: data.description,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                structure: data.structure as any,
+                structure: JSON.stringify(data.structure),
             }
         })
     } else {
@@ -32,8 +31,7 @@ export async function saveAdvancedTemplate(data: {
             data: {
                 name: data.name,
                 description: data.description,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                structure: data.structure as any,
+                structure: JSON.stringify(data.structure),
                 checklistItems: '[]', // Keep for backwards compatibility
             }
         })
@@ -56,7 +54,7 @@ export async function createInspectionWithTemplate(jobId: string, templateId: st
                 jobId,
                 reportTemplateId: templateId,
                 data: '{}',
-                answers: {},
+                answers: '{}',
                 score: 0,
             }
         })

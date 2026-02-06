@@ -72,6 +72,9 @@ export async function updateServiceItem(id: string, data: Partial<z.infer<typeof
 }
 
 export async function getServiceItems() {
+    const session = await auth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+
     try {
         const items = await prisma.serviceItem.findMany({
             orderBy: { name: 'asc' }
@@ -111,6 +114,9 @@ export async function createPriceList(data: z.infer<typeof PriceListSchema>) {
 }
 
 export async function getPriceLists() {
+    const session = await auth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+
     try {
         const priceLists = await prisma.priceList.findMany({
             include: {
@@ -130,6 +136,9 @@ export async function getPriceLists() {
 }
 
 export async function getPriceList(id: string) {
+    const session = await auth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+
     try {
         const priceList = await prisma.priceList.findUnique({
             where: { id },

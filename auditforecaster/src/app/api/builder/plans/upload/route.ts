@@ -19,6 +19,11 @@ export async function POST(req: Request) {
         const formData = await req.formData();
         const file = formData.get("file") as File;
         const builderId = formData.get("builderId") as string;
+
+        // RBAC: Only ADMIN users or users belonging to this builder can upload plans
+        if (session.user.role !== 'ADMIN' && session.user.builderId !== builderId) {
+            return new NextResponse("Forbidden", { status: 403 });
+        }
         const title = formData.get("title") as string;
         const description = formData.get("description") as string;
 

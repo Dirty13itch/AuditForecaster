@@ -4,6 +4,7 @@ import { Printer, MapPin, Wind, Droplets, Sun } from "lucide-react"
 import { notFound } from "next/navigation"
 import { DownloadPDFButton } from "@/components/download-pdf-button"
 import { TemplateStructure, evaluateLogic, Answer } from "@/lib/reporting/engine"
+import { safeJsonParse } from "@/lib/utils"
 
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -29,8 +30,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     if (!inspection) notFound()
 
     // 1. Load Template & Answers
-    const structure = (inspection.reportTemplate?.structure as unknown as TemplateStructure) || { pages: [], logic: [] }
-    const answers = (inspection.answers as unknown as Record<string, Answer>) || {}
+    const structure = safeJsonParse<TemplateStructure>(inspection.reportTemplate?.structure, { pages: [], logic: [] })
+    const answers = safeJsonParse<Record<string, Answer>>(inspection.answers, {})
     const logicState = evaluateLogic(structure, answers)
 
     // 2. Calculate Stats
