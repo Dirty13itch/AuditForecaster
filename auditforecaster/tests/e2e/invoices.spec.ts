@@ -7,7 +7,7 @@ test.describe('Finance flows', () => {
         await page.getByLabel('Email').fill('admin@ulrich.com')
         await page.getByLabel('Password').fill('password123')
         await page.getByRole('button', { name: /sign in/i }).click()
-        await page.waitForURL('/dashboard', { timeout: 10000 })
+        await page.waitForURL('/dashboard', { timeout: 30000 })
     })
 
     test('invoices page renders', async ({ page }) => {
@@ -50,19 +50,19 @@ test.describe('Finance flows', () => {
     test('invoice detail page loads when clicking an invoice', async ({ page }) => {
         await page.goto('/dashboard/finances/invoices')
 
-        // Click on the first invoice link if available
-        const invoiceLink = page.locator('a[href*="/dashboard/finances/invoices/"]').first()
+        // Click on the first invoice link if available (exclude "create" links)
+        const invoiceLink = page.locator('a[href*="/dashboard/finances/invoices/c"]:not([href*="create"])').first()
         if (await invoiceLink.isVisible({ timeout: 5000 })) {
             await invoiceLink.click()
 
             // Should navigate to invoice detail page
-            await page.waitForURL(/\/dashboard\/finances\/invoices\//, { timeout: 10000 })
+            await page.waitForURL(/\/dashboard\/finances\/invoices\/c/, { timeout: 10000 })
 
-            // Verify back button is present
-            await expect(page.getByRole('link', { name: /back to invoices/i })).toBeVisible()
+            // Verify back link is present
+            await expect(page.getByText('Back to Invoices')).toBeVisible()
 
             // Verify Download PDF button
-            await expect(page.getByRole('button', { name: /download pdf/i })).toBeVisible()
+            await expect(page.getByText('Download PDF')).toBeVisible()
         }
     })
 

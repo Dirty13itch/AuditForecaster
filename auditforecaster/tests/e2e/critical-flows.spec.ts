@@ -6,7 +6,7 @@ test.describe('Critical User Flows', () => {
         await page.goto('/dashboard');
         // Expect to be redirected to signin page (NextAuth default)
         // Note: The actual URL might be /api/auth/signin or similar depending on config
-        await expect(page).toHaveURL(/signin/);
+        await expect(page).toHaveURL(/\/(login|signin|api\/auth\/signin)/);
     });
 
     test('health endpoint should be accessible', async ({ request }) => {

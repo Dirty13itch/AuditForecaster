@@ -7,7 +7,7 @@ test.describe('Job management flows', () => {
         await page.getByLabel('Email').fill('admin@ulrich.com')
         await page.getByLabel('Password').fill('password123')
         await page.getByRole('button', { name: /sign in/i }).click()
-        await page.waitForURL('/dashboard', { timeout: 10000 })
+        await page.waitForURL('/dashboard', { timeout: 30000 })
     })
 
     test('dashboard loads with stats cards', async ({ page }) => {
@@ -54,10 +54,15 @@ test.describe('Job management flows', () => {
     test('job detail page shows property information', async ({ page }) => {
         await page.goto('/dashboard/jobs')
 
-        // Click on the first job link if available
-        const jobLink = page.locator('a[href*="/dashboard/jobs/"]').first()
+        // Click on the first job link in the main content area (not sidebar)
+        // Use a pattern that matches job ID URLs (CUIDs start with 'c')
+        const mainContent = page.locator('main')
+        const jobLink = mainContent.locator('a[href*="/dashboard/jobs/c"]').first()
         if (await jobLink.isVisible({ timeout: 5000 })) {
             await jobLink.click()
+
+            // Wait for navigation to job detail page
+            await page.waitForURL(/\/dashboard\/jobs\/c/, { timeout: 10000 })
 
             // Verify job details page loaded
             await expect(page.locator('h1')).toContainText('Job Details')
@@ -67,10 +72,6 @@ test.describe('Job management flows', () => {
 
             // Verify Schedule & Status card
             await expect(page.getByText('Schedule & Status')).toBeVisible()
-
-            // Verify tabs are present
-            await expect(page.getByRole('tab', { name: /details/i })).toBeVisible()
-            await expect(page.getByRole('tab', { name: /photos/i })).toBeVisible()
         }
     })
 

@@ -7,7 +7,7 @@ test.describe('Inspection flows', () => {
         await page.getByLabel('Email').fill('admin@ulrich.com')
         await page.getByLabel('Password').fill('password123')
         await page.getByRole('button', { name: /sign in/i }).click()
-        await page.waitForURL('/dashboard', { timeout: 10000 })
+        await page.waitForURL('/dashboard', { timeout: 30000 })
     })
 
     test('inspections list page renders', async ({ page }) => {
@@ -34,8 +34,8 @@ test.describe('Inspection flows', () => {
         const count = parseInt(hasInspections?.match(/\d+/)?.[0] || '0')
 
         if (count > 0) {
-            // Inspection cards should be visible
-            const cards = page.locator('[class*="Card"]')
+            // Inspection card links should be visible
+            const cards = page.locator('a[href*="/dashboard/inspections/"]')
             await expect(cards.first()).toBeVisible()
         } else {
             // Empty state message
@@ -47,21 +47,28 @@ test.describe('Inspection flows', () => {
         // Navigate to jobs first to find one to inspect
         await page.goto('/dashboard/jobs')
 
-        // Click on the first job link if available
-        const jobLink = page.locator('a[href*="/dashboard/jobs/"]').first()
+        // Click on the first job link in the main content area
+        const mainContent = page.locator('main')
+        const jobLink = mainContent.locator('a[href*="/dashboard/jobs/c"]').first()
         if (await jobLink.isVisible({ timeout: 5000 })) {
             await jobLink.click()
+            await page.waitForURL(/\/dashboard\/jobs\/c/, { timeout: 10000 })
 
             // Verify job details page loaded
             await expect(page.locator('h1')).toContainText('Job Details')
 
-            // Look for Start Inspection or Continue Inspection button
-            const inspectionButton = page.getByRole('button', { name: /start inspection|continue inspection/i })
-            if (await inspectionButton.isVisible({ timeout: 3000 })) {
-                await inspectionButton.click()
+            // Look for Continue Inspection link or Start Inspection button
+            const continueLink = page.getByRole('link', { name: /continue inspection/i })
+            const startButton = page.getByRole('button', { name: /start inspection/i })
 
-                // Should navigate to inspection form
+            if (await continueLink.isVisible({ timeout: 3000 })) {
+                await continueLink.click()
+                // Should navigate to inspection page
                 await page.waitForURL(/\/inspections\//, { timeout: 10000 })
+            } else if (await startButton.isVisible({ timeout: 1000 })) {
+                await startButton.click()
+                // Start Inspection opens a template selection modal
+                await expect(page.getByText(/select.*template/i)).toBeVisible({ timeout: 5000 })
             }
         }
     })

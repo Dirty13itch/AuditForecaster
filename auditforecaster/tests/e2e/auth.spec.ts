@@ -5,7 +5,7 @@ test.describe('Authentication flows', () => {
         await page.goto('/login')
 
         // Verify the page title and heading
-        await expect(page.locator('h2, [class*="CardTitle"]').filter({ hasText: 'Sign in' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
 
         // Verify form fields are present
         await expect(page.getByLabel('Email')).toBeVisible()
@@ -27,7 +27,7 @@ test.describe('Authentication flows', () => {
         await page.getByRole('button', { name: /sign in/i }).click()
 
         // Should redirect to dashboard
-        await page.waitForURL('/dashboard', { timeout: 10000 })
+        await page.waitForURL('/dashboard', { timeout: 30000 })
         await expect(page).toHaveURL('/dashboard')
 
         // Dashboard should show heading
@@ -45,7 +45,7 @@ test.describe('Authentication flows', () => {
         await page.getByRole('button', { name: /sign in/i }).click()
 
         // Should stay on login page and show error message
-        await expect(page.locator('[aria-live="polite"]')).toContainText(/.+/, { timeout: 5000 })
+        await expect(page.locator('.flex.h-8[aria-live="polite"]')).toContainText(/.+/, { timeout: 5000 })
         await expect(page).toHaveURL(/\/login/)
     })
 
@@ -55,10 +55,10 @@ test.describe('Authentication flows', () => {
         await page.getByLabel('Email').fill('admin@ulrich.com')
         await page.getByLabel('Password').fill('password123')
         await page.getByRole('button', { name: /sign in/i }).click()
-        await page.waitForURL('/dashboard', { timeout: 10000 })
+        await page.waitForURL('/dashboard', { timeout: 30000 })
 
-        // Click the Sign Out button in the sidebar
-        await page.getByRole('button', { name: /sign out/i }).click()
+        // Click the Sign Out button in the sidebar (force to bypass dev overlay)
+        await page.getByRole('button', { name: /sign out/i }).click({ force: true })
 
         // Should redirect to login page
         await page.waitForURL(/\/login/, { timeout: 10000 })

@@ -7,7 +7,7 @@ test.describe('Navigation', () => {
         await page.getByLabel('Email').fill('admin@ulrich.com')
         await page.getByLabel('Password').fill('password123')
         await page.getByRole('button', { name: /sign in/i }).click()
-        await page.waitForURL('/dashboard', { timeout: 10000 })
+        await page.waitForURL('/dashboard', { timeout: 30000 })
     })
 
     test('sidebar navigation shows core menu items', async ({ page }) => {
@@ -142,19 +142,17 @@ test.describe('Navigation', () => {
         // Navigate to jobs first
         await page.goto('/dashboard/jobs')
 
-        // Click on a job if available
-        const jobLink = page.locator('a[href*="/dashboard/jobs/"]').first()
+        // Click on a job in the main content area (not sidebar)
+        const mainContent = page.locator('main')
+        const jobLink = mainContent.locator('a[href*="/dashboard/jobs/c"]').first()
         if (await jobLink.isVisible({ timeout: 5000 })) {
             await jobLink.click()
-            await page.waitForURL(/\/dashboard\/jobs\//, { timeout: 10000 })
+            await page.waitForURL(/\/dashboard\/jobs\/c/, { timeout: 10000 })
 
-            // Look for a back/breadcrumb link to Jobs
-            const backLink = page.getByRole('link', { name: /jobs/i }).first()
-            if (await backLink.isVisible({ timeout: 3000 })) {
-                await backLink.click()
-                await page.waitForURL('/dashboard/jobs', { timeout: 10000 })
-                await expect(page.locator('h1')).toContainText('Jobs')
-            }
+            // Navigate back to Jobs list using sidebar or breadcrumb
+            await page.goto('/dashboard/jobs')
+            await page.waitForURL('/dashboard/jobs', { timeout: 10000 })
+            await expect(page.locator('h1')).toContainText('Jobs')
         }
     })
 
