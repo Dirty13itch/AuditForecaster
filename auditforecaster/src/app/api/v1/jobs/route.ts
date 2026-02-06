@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit"
 import { logger } from "@/lib/logger"
 import { safeParseInt } from "@/lib/utils"
 import { z } from "zod"
+import { apiLimiter } from "@/lib/rate-limit"
 
 // Schema for Job Creation via API
 const CreateJobApiSchema = z.object({
@@ -16,6 +17,12 @@ const CreateJobApiSchema = z.object({
 })
 
 export async function GET(request: Request) {
+    const ip = request.headers.get('x-forwarded-for') || 'unknown'
+    const { success: allowed } = await apiLimiter(`api:${ip}`)
+    if (!allowed) {
+        return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
+    }
+
     const apiKey = await validateApiKey('READ_JOBS')
     if (!apiKey) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -45,6 +52,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+    const ip = request.headers.get('x-forwarded-for') || 'unknown'
+    const { success: allowed } = await apiLimiter(`api:${ip}`)
+    if (!allowed) {
+        return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
+    }
+
     const apiKey = await validateApiKey('WRITE_JOBS')
     if (!apiKey) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

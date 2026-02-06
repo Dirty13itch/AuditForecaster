@@ -50,6 +50,7 @@ model User {
   onboarding     OnboardingChecklist?
   apiKeys        ApiKey[]
   taskClaims     TaskClaim[]
+  notifications  Notification[]
 
   @@index([builderId])
 }
@@ -784,4 +785,16 @@ model TaskClaim {
   @@unique([taskId]) // Only one active claim per task
   @@index([expiresAt]) // For cleanup
   @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, SUCCESS, ERROR
+  read      Boolean  @default(false)
+  link      String?  // Optional URL to navigate to
+  createdAt DateTime @default(now())
 }

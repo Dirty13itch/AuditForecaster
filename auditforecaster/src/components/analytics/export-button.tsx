@@ -2,12 +2,12 @@
 
 import { Button } from "@/components/ui/button"
 import { Download, Loader2 } from "lucide-react"
-import { exportData } from "@/app/actions/export"
+import { exportJobsCSV, exportInvoicesCSV, exportExpensesCSV } from "@/app/actions/export"
 import { useState } from "react"
 import { toast } from "sonner"
 
 interface ExportButtonProps {
-    type: 'JOBS' | 'INVOICES' | 'PAYOUTS'
+    type: 'JOBS' | 'INVOICES' | 'EXPENSES'
     label?: string
 }
 
@@ -17,14 +17,23 @@ export function ExportButton({ type, label = "Export CSV" }: ExportButtonProps) 
     const handleExport = async () => {
         setIsLoading(true)
         try {
-            const csvData = await exportData(type)
+            const exportFn = type === 'JOBS' ? exportJobsCSV
+                : type === 'INVOICES' ? exportInvoicesCSV
+                : exportExpensesCSV
+
+            const result = await exportFn()
+
+            if (!result.success) {
+                toast.error(result.message)
+                return
+            }
 
             // Create blob and download
-            const blob = new Blob([csvData], { type: 'text/csv' })
+            const blob = new Blob([result.csv], { type: 'text/csv' })
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
-            a.download = `${type.toLowerCase()}_export_${new Date().toISOString().split('T')[0]}.csv`
+            a.download = result.filename
             document.body.appendChild(a)
             a.click()
             window.URL.revokeObjectURL(url)

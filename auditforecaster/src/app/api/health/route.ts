@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { access, constants, writeFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import Redis from 'ioredis'
+import { apiLimiter } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +106,12 @@ async function checkFilesystem(): Promise<CheckResult> {
 }
 
 export async function GET(req: NextRequest) {
+    const ip = req.headers.get('x-forwarded-for') || 'unknown'
+    const { success: allowed } = await apiLimiter(`api:${ip}`)
+    if (!allowed) {
+        return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
+    }
+
     const startTime = Date.now()
 
     // Check if request is authenticated for detailed info

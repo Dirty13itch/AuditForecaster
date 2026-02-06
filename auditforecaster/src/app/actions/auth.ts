@@ -7,6 +7,7 @@ import crypto from 'crypto'
 
 import { headers } from 'next/headers'
 import { checkRateLimit } from '@/lib/security'
+import { authLimiter } from '@/lib/rate-limit'
 import { sendEmail } from './email'
 import { prisma } from '@/lib/prisma'
 
@@ -21,6 +22,10 @@ export async function authenticate(
     try {
         const email = formData.get('email') as string
         const password = formData.get('password') as string
+
+        // Per-email rate limiting (works even in dev/test, unlike checkRateLimit)
+        const { success: emailAllowed } = await authLimiter(`auth:login:${email}`)
+        if (!emailAllowed) return 'Too many login attempts. Please try again later.'
         const callbackUrl = formData.get('callbackUrl') as string || '/dashboard'
 
         // Validate callbackUrl is a relative path to prevent open redirect
@@ -62,6 +67,16 @@ export async function resetPassword(
     }
 
     const email = formData.get('email') as string
+
+    // Per-email rate limiting (works even in dev/test, unlike checkRateLimit)
+    const { success: emailAllowed } = await authLimiter(`auth:reset:${email}`)
+    if (!emailAllowed) {
+        return {
+            success: false,
+            message: 'Too many password reset attempts. Please try again later.',
+            error: 'Rate limit exceeded'
+        }
+    }
 
     // Always return the same response to prevent email enumeration
     const genericResponse = {

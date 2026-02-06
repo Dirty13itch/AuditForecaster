@@ -111,7 +111,7 @@ async function handleCreateJob(payload: unknown, userId: string) {
         entityId: job.id,
         action: 'CREATE',
         changes: validated,
-        actorId: userId
+        userId: userId
     });
 
     return { success: true, id: job.id };
@@ -206,7 +206,7 @@ async function handleCreateEquipment(payload: unknown, userId: string) {
         entityId: equipment.id,
         action: 'CREATE',
         changes: validated,
-        actorId: userId
+        userId: userId
     });
 
     return { success: true, id: equipment.id };
@@ -232,7 +232,7 @@ async function handleUpdateEquipment(payload: unknown, userId: string) {
         entityId: id,
         action: 'UPDATE',
         changes: validated,
-        actorId: userId
+        userId: userId
     });
 
     return { success: true };

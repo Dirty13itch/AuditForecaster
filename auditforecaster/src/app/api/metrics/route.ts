@@ -1,11 +1,18 @@
 import { register, collectDefaultMetrics } from 'prom-client';
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { apiLimiter } from '@/lib/rate-limit';
 
 // Initialize default metrics collection
 collectDefaultMetrics({ prefix: 'auditforecaster_' });
 
 export async function GET(req: NextRequest) {
+    const ip = req.headers.get('x-forwarded-for') || 'unknown'
+    const { success: allowed } = await apiLimiter(`api:${ip}`)
+    if (!allowed) {
+        return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
+    }
+
     // Require a bearer token for metrics access
     const authHeader = req.headers.get('authorization');
     const metricsToken = process.env.METRICS_SECRET;
