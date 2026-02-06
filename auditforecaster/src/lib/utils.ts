@@ -41,3 +41,20 @@ export function safeParseFloat(value: string | null | undefined, fallback: numbe
   const parsed = parseFloat(value)
   return Number.isNaN(parsed) ? fallback : parsed
 }
+
+/**
+ * Validate that a string looks like a valid CUID or UUID
+ * Prisma uses CUIDs by default; some fields use UUIDs
+ */
+const CUID_REGEX = /^c[a-z0-9]{24,}$/
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isValidId(id: string): boolean {
+  return CUID_REGEX.test(id) || UUID_REGEX.test(id)
+}
+
+export function assertValidId(id: string, label = 'ID'): void {
+  if (!isValidId(id)) {
+    throw new Error(`Invalid ${label} format`)
+  }
+}

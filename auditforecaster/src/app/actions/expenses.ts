@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
+import { assertValidId } from "@/lib/utils"
 
 export async function getPendingExpenses() {
     const session = await auth()
@@ -44,16 +45,22 @@ export async function processExpense(id: string, status: 'APPROVED' | 'REJECTED'
         throw new Error("Unauthorized")
     }
 
-    await prisma.expense.update({
-        where: { id },
-        data: {
-            status,
-            rejectionReason: status === 'REJECTED' ? rejectionReason : null
-        }
-    })
+    assertValidId(id, 'Expense ID')
 
-    revalidatePath('/dashboard/finances/expenses')
-    revalidatePath('/dashboard/finances/expenses/approvals')
+    try {
+        await prisma.expense.update({
+            where: { id },
+            data: {
+                status,
+                rejectionReason: status === 'REJECTED' ? rejectionReason : null
+            }
+        })
 
-    return { success: true }
+        revalidatePath('/dashboard/finances/expenses')
+        revalidatePath('/dashboard/finances/expenses/approvals')
+
+        return { success: true }
+    } catch {
+        return { success: false, error: 'Failed to process expense' }
+    }
 }

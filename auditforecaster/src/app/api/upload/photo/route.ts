@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         logger.error('Upload error', { error })
         return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Upload failed' },
+            { error: 'Upload failed' },
             { status: 500 }
         )
     }
@@ -203,7 +203,7 @@ export async function DELETE(request: NextRequest) {
     } catch (error) {
         logger.error('Delete error', { error })
         return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Delete failed' },
+            { error: 'Delete failed' },
             { status: 500 }
         )
     }

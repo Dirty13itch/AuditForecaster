@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
 import { logAudit } from "@/lib/audit"
+import { assertValidId } from "@/lib/utils"
 
 export async function createInvoice(data: {
     builderId: string
@@ -147,6 +148,13 @@ export async function updateInvoiceStatus(id: string, status: string) {
         throw new Error("Unauthorized")
     }
 
+    assertValidId(id, 'Invoice ID')
+
+    const validStatuses = ['DRAFT', 'SENT', 'PAID', 'VOID', 'OVERDUE']
+    if (!validStatuses.includes(status)) {
+        throw new Error("Invalid invoice status")
+    }
+
     const data: Prisma.InvoiceUpdateInput = { status }
     if (status === 'SENT') data.sentAt = new Date()
     if (status === 'PAID') data.paidAt = new Date()
@@ -172,6 +180,8 @@ export async function deleteInvoice(id: string) {
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
     }
+
+    assertValidId(id, 'Invoice ID')
 
     const invoice = await prisma.invoice.findUnique({
         where: { id },

@@ -56,7 +56,7 @@ describe('Jobs Server Actions', () => {
             formData.append('city', 'Austin')
 
             vi.mocked(getCoordinates).mockResolvedValue({ lat: 30, lng: -97 })
-            vi.mocked(prisma.job.create).mockResolvedValue({ id: 'job-1' } as any)
+            vi.mocked(prisma.job.create).mockResolvedValue({ id: 'cm000000000000000000job01' } as any)
 
 
             const result = await createJob(formData)
@@ -92,13 +92,13 @@ describe('Jobs Server Actions', () => {
 
     describe('updateJobStatus', () => {
         it('should update status successfully', async () => {
-            vi.mocked(prisma.job.findUnique).mockResolvedValue({ id: 'job-1', status: 'PENDING' } as any)
-            vi.mocked(prisma.job.update).mockResolvedValue({ id: 'job-1' } as any)
+            vi.mocked(prisma.job.findUnique).mockResolvedValue({ id: 'cm000000000000000000job01', status: 'PENDING' } as any)
+            vi.mocked(prisma.job.update).mockResolvedValue({ id: 'cm000000000000000000job01' } as any)
 
-            await updateJobStatus('job-1', 'COMPLETED')
+            await updateJobStatus('cm000000000000000000job01', 'COMPLETED')
 
             expect(prisma.job.update).toHaveBeenCalledWith({
-                where: { id: 'job-1' },
+                where: { id: 'cm000000000000000000job01' },
                 data: { status: 'COMPLETED' }
             })
         })

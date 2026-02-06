@@ -79,7 +79,7 @@ export async function POST(request: Request) {
         // Don't leak internal error details - log them instead
         logger.error('API /v1/jobs POST error', { error })
         const message = error instanceof z.ZodError
-            ? 'Validation failed: ' + error.errors.map(e => e.message).join(', ')
+            ? 'Validation failed'
             : 'Invalid request'
         return NextResponse.json({ error: message }, { status: 400 })
     }

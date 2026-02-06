@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 
 import { auth } from "@/auth"
-import { safeParseFloat } from "@/lib/utils"
+import { safeParseFloat, assertValidId } from "@/lib/utils"
 
 export async function createTaxCredit(formData: FormData) {
     const session = await auth()
@@ -47,6 +47,14 @@ export async function createTaxCredit(formData: FormData) {
 export async function updateTaxCreditStatus(id: string, status: string) {
     const session = await auth()
     if (!session) throw new Error("Unauthorized")
+
+    assertValidId(id, 'Tax Credit ID')
+
+    const validStatuses = ['PENDING', 'APPROVED', 'FILED', 'RECEIVED']
+    if (!validStatuses.includes(status)) {
+        throw new Error("Invalid status")
+    }
+
     await prisma.taxCredit.update({
         where: { id },
         data: { status }

@@ -32,12 +32,20 @@ export async function updateProfile(formData: FormData) {
 
         const validated = ProfileSchema.parse(rawData)
 
+        // Check if email is changing and if new email is already taken
+        const currentUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { email: true } })
+        if (currentUser && validated.email !== currentUser.email) {
+            const existing = await prisma.user.findUnique({ where: { email: validated.email }, select: { id: true } })
+            if (existing) {
+                return { success: false, message: 'Email already in use' }
+            }
+        }
+
         await prisma.user.update({
             where: { id: session.user.id },
             data: {
                 name: validated.name,
                 email: validated.email,
-                // phone: validated.phone // Assuming phone field exists or will exist
             }
         })
 
@@ -52,7 +60,7 @@ export async function updateProfile(formData: FormData) {
         return { success: true, message: 'Profile updated successfully' }
     } catch (error) {
         logger.error('Failed to update profile', { error })
-        return { success: false, message: error instanceof Error ? error.message : 'Failed to update profile' }
+        return { success: false, message: 'Failed to update profile' }
     }
 }
 
@@ -103,6 +111,6 @@ export async function changePassword(formData: FormData) {
         return { success: true, message: 'Password changed successfully' }
     } catch (error) {
         logger.error('Failed to change password', { error })
-        return { success: false, message: error instanceof Error ? error.message : 'Failed to change password' }
+        return { success: false, message: 'Failed to change password' }
     }
 }

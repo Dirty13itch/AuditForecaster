@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { sendEmail } from './email'
 import { revalidatePath } from 'next/cache'
 import { logger } from "@/lib/logger"
+import { assertValidId } from "@/lib/utils"
 
 export async function createActionItem(data: {
     inspectionId: string
@@ -75,6 +76,13 @@ export async function getActionItems(inspectionId: string) {
 export async function updateActionItemStatus(id: string, status: string) {
     const session = await auth()
     if (!session?.user?.id) throw new Error('Unauthorized')
+
+    assertValidId(id, 'Action Item ID')
+
+    const validStatuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
+    if (!validStatuses.includes(status)) {
+        throw new Error("Invalid status")
+    }
 
     await prisma.actionItem.update({
         where: { id },

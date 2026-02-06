@@ -8,6 +8,7 @@ import { auth } from "@/auth"
 import { getCoordinates } from "@/lib/geocoding"
 import { logAudit } from "@/lib/audit"
 import { logger } from "@/lib/logger"
+import { assertValidId } from "@/lib/utils"
 
 const JobSchema = z.object({
     builderId: z.string().min(1, "Builder is required"),
@@ -74,6 +75,8 @@ const UpdateJobSchema = JobSchema.partial().extend({
 export async function updateJobStatus(id: string, status: string) {
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized")
+
+    assertValidId(id, 'Job ID')
 
     // RBAC: Only Admin or Inspector can update status
     const role = session.user.role

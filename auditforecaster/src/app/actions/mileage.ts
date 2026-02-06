@@ -17,24 +17,27 @@ export async function logTrip(data: {
     if (!session?.user?.id) throw new Error('Unauthorized')
 
     try {
-        const log = await prisma.mileageLog.create({
-            data: {
-                vehicleId: data.vehicleId,
-                date: data.date,
-                distance: data.distance,
-                startLocation: data.startLocation,
-                endLocation: data.endLocation,
-                purpose: data.purpose || 'BUSINESS',
-                status: 'CLASSIFIED'
-            }
-        })
+        const log = await prisma.$transaction(async (tx) => {
+            const mileageLog = await tx.mileageLog.create({
+                data: {
+                    vehicleId: data.vehicleId,
+                    date: data.date,
+                    distance: data.distance,
+                    startLocation: data.startLocation,
+                    endLocation: data.endLocation,
+                    purpose: data.purpose || 'BUSINESS',
+                    status: 'CLASSIFIED'
+                }
+            })
 
-        // Update vehicle mileage
-        await prisma.vehicle.update({
-            where: { id: data.vehicleId },
-            data: {
-                mileage: { increment: Math.round(data.distance) }
-            }
+            await tx.vehicle.update({
+                where: { id: data.vehicleId },
+                data: {
+                    mileage: { increment: Math.round(data.distance) }
+                }
+            })
+
+            return mileageLog
         })
 
         revalidatePath('/dashboard/logistics/mileage')
@@ -65,6 +68,7 @@ export async function getVehicles() {
 
     return await prisma.vehicle.findMany({
         where: { status: 'ACTIVE' },
-        take: 100
+        take: 100,
+        orderBy: { createdAt: 'desc' }
     })
 }
