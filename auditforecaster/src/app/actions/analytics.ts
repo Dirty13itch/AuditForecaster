@@ -4,8 +4,6 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { startOfMonth, subMonths, endOfMonth, eachDayOfInterval, format } from "date-fns"
 import { predictNextMonth } from "@/lib/forecasting"
-import { getJobPrice } from "@/lib/pricing"
-
 export async function getAnalyticsData() {
     const session = await auth()
     if (!session) throw new Error("Unauthorized")
@@ -101,20 +99,74 @@ export async function getAnalyticsData() {
         console.warn(`[Performance] getAnalyticsData took ${duration.toFixed(2)}ms`)
     }
 
-    // Process Revenue Calculations (Sequential due to pricing logic)
+    // Batch-load pricing data to avoid N+1 queries
+    // Instead of calling getJobPrice() per job (up to 3 queries each),
+    // load all relevant price lists and service items in 2 queries total.
+    const allUninvoicedJobs = [...uninvoicedJobsCurrent, ...uninvoicedJobsLast]
+    const builderIds = [...new Set(allUninvoicedJobs.map(j => j.builderId).filter((id): id is string => id != null))]
+    const subdivisionIds = [...new Set(allUninvoicedJobs.map(j => j.subdivisionId).filter((id): id is string => id != null))]
 
+    const DEFAULT_PRICE = 350.00
+
+    // Build lookup maps for O(1) price resolution
+    const subdivisionPriceLists = new Map<string, number>()
+    const builderPriceLists = new Map<string, number>()
+
+    if (builderIds.length > 0 || subdivisionIds.length > 0) {
+        const orConditions = []
+        if (builderIds.length > 0) orConditions.push({ builderId: { in: builderIds } })
+        if (subdivisionIds.length > 0) orConditions.push({ subdivisionId: { in: subdivisionIds } })
+
+        const priceLists = await prisma.priceList.findMany({
+            where: { OR: orConditions },
+            include: {
+                items: {
+                    include: { serviceItem: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        })
+
+        for (const pl of priceLists) {
+            const priceItem = pl.items.find(item => item.serviceItem.name === "Blower Door Test")
+            if (!priceItem) continue
+            const price = Number(priceItem.price)
+
+            if (pl.subdivisionId && !subdivisionPriceLists.has(pl.subdivisionId)) {
+                subdivisionPriceLists.set(pl.subdivisionId, price)
+            }
+            if (pl.builderId && !builderPriceLists.has(pl.builderId)) {
+                builderPriceLists.set(pl.builderId, price)
+            }
+        }
+    }
+
+    const defaultServiceItem = await prisma.serviceItem.findFirst({
+        where: { name: "Blower Door Test" }
+    })
+    const fallbackPrice = defaultServiceItem?.basePrice
+        ? Number(defaultServiceItem.basePrice)
+        : DEFAULT_PRICE
+
+    function resolveJobPrice(builderId: string | null, subdivisionId: string | null): number {
+        if (subdivisionId && subdivisionPriceLists.has(subdivisionId)) {
+            return subdivisionPriceLists.get(subdivisionId)!
+        }
+        if (builderId && builderPriceLists.has(builderId)) {
+            return builderPriceLists.get(builderId)!
+        }
+        return fallbackPrice
+    }
+
+    // Process Revenue Calculations (now O(1) per job instead of 3 queries)
     let revenueFromUninvoiced = 0
     for (const job of uninvoicedJobsCurrent) {
-        // @ts-expect-error - TS struggles with optional second arg here
-        const price = await getJobPrice(job.builderId, job.subdivisionId)
-        revenueFromUninvoiced += price
+        revenueFromUninvoiced += resolveJobPrice(job.builderId, job.subdivisionId)
     }
 
     let revenueFromUninvoicedLast = 0
     for (const job of uninvoicedJobsLast) {
-        // @ts-expect-error - TS struggles with optional second arg here
-        const price = await getJobPrice(job.builderId, job.subdivisionId)
-        revenueFromUninvoicedLast += price
+        revenueFromUninvoicedLast += resolveJobPrice(job.builderId, job.subdivisionId)
     }
 
     const revenueCurrent = (invoicesCurrent._sum.totalAmount || 0) + revenueFromUninvoiced

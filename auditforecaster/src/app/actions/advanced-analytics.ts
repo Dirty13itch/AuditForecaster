@@ -54,11 +54,13 @@ export async function getInspectorPerformance(): Promise<InspectorPerformance[] 
 
     const inspectors = await prisma.user.findMany({
         where: { role: 'INSPECTOR' },
+        take: 50,
         include: {
             jobs: {
                 where: { status: 'COMPLETED' },
+                take: 200,
                 include: {
-                    inspections: true
+                    inspections: { take: 1 }
                 }
             }
         }

@@ -48,6 +48,7 @@ export async function getSavedReports() {
 
     return prisma.savedReport.findMany({
         where: { userId: session.user.id },
+        take: 50,
         orderBy: { createdAt: 'desc' }
     })
 }

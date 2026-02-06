@@ -19,7 +19,7 @@ export async function getJobProfitability(jobId: string) {
             expenses: true,
             payout: true,
             mileageLogs: {
-                where: { purpose: 'Business' } // Only count business mileage
+                where: { purpose: 'BUSINESS' } // Only count business mileage
             }
         }
     })
@@ -75,11 +75,12 @@ export async function getProfitabilityDashboard(startDate: Date, endDate: Date) 
                 lte: endDate
             }
         },
+        take: 500,
         include: {
             invoiceItems: true,
             expenses: true,
             mileageLogs: {
-                where: { purpose: 'Business' }
+                where: { purpose: 'BUSINESS' }
             }
         }
     })

@@ -229,6 +229,7 @@ export async function getUninvoicedJobs(builderId: string) {
                 }
             }
         },
+        take: 200,
         orderBy: { createdAt: 'desc' },
         select: {
             id: true,

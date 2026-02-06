@@ -1,7 +1,7 @@
 "use client";
 
 import { SwipeCard } from "@/components/ui/swipe-card";
-import { classifyExpense } from "@/app/actions/finances";
+import { classifyExpense } from "@/app/actions/finance";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 

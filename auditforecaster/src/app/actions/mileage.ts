@@ -24,7 +24,7 @@ export async function logTrip(data: {
                 distance: data.distance,
                 startLocation: data.startLocation,
                 endLocation: data.endLocation,
-                purpose: data.purpose || 'Business',
+                purpose: data.purpose || 'BUSINESS',
                 status: 'CLASSIFIED'
             }
         })
@@ -53,6 +53,7 @@ export async function getMileageLogs(vehicleId?: string) {
 
     return await prisma.mileageLog.findMany({
         where,
+        take: 200,
         orderBy: { date: 'desc' },
         include: { vehicle: true }
     })
@@ -63,6 +64,7 @@ export async function getVehicles() {
     if (!session?.user?.id) throw new Error('Unauthorized')
 
     return await prisma.vehicle.findMany({
-        where: { status: 'ACTIVE' } // Or assigned to user
+        where: { status: 'ACTIVE' },
+        take: 100
     })
 }

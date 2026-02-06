@@ -139,6 +139,7 @@ export async function getRoutes(date?: Date) {
 
     return prisma.route.findMany({
         where,
+        take: 50,
         include: {
             driver: { select: { name: true, email: true } },
             stops: { include: { job: true }, orderBy: { order: 'asc' } }

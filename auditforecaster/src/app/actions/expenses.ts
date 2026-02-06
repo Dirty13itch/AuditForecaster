@@ -14,6 +14,7 @@ export async function getPendingExpenses() {
         where: {
             status: 'PENDING'
         },
+        take: 100,
         include: {
             user: {
                 select: {
