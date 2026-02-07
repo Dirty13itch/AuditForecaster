@@ -18,29 +18,18 @@ COPY . .
 RUN npx prisma generate
 
 # Build Next.js app
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # Production image
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install Puppeteer dependencies and OpenSSL for Prisma
-RUN apk add --no-cache \
-      chromium \
-      nss \
-      freetype \
-      harfbuzz \
-      ca-certificates \
-      ttf-freefont \
-      openssl
-
-# Tell Puppeteer to use installed Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# OpenSSL required by Prisma
+RUN apk add --no-cache openssl
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -50,7 +39,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy Prisma for runtime usage and migrations
+# Copy Prisma for runtime usage
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
@@ -59,12 +48,12 @@ COPY --from=builder /app/prisma ./prisma
 # Ensure uploads directory exists and is writable
 RUN mkdir -p public/uploads/photos && chown -R nextjs:nodejs public/uploads
 
-# Create entrypoint script for migrations
+# Create entrypoint script
 COPY --chmod=755 <<EOF /app/entrypoint.sh
 #!/bin/sh
 set -e
 
-# Wait for database to be ready (with timeout)
+# Wait for database to be ready
 echo "Waiting for database..."
 MAX_RETRIES=30
 RETRY_COUNT=0
@@ -79,14 +68,21 @@ if [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; then
     exit 1
 fi
 
-# Run database migrations
-echo "Running database migrations..."
-npx prisma migrate deploy
+# Sync database schema
+echo "Syncing database schema..."
+npx prisma db push --skip-generate
 
-echo "Migrations complete!"
+echo "Database ready!"
+
+# Seed if empty (first deploy only)
+ROW_COUNT=\$(npx prisma db execute --stdin <<< "SELECT COUNT(*) FROM \"User\"" 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "0")
+if [ "\$ROW_COUNT" = "0" ] || [ -z "\$ROW_COUNT" ]; then
+    echo "Empty database detected, seeding..."
+    npx prisma db seed || echo "Seed skipped (may need ts-node in production)"
+fi
 
 # Start the application
-echo "Starting application..."
+echo "Starting Field Inspect..."
 exec node server.js
 EOF
 
@@ -94,12 +90,11 @@ USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 # Docker health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-# Use entrypoint to run migrations before starting
 ENTRYPOINT ["/app/entrypoint.sh"]

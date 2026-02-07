@@ -12,6 +12,11 @@ vi.mock('@/components/ui/use-toast', () => ({
     useToast: vi.fn(() => ({ toast: vi.fn() })),
 }))
 
+const mockRefresh = vi.fn()
+vi.mock('next/navigation', () => ({
+    useRouter: vi.fn(() => ({ refresh: mockRefresh, push: vi.fn(), replace: vi.fn() })),
+}))
+
 // Mock Radix UI Select to simplify testing
 type MockProps = {
     children?: React.ReactNode;

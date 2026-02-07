@@ -1,65 +1,49 @@
 # =============================================================================
-# Field Inspect Production Stack
+# Field Inspect - Unraid Production Stack
 # =============================================================================
-# Complete production deployment with:
-# - Application (Next.js)
-# - PostgreSQL database with automated backups
-# - Redis for queues and caching
-# - Nginx Proxy Manager for SSL/HTTPS
-# - Uptime Kuma for monitoring
+# Deploy:
+#   1. Copy this file + .env to /mnt/user/appdata/fieldinspect/
+#   2. Build image locally: docker build -t fieldinspect:latest .
+#   3. Run: docker compose -f docker-compose.prod.yml up -d
 #
-# SETUP:
-# 1. Copy this file to your server
-# 2. Create .env file (see .env.example)
-# 3. Run: docker compose up -d
+# Or use the deploy script from your Windows PC:
+#   npm run deploy:preview
 # =============================================================================
-
-version: '3.8'
 
 services:
   # ===========================================================================
-  # CORE APPLICATION
+  # APPLICATION
   # ===========================================================================
   app:
     container_name: fieldinspect-app
-    image: ghcr.io/dirty13itch/auditforecaster:latest
+    image: fieldinspect:latest
     restart: unless-stopped
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://fieldinspect:${POSTGRES_PASSWORD}@postgres:5432/fieldinspect
-      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://192.168.1.244:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NODE_ENV=production
-      # Redis for BullMQ queues
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      # Email
+      # Email (optional)
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - EMAIL_FROM=${EMAIL_FROM:-}
       - ADMIN_NOTIFICATION_EMAIL=${ADMIN_NOTIFICATION_EMAIL:-}
-      # Monitoring
+      # Error tracking (optional)
       - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
-      # Rate limiting (Upstash - optional if using local Redis)
-      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL:-}
-      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-}
-      # Google OAuth
+      # Google OAuth (optional)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      # Webhooks
+      # Webhooks (optional)
       - SUPPLYPRO_WEBHOOK_SECRET=${SUPPLYPRO_WEBHOOK_SECRET:-}
       - GOOGLE_CALENDAR_WEBHOOK_TOKEN=${GOOGLE_CALENDAR_WEBHOOK_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     volumes:
       - uploads:/app/public/uploads
     networks:
-      - audit-net
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
+      - fieldinspect
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
@@ -81,7 +65,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - audit-net
+      - fieldinspect
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fieldinspect"]
       interval: 10s
@@ -89,7 +73,7 @@ services:
       retries: 5
 
   # ===========================================================================
-  # DATABASE BACKUPS (Daily, keeps 30 days)
+  # DATABASE BACKUPS (daily, keeps 30 days)
   # ===========================================================================
   db-backup:
     image: prodrigestivill/postgres-backup-local:16
@@ -111,82 +95,10 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - audit-net
-
-  # ===========================================================================
-  # REDIS (Queues & Caching)
-  # ===========================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: fieldinspect-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    networks:
-      - audit-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ===========================================================================
-  # REVERSE PROXY (Nginx Proxy Manager)
-  # Provides: SSL certificates, HTTPS, domain routing
-  # Access at: http://YOUR_IP:81 (admin panel)
-  # Default login: admin@example.com / changeme
-  # ===========================================================================
-  nginx-proxy:
-    image: jc21/nginx-proxy-manager:latest
-    container_name: fieldinspect-proxy
-    restart: unless-stopped
-    ports:
-      - "80:80"      # HTTP
-      - "443:443"    # HTTPS
-      - "81:81"      # Admin panel
-    environment:
-      - DISABLE_IPV6=true
-    volumes:
-      - nginx_data:/data
-      - nginx_letsencrypt:/etc/letsencrypt
-    networks:
-      - audit-net
-
-  # ===========================================================================
-  # UPTIME MONITORING (Uptime Kuma)
-  # Access at: http://YOUR_IP:3001
-  # ===========================================================================
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    container_name: fieldinspect-monitor
-    restart: unless-stopped
-    ports:
-      - "3001:3001"
-    volumes:
-      - uptime_kuma:/app/data
-    networks:
-      - audit-net
-
-  # ===========================================================================
-  # AUTO-UPDATER (Watchtower) - Optional
-  # Automatically pulls new images and restarts containers
-  # ===========================================================================
-  watchtower:
-    image: containrrr/watchtower
-    container_name: fieldinspect-watchtower
-    restart: unless-stopped
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=86400  # Check daily
-      - WATCHTOWER_LABEL_ENABLE=true    # Only update labeled containers
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - audit-net
+      - fieldinspect
 
 # =============================================================================
-# VOLUMES (Persistent Data)
+# VOLUMES - Bind-mounted to Unraid appdata
 # =============================================================================
 volumes:
   postgres_data:
@@ -195,13 +107,6 @@ volumes:
       type: none
       o: bind
       device: ${DATA_PATH:-/mnt/user/appdata}/fieldinspect/postgres
-
-  redis_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH:-/mnt/user/appdata}/fieldinspect/redis
 
   uploads:
     driver: local
@@ -217,30 +122,6 @@ volumes:
       o: bind
       device: ${DATA_PATH:-/mnt/user/appdata}/fieldinspect/backups
 
-  nginx_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH:-/mnt/user/appdata}/fieldinspect/nginx/data
-
-  nginx_letsencrypt:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH:-/mnt/user/appdata}/fieldinspect/nginx/letsencrypt
-
-  uptime_kuma:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH:-/mnt/user/appdata}/fieldinspect/uptime-kuma
-
-# =============================================================================
-# NETWORKS
-# =============================================================================
 networks:
-  audit-net:
+  fieldinspect:
     driver: bridge
