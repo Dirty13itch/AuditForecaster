@@ -184,3 +184,52 @@ export async function updateJobStatus(jobId: string, status: string) {
         return { success: false as const, message: "Failed to update status" }
     }
 }
+
+export async function startInspection(jobId: string, type: 'PRE_DRYWALL' | 'FINAL_TEST') {
+    const session = await auth()
+    if (!session?.user) {
+        return { success: false as const, message: "Not authenticated" }
+    }
+
+    try {
+        assertValidId(jobId, 'Job ID')
+    } catch {
+        return { success: false as const, message: "Invalid ID format" }
+    }
+
+    try {
+        const job = await prisma.job.findUnique({ where: { id: jobId } })
+        if (!job) {
+            return { success: false as const, message: "Job not found" }
+        }
+
+        // Find the matching report template
+        const templateName = type === 'PRE_DRYWALL' ? 'Pre-Drywall Inspection' : 'Final Testing'
+        const template = await prisma.reportTemplate.findFirst({
+            where: { name: templateName },
+        })
+
+        const inspection = await prisma.inspection.create({
+            data: {
+                jobId,
+                type: type === 'PRE_DRYWALL' ? 'PRE_DRYWALL' : 'BLOWER_DOOR',
+                status: 'IN_PROGRESS',
+                data: '{}',
+                answers: '{}',
+                reportTemplateId: template?.id,
+            },
+        })
+
+        await logAudit({
+            entityType: 'Inspection',
+            entityId: inspection.id,
+            action: 'CREATE',
+            after: { jobId, type },
+            userId: session.user.id,
+        })
+
+        return { success: true as const, inspectionId: inspection.id }
+    } catch {
+        return { success: false as const, message: "Failed to create inspection" }
+    }
+}

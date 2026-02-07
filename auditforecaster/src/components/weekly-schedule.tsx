@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { ScheduleJob } from "@/app/actions/schedule"
-import { getWeekJobs, assignJob, updateJobStatus } from "@/app/actions/schedule"
+import { getWeekJobs, assignJob, updateJobStatus, startInspection } from "@/app/actions/schedule"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+import { ClipboardCheck } from "lucide-react"
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 const SHORT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
@@ -42,6 +44,7 @@ type Props = {
 }
 
 export function WeeklySchedule({ initialJobs, inspectors }: Props) {
+    const router = useRouter()
     const [jobs, setJobs] = useState(initialJobs)
     const [weekOffset, setWeekOffset] = useState(0)
     const [selectedJob, setSelectedJob] = useState<ScheduleJob | null>(null)
@@ -125,6 +128,18 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
         })
     }
 
+    const handleStartInspection = (job: ScheduleJob, type: 'PRE_DRYWALL' | 'FINAL_TEST') => {
+        startTransition(async () => {
+            const result = await startInspection(job.id, type)
+            if (result.success && result.inspectionId) {
+                toast.success('Inspection created')
+                router.push(`/dashboard/inspections/${result.inspectionId}`)
+            } else {
+                toast.error(result.message ?? 'Failed to create inspection')
+            }
+        })
+    }
+
     const getInspectorColor = (name: string | null) => {
         if (!name) return INSPECTOR_COLORS['Unassigned']
         if (name.includes('Shaun') || name.includes('Admin')) return INSPECTOR_COLORS['Shaun']
@@ -160,7 +175,7 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
             </div>
 
             {/* Legend */}
-            <div className="flex gap-4 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-3 md:gap-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded border-l-4 border-l-blue-500 bg-blue-50" />
                     Shaun
@@ -175,12 +190,12 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
                 </div>
                 <div className="flex items-center gap-1">
                     <AlertCircle className="h-3 w-3 text-orange-500" />
-                    Updated by BK
+                    BK Source
                 </div>
             </div>
 
-            {/* Weekly Grid */}
-            <div className="grid grid-cols-5 gap-2">
+            {/* Weekly Grid - stacked on mobile, 5-col on desktop */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
                 {DAYS.map((day, i) => {
                     const dayDate = addDays(weekStart, i)
                     const today = isToday(dayDate)
@@ -188,8 +203,10 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
 
                     return (
                         <div key={day} className={cn(
-                            "rounded-lg border min-h-[200px]",
-                            today ? "border-blue-300 bg-blue-50/30" : "border-gray-200 bg-white"
+                            "rounded-lg border md:min-h-[200px]",
+                            today ? "border-blue-300 bg-blue-50/30" : "border-gray-200 bg-white",
+                            // On mobile, hide empty non-today days to reduce scroll
+                            dayJobsList.length === 0 && !today ? "hidden md:block" : ""
                         )}>
                             {/* Day Header */}
                             <div className={cn(
@@ -197,12 +214,15 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
                                 today ? "bg-blue-100/50 text-blue-800" : "bg-gray-50 text-gray-600"
                             )}>
                                 <div className="flex items-center justify-between">
-                                    <span>{SHORT_DAYS[i]}</span>
+                                    <span>
+                                        <span className="md:hidden">{DAYS[i]}</span>
+                                        <span className="hidden md:inline">{SHORT_DAYS[i]}</span>
+                                    </span>
                                     <span className={cn(
                                         "text-xs",
                                         today ? "bg-blue-600 text-white rounded-full px-1.5 py-0.5" : ""
                                     )}>
-                                        {format(dayDate, 'd')}
+                                        {format(dayDate, today ? 'MMM d' : 'd')}
                                     </span>
                                 </div>
                                 {dayJobsList.length > 0 && (
@@ -224,7 +244,7 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
                                         key={job.id}
                                         onClick={() => setSelectedJob(selectedJob?.id === job.id ? null : job)}
                                         className={cn(
-                                            "w-full text-left rounded-md border-l-4 p-2 text-xs transition-all hover:shadow-sm cursor-pointer",
+                                            "w-full text-left rounded-md border-l-4 p-2 md:p-2 p-3 text-xs md:text-xs text-sm transition-all hover:shadow-sm cursor-pointer",
                                             getInspectorColor(job.inspectorName),
                                             selectedJob?.id === job.id ? "ring-2 ring-blue-400 shadow-sm" : "",
                                             STATUS_COLORS[job.status] || STATUS_COLORS['PENDING']
@@ -318,6 +338,34 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
                             </Button>
                         ))}
                     </div>
+
+                    {/* Inspection Actions - show when job is completed or assigned */}
+                    {(selectedJob.status === 'COMPLETED' || selectedJob.status === 'ASSIGNED') && (
+                        <div className="flex gap-2 mt-4 pt-3 border-t flex-wrap">
+                            <span className="text-sm text-muted-foreground self-center mr-2">
+                                <ClipboardCheck className="h-4 w-4 inline mr-1" />
+                                Inspect:
+                            </span>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
+                                onClick={() => handleStartInspection(selectedJob, 'PRE_DRYWALL')}
+                                disabled={isPending}
+                            >
+                                Pre-Drywall
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs border-green-200 text-green-700 hover:bg-green-50"
+                                onClick={() => handleStartInspection(selectedJob, 'FINAL_TEST')}
+                                disabled={isPending}
+                            >
+                                Final Test
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

@@ -31,7 +31,7 @@ export async function createEquipment(data: EquipmentClientInput) {
             },
         })
 
-        revalidatePath("/dashboard/assets/equipment")
+        revalidatePath("/dashboard/equipment")
         return { success: true, message: "Equipment added to inventory" }
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -59,7 +59,7 @@ export async function updateEquipment(id: string, data: EquipmentClientInput) {
             data: validated,
         })
 
-        revalidatePath("/dashboard/assets/equipment")
+        revalidatePath("/dashboard/equipment")
         return { success: true, message: "Equipment updated successfully" }
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -109,7 +109,7 @@ export async function assignEquipment(equipmentId: string, userId: string) {
             })
         ])
 
-        revalidatePath("/dashboard/assets/equipment")
+        revalidatePath("/dashboard/equipment")
         return { success: true, message: "Equipment checked out successfully" }
     } catch (error) {
         logger.error("Failed to assign equipment", { error })
@@ -150,7 +150,7 @@ export async function returnEquipment(equipmentId: string) {
 
         await prisma.$transaction(queries)
 
-        revalidatePath("/dashboard/assets/equipment")
+        revalidatePath("/dashboard/equipment")
         return { success: true, message: "Equipment returned to inventory" }
     } catch (error) {
         logger.error("Failed to return equipment", { error })
@@ -169,7 +169,7 @@ export async function deleteEquipment(id: string) {
             where: { id }
         })
 
-        revalidatePath("/dashboard/assets/equipment")
+        revalidatePath("/dashboard/equipment")
         return { success: true, message: "Equipment deleted successfully" }
     } catch (error) {
         logger.error("Failed to delete equipment", { error })
