@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -7,27 +7,29 @@ import { SyncProvider } from "@/providers/sync-provider";
 import { SyncIndicator } from "@/components/sync-indicator";
 import { Toaster } from "sonner";
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: "../../node_modules/geist/dist/fonts/geist-sans/Geist-Regular.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../../node_modules/geist/dist/fonts/geist-mono/GeistMono-Regular.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "Ulrich Energy Auditing",
-    template: "%s | Ulrich Energy"
+    default: "Field Inspect",
+    template: "%s | Field Inspect"
   },
-  description: "Professional field auditing tool for energy inspectors. Manage jobs, photos, and reports efficiently.",
+  description: "Professional field inspection platform for energy auditors. Manage jobs, inspections, photos, and reports efficiently.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Ulrich Audit",
+    title: "Field Inspect",
   },
   formatDetection: {
     telephone: false,
