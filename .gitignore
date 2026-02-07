@@ -1,3 +1,7 @@
 node_modules/
 .env
 .DS_Store
+
+# Root-level npm artifacts (app lives in auditforecaster/)
+/package.json
+/package-lock.json
