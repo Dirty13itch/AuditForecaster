@@ -2,7 +2,9 @@
 
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { startOfWeek, endOfWeek, addWeeks, format } from "date-fns"
+import { assertValidId } from "@/lib/utils"
+import { logAudit } from "@/lib/audit"
+import { startOfWeek, addWeeks, format } from "date-fns"
 
 export type ScheduleJob = {
     id: string
@@ -20,16 +22,17 @@ export type ScheduleJob = {
     lastUpdatedBy: string | null
 }
 
+const VALID_STATUSES = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'RESCHEDULED', 'POSTPONED', 'REMOVED'] as const
+
 export async function getWeekJobs(weekOffset: number = 0) {
     const session = await auth()
     if (!session?.user) {
-        return { success: false as const, message: "Not authenticated", jobs: [] }
+        return { success: false as const, message: "Not authenticated", jobs: [] as ScheduleJob[] }
     }
 
     const now = new Date()
     const targetWeek = addWeeks(now, weekOffset)
     const weekStart = startOfWeek(targetWeek, { weekStartsOn: 1 }) // Monday
-    const weekEnd = endOfWeek(targetWeek, { weekStartsOn: 1 }) // Sunday
     // Limit to Friday
     const friday = new Date(weekStart)
     friday.setDate(friday.getDate() + 4)
@@ -73,33 +76,111 @@ export async function getWeekJobs(weekOffset: number = 0) {
     }
 }
 
+export async function getInspectors() {
+    const session = await auth()
+    if (!session?.user) {
+        return []
+    }
+
+    const inspectors = await prisma.user.findMany({
+        where: {
+            role: { in: ['ADMIN', 'INSPECTOR'] },
+        },
+        select: { id: true, name: true, role: true },
+        orderBy: { name: 'asc' },
+    })
+
+    return inspectors
+}
+
 export async function assignJob(jobId: string, inspectorId: string | null) {
     const session = await auth()
     if (!session?.user) {
         return { success: false as const, message: "Not authenticated" }
     }
 
-    await prisma.job.update({
-        where: { id: jobId },
-        data: {
-            inspectorId: inspectorId,
-            status: inspectorId ? 'ASSIGNED' : 'PENDING',
-        },
-    })
+    try {
+        assertValidId(jobId, 'Job ID')
+        if (inspectorId !== null) {
+            assertValidId(inspectorId, 'Inspector ID')
+        }
+    } catch {
+        return { success: false as const, message: "Invalid ID format" }
+    }
 
-    return { success: true as const }
+    try {
+        const before = await prisma.job.findUnique({ where: { id: jobId } })
+        if (!before) {
+            return { success: false as const, message: "Job not found" }
+        }
+
+        const updated = await prisma.job.update({
+            where: { id: jobId },
+            data: {
+                inspectorId: inspectorId,
+                status: inspectorId ? 'ASSIGNED' : 'PENDING',
+            },
+            include: {
+                inspector: { select: { name: true } },
+            },
+        })
+
+        await logAudit({
+            entityType: 'Job',
+            entityId: jobId,
+            action: 'UPDATE',
+            before: { inspectorId: before.inspectorId, status: before.status },
+            after: { inspectorId: updated.inspectorId, status: updated.status },
+            userId: session.user.id,
+        })
+
+        return {
+            success: true as const,
+            inspectorName: updated.inspector?.name ?? null,
+        }
+    } catch {
+        return { success: false as const, message: "Failed to assign job" }
+    }
 }
 
-export async function updateJobStatus(jobId: string, status: string, notes?: string) {
+export async function updateJobStatus(jobId: string, status: string) {
     const session = await auth()
     if (!session?.user) {
         return { success: false as const, message: "Not authenticated" }
     }
 
-    await prisma.job.update({
-        where: { id: jobId },
-        data: { status },
-    })
+    try {
+        assertValidId(jobId, 'Job ID')
+    } catch {
+        return { success: false as const, message: "Invalid ID format" }
+    }
 
-    return { success: true as const }
+    if (!VALID_STATUSES.includes(status as typeof VALID_STATUSES[number])) {
+        return { success: false as const, message: "Invalid status" }
+    }
+
+    try {
+        const before = await prisma.job.findUnique({ where: { id: jobId } })
+        if (!before) {
+            return { success: false as const, message: "Job not found" }
+        }
+
+        await prisma.job.update({
+            where: { id: jobId },
+            data: { status },
+        })
+
+        await logAudit({
+            entityType: 'Job',
+            entityId: jobId,
+            action: 'UPDATE',
+            before: { status: before.status },
+            after: { status },
+            userId: session.user.id,
+        })
+
+        return { success: true as const }
+    } catch {
+        return { success: false as const, message: "Failed to update status" }
+    }
 }

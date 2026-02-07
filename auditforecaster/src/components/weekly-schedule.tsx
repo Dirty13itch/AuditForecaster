@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useTransition } from "react"
-import { format, startOfWeek, addDays, isToday, parseISO } from "date-fns"
-import { ChevronLeft, ChevronRight, MapPin, User, AlertCircle } from "lucide-react"
+import { useState, useTransition, useCallback } from "react"
+import { format, startOfWeek, addDays, isToday } from "date-fns"
+import { ChevronLeft, ChevronRight, MapPin, User, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { ScheduleJob } from "@/app/actions/schedule"
-import { assignJob, updateJobStatus } from "@/app/actions/schedule"
+import { getWeekJobs, assignJob, updateJobStatus } from "@/app/actions/schedule"
 import { toast } from "sonner"
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
@@ -30,15 +30,23 @@ const INSPECTOR_COLORS: Record<string, string> = {
     'Unassigned': 'border-l-gray-300',
 }
 
-type Props = {
-    initialJobs: ScheduleJob[]
+type Inspector = {
+    id: string
+    name: string | null
+    role: string
 }
 
-export function WeeklySchedule({ initialJobs }: Props) {
+type Props = {
+    initialJobs: ScheduleJob[]
+    inspectors: Inspector[]
+}
+
+export function WeeklySchedule({ initialJobs, inspectors }: Props) {
     const [jobs, setJobs] = useState(initialJobs)
     const [weekOffset, setWeekOffset] = useState(0)
     const [selectedJob, setSelectedJob] = useState<ScheduleJob | null>(null)
     const [isPending, startTransition] = useTransition()
+    const [isNavigating, setIsNavigating] = useState(false)
 
     const weekStart = startOfWeek(addDays(new Date(), weekOffset * 7), { weekStartsOn: 1 })
 
@@ -47,20 +55,57 @@ export function WeeklySchedule({ initialJobs }: Props) {
         return jobs.filter(j => j.scheduledDate === dayDate)
     })
 
+    const fetchWeekJobs = useCallback(async (newOffset: number) => {
+        setIsNavigating(true)
+        try {
+            const result = await getWeekJobs(newOffset)
+            if (result.success) {
+                setJobs(result.jobs)
+                setSelectedJob(null)
+            } else {
+                toast.error(result.message ?? 'Failed to load jobs')
+            }
+        } catch {
+            toast.error('Failed to load jobs')
+        } finally {
+            setIsNavigating(false)
+        }
+    }, [])
+
     const navigateWeek = (direction: number) => {
-        setWeekOffset(prev => prev + direction)
-        // TODO: fetch new week's jobs from server
+        const newOffset = weekOffset + direction
+        setWeekOffset(newOffset)
+        fetchWeekJobs(newOffset)
     }
 
-    const handleAssign = (job: ScheduleJob, inspectorName: string | null) => {
+    const goToToday = () => {
+        setWeekOffset(0)
+        fetchWeekJobs(0)
+    }
+
+    // Filter out Pat (Building Knowledge) from the assign buttons - he's rarely assigned
+    const assignableInspectors = inspectors.filter(i =>
+        !i.name?.includes('Building Knowledge') && !i.name?.includes('Pat')
+    )
+
+    const handleAssign = (job: ScheduleJob, inspectorId: string | null, inspectorName: string | null) => {
         startTransition(async () => {
-            // For now, map name to a placeholder ID - will be replaced with real user lookup
-            const result = await assignJob(job.id, inspectorName === 'Shaun' ? 'shaun-id' : inspectorName === 'Erik' ? 'erik-id' : null)
+            const result = await assignJob(job.id, inspectorId)
             if (result.success) {
+                const updatedJob = {
+                    ...job,
+                    inspectorId,
+                    inspectorName: result.inspectorName ?? inspectorName,
+                    status: inspectorId ? 'ASSIGNED' : 'PENDING',
+                }
                 setJobs(prev => prev.map(j =>
-                    j.id === job.id ? { ...j, inspectorName: inspectorName, status: inspectorName ? 'ASSIGNED' : 'PENDING' } : j
+                    j.id === job.id ? updatedJob : j
                 ))
+                // Keep selectedJob in sync
+                setSelectedJob(updatedJob)
                 toast.success(inspectorName ? `Assigned to ${inspectorName}` : 'Unassigned')
+            } else {
+                toast.error(result.message ?? 'Failed to assign job')
             }
         })
     }
@@ -74,6 +119,8 @@ export function WeeklySchedule({ initialJobs }: Props) {
                 ))
                 toast.success(`Status updated to ${newStatus.toLowerCase()}`)
                 setSelectedJob(null)
+            } else {
+                toast.error(result.message ?? 'Failed to update status')
             }
         })
     }
@@ -89,19 +136,24 @@ export function WeeklySchedule({ initialJobs }: Props) {
         <div className="space-y-4">
             {/* Week Navigation */}
             <div className="flex items-center justify-between">
-                <Button variant="outline" size="sm" onClick={() => navigateWeek(-1)}>
+                <Button variant="outline" size="sm" onClick={() => navigateWeek(-1)} disabled={isNavigating}>
                     <ChevronLeft className="h-4 w-4 mr-1" />
                     Prev
                 </Button>
-                <div className="text-center">
+                <div className="text-center flex items-center gap-2">
                     <span className="font-semibold text-sm">
                         {format(weekStart, 'MMM d')} – {format(addDays(weekStart, 4), 'MMM d, yyyy')}
                     </span>
-                    {weekOffset === 0 && (
-                        <Badge variant="secondary" className="ml-2 text-xs">This Week</Badge>
+                    {weekOffset === 0 ? (
+                        <Badge variant="secondary" className="text-xs">This Week</Badge>
+                    ) : (
+                        <Button variant="ghost" size="sm" className="text-xs h-6 px-2" onClick={goToToday}>
+                            Today
+                        </Button>
                     )}
+                    {isNavigating && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => navigateWeek(1)}>
+                <Button variant="outline" size="sm" onClick={() => navigateWeek(1)} disabled={isNavigating}>
                     Next
                     <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
@@ -131,9 +183,7 @@ export function WeeklySchedule({ initialJobs }: Props) {
             <div className="grid grid-cols-5 gap-2">
                 {DAYS.map((day, i) => {
                     const dayDate = addDays(weekStart, i)
-                    const dayJobs = jobsByDay[i]
                     const today = isToday(dayDate)
-
                     const dayJobsList = jobsByDay[i] ?? []
 
                     return (
@@ -230,41 +280,36 @@ export function WeeklySchedule({ initialJobs }: Props) {
                         </Badge>
                     </div>
 
-                    <div className="flex gap-2 mt-4">
+                    <div className="flex gap-2 mt-4 flex-wrap">
                         <span className="text-sm text-muted-foreground self-center mr-2">Assign:</span>
-                        <Button
-                            size="sm"
-                            variant={selectedJob.inspectorName?.includes('Shaun') || selectedJob.inspectorName?.includes('Admin') ? "default" : "outline"}
-                            onClick={() => handleAssign(selectedJob, 'Shaun')}
-                            disabled={isPending}
-                        >
-                            Shaun
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant={selectedJob.inspectorName?.includes('Erik') ? "default" : "outline"}
-                            onClick={() => handleAssign(selectedJob, 'Erik')}
-                            disabled={isPending}
-                        >
-                            Erik
-                        </Button>
+                        {assignableInspectors.map(inspector => (
+                            <Button
+                                key={inspector.id}
+                                size="sm"
+                                variant={selectedJob.inspectorId === inspector.id ? "default" : "outline"}
+                                onClick={() => handleAssign(selectedJob, inspector.id, inspector.name)}
+                                disabled={isPending}
+                            >
+                                {inspector.name}
+                            </Button>
+                        ))}
                         <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleAssign(selectedJob, null)}
-                            disabled={isPending}
+                            onClick={() => handleAssign(selectedJob, null, null)}
+                            disabled={isPending || !selectedJob.inspectorId}
                         >
                             Unassign
                         </Button>
                     </div>
 
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex gap-2 mt-3 flex-wrap">
                         <span className="text-sm text-muted-foreground self-center mr-2">Status:</span>
                         {['COMPLETED', 'RESCHEDULED', 'FAILED', 'POSTPONED', 'REMOVED'].map(status => (
                             <Button
                                 key={status}
                                 size="sm"
-                                variant="outline"
+                                variant={selectedJob.status === status ? "default" : "outline"}
                                 className="text-xs"
                                 onClick={() => handleStatusUpdate(selectedJob, status)}
                                 disabled={isPending}

@@ -1,6 +1,6 @@
 import { Metadata } from "next"
 import { WeeklySchedule } from "@/components/weekly-schedule"
-import { getWeekJobs } from "@/app/actions/schedule"
+import { getWeekJobs, getInspectors } from "@/app/actions/schedule"
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +10,10 @@ export const metadata: Metadata = {
 }
 
 export default async function SchedulePage() {
-    const result = await getWeekJobs()
+    const [result, inspectors] = await Promise.all([
+        getWeekJobs(),
+        getInspectors(),
+    ])
 
     return (
         <div className="space-y-4">
@@ -22,7 +25,10 @@ export default async function SchedulePage() {
                     </p>
                 </div>
             </div>
-            <WeeklySchedule initialJobs={result.success ? result.jobs : []} />
+            <WeeklySchedule
+                initialJobs={result.success ? result.jobs : []}
+                inspectors={inspectors}
+            />
         </div>
     )
 }

@@ -2,8 +2,6 @@ import { auth, signOut } from "@/auth"
 import { ToastProvider } from "@/components/ui/use-toast"
 import { MobileNav } from "@/components/mobile-nav"
 import { AppSidebar } from "@/components/app-sidebar"
-import { AICopilot } from "@/components/ai-copilot"
-import { CommandPalette } from "@/components/command-palette"
 
 export default async function DashboardLayout({
     children,
@@ -31,7 +29,7 @@ export default async function DashboardLayout({
                             await signOut({ redirectTo: '/login' });
                         }}
                     />
-                    <span className="ml-2 font-semibold">Ulrich Energy</span>
+                    <span className="ml-2 font-semibold">Field Inspect</span>
                 </div>
                 <AppSidebar
                     className="hidden md:flex"
@@ -45,8 +43,6 @@ export default async function DashboardLayout({
                     {children}
                 </main>
             </div>
-            <AICopilot />
-            <CommandPalette />
         </ToastProvider>
     )
 }

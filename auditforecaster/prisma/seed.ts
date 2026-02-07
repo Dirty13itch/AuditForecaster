@@ -86,11 +86,11 @@ async function main() {
 
     // === EQUIPMENT ===
     const equipmentItems = [
-        { name: 'Retrotec 5000 #1', serialNumber: 'SN-RT-5001', type: 'Blower Door', status: 'Active', assignedTo: shaun.id },
-        { name: 'Retrotec 5000 #2', serialNumber: 'SN-RT-5002', type: 'Blower Door', status: 'Active', assignedTo: erik.id },
-        { name: 'Duct Blaster Pro', serialNumber: 'SN-DB-001', type: 'Duct Tester', status: 'Active', assignedTo: shaun.id },
-        { name: 'FLIR E8 IR Camera', serialNumber: 'SN-FLIR-E8-01', type: 'IR Camera', status: 'Active', assignedTo: erik.id },
-        { name: 'TEC TruFlow Grid', serialNumber: 'SN-TFG-001', type: 'Flow Grid', status: 'Active' },
+        { name: 'Retrotec 5000 #1', serialNumber: 'SN-RT-5001', type: 'Blower Door', status: 'ACTIVE', assignedTo: shaun.id },
+        { name: 'Retrotec 5000 #2', serialNumber: 'SN-RT-5002', type: 'Blower Door', status: 'ACTIVE', assignedTo: erik.id },
+        { name: 'Duct Blaster Pro', serialNumber: 'SN-DB-001', type: 'Duct Tester', status: 'ACTIVE', assignedTo: shaun.id },
+        { name: 'FLIR E8 IR Camera', serialNumber: 'SN-FLIR-E8-01', type: 'IR Camera', status: 'ACTIVE', assignedTo: erik.id },
+        { name: 'TEC TruFlow Grid', serialNumber: 'SN-TFG-001', type: 'Flow Grid', status: 'ACTIVE' },
         { name: 'Manometer (spare)', serialNumber: 'SN-MAN-002', type: 'Manometer', status: 'CALIBRATION_DUE' },
     ]
 
