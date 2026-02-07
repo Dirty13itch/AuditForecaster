@@ -21,53 +21,6 @@ export function AssetQRCode({ assetId, name, serialNumber }: AssetQRCodeProps) {
     // In a real app, this would point to the asset's public URL or deep link
     const qrValue = `https://fieldinspect.app/assets/${assetId}`
 
-    const handlePrint = () => {
-        const printWindow = window.open('', '', 'width=600,height=600')
-        if (printWindow) {
-            printWindow.document.write(`
-        <html>
-          <head>
-            <title>Asset Label - ${name}</title>
-            <style>
-              body { 
-                font-family: sans-serif; 
-                display: flex; 
-                flex-direction: column; 
-                align-items: center; 
-                justify-content: center; 
-                height: 100vh; 
-                margin: 0; 
-              }
-              .label {
-                border: 2px solid black;
-                padding: 20px;
-                text-align: center;
-                border-radius: 8px;
-              }
-              h1 { margin: 0 0 10px 0; font-size: 18px; }
-              p { margin: 10px 0 0 0; font-size: 14px; color: #555; }
-            </style>
-          </head>
-          <body>
-            <div class="label">
-              <h1>${name}</h1>
-              <div id="qr-target"></div>
-              <p>SN: ${serialNumber}</p>
-            </div>
-          </body>
-        </html>
-      `)
-
-            // We need to render the QR code into the new window. 
-            // Since we can't easily transfer the React component, we'll rely on the user printing the dialog for now
-            // or use a more complex print library. 
-            // For MVP Vibe: We'll just print the current window but target the dialog content.
-            // Actually, let's keep it simple: Just show the dialog and let them print the screen or use a dedicated label printer feature later.
-            printWindow.close()
-            window.print()
-        }
-    }
-
     return (
         <Dialog>
             <DialogTrigger asChild>

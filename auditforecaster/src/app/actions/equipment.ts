@@ -181,6 +181,7 @@ export async function returnEquipment(equipmentId: string) {
             }
         })
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const queries: Prisma.PrismaPromise<any>[] = [
             prisma.equipment.update({
                 where: { id: equipmentId },

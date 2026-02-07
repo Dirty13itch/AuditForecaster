@@ -44,7 +44,7 @@ export async function createInvoice(data: {
 
     // 2. Calculate Line Items - one item per job
     const invoiceItems: Prisma.InvoiceItemCreateWithoutInvoiceInput[] = []
-    let totalAmount = 0
+    const totalAmount = 0
 
     for (const job of jobs) {
         invoiceItems.push({

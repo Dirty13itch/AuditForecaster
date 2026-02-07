@@ -131,13 +131,14 @@ export async function updateJob(formData: FormData) {
 
     // Filter out empty strings/nulls for partial update
     const cleanData = Object.fromEntries(
-        Object.entries(rawData).filter(([_, v]) => v != null && v !== '')
+        Object.entries(rawData).filter(([, v]) => v != null && v !== '')
     )
 
     const validated = UpdateJobSchema.parse(cleanData)
     const { id, ...data } = validated
 
-    const updateData: any = { ...data }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: Record<string, any> = { ...data }
 
     if (data.streetAddress || data.city) {
         // If address changed, we might want to re-geocode, but for now just update the full string

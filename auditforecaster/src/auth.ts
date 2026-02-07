@@ -6,7 +6,7 @@ import { z } from "zod"
 import type { User } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { authConfig } from "./auth.config"
-import { env } from "@/lib/env"
+
 import { logger } from "@/lib/logger"
 
 async function getUser(email: string): Promise<User | undefined> {
@@ -68,7 +68,6 @@ const nextAuthResult = NextAuth({
                 const user = await prisma.user.findUnique({ where: { id: token.sub } })
                 if (user) {
                     session.user.role = user.role
-                    session.user.builderId = user.builderId
                 }
             }
             // Add access token to session for API calls
@@ -95,6 +94,7 @@ const nextAuthResult = NextAuth({
 export const { handlers, signIn, signOut } = nextAuthResult
 
 // Wrap auth to support E2E mocking (ONLY in non-production environments)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const auth = async (...args: any[]) => {
     if (
         process.env.NODE_ENV !== 'production' &&
@@ -106,11 +106,11 @@ export const auth = async (...args: any[]) => {
                 email: 'admin@example.com',
                 role: 'ADMIN',
                 id: 'e2e-admin-id',
-                builderId: 'e2e-test-builder'
             },
             expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         }
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (nextAuthResult.auth as any)(...args)
 }
 

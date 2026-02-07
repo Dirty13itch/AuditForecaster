@@ -47,7 +47,7 @@ const NAV_ITEMS: NavItem[] = [
     },
 ]
 
-export function AppSidebar({ userRole, onSignOut, className }: { userRole: string, onSignOut: () => Promise<void>, className?: string }) {
+export function AppSidebar({ onSignOut, className }: { userRole: string, onSignOut: () => Promise<void>, className?: string }) {
     const pathname = usePathname()
 
     const isActive = (href: string) => {

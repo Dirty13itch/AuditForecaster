@@ -6,14 +6,12 @@ declare module "next-auth" {
         user: {
             id: string
             role: string
-            builderId?: string | null
             refreshToken?: string
         } & DefaultSession["user"]
     }
 
     interface User {
         role: string
-        builderId?: string | null
         refreshToken?: string
     }
 }
