@@ -5,7 +5,6 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from "zod"
 import { auth } from "@/auth"
-import { getCoordinates } from "@/lib/geocoding"
 import { logAudit } from "@/lib/audit"
 import { logger } from "@/lib/logger"
 import { assertValidId } from "@/lib/utils"
@@ -34,7 +33,6 @@ export async function createJob(formData: FormData) {
     })
 
     const fullAddress = `${validatedFields.streetAddress}, ${validatedFields.city}`
-    const coords = await getCoordinates(fullAddress)
 
     try {
         const job = await prisma.job.create({
@@ -47,8 +45,6 @@ export async function createJob(formData: FormData) {
                 scheduledDate: validatedFields.scheduledDate ? new Date(validatedFields.scheduledDate) : new Date(),
                 status: validatedFields.inspectorId ? 'ASSIGNED' : 'PENDING',
                 inspectorId: validatedFields.inspectorId || null,
-                latitude: coords?.lat || null,
-                longitude: coords?.lng || null,
             }
         })
 
@@ -156,14 +152,7 @@ export async function updateJob(formData: FormData) {
             const city = data.city || current.city
             updateData.address = `${street}, ${city}`
 
-            // Re-geocode if address changed
-            if (data.streetAddress || data.city) {
-                const coords = await getCoordinates(updateData.address)
-                if (coords) {
-                    updateData.latitude = coords.lat
-                    updateData.longitude = coords.lng
-                }
-            }
+            // Address updated - could add geocoding here in future
         }
     }
 

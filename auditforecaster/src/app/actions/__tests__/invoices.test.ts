@@ -59,14 +59,8 @@ describe('invoices actions', () => {
                 {
                     id: 'cm0000000000000000000job1',
                     address: '123 Main',
-                    subdivision: {
-                        priceLists: [{
-                            items: [{
-                                price: 100,
-                                serviceItem: { name: 'Inspection' }
-                            }]
-                        }]
-                    }
+                    subdivision: null,
+                    builder: { name: 'Test Builder' }
                 }
             ]
             vi.mocked(prisma.job.findMany).mockResolvedValue(mockJobs as any)
@@ -83,12 +77,13 @@ describe('invoices actions', () => {
             expect(result.invoiceId).toBe('cm0000000000000000000inv1')
             expect(prisma.invoice.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({
-                    totalAmount: 100,
+                    totalAmount: 0,
                     items: {
                         create: expect.arrayContaining([
                             expect.objectContaining({
-                                unitPrice: 100,
-                                totalPrice: 100
+                                description: 'Inspection - 123 Main',
+                                unitPrice: 0,
+                                totalPrice: 0
                             })
                         ])
                     }

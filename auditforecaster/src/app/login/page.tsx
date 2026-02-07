@@ -74,9 +74,8 @@ function LoginForm() {
                     <div className="mt-6 text-sm text-gray-500">
                         <p className="font-medium mb-2">Demo Credentials:</p>
                         <ul className="list-disc list-inside space-y-1">
-                            <li>Admin: admin@ulrich.com</li>
-                            <li>Inspector: inspector1@ulrich.com</li>
-                            <li>QA: qa@ulrich.com</li>
+                            <li>Admin: shaun@fieldinspect.com</li>
+                            <li>Inspector: erik@fieldinspect.com</li>
                             <li>Password: password123</li>
                         </ul>
                     </div>

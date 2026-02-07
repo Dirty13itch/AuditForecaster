@@ -8,14 +8,15 @@ import { auth } from "@/auth"
 import { sendInspectionCompletedEmail } from "@/lib/email"
 import { z } from "zod"
 import { logger } from "@/lib/logger"
-import { safeJsonParse, safeParseFloat } from "@/lib/utils"
+import { safeJsonParse, safeParseFloat, assertValidId } from "@/lib/utils"
+import { logAudit } from "@/lib/audit"
 
 const InspectionSchema = z.object({
     jobId: z.string().min(1, "Job ID is required"),
     cfm50: z.string().min(1, "CFM50 is required"),
     houseVolume: z.string().nullable().optional().transform(v => v || undefined),
     notes: z.string().nullable().optional().transform(v => v || undefined),
-    checklist: z.string().nullable().optional().transform(v => v || undefined),
+    answers: z.string().nullable().optional().transform(v => v || undefined),
     signature: z.string().nullable().optional().transform(v => v || undefined),
 })
 
@@ -29,7 +30,7 @@ export async function updateInspection(formData: FormData): Promise<never> {
             cfm50: formData.get('cfm50'),
             houseVolume: formData.get('houseVolume'),
             notes: formData.get('notes'),
-            checklist: formData.get('checklist'),
+            answers: formData.get('answers'),
             signature: formData.get('signature'),
         })
 
@@ -40,9 +41,15 @@ export async function updateInspection(formData: FormData): Promise<never> {
 
         const fields = validatedFields.data
 
+        try {
+            assertValidId(fields.jobId, 'Job ID')
+        } catch {
+            throw new Error('Invalid Job ID format')
+        }
+
         // Parse and calculate
         const houseVolume = fields.houseVolume ? safeParseFloat(fields.houseVolume, 0) : null
-        const checklist = safeJsonParse(fields.checklist, null)
+        const answers = safeJsonParse(fields.answers, null)
 
         const cfm50Val = safeParseFloat(fields.cfm50, 0)
         if (cfm50Val <= 0) {
@@ -84,7 +91,7 @@ export async function updateInspection(formData: FormData): Promise<never> {
                     where: { id: existingInspection.id },
                     data: {
                         data: JSON.stringify(inspectionData),
-                        checklist: JSON.stringify(checklist),
+                        answers: JSON.stringify(answers),
                         signatureUrl: fields.signature,
                     }
                 })
@@ -94,7 +101,7 @@ export async function updateInspection(formData: FormData): Promise<never> {
                         jobId: fields.jobId,
                         type: 'BLOWER_DOOR',
                         data: JSON.stringify(inspectionData),
-                        checklist: JSON.stringify(checklist),
+                        answers: JSON.stringify(answers),
                         signatureUrl: fields.signature,
                     }
                 })
@@ -158,13 +165,15 @@ export async function createReinspection(jobId: string): Promise<never> {
             throw new Error('Unauthorized: Only admins and inspectors can create reinspections')
         }
 
+        assertValidId(jobId, 'Job ID')
+
         const newInspection = await prisma.$transaction(async (tx) => {
             const inspection = await tx.inspection.create({
                 data: {
                     jobId,
                     type: 'BLOWER_DOOR',
                     data: '{}',
-                    checklist: '[]',
+                    answers: '[]',
                 }
             })
 
@@ -174,6 +183,14 @@ export async function createReinspection(jobId: string): Promise<never> {
             })
 
             return inspection
+        })
+
+        await logAudit({
+            entityType: 'Inspection',
+            entityId: newInspection.id,
+            action: 'CREATE',
+            after: { jobId, type: 'REINSPECTION' },
+            userId: session.user.id,
         })
 
         redirect(`/dashboard/inspections/${newInspection.id}`)

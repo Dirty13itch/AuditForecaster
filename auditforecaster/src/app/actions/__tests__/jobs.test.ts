@@ -3,8 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createJob, updateJobStatus } from '../jobs'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
-import { getCoordinates } from '@/lib/geocoding'
-
 // Mock dependencies
 vi.mock('@/lib/prisma', () => ({
     prisma: {
@@ -21,10 +19,6 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/auth', () => ({
     auth: vi.fn()
-}))
-
-vi.mock('@/lib/geocoding', () => ({
-    getCoordinates: vi.fn()
 }))
 
 vi.mock('next/cache', () => ({
@@ -55,9 +49,7 @@ describe('Jobs Server Actions', () => {
             formData.append('streetAddress', '123 Main St')
             formData.append('city', 'Austin')
 
-            vi.mocked(getCoordinates).mockResolvedValue({ lat: 30, lng: -97 })
             vi.mocked(prisma.job.create).mockResolvedValue({ id: 'cm000000000000000000job01' } as any)
-
 
             const result = await createJob(formData)
 
@@ -67,8 +59,6 @@ describe('Jobs Server Actions', () => {
                     lotNumber: '123',
                     streetAddress: '123 Main St',
                     city: 'Austin',
-                    latitude: 30,
-                    longitude: -97,
                     status: 'PENDING'
                 })
             }))

@@ -48,7 +48,7 @@ export default async function InspectionDetailsPage({
 
     const job = inspection.job;
     const inspectionData: InspectionData = safeJsonParse<InspectionData>(inspection.data, {});
-    const checklist: ChecklistItem[] = safeJsonParse<ChecklistItem[]>(inspection.checklist, []);
+    const checklist: ChecklistItem[] = safeJsonParse<ChecklistItem[]>(inspection.answers ?? '', []);
 
     return (
         <div className="space-y-6">

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { DollarSign, FileText, TrendingUp, Plus } from "lucide-react"
+import { DollarSign, TrendingUp, Clock, Plus } from "lucide-react"
 import Link from "next/link"
 import { formatCurrency } from "@/lib/utils"
 import { Metadata } from "next"
@@ -13,22 +13,17 @@ export const metadata: Metadata = {
 }
 
 export default async function FinancesPage() {
-    const [invoices, expenses] = await Promise.all([
-        prisma.invoice.findMany({
-            orderBy: { date: 'desc' },
-            take: 10,
-            include: { builder: true },
-        }),
-        prisma.expense.findMany({
-            orderBy: { date: 'desc' },
-            take: 10,
-        }),
-    ])
+    const invoices = await prisma.invoice.findMany({
+        orderBy: { date: 'desc' },
+        take: 20,
+        include: { builder: true },
+    })
 
     const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
     const totalPaid = invoices.filter(i => i.status === 'PAID').reduce((sum, inv) => sum + inv.totalAmount, 0)
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0)
     const outstandingCount = invoices.filter(i => i.status !== 'PAID' && i.status !== 'DRAFT').length
+    const outstandingAmount = invoices.filter(i => i.status !== 'PAID' && i.status !== 'DRAFT')
+        .reduce((sum, inv) => sum + inv.totalAmount, 0)
 
     return (
         <div className="space-y-6">
@@ -71,12 +66,14 @@ export default async function FinancesPage() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Expenses</CardTitle>
-                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
+                        <Clock className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(totalExpenses)}</div>
-                        <p className="text-xs text-muted-foreground">{expenses.length} recorded</p>
+                        <div className="text-2xl font-bold text-orange-600">{formatCurrency(outstandingAmount)}</div>
+                        <p className="text-xs text-muted-foreground">
+                            {outstandingCount} invoice{outstandingCount !== 1 ? 's' : ''} pending
+                        </p>
                     </CardContent>
                 </Card>
             </div>

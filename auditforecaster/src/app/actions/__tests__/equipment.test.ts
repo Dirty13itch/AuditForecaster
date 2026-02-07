@@ -36,7 +36,7 @@ describe('equipment actions', () => {
 
                 ; (prisma.equipment.findUnique as any).mockResolvedValue(null)
                 ; (prisma.equipment.create as any).mockResolvedValue({
-                    id: '1',
+                    id: 'cm0000000000000000equip01',
                     ...input,
                     lastCalibration: null,
                     nextCalibration: null,
@@ -90,8 +90,13 @@ describe('equipment actions', () => {
                 status: 'REPAIR' as const
             }
 
+                ; (prisma.equipment.findUnique as any).mockResolvedValue({
+                    id: 'cm0000000000000000equip01',
+                    name: 'Old Name',
+                    status: 'ACTIVE',
+                })
                 ; (prisma.equipment.update as any).mockResolvedValue({
-                    id: '1',
+                    id: 'cm0000000000000000equip01',
                     ...input,
                     lastCalibration: null,
                     nextCalibration: null,
@@ -101,11 +106,11 @@ describe('equipment actions', () => {
                     updatedAt: new Date()
                 })
 
-            const result = await updateEquipment('1', input)
+            const result = await updateEquipment('cm0000000000000000equip01', input)
 
             expect(result.message).toBe('Equipment updated successfully')
             expect(prisma.equipment.update).toHaveBeenCalledWith({
-                where: { id: '1' },
+                where: { id: 'cm0000000000000000equip01' },
                 data: expect.objectContaining({
                     status: 'REPAIR'
                 })
@@ -115,25 +120,20 @@ describe('equipment actions', () => {
 
     describe('deleteEquipment', () => {
         it('should delete equipment', async () => {
-            ; (prisma.equipment.delete as any).mockResolvedValue({
-                id: '1',
+            ; (prisma.equipment.findUnique as any).mockResolvedValue({
+                id: 'cm0000000000000000equip01',
                 name: 'Deleted Equipment',
-                type: 'Testing',
                 serialNumber: 'SN123456',
-                status: 'RETIRED',
-                lastCalibration: null,
-                nextCalibration: null,
-                assignedTo: null,
-                notes: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
+            })
+            ; (prisma.equipment.delete as any).mockResolvedValue({
+                id: 'cm0000000000000000equip01',
             })
 
-            const result = await deleteEquipment('1')
+            const result = await deleteEquipment('cm0000000000000000equip01')
 
             expect(result.message).toBe('Equipment deleted successfully')
             expect(prisma.equipment.delete).toHaveBeenCalledWith({
-                where: { id: '1' }
+                where: { id: 'cm0000000000000000equip01' }
             })
         })
     })

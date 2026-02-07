@@ -10,10 +10,10 @@ async function main() {
 
     // === USERS ===
     const shaun = await prisma.user.upsert({
-        where: { email: 'shaun@ulrich.com' },
+        where: { email: 'shaun@fieldinspect.com' },
         update: { passwordHash: demoPasswordHash, name: 'Shaun', role: 'ADMIN' },
         create: {
-            email: 'shaun@ulrich.com',
+            email: 'shaun@fieldinspect.com',
             name: 'Shaun',
             role: 'ADMIN',
             passwordHash: demoPasswordHash,
@@ -21,10 +21,10 @@ async function main() {
     })
 
     const erik = await prisma.user.upsert({
-        where: { email: 'erik@ulrich.com' },
+        where: { email: 'erik@fieldinspect.com' },
         update: { passwordHash: demoPasswordHash, name: 'Erik', role: 'INSPECTOR' },
         create: {
-            email: 'erik@ulrich.com',
+            email: 'erik@fieldinspect.com',
             name: 'Erik',
             role: 'INSPECTOR',
             passwordHash: demoPasswordHash,
@@ -44,10 +44,10 @@ async function main() {
 
     // Keep old admin for backwards compat
     await prisma.user.upsert({
-        where: { email: 'admin@ulrich.com' },
+        where: { email: 'admin@fieldinspect.com' },
         update: { passwordHash: demoPasswordHash },
         create: {
-            email: 'admin@ulrich.com',
+            email: 'admin@fieldinspect.com',
             name: 'Shaun (Admin)',
             role: 'ADMIN',
             passwordHash: demoPasswordHash,

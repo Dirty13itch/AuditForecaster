@@ -1,6 +1,7 @@
 import { Metadata } from "next"
 import { WeeklySchedule } from "@/components/weekly-schedule"
 import { getWeekJobs, getInspectors } from "@/app/actions/schedule"
+import { startOfWeek, format } from "date-fns"
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,7 @@ export default async function SchedulePage() {
             <WeeklySchedule
                 initialJobs={result.success ? result.jobs : []}
                 inspectors={inspectors}
+                serverWeekStart={format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')}
             />
         </div>
     )

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition, useCallback } from "react"
-import { format, startOfWeek, addDays, isToday } from "date-fns"
+import { useState, useTransition, useCallback, useMemo } from "react"
+import { format, addDays, isToday, parseISO, addWeeks } from "date-fns"
 import { ChevronLeft, ChevronRight, MapPin, User, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,9 +41,10 @@ type Inspector = {
 type Props = {
     initialJobs: ScheduleJob[]
     inspectors: Inspector[]
+    serverWeekStart: string // 'yyyy-MM-dd' from server to avoid hydration mismatch
 }
 
-export function WeeklySchedule({ initialJobs, inspectors }: Props) {
+export function WeeklySchedule({ initialJobs, inspectors, serverWeekStart }: Props) {
     const router = useRouter()
     const [jobs, setJobs] = useState(initialJobs)
     const [weekOffset, setWeekOffset] = useState(0)
@@ -51,7 +52,9 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
     const [isPending, startTransition] = useTransition()
     const [isNavigating, setIsNavigating] = useState(false)
 
-    const weekStart = startOfWeek(addDays(new Date(), weekOffset * 7), { weekStartsOn: 1 })
+    // Use server-provided date as base to avoid hydration mismatch from new Date()
+    const baseWeekStart = useMemo(() => parseISO(serverWeekStart), [serverWeekStart])
+    const weekStart = useMemo(() => addWeeks(baseWeekStart, weekOffset), [baseWeekStart, weekOffset])
 
     const jobsByDay: ScheduleJob[][] = DAYS.map((_, i) => {
         const dayDate = format(addDays(weekStart, i), 'yyyy-MM-dd')
@@ -266,7 +269,7 @@ export function WeeklySchedule({ initialJobs, inspectors }: Props) {
                                         {job.source === 'Building Knowledge' && (
                                             <div className="flex items-center gap-1 mt-1 text-orange-600">
                                                 <AlertCircle className="h-3 w-3" />
-                                                <span className="text-[10px]">BK</span>
+                                                <span className="text-xs">BK</span>
                                             </div>
                                         )}
                                     </button>

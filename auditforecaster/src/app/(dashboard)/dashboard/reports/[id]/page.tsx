@@ -128,8 +128,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
                 {/* Footer Branding */}
                 <div className="relative z-10 p-8 bg-slate-950 flex justify-between items-center text-slate-500 text-sm">
-                    <span>Ulrich Energy Auditing</span>
-                    <span>www.ulrich-energy.com</span>
+                    <span>Field Inspect</span>
+                    <span>fieldinspect.com</span>
                 </div>
             </div>
 
@@ -281,7 +281,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
             {/* --- DISCLAIMER --- */}
             <div className="p-12 bg-slate-50 text-slate-400 text-xs text-center border-t border-slate-200 print:break-before-auto">
-                <p className="mb-2">© {new Date().getFullYear()} Ulrich Energy Auditing. All rights reserved.</p>
+                <p className="mb-2">© {new Date().getFullYear()} Field Inspect. All rights reserved.</p>
                 <p>This report is a snapshot of conditions at the time of inspection. Hidden defects may exist. This report does not constitute a warranty or guarantee of future performance. All data is collected using industry-standard equipment and methodologies.</p>
             </div>
         </div>

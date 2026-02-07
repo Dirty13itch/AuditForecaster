@@ -1,5 +1,3 @@
-import { prisma } from "@/lib/prisma";
-
 type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG";
 
 interface LogContext {
@@ -10,7 +8,7 @@ interface LogContext {
 }
 
 class Logger {
-    private async log(level: LogLevel, message: string, context?: LogContext) {
+    private log(level: LogLevel, message: string, context?: LogContext) {
         const timestamp = new Date().toISOString();
         const logEntry = {
             timestamp,
@@ -19,32 +17,11 @@ class Logger {
             ...context
         };
 
-        // Console Output (JSON for machine readability in production)
         if (process.env.NODE_ENV === 'production') {
             console.log(JSON.stringify(logEntry));
         } else {
-            // Pretty print for development
             const color = level === 'ERROR' ? '\x1b[31m' : level === 'WARN' ? '\x1b[33m' : '\x1b[36m';
             console.log(`${color}[${level}] \x1b[0m${message}`, context || '');
-        }
-
-        // Persist Errors to DB (Async, fire-and-forget)
-        if (level === 'ERROR' || level === 'WARN') {
-            try {
-                // We use a detached promise to not block the main thread
-                // In a serverless env, we might need to await this or use a queue
-                prisma.systemLog.create({
-                    data: {
-                        level,
-                        message,
-                        context: context ? JSON.stringify(context) : null,
-                        userId: context?.userId,
-                    }
-                }).catch(err => console.error('Failed to write log to DB:', err));
-            } catch (e) {
-                // Fallback if Prisma fails
-                console.error('Logger failed to persist:', e);
-            }
         }
     }
 

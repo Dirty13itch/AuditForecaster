@@ -107,7 +107,7 @@ export function EquipmentList({ equipment, inspectors }: { equipment: EquipmentI
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-7 w-7 p-0"
+                                                className="h-10 w-10 md:h-7 md:w-7 p-0"
                                                 onClick={() => setReassigningId(reassigningId === item.id ? null : item.id)}
                                                 disabled={isPending}
                                                 aria-label="Reassign equipment"

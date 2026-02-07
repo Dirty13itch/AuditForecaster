@@ -8,6 +8,8 @@ import { z } from "zod"
 import { addYears } from "date-fns"
 import { auth } from "@/auth"
 import { logger } from "@/lib/logger"
+import { assertValidId } from "@/lib/utils"
+import { logAudit } from "@/lib/audit"
 
 export async function createEquipment(data: EquipmentClientInput) {
     try {
@@ -24,11 +26,19 @@ export async function createEquipment(data: EquipmentClientInput) {
             nextCal = addYears(validated.lastCalibration, 1)
         }
 
-        await prisma.equipment.create({
+        const equipment = await prisma.equipment.create({
             data: {
                 ...validated,
                 nextCalibration: nextCal
             },
+        })
+
+        await logAudit({
+            entityType: 'Equipment',
+            entityId: equipment.id,
+            action: 'CREATE',
+            after: { name: validated.name, serialNumber: validated.serialNumber },
+            userId: session.user.id,
         })
 
         revalidatePath("/dashboard/equipment")
@@ -52,11 +62,31 @@ export async function updateEquipment(id: string, data: EquipmentClientInput) {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
 
+        try {
+            assertValidId(id, 'Equipment ID')
+        } catch {
+            return { success: false, message: "Invalid ID format" }
+        }
+
         const validated = EquipmentClientSchema.parse(data)
+
+        const before = await prisma.equipment.findUnique({ where: { id } })
+        if (!before) {
+            return { success: false, message: "Equipment not found" }
+        }
 
         await prisma.equipment.update({
             where: { id },
             data: validated,
+        })
+
+        await logAudit({
+            entityType: 'Equipment',
+            entityId: id,
+            action: 'UPDATE',
+            before: { name: before.name, status: before.status },
+            after: { name: validated.name, status: validated.status },
+            userId: session.user.id,
         })
 
         revalidatePath("/dashboard/equipment")
@@ -77,7 +107,13 @@ export async function assignEquipment(equipmentId: string, userId: string) {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
 
-        // Deep Layer Check: Verify Calibration Status
+        try {
+            assertValidId(equipmentId, 'Equipment ID')
+            assertValidId(userId, 'User ID')
+        } catch {
+            return { success: false, message: "Invalid ID format" }
+        }
+
         const equipment = await prisma.equipment.findUnique({
             where: { id: equipmentId }
         })
@@ -94,7 +130,6 @@ export async function assignEquipment(equipmentId: string, userId: string) {
             return { success: false, message: "Compliance Alert: Calibration is overdue" }
         }
 
-        // Transaction: Update Equipment AND Create Assignment Log
         await prisma.$transaction([
             prisma.equipment.update({
                 where: { id: equipmentId },
@@ -108,6 +143,15 @@ export async function assignEquipment(equipmentId: string, userId: string) {
                 }
             })
         ])
+
+        await logAudit({
+            entityType: 'Equipment',
+            entityId: equipmentId,
+            action: 'UPDATE',
+            before: { assignedTo: equipment.assignedTo },
+            after: { assignedTo: userId },
+            userId: session.user.id,
+        })
 
         revalidatePath("/dashboard/equipment")
         return { success: true, message: "Equipment checked out successfully" }
@@ -124,7 +168,12 @@ export async function returnEquipment(equipmentId: string) {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
 
-        // Find the active assignment
+        try {
+            assertValidId(equipmentId, 'Equipment ID')
+        } catch {
+            return { success: false, message: "Invalid ID format" }
+        }
+
         const activeAssignment = await prisma.equipmentAssignment.findFirst({
             where: {
                 equipmentId,
@@ -150,6 +199,14 @@ export async function returnEquipment(equipmentId: string) {
 
         await prisma.$transaction(queries)
 
+        await logAudit({
+            entityType: 'Equipment',
+            entityId: equipmentId,
+            action: 'UPDATE',
+            after: { assignedTo: null, returned: true },
+            userId: session.user.id,
+        })
+
         revalidatePath("/dashboard/equipment")
         return { success: true, message: "Equipment returned to inventory" }
     } catch (error) {
@@ -165,8 +222,27 @@ export async function deleteEquipment(id: string) {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
 
+        try {
+            assertValidId(id, 'Equipment ID')
+        } catch {
+            return { success: false, message: "Invalid ID format" }
+        }
+
+        const equipment = await prisma.equipment.findUnique({ where: { id } })
+        if (!equipment) {
+            return { success: false, message: "Equipment not found" }
+        }
+
         await prisma.equipment.delete({
             where: { id }
+        })
+
+        await logAudit({
+            entityType: 'Equipment',
+            entityId: id,
+            action: 'DELETE',
+            before: { name: equipment.name, serialNumber: equipment.serialNumber },
+            userId: session.user.id,
         })
 
         revalidatePath("/dashboard/equipment")

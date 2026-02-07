@@ -1,3 +1,4 @@
+import 'server-only'
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { headers } from "next/headers"

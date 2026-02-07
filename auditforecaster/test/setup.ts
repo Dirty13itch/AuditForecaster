@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom'
 import { vi, beforeEach } from 'vitest'
 
+// Mock server-only to prevent "cannot import from Client Component" errors in tests
+vi.mock('server-only', () => ({}))
+
 // Setup Environment Variables
 vi.stubEnv('NEXTAUTH_URL', 'http://localhost:3000')
 vi.stubEnv('NEXTAUTH_SECRET', 'super-secret-secret-at-least-32-chars-long')

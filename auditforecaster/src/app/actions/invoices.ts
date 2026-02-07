@@ -29,36 +29,12 @@ export async function createInvoice(data: {
     const jobs = await prisma.job.findMany({
         where: {
             id: { in: jobIds },
-            builderId: builderId, // Security check
-            status: { in: ['COMPLETED', 'REVIEWED'] } // Only completed jobs
+            builderId: builderId,
+            status: { in: ['COMPLETED', 'REVIEWED'] }
         },
         include: {
-            subdivision: {
-                include: {
-                    priceLists: {
-                        include: {
-                            items: {
-                                include: {
-                                    serviceItem: true
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            builder: {
-                include: {
-                    priceLists: {
-                        include: {
-                            items: {
-                                include: {
-                                    serviceItem: true
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            subdivision: true,
+            builder: true,
         }
     })
 
@@ -66,41 +42,18 @@ export async function createInvoice(data: {
         throw new Error("No valid jobs found for invoice")
     }
 
-    // 2. Calculate Line Items
+    // 2. Calculate Line Items - one item per job
     const invoiceItems: Prisma.InvoiceItemCreateWithoutInvoiceInput[] = []
     let totalAmount = 0
 
     for (const job of jobs) {
-        // Determine Price List (Subdivision specific > Builder default)
-        const priceList = job.subdivision?.priceLists[0] || job.builder?.priceLists[0]
-
-        if (!priceList) {
-            // Fallback if no price list found - create a generic item
-            // In a real app, this should probably error or warn
-            invoiceItems.push({
-                description: `Inspection for ${job.address}`,
-                quantity: 1,
-                unitPrice: 0,
-                totalPrice: 0,
-                job: { connect: { id: job.id } }
-            })
-            continue
-        }
-
-        // Add items from price list
-        // Logic: For now, we assume 1 "Standard Inspection" per job. 
-        // In future, we might check Inspection Type to match Service Item.
-        for (const item of priceList.items) {
-            const price = item.price
-            invoiceItems.push({
-                description: `${item.serviceItem.name} - ${job.address}`,
-                quantity: 1,
-                unitPrice: price,
-                totalPrice: price,
-                job: { connect: { id: job.id } }
-            })
-            totalAmount += price
-        }
+        invoiceItems.push({
+            description: `Inspection - ${job.address}`,
+            quantity: 1,
+            unitPrice: 0,
+            totalPrice: 0,
+            job: { connect: { id: job.id } }
+        })
     }
 
     // 3. Generate Invoice Number

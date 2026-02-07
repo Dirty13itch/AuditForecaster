@@ -54,7 +54,7 @@ describe('Inspections Server Actions', () => {
     describe('updateInspection', () => {
         it('should create new inspection and calculate ACH50 correctly', async () => {
             const formData = new FormData()
-            formData.append('jobId', 'job-1')
+            formData.append('jobId', 'cm00000000000000000000job1')
             formData.append('cfm50', '1000')
             formData.append('houseVolume', '20000') // ACH50 = (1000 * 60) / 20000 = 3.0
             formData.append('checklist', JSON.stringify([{ id: '1', status: 'PASS' }]))
@@ -62,7 +62,7 @@ describe('Inspections Server Actions', () => {
             vi.mocked(prisma.inspection.findFirst).mockResolvedValue(null)
             vi.mocked(prisma.inspection.create).mockResolvedValue({ id: 'insp-1' } as any)
             vi.mocked(prisma.job.update).mockResolvedValue({
-                id: 'job-1',
+                id: 'cm00000000000000000000job1',
                 streetAddress: '123 Main',
                 city: 'Austin'
             } as any)
@@ -77,23 +77,23 @@ describe('Inspections Server Actions', () => {
             expect(prisma.inspection.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({
                     data: expect.stringContaining('"ach50":3'),
-                    jobId: 'job-1'
+                    jobId: 'cm00000000000000000000job1'
                 })
             }))
 
             // Verify job update
             expect(prisma.job.update).toHaveBeenCalledWith(expect.objectContaining({
-                where: { id: 'job-1' },
+                where: { id: 'cm00000000000000000000job1' },
                 data: { status: 'COMPLETED' }
             }))
 
             // Verify redirect
-            expect(redirect).toHaveBeenCalledWith('/dashboard/jobs/job-1')
+            expect(redirect).toHaveBeenCalledWith('/dashboard/jobs/cm00000000000000000000job1')
         })
 
         it('should update existing inspection', async () => {
             const formData = new FormData()
-            formData.append('jobId', 'job-1')
+            formData.append('jobId', 'cm00000000000000000000job1')
             formData.append('cfm50', '1200')
             formData.append('houseVolume', '20000')
 
@@ -127,16 +127,16 @@ describe('Inspections Server Actions', () => {
             vi.mocked(prisma.inspection.create).mockResolvedValue({ id: 'new-insp-1' } as any)
 
             try {
-                await createReinspection('job-1')
+                await createReinspection('cm00000000000000000000job1')
             } catch (e) {
                 if ((e as Error).message !== 'NEXT_REDIRECT') throw e
             }
 
             expect(prisma.inspection.create).toHaveBeenCalledWith(expect.objectContaining({
-                data: expect.objectContaining({ jobId: 'job-1' })
+                data: expect.objectContaining({ jobId: 'cm00000000000000000000job1' })
             }))
             expect(prisma.job.update).toHaveBeenCalledWith(expect.objectContaining({
-                where: { id: 'job-1' },
+                where: { id: 'cm00000000000000000000job1' },
                 data: { status: 'IN_PROGRESS' }
             }))
             expect(redirect).toHaveBeenCalledWith('/dashboard/inspections/new-insp-1')

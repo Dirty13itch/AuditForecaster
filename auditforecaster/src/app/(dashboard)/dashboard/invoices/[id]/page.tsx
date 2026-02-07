@@ -37,7 +37,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             {/* Header */}
             <div className="flex justify-between items-start border-b pb-8 mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Ulrich Energy Auditing</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Field Inspect</h1>
                     <p className="text-gray-500 mt-1">123 Energy Way<br />Green City, ST 12345</p>
                 </div>
                 <div className="text-right">
@@ -97,7 +97,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             {/* Footer */}
             <div className="mt-16 pt-8 border-t text-center text-gray-500 text-sm">
                 <p>Thank you for your business!</p>
-                <p className="mt-1">Please make checks payable to Ulrich Energy Auditing.</p>
+                <p className="mt-1">Please make checks payable to Field Inspect.</p>
             </div>
         </div>
     )

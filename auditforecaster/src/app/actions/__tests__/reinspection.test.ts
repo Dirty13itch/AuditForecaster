@@ -42,7 +42,7 @@ vi.mock('next/dist/client/components/redirect-error', () => ({
 }))
 
 describe('createReinspection', () => {
-    const mockJobId = 'job-123'
+    const mockJobId = 'cm00000000000000000000job1'
     const mockUserId = 'user-123'
 
     beforeEach(() => {
@@ -68,7 +68,7 @@ describe('createReinspection', () => {
                 jobId: mockJobId,
                 type: 'BLOWER_DOOR',
                 data: '{}',
-                checklist: '[]',
+                answers: '[]',
             }
         })
 

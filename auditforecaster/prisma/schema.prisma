@@ -7,6 +7,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Authentication (NextAuth) ───────────────────────────────────────────
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -15,8 +17,7 @@ model User {
   image         String?
   role          String    @default("INSPECTOR")
   passwordHash  String?
-  tokenVersion  Int       @default(1) // Security: For session revocation
-  baseRate      Float?    // Base monthly rate for salaried subcontractors
+  tokenVersion  Int       @default(1)
   accounts      Account[]
   sessions      Session[]
 
@@ -29,176 +30,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  jobs      Job[]
-  vehicles  Vehicle[]
-  equipment Equipment[]
+  jobs                 Job[]
+  equipment            Equipment[]
   equipmentAssignments EquipmentAssignment[]
-  expenses  Expense[]
-  payouts   Payout[]
-  routes    Route[]
-
-
-
-  // Link to Builder for Builder Portal users
-  builderId String?
-  builder   Builder? @relation(fields: [builderId], references: [id])
-
-  savedReports SavedReport[]
-  certifications Certification[] // Consultant: Track specific cert details
-  hersRaterId    String?         // Consultant: Critical for Ekotrope sync
-  
-  onboarding     OnboardingChecklist?
-  apiKeys        ApiKey[]
-  taskClaims     TaskClaim[]
-  notifications  Notification[]
-
-  @@index([builderId])
-}
-
-model OnboardingChecklist {
-  id               String  @id @default(cuid())
-  uniformIssued    Boolean @default(false)
-  ipadIssued       Boolean @default(false)
-  badgePrinted     Boolean @default(false)
-  trainingComplete Boolean @default(false)
-  notes            String?
-  
-  userId           String  @unique
-  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-}
-
-model Certification {
-  id             String    @id @default(cuid())
-  name           String    // e.g. "BPI Building Analyst", "RESNET HERS Rater"
-  licenseNumber  String?
-  issuedDate     DateTime?
-  expirationDate DateTime?
-  
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@index([userId])
-}
-
-model TaxCredit {
-  id                String   @id @default(cuid())
-  jobId             String   @unique
-  job               Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  creditAmount      Float // e.g., 2500 or 5000
-  certificationDate DateTime
-  status            String // PENDING, SUBMITTED, APPROVED, DENIED
-  notes             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-}
-
-model Vehicle {
-  id           String    @id @default(cuid())
-  name         String
-  licensePlate String    @unique
-  vin          String?
-  make         String
-  model        String
-  year         Int
-  mileage      Int
-  status       String    @default("ACTIVE") // ACTIVE, MAINTENANCE, RETIRED
-  lastService  DateTime?
-  nextService  DateTime?
-  assignedTo   String?
-  assignedUser User?     @relation(fields: [assignedTo], references: [id])
-  notes        String?
-
-  mileageLogs   MileageLog[]
-  maintenance   VehicleMaintenance[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([assignedTo])
-  @@index([status])
-}
-
-model VehicleMaintenance {
-  id            String    @id @default(cuid())
-  date          DateTime
-  type          String    // OIL_CHANGE, TIRE_ROTATION, REPAIR, INSPECTION
-  cost          Float
-  description   String?
-  mileage       Int?      // Odometer reading at time of service
-  
-  vehicleId     String
-  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  @@index([vehicleId])
-  @@index([date])
-}
-
-model SavedReport {
-  id            String    @id @default(cuid())
-  name          String
-  description   String?
-  config        String      // Stores selected columns, filters, sorting
-  
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  @@index([userId])
-}
-
-model Equipment {
-  id              String    @id @default(cuid())
-  name            String // e.g., "Retrotec 5000"
-  type            String // e.g., "Blower Door", "Duct Blaster", "Infrared Camera"
-  serialNumber    String    @unique
-  status          String    @default("ACTIVE") // ACTIVE, CALIBRATION_DUE, REPAIR, RETIRED
-  lastCalibration DateTime?
-  nextCalibration DateTime?
-  
-  purchasePrice   Float?    // Deep Layer: Financial tracking
-  purchaseDate    DateTime?
-  
-  assignedTo      String?
-  assignedUser    User?     @relation(fields: [assignedTo], references: [id])
-  
-  calibrationCertUrl String? // Deep Scope: Proof of compliance
-  assignments     EquipmentAssignment[] // Deep Scope: Chain of Custody
-
-  notes           String?
-  version         Int       @default(1) // Optimistic Locking
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([status])
-  @@index([assignedTo])
-}
-
-model EquipmentAssignment {
-  id          String    @id @default(cuid())
-  equipmentId String
-  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  
-  assignedAt  DateTime  @default(now())
-  returnedAt  DateTime?
-  
-  notes       String?   // Condition upon checkout/return
-
-  @@index([equipmentId])
-  @@index([userId])
+  notifications        Notification[]
 }
 
 model Account {
@@ -243,6 +78,47 @@ model VerificationToken {
   @@id([identifier, token])
 }
 
+// ─── Schedule ────────────────────────────────────────────────────────────
+
+model Job {
+  id            String    @id @default(cuid())
+  lotNumber     String
+  streetAddress String
+  city          String
+  address       String
+  status        String    @default("PENDING")
+  scheduledDate DateTime?
+
+  // Google Calendar Integration
+  googleEventId  String? @unique
+  googleHtmlLink String?
+
+  inspectorId String?
+  inspector   User?   @relation(fields: [inspectorId], references: [id])
+
+  builderId String?
+  builder   Builder? @relation(fields: [builderId], references: [id])
+
+  subdivisionId String?
+  subdivision   Subdivision? @relation(fields: [subdivisionId], references: [id])
+
+  inspections  Inspection[]
+  invoiceItems InvoiceItem[]
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([inspectorId])
+  @@index([builderId])
+  @@index([subdivisionId])
+  @@index([createdAt])
+  @@index([scheduledDate])
+  @@index([lotNumber])
+  @@index([streetAddress])
+}
+
 model Builder {
   id           String   @id @default(cuid())
   name         String
@@ -256,32 +132,15 @@ model Builder {
 
   jobs         Job[]
   subdivisions Subdivision[]
-  priceLists   PriceList[]
-  plans        Plan[] // New relation to plans
   invoices     Invoice[]
-  User         User[]
-}
-
-model Plan {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  pdfUrl      String?
-  builderId   String
-  builder     Builder  @relation(fields: [builderId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([builderId])
 }
 
 model Subdivision {
-  id         String      @id @default(cuid())
-  name       String
-  builderId  String
-  builder    Builder     @relation(fields: [builderId], references: [id])
-  jobs       Job[]
-  priceLists PriceList[]
+  id        String  @id @default(cuid())
+  name      String
+  builderId String
+  builder   Builder @relation(fields: [builderId], references: [id])
+  jobs      Job[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -289,133 +148,22 @@ model Subdivision {
   @@index([builderId])
 }
 
-model ServiceItem {
-  id          String  @id @default(cuid())
-  name        String
-  description String?
-  basePrice   Float
-
-  priceListItems PriceListItem[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model PriceList {
-  id            String       @id @default(cuid())
-  name          String
-  builderId     String?
-  builder       Builder?     @relation(fields: [builderId], references: [id])
-  subdivisionId String?
-  subdivision   Subdivision? @relation(fields: [subdivisionId], references: [id])
-
-  items PriceListItem[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([builderId])
-  @@index([subdivisionId])
-}
-
-model PriceListItem {
-  id            String      @id @default(cuid())
-  priceListId   String
-  priceList     PriceList   @relation(fields: [priceListId], references: [id])
-  serviceItemId String
-  serviceItem   ServiceItem @relation(fields: [serviceItemId], references: [id])
-  price         Float
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([priceListId, serviceItemId])
-  @@index([priceListId])
-  @@index([serviceItemId])
-}
-
-model Job {
-  id              String    @id @default(cuid())
-  lotNumber       String
-  streetAddress   String
-  city            String
-  address         String
-  status          String    @default("PENDING") // Was Enum JobStatus
-  scheduledDate   DateTime?
-  rejectionReason String?
-
-  // Geocoding for weather and routing
-  latitude  Float?
-  longitude Float?
-
-  // Google Integration
-  googleEventId  String? @unique // Google Calendar Event ID
-  googleHtmlLink String? // Link to event in Google Calendar
-  googleAlbumId  String? // Google Photos Album ID
-  googleAlbumUrl String? // Link to Google Photos Album
-
-  // SupplyPro Integration
-  buildProOrderId String? @unique
-  buildProSyncedAt DateTime?
-
-  // Ekotrope Integration
-  ekotropeProjectId String?
-  ekotropeSyncedAt  DateTime?
-  hersScore         Int?
-  hersCertUrl       String?
-
-  inspectorId String?
-  inspector   User?   @relation(fields: [inspectorId], references: [id])
-
-  builderId String?
-  builder   Builder? @relation(fields: [builderId], references: [id])
-
-  subdivisionId String?
-  subdivision   Subdivision? @relation(fields: [subdivisionId], references: [id])
-
-  inspections Inspection[]
-  taxCredit   TaxCredit?
-  expenses    Expense[]
-  invoiceItems InvoiceItem[]
-  mileageLogs  MileageLog[]
-
-  payoutId      String?
-  payout        Payout?   @relation(fields: [payoutId], references: [id])
-  payoutAmount  Float? // Snapshot of the amount paid for this job
-  
-  routeStops    RouteStop[]
-
-  version       Int      @default(1) // Optimistic Locking
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([status])
-  @@index([inspectorId])
-  @@index([builderId])
-  @@index([subdivisionId])
-  @@index([payoutId])
-  @@index([createdAt])
-  @@index([scheduledDate])
-  @@index([lotNumber]) // Search optimization
-  @@index([streetAddress]) // Search optimization
-}
+// ─── Inspections ─────────────────────────────────────────────────────────
 
 model Inspection {
   id    String @id @default(cuid())
   jobId String
   job   Job    @relation(fields: [jobId], references: [id])
 
-  type   String @default("BLOWER_DOOR") // Was Enum InspectionType
-  status String @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED
+  type   String @default("BLOWER_DOOR")
+  status String @default("IN_PROGRESS")
 
-  // iAuditor Parity Fields
   score    Float?
   maxScore Float?
-  answers  String? // Structured responses matching the template
-  metadata String? // Device info, location, duration, etc.
+  answers  String?
+  metadata String?
 
-  data         String // Legacy: Was Json (keep for migration if needed, or deprecate)
-  checklist    String? // Legacy: Was Json
+  data         String
   signatureUrl String?
 
   photos      Photo[]
@@ -437,9 +185,8 @@ model Photo {
   id       String  @id @default(cuid())
   url      String
   caption  String?
-  category String? // e.g., "Exterior", "Attic"
+  category String?
 
-  // Metadata from EXIF or upload
   latitude  Float?
   longitude Float?
   takenAt   DateTime?
@@ -458,12 +205,10 @@ model ReportTemplate {
   name        String
   description String?
 
-  // iAuditor Parity Fields
-  structure String? // Full definition: pages, sections, items, logic
-  scoring   String? // Scoring configuration: weights, max scores
+  structure String?
+  scoring   String?
 
-  checklistItems String? // Legacy: JSON definition (keep for migration)
-  isDefault      Boolean @default(false)
+  isDefault Boolean @default(false)
 
   inspections Inspection[]
 
@@ -475,13 +220,13 @@ model ActionItem {
   id          String  @id @default(cuid())
   title       String
   description String?
-  status      String  @default("OPEN") // OPEN, RESOLVED
-  priority    String  @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status      String  @default("OPEN")
+  priority    String  @default("MEDIUM")
 
   inspectionId String
   inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
-  assignedToEmail String? // Email of the builder/super
+  assignedToEmail String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -490,122 +235,76 @@ model ActionItem {
   @@index([status])
 }
 
-model Expense {
-  id     String   @id @default(cuid())
-  date   DateTime
-  amount Float
+// ─── Equipment ───────────────────────────────────────────────────────────
 
-  category    String? // Travel, Equipment, Meals, etc. (Optional for pending)
-  status      String  @default("PENDING") // PENDING, CLASSIFIED
-  description     String?
-  rejectionReason String?
-  receiptUrl      String?
+model Equipment {
+  id              String    @id @default(cuid())
+  name            String
+  type            String
+  serialNumber    String    @unique
+  status          String    @default("ACTIVE")
+  lastCalibration DateTime?
+  nextCalibration DateTime?
+
+  purchasePrice Float?
+  purchaseDate  DateTime?
+
+  assignedTo   String?
+  assignedUser User?   @relation(fields: [assignedTo], references: [id])
+
+  calibrationCertUrl String?
+  assignments        EquipmentAssignment[]
+
+  notes   String?
+  version Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([assignedTo])
+}
+
+model EquipmentAssignment {
+  id          String    @id @default(cuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  jobId String?
-  job   Job?    @relation(fields: [jobId], references: [id])
+  assignedAt DateTime @default(now())
+  returnedAt DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  notes String?
 
+  @@index([equipmentId])
   @@index([userId])
-  @@index([jobId])
-  @@index([status])
-  @@index([date])
 }
 
-model MileageLog {
-  id       String   @id @default(cuid())
-  date     DateTime
-  distance Float
-
-  purpose       String? // Business, Personal (Optional for pending)
-  status        String  @default("PENDING") // PENDING, CLASSIFIED
-  startLocation String?
-  endLocation   String?
-
-  vehicleId String
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
-
-  // Link to Job for profitability calculations
-  jobId     String?
-  job       Job?    @relation(fields: [jobId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([vehicleId])
-  @@index([jobId])
-  @@index([status])
-}
-
-model Subcontractor {
-  id     String  @id @default(cuid())
-  name   String
-  type   String // Individual, Company
-  email  String?
-  phone  String?
-  taxId  String? // Consider encryption in app layer if needed
-  status String  @default("ACTIVE")
-
-  complianceDocs ComplianceDoc[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ComplianceDoc {
-  id             String    @id @default(cuid())
-  type           String // W9, COI, License
-  url            String
-  expirationDate DateTime?
-
-  subcontractorId String
-  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([subcontractorId])
-}
-
-model CorporateDoc {
-  id    String   @id @default(cuid())
-  title String
-  type  String // Bylaws, Minutes, TaxReturn
-  url   String
-  date  DateTime
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-
+// ─── Finances ────────────────────────────────────────────────────────────
 
 model Invoice {
   id          String   @id @default(cuid())
-  number      String   @unique // e.g., INV-2024-001
+  number      String   @unique
   date        DateTime @default(now())
   dueDate     DateTime
-  status      String   @default("DRAFT") // DRAFT, SENT, PAID, VOID, OVERDUE
+  status      String   @default("DRAFT")
   totalAmount Float
   notes       String?
   pdfUrl      String?
 
-  sentAt      DateTime?
-  paidAt      DateTime?
+  sentAt DateTime?
+  paidAt DateTime?
 
-  builderId   String
-  builder     Builder @relation(fields: [builderId], references: [id])
+  builderId String
+  builder   Builder @relation(fields: [builderId], references: [id])
 
-  items       InvoiceItem[]
+  items InvoiceItem[]
 
-  version     Int      @default(1) // Optimistic Locking
-  deletedAt   DateTime? // Soft Delete
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  version   Int       @default(1)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([builderId])
   @@index([status])
@@ -614,177 +313,41 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   description String
-  quantity    Float    @default(1)
+  quantity    Float  @default(1)
   unitPrice   Float
   totalPrice  Float
 
-  invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
-  jobId       String?
-  job         Job?    @relation(fields: [jobId], references: [id]) // Optional link to a job
+  jobId String?
+  job   Job?   @relation(fields: [jobId], references: [id])
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([invoiceId])
   @@index([jobId])
 }
 
-
-
-model SystemLog {
-  id        String   @id @default(cuid())
-  level     String   // "INFO", "WARN", "ERROR"
-  message   String
-  context   String?
-  userId    String?
-  createdAt DateTime @default(now())
-
-  @@index([level])
-  @@index([createdAt])
-  @@index([userId])
-}
-
-model ApiKey {
-  id        String   @id @default(cuid())
-  name      String   // e.g. "Zapier Integration"
-  keyHash   String   @unique
-  scopes    String // JSON array of scopes: "READ_JOBS", "WRITE_JOBS"
-  lastUsed  DateTime?
-  
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-}
+// ─── Admin / System ──────────────────────────────────────────────────────
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  entityType String   // "Job", "Inspection", "User"
+  id         String  @id @default(cuid())
+  entityType String
   entityId   String
-  action     String   // "CREATE", "UPDATE", "DELETE"
-  actorId    String   // User ID or API Key ID
-  changes    String?    // { before: {}, after: {} }
+  action     String
+  actorId    String
+  changes    String?
   ipAddress  String?
-  
-  createdAt  DateTime @default(now())
+
+  createdAt DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([actorId])
-}
-
-
-model Payout {
-  id          String    @id @default(cuid())
-  periodStart DateTime
-  periodEnd   DateTime
-  amount      Float
-  status      String    @default("DRAFT") // DRAFT, PAID
-  
-  generatedAt DateTime  @default(now())
-  paidAt      DateTime?
-
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-
-  jobs        Job[]
-
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([periodStart])
-  @@index([periodEnd])
-}
-
-model Route {
-  id            String      @id @default(cuid())
-  date          DateTime
-  status        String      @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
-  totalDistance Float?      // in miles
-  totalDuration Int?        // in minutes
-  
-  driverId      String
-  driver        User        @relation(fields: [driverId], references: [id])
-  
-  stops         RouteStop[]
-
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  @@index([driverId])
-  @@index([date])
-  @@index([status])
-}
-
-model RouteStop {
-  id               String    @id @default(cuid())
-  order            Int
-  estimatedArrival DateTime?
-  status           String    @default("PENDING") // PENDING, COMPLETED, SKIPPED
-  
-  routeId          String
-  route            Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  
-  jobId            String?
-  job              Job?      @relation(fields: [jobId], references: [id])
-
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@index([routeId])
-  @@index([jobId])
-}
-
-model IntegrationLog {
-  id        String   @id @default(cuid())
-  service   String   // SUPPLYPRO, EKOTROPE, GOOGLE
-  action    String   // JOB_INGESTION, SYNC, UPLOAD
-  success   Boolean
-  jobId     String?
-  request   String?  // JSON string
-  response  String?  // JSON string or error message
-  error     String?
-
-  createdAt DateTime @default(now())
-
-  @@index([jobId])
-  @@index([createdAt])
-}
-
-model IntegrationSettings {
-  id                         String  @id @default(cuid())
-  ekotropeApiKey             String?
-  ekotropeEnabled            Boolean @default(false)
-  supplyProApiKey            String?
-  supplyProEnabled           Boolean @default(false)
-  autoCreateJobsFromBuildPro Boolean @default(true)
-  autoSyncToEkotrope         Boolean @default(true)
-  autoGenerateHERSCerts      Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model TaskClaim {
-  id        String   @id @default(cuid())
-  taskId    String   // ID of the job/inspection being claimed
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@unique([taskId]) // Only one active claim per task
-  @@index([expiresAt]) // For cleanup
-  @@index([userId])
 }
 
 model Notification {
@@ -793,8 +356,8 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String
-  type      String   @default("INFO") // INFO, WARNING, SUCCESS, ERROR
+  type      String   @default("INFO")
   read      Boolean  @default(false)
-  link      String?  // Optional URL to navigate to
+  link      String?
   createdAt DateTime @default(now())
 }
