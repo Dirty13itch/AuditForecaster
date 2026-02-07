@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import { Button } from "@/components/ui/button"
 import { AlertCircle } from "lucide-react"
 
@@ -12,7 +13,7 @@ export default function Error({
     reset: () => void
 }) {
     useEffect(() => {
-        console.error(error)
+        Sentry.captureException(error)
     }, [error])
 
     return (
@@ -23,6 +24,11 @@ export default function Error({
                 <p className="text-muted-foreground max-w-[500px]">
                     {error.message || "An unexpected error occurred."}
                 </p>
+                {error.digest && (
+                    <p className="text-xs text-muted-foreground font-mono">
+                        Error ID: {error.digest}
+                    </p>
+                )}
             </div>
             <Button onClick={() => reset()}>Try again</Button>
         </div>
