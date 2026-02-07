@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 0.0.0.0",
     "dev:e2e": "cross-env MOCK_AUTH_FOR_E2E=true next dev",
     "build": "next build",
     "start": "next start",
