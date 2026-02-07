@@ -1,184 +1,129 @@
-import { prisma } from "@/lib/prisma";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Plus, FileText } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Metadata } from "next";
-import { MileageSwipe } from "@/components/finance/mileage-swipe";
-import { AutoClassifyButton } from "@/components/finance/auto-classify-button";
+import { prisma } from "@/lib/prisma"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { DollarSign, FileText, TrendingUp, Plus } from "lucide-react"
+import Link from "next/link"
+import { formatCurrency } from "@/lib/utils"
+import { Metadata } from "next"
 
 export const metadata: Metadata = {
-    title: "Finances | Field Inspect",
-    description: "Track expenses, mileage, and financial reports.",
-};
+    title: "Finances",
+    description: "Track invoices and revenue.",
+}
 
 export default async function FinancesPage() {
-    const expenses = await prisma.expense.findMany({
-        orderBy: { date: 'desc' },
-        take: 20,
-        include: { user: true }
-    });
+    const [invoices, expenses] = await Promise.all([
+        prisma.invoice.findMany({
+            orderBy: { date: 'desc' },
+            take: 10,
+            include: { builder: true },
+        }),
+        prisma.expense.findMany({
+            orderBy: { date: 'desc' },
+            take: 10,
+        }),
+    ])
 
-    const mileageLogs = await prisma.mileageLog.findMany({
-        orderBy: { date: 'desc' },
-        take: 20,
-        include: { vehicle: true }
-    });
-
-    const pendingLogs = await prisma.mileageLog.findMany({
-        where: { status: 'PENDING' },
-        orderBy: { date: 'desc' },
-        take: 50
-    });
+    const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
+    const totalPaid = invoices.filter(i => i.status === 'PAID').reduce((sum, inv) => sum + inv.totalAmount, 0)
+    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0)
+    const outstandingCount = invoices.filter(i => i.status !== 'PAID' && i.status !== 'DRAFT').length
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-bold tracking-tight">Finances</h2>
+            <div className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Finances</h1>
+                    <p className="text-sm text-muted-foreground">Invoices and revenue overview</p>
+                </div>
+                <Button asChild>
+                    <Link href="/dashboard/finances/invoices/create">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create Invoice
+                    </Link>
+                </Button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Summary Cards */}
+            <div className="grid gap-4 md:grid-cols-3">
                 <Card>
-                    <CardContent className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-                        <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Total Asset Value</p>
-                            <div className="text-2xl font-bold">
-                                ${(await prisma.equipment.aggregate({ _sum: { purchasePrice: true } }))._sum.purchasePrice?.toLocaleString() ?? "0.00"}
-                            </div>
-                        </div>
-                        <div className="h-10 w-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
-                            <span className="font-bold">$</span>
-                        </div>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Invoiced</CardTitle>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{formatCurrency(totalInvoiced)}</div>
+                        <p className="text-xs text-muted-foreground">{invoices.length} invoices</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Collected</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-green-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-green-600">{formatCurrency(totalPaid)}</div>
+                        <p className="text-xs text-muted-foreground">
+                            {outstandingCount > 0 ? `${outstandingCount} outstanding` : 'All paid'}
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Expenses</CardTitle>
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{formatCurrency(totalExpenses)}</div>
+                        <p className="text-xs text-muted-foreground">{expenses.length} recorded</p>
                     </CardContent>
                 </Card>
             </div>
 
-            <Tabs defaultValue="expenses" className="space-y-4">
-                <TabsList>
-                    <TabsTrigger value="expenses">Expenses</TabsTrigger>
-                    <TabsTrigger value="mileage">Mileage</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="expenses" className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <h3 className="text-xl font-semibold">Expense Tracker</h3>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Add Expense
-                        </Button>
-                    </div>
-                    <Card>
-                        <CardContent className="p-0">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Category</TableHead>
-                                            <TableHead>Description</TableHead>
-                                            <TableHead>Amount</TableHead>
-                                            <TableHead>User</TableHead>
-                                            <TableHead>Receipt</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {expenses.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
-                                                    No expenses recorded.
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            expenses.map(expense => (
-                                                <TableRow key={expense.id}>
-                                                    <TableCell>{expense.date.toLocaleDateString()}</TableCell>
-                                                    <TableCell>{expense.category}</TableCell>
-                                                    <TableCell>{expense.description}</TableCell>
-                                                    <TableCell>${expense.amount.toFixed(2)}</TableCell>
-                                                    <TableCell>{expense.user.name}</TableCell>
-                                                    <TableCell>
-                                                        {expense.receiptUrl && (
-                                                            <Button variant="ghost" size="icon" asChild>
-                                                                <a href={expense.receiptUrl} target="_blank" rel="noopener noreferrer">
-                                                                    <FileText className="h-4 w-4" />
-                                                                </a>
-                                                            </Button>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="mileage" className="space-y-4">
-                    {/* Swipe Interface for Pending Logs */}
-                    {pendingLogs.length > 0 && (
-                        <div className="mb-8">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold">Pending Classification</h3>
-                                <AutoClassifyButton />
-                            </div>
-                            <MileageSwipe logs={pendingLogs} onComplete={() => {}} />
+            {/* Recent Invoices */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle>Recent Invoices</CardTitle>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href="/dashboard/finances/invoices">View All</Link>
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {invoices.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                            No invoices yet. Create one to get started.
+                        </p>
+                    ) : (
+                        <div className="space-y-3">
+                            {invoices.slice(0, 5).map(invoice => (
+                                <Link
+                                    key={invoice.id}
+                                    href={`/dashboard/finances/invoices/${invoice.id}`}
+                                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
+                                >
+                                    <div>
+                                        <div className="font-medium text-sm">{invoice.number}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {invoice.builder.name} &middot; {invoice.date.toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="font-medium text-sm">{formatCurrency(invoice.totalAmount)}</span>
+                                        <Badge variant={
+                                            invoice.status === 'PAID' ? 'default' :
+                                                invoice.status === 'SENT' ? 'secondary' :
+                                                    invoice.status === 'OVERDUE' ? 'destructive' : 'outline'
+                                        }>
+                                            {invoice.status}
+                                        </Badge>
+                                    </div>
+                                </Link>
+                            ))}
                         </div>
                     )}
-
-                    <div className="flex justify-between items-center">
-                        <h3 className="text-xl font-semibold">Mileage Log</h3>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Log Trip
-                        </Button>
-                    </div>
-                    <Card>
-                        <CardContent className="p-0">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Vehicle</TableHead>
-                                            <TableHead>Purpose</TableHead>
-                                            <TableHead>Route</TableHead>
-                                            <TableHead>Distance</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {mileageLogs.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
-                                                    No mileage logs recorded.
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            mileageLogs.map(log => (
-                                                <TableRow key={log.id}>
-                                                    <TableCell>{log.date.toLocaleDateString()}</TableCell>
-                                                    <TableCell>{log.vehicle.name}</TableCell>
-                                                    <TableCell>
-                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                            log.purpose === 'BUSINESS' ? 'bg-green-100 text-green-700' :
-                                                            log.purpose === 'PERSONAL' ? 'bg-red-100 text-red-700' :
-                                                            'bg-gray-100 text-gray-700'
-                                                        }`}>
-                                                            {log.purpose || 'PENDING'}
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell>{log.startLocation} → {log.endLocation}</TableCell>
-                                                    <TableCell>{log.distance} mi</TableCell>
-                                                </TableRow>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+                </CardContent>
+            </Card>
         </div>
-    );
+    )
 }

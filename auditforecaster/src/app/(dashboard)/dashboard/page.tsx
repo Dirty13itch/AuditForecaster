@@ -1,26 +1,28 @@
-import { RevenueChart, BuilderDistributionChart } from "@/components/analytics-charts"
-import { DashboardStats } from "@/components/dashboard-stats"
-
 import { Metadata } from "next"
+import { WeeklySchedule } from "@/components/weekly-schedule"
+import { getWeekJobs } from "@/app/actions/schedule"
 
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-    title: "Dashboard",
-    description: "Overview of your inspection tasks, recent activity, and quick actions.",
+    title: "Schedule",
+    description: "Weekly job schedule - assign and track inspections.",
 }
 
-export default function DashboardPage() {
+export default async function SchedulePage() {
+    const result = await getWeekJobs()
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
+                    <p className="text-sm text-muted-foreground">
+                        Assign and track jobs for the week
+                    </p>
+                </div>
             </div>
-            <DashboardStats />
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <RevenueChart />
-                <BuilderDistributionChart />
-            </div>
+            <WeeklySchedule initialJobs={result.success ? result.jobs : []} />
         </div>
     )
 }
