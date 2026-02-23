@@ -3,12 +3,16 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
+import { checkRateLimit } from "@/lib/security"
 
 export async function calculatePayout(userId: string, periodStart: Date, periodEnd: Date) {
     const session = await auth()
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
     }
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     // Fetch completed, unpaid jobs for this user in the period
     const jobs = await prisma.job.findMany({
@@ -91,6 +95,9 @@ export async function createPayout(userId: string, jobIds: string[], amount: num
         throw new Error("Unauthorized")
     }
 
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
+
     // Create Payout Record
     const payout = await prisma.$transaction(async (tx) => {
         const newPayout = await tx.payout.create({
@@ -128,6 +135,9 @@ export async function markPayoutAsPaid(payoutId: string) {
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
     }
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     await prisma.payout.update({
         where: { id: payoutId },

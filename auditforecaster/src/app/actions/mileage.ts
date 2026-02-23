@@ -4,6 +4,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { logger } from '@/lib/logger'
+import { checkRateLimit } from '@/lib/security'
 
 export async function logTrip(data: {
     vehicleId: string
@@ -15,6 +16,9 @@ export async function logTrip(data: {
 }) {
     const session = await auth()
     if (!session?.user?.id) throw new Error('Unauthorized')
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) return { success: false, error: 'Too many requests. Please try again later.' }
 
     try {
         const log = await prisma.mileageLog.create({

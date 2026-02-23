@@ -6,12 +6,16 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { logger } from "@/lib/logger"
 import { auth } from "@/auth"
+import { checkRateLimit } from "@/lib/security"
 
 export async function createSubcontractor(data: SubcontractorInput) {
     const session = await auth()
     if (!session?.user) {
         return { success: false, message: "Unauthorized" }
     }
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
 
     try {
         const validated = SubcontractorSchema.parse(data)
@@ -37,6 +41,9 @@ export async function updateSubcontractor(id: string, data: SubcontractorInput) 
         return { success: false, message: "Unauthorized" }
     }
 
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
+
     try {
         const validated = SubcontractorSchema.parse(data)
 
@@ -61,6 +68,9 @@ export async function deleteSubcontractor(id: string) {
     if (!session?.user) {
         return { success: false, message: "Unauthorized" }
     }
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
 
     try {
         await prisma.subcontractor.delete({

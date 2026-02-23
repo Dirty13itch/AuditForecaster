@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { SupplyProWebhookSchema, normalizeBuilderName } from '@/lib/integrations/supplypro';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { checkRateLimit } from '@/lib/security';
 import crypto from 'crypto';
 
 // Verify webhook signature using HMAC-SHA256
@@ -23,6 +24,13 @@ function verifyWebhookSignature(payload: string, signature: string | null, secre
 }
 
 export async function POST(req: Request) {
+    // Rate limit webhook by source IP
+    const ip = req.headers.get('x-forwarded-for') || 'unknown';
+    const { success: allowed } = await checkRateLimit(`webhook:supplypro:${ip}`, 'webhook');
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+    }
+
     const bodyText = await req.text();
     let bodyJson: unknown;
 

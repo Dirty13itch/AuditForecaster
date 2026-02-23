@@ -46,13 +46,23 @@ export const rateLimiters = {
         analytics: true,
         prefix: '@upstash/ratelimit/login',
     }) : null,
+
+    // Webhook: 30 req / 60s (External service protection)
+    webhook: redis ? new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(30, '60 s'),
+        analytics: true,
+        prefix: '@upstash/ratelimit/webhook',
+    }) : null,
 };
 
 // Fallback In-Memory Limiter (if Redis is down or not configured)
 const memoryStore = new Map<string, { count: number; lastReset: number }>();
 const MEMORY_WINDOW = 10000; // 10s
 
-export async function checkRateLimit(identifier: string, type: 'public' | 'authenticated' | 'core' | 'login' = 'core') {
+export type RateLimitType = 'public' | 'authenticated' | 'core' | 'login' | 'webhook';
+
+export async function checkRateLimit(identifier: string, type: RateLimitType = 'core') {
     // 0. Bypass in Development/Test
     if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
         return { success: true, limit: 1000, remaining: 1000, reset: Date.now() + 10000 };
@@ -81,7 +91,7 @@ export async function checkRateLimit(identifier: string, type: 'public' | 'authe
     record.count++;
     memoryStore.set(identifier, record);
 
-    const limits = { public: 5, authenticated: 20, core: 100, login: 5 };
+    const limits = { public: 5, authenticated: 20, core: 100, login: 5, webhook: 30 };
     const limit = limits[type];
 
     return {

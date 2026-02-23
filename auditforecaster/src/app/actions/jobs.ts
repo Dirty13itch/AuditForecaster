@@ -8,6 +8,7 @@ import { auth } from "@/auth"
 import { getCoordinates } from "@/lib/geocoding"
 import { logAudit } from "@/lib/audit"
 import { logger } from "@/lib/logger"
+import { checkRateLimit } from "@/lib/security"
 
 const JobSchema = z.object({
     builderId: z.string().min(1, "Builder is required"),
@@ -22,6 +23,9 @@ export async function createJob(formData: FormData) {
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized")
     if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     const validatedFields = JobSchema.parse({
         builderId: formData.get('builderId'),
@@ -81,6 +85,9 @@ export async function updateJobStatus(id: string, status: string) {
         throw new Error("Unauthorized: Insufficient permissions")
     }
 
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
+
     // Validation
     const validStatuses = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED']
     if (!validStatuses.includes(status)) {
@@ -118,6 +125,9 @@ export async function updateJob(formData: FormData) {
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized")
     if (session.user.role !== 'ADMIN') throw new Error("Unauthorized: Admin access required")
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     const rawData = {
         id: formData.get('id'),

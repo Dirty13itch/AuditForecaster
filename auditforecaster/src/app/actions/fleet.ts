@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { logger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
 import { safeParseInt } from "@/lib/utils"
+import { checkRateLimit } from "@/lib/security"
 
 export async function addMaintenanceLog(data: {
     vehicleId: string
@@ -18,6 +19,9 @@ export async function addMaintenanceLog(data: {
 }) {
     const session = await auth()
     if (!session?.user) throw new Error("Unauthorized")
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     await prisma.vehicleMaintenance.create({
         data: {
@@ -49,6 +53,9 @@ export async function createVehicle(_prevState: unknown, formData: FormData) {
     try {
         const session = await auth()
         if (!session?.user) throw new Error("Unauthorized")
+
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { message: 'Too many requests. Please try again later.' }
 
         const name = formData.get('name') as string
         const make = formData.get('make') as string
@@ -102,6 +109,9 @@ export async function updateVehicle(id: string, _prevState: unknown, formData: F
         const session = await auth()
         if (!session?.user) throw new Error("Unauthorized")
 
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { message: 'Too many requests. Please try again later.' }
+
         const name = formData.get('name') as string
         const make = formData.get('make') as string
         const model = formData.get('model') as string
@@ -151,6 +161,9 @@ export async function deleteVehicle(id: string) {
     try {
         const session = await auth()
         if (!session?.user) throw new Error("Unauthorized")
+
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { message: 'Too many requests. Please try again later.' }
 
         await prisma.vehicle.delete({
             where: { id }

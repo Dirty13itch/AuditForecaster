@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
+import { checkRateLimit } from "@/lib/security"
 
 export async function getPendingExpenses() {
     const session = await auth()
@@ -42,6 +43,9 @@ export async function processExpense(id: string, status: 'APPROVED' | 'REJECTED'
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
     }
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     await prisma.expense.update({
         where: { id },

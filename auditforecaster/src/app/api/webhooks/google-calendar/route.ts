@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { syncEvents } from '@/lib/google-calendar'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
+import { checkRateLimit } from '@/lib/security'
 
 export async function POST(req: NextRequest) {
+    // Rate limit webhook by source IP
+    const ip = req.headers.get('x-forwarded-for') || 'unknown'
+    const { success: allowed } = await checkRateLimit(`webhook:gcal:${ip}`, 'webhook')
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 })
+    }
+
     const channelId = req.headers.get('x-goog-channel-id')
     const resourceState = req.headers.get('x-goog-resource-state')
     const resourceId = req.headers.get('x-goog-resource-id')

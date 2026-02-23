@@ -14,11 +14,21 @@ describe('checkRateLimit', () => {
     })
 
     it('returns success for all rate limit types in test', async () => {
-        const types = ['public', 'authenticated', 'core', 'login'] as const
+        const types = ['public', 'authenticated', 'core', 'login', 'webhook'] as const
         for (const type of types) {
             const result = await checkRateLimit('test-ip', type)
             expect(result.success).toBe(true)
         }
+    })
+
+    it('supports user-prefixed identifiers for per-user rate limiting', async () => {
+        const result = await checkRateLimit('user:user-123', 'authenticated')
+        expect(result.success).toBe(true)
+    })
+
+    it('supports webhook-prefixed identifiers', async () => {
+        const result = await checkRateLimit('webhook:supplypro:1.2.3.4', 'webhook')
+        expect(result.success).toBe(true)
     })
 
     it('defaults to core type when no type specified', async () => {

@@ -8,6 +8,7 @@ import { z } from "zod"
 import { addYears } from "date-fns"
 import { auth } from "@/auth"
 import { logger } from "@/lib/logger"
+import { checkRateLimit } from "@/lib/security"
 
 export async function createEquipment(data: EquipmentClientInput) {
     try {
@@ -15,6 +16,9 @@ export async function createEquipment(data: EquipmentClientInput) {
         if (session?.user?.role !== "ADMIN") {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
+
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
 
         const validated = EquipmentClientSchema.parse(data)
 
@@ -52,6 +56,9 @@ export async function updateEquipment(id: string, data: EquipmentClientInput) {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
 
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
+
         const validated = EquipmentClientSchema.parse(data)
 
         await prisma.equipment.update({
@@ -76,6 +83,9 @@ export async function assignEquipment(equipmentId: string, userId: string) {
         if (session?.user?.role !== "ADMIN") {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
+
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
 
         // Deep Layer Check: Verify Calibration Status
         const equipment = await prisma.equipment.findUnique({
@@ -124,6 +134,9 @@ export async function returnEquipment(equipmentId: string) {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
 
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
+
         // Find the active assignment
         const activeAssignment = await prisma.equipmentAssignment.findFirst({
             where: {
@@ -164,6 +177,9 @@ export async function deleteEquipment(id: string) {
         if (session?.user?.role !== "ADMIN") {
             return { success: false, message: "Unauthorized: Admin access required" }
         }
+
+        const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+        if (!allowed) return { success: false, message: 'Too many requests. Please try again later.' }
 
         await prisma.equipment.delete({
             where: { id }

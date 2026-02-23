@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
 import { logAudit } from "@/lib/audit"
+import { checkRateLimit } from "@/lib/security"
 
 export async function createInvoice(data: {
     builderId: string
@@ -16,6 +17,9 @@ export async function createInvoice(data: {
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
     }
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     const { builderId, jobIds, dueDate, notes } = data
 
@@ -147,6 +151,9 @@ export async function updateInvoiceStatus(id: string, status: string) {
         throw new Error("Unauthorized")
     }
 
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
+
     const data: Prisma.InvoiceUpdateInput = { status }
     if (status === 'SENT') data.sentAt = new Date()
     if (status === 'PAID') data.paidAt = new Date()
@@ -172,6 +179,9 @@ export async function deleteInvoice(id: string) {
     if (!session?.user || session.user.role !== 'ADMIN') {
         throw new Error("Unauthorized")
     }
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
 
     const invoice = await prisma.invoice.findUnique({
         where: { id },

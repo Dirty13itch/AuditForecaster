@@ -8,6 +8,7 @@ import { sendInspectionCompletedEmail } from "@/lib/email"
 import { z } from "zod"
 import { logger } from "@/lib/logger"
 import { safeJsonParse, safeParseFloat } from "@/lib/utils"
+import { checkRateLimit } from "@/lib/security"
 
 const InspectionSchema = z.object({
     jobId: z.string().min(1, "Job ID is required"),
@@ -21,6 +22,10 @@ const InspectionSchema = z.object({
 export async function updateInspection(formData: FormData): Promise<never> {
     const session = await auth()
     if (!session) throw new Error("Unauthorized")
+
+    const { success: allowed } = await checkRateLimit(`user:${session.user?.id}`, 'authenticated')
+    if (!allowed) throw new Error('Too many requests. Please try again later.')
+
     try {
         // Validate input
         const validatedFields = InspectionSchema.safeParse({
@@ -149,6 +154,9 @@ export async function createReinspection(jobId: string): Promise<never> {
         if (!session) {
             throw new Error('You must be logged in to create a reinspection')
         }
+
+        const { success: allowed } = await checkRateLimit(`user:${session.user?.id}`, 'authenticated')
+        if (!allowed) throw new Error('Too many requests. Please try again later.')
 
         const newInspection = await prisma.inspection.create({
             data: {
