@@ -58,6 +58,14 @@ services:
       - uploads:/app/public/uploads
     networks:
       - audit-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
@@ -80,6 +88,14 @@ services:
       POSTGRES_DB: auditforecaster
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     networks:
       - audit-net
     healthcheck:
@@ -123,6 +139,14 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
     networks:
       - audit-net
     healthcheck:
@@ -150,6 +174,14 @@ services:
     volumes:
       - nginx_data:/data
       - nginx_letsencrypt:/etc/letsencrypt
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
     networks:
       - audit-net
 
