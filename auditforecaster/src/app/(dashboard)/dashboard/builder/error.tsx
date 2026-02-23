@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle } from 'lucide-react';
@@ -13,7 +14,7 @@ export default function BuilderError({
     reset: () => void;
 }) {
     useEffect(() => {
-        // Log error to monitoring service (Sentry, etc.)
+        Sentry.captureException(error, { tags: { section: 'builder' } });
         console.error('Builder section error:', error);
     }, [error]);
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle } from 'lucide-react';
 
-export default function FinancesError({
+export default function BuildersError({
     error,
     reset,
 }: {
@@ -14,8 +14,8 @@ export default function FinancesError({
     reset: () => void;
 }) {
     useEffect(() => {
-        Sentry.captureException(error, { tags: { section: 'finances' } });
-        console.error('Finances section error:', error);
+        Sentry.captureException(error, { tags: { section: 'builders' } });
+        console.error('Builders section error:', error);
     }, [error]);
 
     return (
@@ -24,12 +24,12 @@ export default function FinancesError({
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-destructive">
                         <AlertTriangle className="h-5 w-5" />
-                        Finances Error
+                        Builders Error
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                        Failed to load financial data. Please try again.
+                        Failed to load builder data. Please try again.
                     </p>
                     {error.digest && (
                         <p className="text-xs text-muted-foreground">
