@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { access, constants, writeFile, unlink } from 'fs/promises'
@@ -6,6 +6,15 @@ import { join } from 'path'
 import Redis from 'ioredis'
 
 export const dynamic = 'force-dynamic'
+
+function checkHealthAuth(request: NextRequest): boolean {
+    const token = process.env.HEALTH_CHECK_TOKEN
+    if (!token) return true // No token configured = public access (backwards compatible)
+
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) return false
+    return authHeader.slice(7) === token
+}
 
 type CheckResult = {
     status: 'ok' | 'error' | 'skipped'
@@ -109,7 +118,11 @@ async function checkFilesystem(): Promise<CheckResult> {
     }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    if (!checkHealthAuth(request)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const startTime = Date.now()
 
     // Run all checks in parallel for speed
@@ -138,7 +151,7 @@ export async function GET() {
         timestamp: new Date().toISOString(),
         checks,
         totalLatencyMs,
-        version: process.env.npm_package_version || '1.0.0',
+        version: process.env.NODE_ENV === 'production' ? 'redacted' : (process.env.npm_package_version || '1.0.0'),
     }
 
     // Return 503 for unhealthy (critical failure), 200 for healthy/degraded

@@ -26,6 +26,9 @@ const envSchema = z.object({
     // Upstash Redis for rate limiting (Optional)
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
+    // Health check token (Optional - if set, health/metrics endpoints require auth)
+    HEALTH_CHECK_TOKEN: z.string().optional(),
 })
 
 const processEnv = {
@@ -43,6 +46,7 @@ const processEnv = {
     REDIS_PASSWORD: process.env.REDIS_PASSWORD,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    HEALTH_CHECK_TOKEN: process.env.HEALTH_CHECK_TOKEN,
 }
 
 // Validate on import (Server only)

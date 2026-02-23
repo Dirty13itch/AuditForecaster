@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs"
 import { authConfig } from "./auth.config"
 import { env } from "@/lib/env"
 import { logger } from "@/lib/logger"
+import { checkRateLimit } from "@/lib/security"
 
 async function getUser(email: string): Promise<User | undefined> {
     try {
@@ -39,9 +40,17 @@ const nextAuthResult = NextAuth({
             }
         }),
         Credentials({
-            async authorize(credentials) {
+            async authorize(credentials, request) {
+                // Apply login-specific rate limiting
+                const ip = (request as any)?.headers?.get?.('x-forwarded-for') || 'unknown'
+                const { success } = await checkRateLimit(ip, 'login')
+                if (!success) {
+                    logger.warn('Login rate limit exceeded', { ip })
+                    throw new Error('Too many login attempts. Please try again in a minute.')
+                }
+
                 const parsedCredentials = z
-                    .object({ email: z.string().email(), password: z.string().min(6) })
+                    .object({ email: z.string().email(), password: z.string().min(8) })
                     .safeParse(credentials);
 
                 if (parsedCredentials.success) {
@@ -94,19 +103,22 @@ const nextAuthResult = NextAuth({
 
 export const { handlers, signIn, signOut } = nextAuthResult
 
-// Wrap auth to support E2E mocking
-// Wrap auth to support E2E mocking
+// Wrap auth to support E2E mocking (NEVER in production)
 export const auth = async (...args: any[]) => {
     if (process.env.MOCK_AUTH_FOR_E2E === 'true') {
-        return {
-            user: {
-                name: 'E2E Admin',
-                email: 'admin@example.com',
-                role: 'ADMIN',
-                id: 'e2e-admin-id',
-                builderId: 'e2e-test-builder'
-            },
-            expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        if (process.env.NODE_ENV === 'production') {
+            logger.error('CRITICAL: MOCK_AUTH_FOR_E2E is enabled in production! Ignoring flag.')
+        } else {
+            return {
+                user: {
+                    name: 'E2E Admin',
+                    email: 'admin@example.com',
+                    role: 'ADMIN',
+                    id: 'e2e-admin-id',
+                    builderId: 'e2e-test-builder'
+                },
+                expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+            }
         }
     }
     return (nextAuthResult.auth as any)(...args)

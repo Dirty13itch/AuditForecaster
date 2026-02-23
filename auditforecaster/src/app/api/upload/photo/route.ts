@@ -194,9 +194,14 @@ export async function DELETE(request: NextRequest) {
             where: { id: photoId }
         })
 
-        // Optionally delete file from disk
-        // const filepath = join(process.cwd(), 'public', photo.url)
-        // await unlink(filepath).catch(() => {}) // Ignore errors if file doesn't exist
+        // Delete file from disk
+        try {
+            const { unlink } = await import('fs/promises')
+            const filepath = join(process.cwd(), 'public', photo.url)
+            await unlink(filepath)
+        } catch (e) {
+            logger.warn('Photo file not found on disk during deletion', { photoId, url: photo.url, error: e })
+        }
 
         return NextResponse.json({ success: true })
 

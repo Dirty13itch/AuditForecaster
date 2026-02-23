@@ -66,11 +66,11 @@ export default auth(async (req) => {
         'Strict-Transport-Security',
         'max-age=31536000; includeSubDomains; preload'
     );
-    // CSP: Using strict-dynamic for scripts loaded by trusted code
-    // Note: Next.js requires some inline styles, so we allow 'unsafe-inline' for styles only
+    // CSP: strict-dynamic handles scripts loaded by trusted code
+    // Note: Next.js requires 'unsafe-inline' for styles
     response.headers.set(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'strict-dynamic' https:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+        "default-src 'self'; script-src 'self' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.sentry.io https://*.upstash.io; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
     );
 
     return response;
