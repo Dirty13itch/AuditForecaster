@@ -156,12 +156,12 @@ async function main() {
         }
     }
 
-    const vehicles = [
+    const vehicleData = [
         { name: 'Truck 01', licensePlate: 'TX-123-ABC', make: 'Ford', model: 'F-150', year: 2022, mileage: 15000, status: 'Active' },
         { name: 'Van 02', licensePlate: 'TX-456-XYZ', make: 'Ford', model: 'Transit', year: 2021, mileage: 32000, status: 'Active' }
     ]
 
-    for (const v of vehicles) {
+    for (const v of vehicleData) {
         const existing = await prisma.vehicle.findFirst({ where: { licensePlate: v.licensePlate } })
         if (!existing) {
             await prisma.vehicle.create({ data: v })
@@ -361,8 +361,6 @@ async function main() {
             endLocation: 'Site A',
             purpose: 'PENDING',
             status: 'PENDING',
-            vehicleId: vehicles[0]!.id, // Assuming vehicles created above
-            userId: inspector1.id
         },
         {
             date: new Date(new Date().setDate(new Date().getDate() - 1)),
@@ -371,8 +369,6 @@ async function main() {
             endLocation: 'Home',
             purpose: 'PENDING',
             status: 'PENDING',
-            vehicleId: vehicles[0]!.id,
-            userId: inspector1.id
         }
     ]
 
@@ -386,7 +382,6 @@ async function main() {
                 where: { 
                     date: log.date, 
                     distance: log.distance,
-                    userId: log.userId 
                 } 
             })
             

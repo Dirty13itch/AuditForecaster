@@ -10,6 +10,14 @@ import { approveJob } from "@/app/actions/qa"
 import { RejectJobDialog } from "@/components/reject-job-dialog"
 import { safeJsonParse } from "@/lib/utils"
 
+interface InspectionData {
+  cfm50?: number
+  houseVolume?: number
+  ach50?: number
+  notes?: string
+  [key: string]: unknown
+}
+
 export default async function QAReviewPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
 
@@ -34,7 +42,7 @@ export default async function QAReviewPage({ params }: { params: Promise<{ id: s
         notFound()
     }
 
-    const inspectionData = safeJsonParse(inspection.data, {})
+    const inspectionData = safeJsonParse<InspectionData>(inspection.data, {})
 
     return (
         <div className="space-y-6">
