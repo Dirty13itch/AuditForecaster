@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AuditForecaster Portfolio Root
 
-## Getting Started
+This normalized portfolio root is the canonical working location for `Dirty13itch/AuditForecaster`.
 
-First, run the development server:
+The actual application source lives in:
 
-```bash
+- `C:\Users\Shaun\dev\portfolio\AuditForecaster\auditforecaster`
+
+Use that nested app root for all install, run, build, and test commands.
+
+## Working Contract
+
+- Canonical repo root: `C:\Users\Shaun\dev\portfolio\AuditForecaster`
+- Canonical app root: `C:\Users\Shaun\dev\portfolio\AuditForecaster\auditforecaster`
+- Old DESK and VAULT clones are preserved reference copies only
+- This normalized root is the only path that should continue as the working clone
+
+## Local Workflow
+
+```powershell
+cd C:\Users\Shaun\dev\portfolio\AuditForecaster\auditforecaster
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. 
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Verification
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```powershell
+cd C:\Users\Shaun\dev\portfolio\AuditForecaster\auditforecaster
+npm run smoke
+```
 
-## Learn More
+## Product Focus
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+AuditForecaster is a Next.js operations app for energy-audit scheduling, field inspections, builder coordination, reporting, and offline-capable field workflows.
