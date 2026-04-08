@@ -95,5 +95,4 @@ Current posture is deployable preview:
 
 ## Known Build Noise
 
-- `npm run smoke` may also emit a stale `baseline-browser-mapping` notice until that dev dependency is refreshed.
-- Webpack cache serialization notices may still appear during `next build`, but the prior OpenTelemetry bundle-warning burst is not expected anymore.
+- Webpack cache serialization notices may still appear during `next build`, but the prior OpenTelemetry bundle-warning burst and stale `baseline-browser-mapping` notice are not expected anymore.
