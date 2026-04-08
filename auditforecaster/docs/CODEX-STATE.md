@@ -20,6 +20,7 @@ AuditForecaster is a normalized Next.js app root. The canonical verification pat
 - The dashboard layout is intentionally `force-dynamic` so smoke builds do not hit auth- or Prisma-backed dashboard routes during static generation.
 - Current smoke output should stay free of the previous OpenTelemetry webpack warning burst; unexpected Prisma connection errors are not acceptable in this lane.
 - The stale `baseline-browser-mapping` notice has been cleared by pinning the latest dev dependency refresh.
+- Draft PR #9 should stay parked for now: its branch smoke proof is green, but two external Vercel projects are still pointed at the portfolio root as Vite builds instead of the nested `auditforecaster/` Next.js app root, so their failing status checks are deployment drift rather than app-code regressions.
 - Historical log files are reference material, not current truth.
 - The portfolio root should stay out of app-level implementation work.
 
