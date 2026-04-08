@@ -33,6 +33,8 @@ This is the canonical verification path for portfolio maturity. It covers:
 - production build with a local smoke env
 - stable Vitest app tests
 
+As of 2026-04-08, the dashboard app segment is forced dynamic during the smoke build so auth and Prisma-backed routes do not get pulled into static generation. That keeps `npm run smoke` honest without requiring a live local PostgreSQL instance.
+
 ### Extended UI lane
 
 ```powershell
@@ -67,7 +69,8 @@ NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="replace-with-a-long-random-secret"
 ```
 
-The stable smoke lane uses mocked and unit coverage and does not require a live PostgreSQL database.
+The stable smoke lane uses its own smoke env and does not require a live PostgreSQL database.
+Full local runtime still does.
 
 ## Main Workflow
 
@@ -89,3 +92,8 @@ Current posture is deployable preview:
 - Old DESK and VAULT clones are preserved reference copies only.
 - The normalized portfolio root is the only working root.
 - Storybook is retained as a secondary UI-confidence lane, not the default repo health gate.
+
+## Known Build Noise
+
+- `npm run smoke` may also emit a stale `baseline-browser-mapping` notice until that dev dependency is refreshed.
+- Webpack cache serialization notices may still appear during `next build`, but the prior OpenTelemetry bundle-warning burst is not expected anymore.

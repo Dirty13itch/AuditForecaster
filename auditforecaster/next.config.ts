@@ -1,3 +1,4 @@
+import path from "path";
 import type { NextConfig } from "next";
 // import { withSentryConfig } from "@sentry/nextjs";
 
@@ -22,9 +23,19 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Keep Node-only observability and queue packages out of the webpack bundle.
+  // This trims smoke-lane build noise without changing runtime behavior.
+  serverExternalPackages: [
+    "@opentelemetry/auto-instrumentations-node",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-node",
+    "bullmq",
+  ],
 
   // Enable standalone output for Docker
   output: 'standalone',
+  outputFileTracingRoot: path.resolve(__dirname),
 
   // Security headers are set in middleware.ts to avoid duplication
   // Only X-DNS-Prefetch-Control is set here (not covered by middleware)
